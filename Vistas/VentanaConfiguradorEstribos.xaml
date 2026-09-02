@@ -2,8 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Configurador de Estribos"
-        Height="600" Width="900"
-        MinHeight="520" MinWidth="820"
+        Height="640" Width="1040"
+        MinHeight="560" MinWidth="960"
         WindowStartupLocation="CenterOwner"
         Background="#F0F0F0">
 
@@ -52,7 +52,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="240" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="330" />
                 <ColumnDefinition Width="10" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
@@ -92,6 +92,28 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Elevación (detalle)" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
 
+                    <!-- Leyenda -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Rectangle Width="12" Height="12" Fill="#3B82F6" Margin="0,0,4,0" />
+                        <TextBlock Text="nudo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                        <Rectangle Width="12" Height="12" Fill="#B45309" Margin="0,0,4,0" />
+                        <TextBlock Text="contra zapata" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                        <Rectangle Width="12" Height="12" Fill="#DCFCE7" Stroke="#22C55E" StrokeThickness="2" Margin="0,0,4,0" />
+                        <TextBlock Text="tramo activo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                        <Rectangle Width="12" Height="12" Margin="0,0,4,0">
+                            <Rectangle.Fill>
+                                <VisualBrush TileMode="Tile" Viewport="0,0,6,6" ViewportUnits="Absolute">
+                                    <VisualBrush.Visual>
+                                        <Canvas Width="6" Height="6" Background="White">
+                                            <Line X1="0" Y1="6" X2="6" Y2="0" Stroke="#94A3B8" StrokeThickness="1" />
+                                        </Canvas>
+                                    </VisualBrush.Visual>
+                                </VisualBrush>
+                            </Rectangle.Fill>
+                        </Rectangle>
+                        <TextBlock Text="configurado" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
+                    </StackPanel>
+
                     <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -105,7 +127,7 @@
                     </Grid>
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <Canvas x:Name="CanvasElevacion" Width="110" Height="420" Background="#FAFAFA" />
+                        <Canvas x:Name="CanvasElevacion" Width="310" Height="460" Background="Transparent" />
                     </ScrollViewer>
                 </DockPanel>
             </Border>

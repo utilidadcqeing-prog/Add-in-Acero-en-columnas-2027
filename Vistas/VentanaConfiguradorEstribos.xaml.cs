@@ -373,63 +373,186 @@ public partial class VentanaConfiguradorEstribos : Window
 
     // -------------------------------------------------------------- dibujo
 
+    /// <summary>
+    /// Dibuja la columna entera como un contorno continuo (no bloques
+    /// sueltos), con los niveles a la izquierda unidos por una línea guía
+    /// punteada -- mismo lenguaje visual que usa la ventana de referencia de
+    /// William. Las bandas de color se superponen al contorno donde
+    /// corresponde: nudo/zapata cruzando más ancho que la columna (como lo
+    /// hace una viga real), el tramo activo resaltado en verde, y los tramos
+    /// que ya tienen una configuración guardada en esta sesión con una trama
+    /// rayada (todavía no hay geometría real creada en Revit -- esa marca es
+    /// de "configurado en la UI", no de "generado en el modelo").
+    /// </summary>
     private void RedibujarElevacion()
     {
         CanvasElevacion.Children.Clear();
         if (_columnaActiva is null) return;
 
-        double alturaTotal = _columnaActiva.ZSuperior - _columnaActiva.ZInferior;
-        if (alturaTotal <= 0) return;
+        const double margenSuperior = 24;
+        const double margenInferior = 24;
+        const double anchoColumna = 46;
+        const double xColumna = 172;
+        const double sobresaleNudo = 16;
+        const double anchoEtiqueta = 130;
+        const double xLeaderIni = 138;
+        double xLeaderFin = xColumna - 4;
 
-        double alturaCanvas = CanvasElevacion.Height;
-        const double anchoBanda = 90;
-        double escala = alturaCanvas / alturaTotal;
+        double zMin = _columnaActiva.ZInferior;
+        double zMax = _columnaActiva.ZSuperior;
+        foreach (NivelRotulo nivel in _columnaActiva.Niveles)
+        {
+            zMin = Math.Min(zMin, nivel.Cota);
+            zMax = Math.Max(zMax, nivel.Cota);
+        }
 
+        double alturaDisponible = Math.Max(1, CanvasElevacion.Height - margenSuperior - margenInferior);
+        double rango = Math.Max(0.01, zMax - zMin);
+        double escala = alturaDisponible / rango;
+        double Y(double cota) => margenSuperior + (zMax - cota) * escala;
+
+        // 1) Contorno continuo de la columna, de punta a punta.
+        var contorno = new Rectangle
+        {
+            Width = anchoColumna,
+            Height = Math.Max(1, Y(_columnaActiva.ZInferior) - Y(_columnaActiva.ZSuperior)),
+            Stroke = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+            StrokeThickness = 1.5,
+            Fill = Brushes.White,
+        };
+        Canvas.SetLeft(contorno, xColumna);
+        Canvas.SetTop(contorno, Y(_columnaActiva.ZSuperior));
+        CanvasElevacion.Children.Add(contorno);
+
+        // 2) Rótulos de nivel con línea guía punteada hasta la columna.
+        foreach (NivelRotulo nivel in _columnaActiva.Niveles)
+        {
+            double y = Y(nivel.Cota);
+
+            var linea = new Line
+            {
+                X1 = xLeaderIni,
+                Y1 = y,
+                X2 = xLeaderFin,
+                Y2 = y,
+                Stroke = Brushes.LightGray,
+                StrokeThickness = 1,
+                StrokeDashArray = new DoubleCollection { 1, 2 },
+                IsHitTestVisible = false,
+            };
+            CanvasElevacion.Children.Add(linea);
+
+            var texto = new TextBlock
+            {
+                Text = $"N{(nivel.Cota >= 0 ? "+" : "")}{nivel.Cota:0.00}  {nivel.Nombre}",
+                FontSize = 10,
+                Foreground = Brushes.DimGray,
+                TextAlignment = TextAlignment.Right,
+                Width = anchoEtiqueta,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(texto, 0);
+            Canvas.SetTop(texto, y - 7);
+            CanvasElevacion.Children.Add(texto);
+        }
+
+        // 3) Bandas por tramo, superpuestas al contorno.
         for (int i = 0; i < _columnaActiva.Tramos.Count; i++)
         {
             Tramo tramo = _columnaActiva.Tramos[i];
-            double y0 = alturaCanvas - (tramo.ZSuperior - _columnaActiva.ZInferior) * escala;
-            double alto = Math.Max(2, tramo.Altura * escala - 1);
-
-            Color colorTipo = tramo.Tipo switch
-            {
-                TipoTramo.DentroDeViga => Color.FromRgb(0x3B, 0x82, 0xF6),   // azul: nudo
-                TipoTramo.ContraZapata => Color.FromRgb(0xB4, 0x53, 0x09),   // marrón: zapata
-                _ => Color.FromRgb(0xE5, 0xE7, 0xEB),                       // gris: libre
-            };
-
+            double yTop = Y(tramo.ZSuperior);
+            double alto = Math.Max(1, Y(tramo.ZInferior) - yTop);
             bool activo = i == _tramoActivoIndice;
+            bool configurado = _configPorTramo.ContainsKey((_columnaActiva.Marca, i));
 
-            var rect = new Rectangle
+            if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
             {
-                Width = anchoBanda,
-                Height = alto,
-                Fill = new SolidColorBrush(colorTipo),
-                Stroke = activo ? new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)) : Brushes.White,
-                StrokeThickness = activo ? 3 : 1,
-                Cursor = System.Windows.Input.Cursors.Hand,
-            };
-            int indiceCapturado = i;
-            rect.MouseLeftButtonUp += (_, _) => IrA(indiceCapturado);
+                Color color = tramo.Tipo == TipoTramo.DentroDeViga
+                    ? Color.FromRgb(0x3B, 0x82, 0xF6)
+                    : Color.FromRgb(0xB4, 0x53, 0x09);
 
-            Canvas.SetLeft(rect, 10);
-            Canvas.SetTop(rect, y0);
-            CanvasElevacion.Children.Add(rect);
-
-            if (alto > 13)
-            {
-                var texto = new TextBlock
+                var banda = new Rectangle
                 {
-                    Text = tramo.Indice.ToString(),
-                    FontSize = 10,
-                    Foreground = activo ? Brushes.White : Brushes.Black,
+                    Width = anchoColumna + sobresaleNudo * 2,
+                    Height = alto,
+                    Fill = new SolidColorBrush(color),
                     IsHitTestVisible = false,
                 };
-                Canvas.SetLeft(texto, 10 + anchoBanda / 2 - 4);
-                Canvas.SetTop(texto, y0 + alto / 2 - 7);
-                CanvasElevacion.Children.Add(texto);
+                Canvas.SetLeft(banda, xColumna - sobresaleNudo);
+                Canvas.SetTop(banda, yTop);
+                CanvasElevacion.Children.Add(banda);
+            }
+            else if (configurado)
+            {
+                var relleno = new Rectangle
+                {
+                    Width = anchoColumna,
+                    Height = alto,
+                    Fill = TramaConfigurado,
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(relleno, xColumna);
+                Canvas.SetTop(relleno, yTop);
+                CanvasElevacion.Children.Add(relleno);
+            }
+
+            if (activo)
+            {
+                var resalte = new Rectangle
+                {
+                    Width = anchoColumna + 6,
+                    Height = alto,
+                    Fill = new SolidColorBrush(Color.FromArgb(60, 0x22, 0xC5, 0x5E)),
+                    Stroke = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
+                    StrokeThickness = 2,
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(resalte, xColumna - 3);
+                Canvas.SetTop(resalte, yTop);
+                CanvasElevacion.Children.Add(resalte);
+            }
+            else
+            {
+                // Zona transparente clickeable: tocar cualquier tramo navega ahí.
+                var zonaClick = new Rectangle
+                {
+                    Width = anchoColumna + sobresaleNudo * 2,
+                    Height = alto,
+                    Fill = Brushes.Transparent,
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                };
+                Canvas.SetLeft(zonaClick, xColumna - sobresaleNudo);
+                Canvas.SetTop(zonaClick, yTop);
+                int indiceCapturado = i;
+                zonaClick.MouseLeftButtonUp += (_, _) => IrA(indiceCapturado);
+                CanvasElevacion.Children.Add(zonaClick);
             }
         }
+    }
+
+    /// <summary>Trama rayada 45° para marcar un tramo con configuración ya guardada.</summary>
+    private static readonly Brush TramaConfigurado = CrearTramaConfigurado();
+
+    private static Brush CrearTramaConfigurado()
+    {
+        var celda = new Canvas { Width = 6, Height = 6 };
+        celda.Children.Add(new Rectangle { Width = 6, Height = 6, Fill = Brushes.White });
+        celda.Children.Add(new Line
+        {
+            X1 = 0,
+            Y1 = 6,
+            X2 = 6,
+            Y2 = 0,
+            Stroke = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
+            StrokeThickness = 1,
+        });
+
+        return new VisualBrush(celda)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 6, 6),
+            ViewportUnits = BrushMappingMode.Absolute,
+        };
     }
 
     // ---------------------------------------------------------- exportar
