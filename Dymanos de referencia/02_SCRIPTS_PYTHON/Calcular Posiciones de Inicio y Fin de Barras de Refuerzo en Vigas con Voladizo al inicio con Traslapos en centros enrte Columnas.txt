@@ -1,0 +1,51 @@
+# Entradas
+pts = IN[0]        # Lista de puntos (Point)
+Lmax = float(IN[1])   # Longitud máxima de barra
+Ltras = float(IN[2])  # Longitud de traslapo
+
+def dist_entre_pts(a, b):
+    dx = b.X - a.X
+    dy = b.Y - b.Y
+    dz = b.Z - a.Z
+    return (dx**2 + dy**2 + dz**2)**0.5
+
+# Calcular distancias acumuladas a lo largo de la viga
+dist_acum = [0]
+for i in range(1, len(pts)):
+    d = dist_entre_pts(pts[i-1], pts[i])
+    dist_acum.append(dist_acum[-1] + d)
+Ltotal = dist_acum[-1]
+
+n_col = (len(pts) - 1) // 2
+
+# Generar puntos de traslapo permitidos: mitad entre cara lejana col (n-1) y cara cercana col (n)
+mitades = []
+for i in range(1, n_col):
+    idx_lej_anter = 2*(i-1) + 2    # cara lejana de columna anterior
+    idx_cerc_sig = 2*i + 1         # cara cercana de siguiente columna
+    d1 = dist_acum[idx_lej_anter]
+    d2 = dist_acum[idx_cerc_sig]
+    mitad = (d1 + d2) / 2.0
+    mitades.append(mitad)
+
+# Los finales permitidos son mitades + Ltras/2 y el último punto
+finales_permitidos = [m + Ltras/2.0 for m in mitades]
+finales_permitidos.append(Ltotal)
+
+barras = []
+tolerancia = 1e-6
+inicio = 0
+
+while inicio < Ltotal - tolerancia:
+    # Buscar el final permitido más lejano sin exceder Lmax
+    posibles_finales = [f for f in finales_permitidos if f - inicio <= Lmax + tolerancia and f - inicio > tolerancia]
+    if not posibles_finales:
+        break
+    fin = max(posibles_finales)
+    barras.append([inicio, fin])
+    if abs(fin - Ltotal) < tolerancia or fin >= Ltotal:
+        break
+    inicio = fin - Ltras
+    if inicio < 0: inicio = 0
+
+OUT = barras

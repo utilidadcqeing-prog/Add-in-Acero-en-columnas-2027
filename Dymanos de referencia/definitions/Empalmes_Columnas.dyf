@@ -1,0 +1,1205 @@
+{
+  "Uuid": "bc05eb84-87aa-4d49-8d78-9a915835b167",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "Crea empalmes en barras verticales. Rebar, Número de empalmes, Planos de empalmes, Longitudes de empalmes, Tipo de barra.",
+  "Name": "Empalmes_Columnas",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "Id": "6d87608858394b2e8b22ee0b78a59eeb",
+      "NodeType": "CodeBlockNode",
+      "Inputs": [
+        {
+          "Id": "2440405c588a40739e30a22166990eab",
+          "Name": "A",
+          "Description": "A",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "06f739dd2c064007b54e79f821f72602",
+          "Name": "function",
+          "Description": "DesignScript.Builtin.Get.ValueAtIndex(A, \"created\")",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite creación directa de código de DesignScript",
+      "Code": "A[\"created\"];"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\nclr.AddReference(\"RevitAPI\")\r\nclr.AddReference(\"RevitServices\")\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\nfrom Autodesk.Revit.DB import BuiltInParameter, ElementType, FilteredElementCollector\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# Entradas\r\ncount_in = IN[0]\r\nvalues_in = IN[1]\r\nprefix = IN[2] if IN[2] is not None else \"\"\r\nbase_type = UnwrapElement(IN[3])\r\n\r\ndef divisor_from_prefix(txt):\r\n    t = (txt or \"\").lower()\r\n    if \"#10\" in t: return 1.9348\r\n    if \"#9\"  in t: return 1.7205\r\n    if \"#8\"  in t: return 1.524\r\n    if \"#7\"  in t: return 1.3335\r\n    if \"#6\"  in t: return 1.143\r\n    if \"#5\"  in t: return 0.9525\r\n    if \"#4\"  in t: return 0.762\r\n    if \"#3\"  in t: return 0.5715\r\n    return 0.762  # fallback\r\n\r\ndivisor = divisor_from_prefix(prefix)\r\n\r\ndef safe_name(e):\r\n    for getter in (\r\n        lambda: e.Name,\r\n        lambda: e.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_NAME).AsString(),\r\n        lambda: e.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString()\r\n    ):\r\n        try:\r\n            v = getter()\r\n            if v:\r\n                return v\r\n        except:\r\n            pass\r\n    return None\r\n\r\ndef get_lap_param(t):\r\n    for bip in (BuiltInParameter.REBAR_SPLICE_LAP_LENGTH_MULTIPLIER,):\r\n        try:\r\n            p = t.get_Parameter(bip)\r\n            if p: return p\r\n        except: pass\r\n    return t.LookupParameter(\"Multiplicador de longitudes de solape\")\r\n\r\ndef find_existing(name, category_id):\r\n    try:\r\n        for et in FilteredElementCollector(doc).WhereElementIsElementType():\r\n            try:\r\n                if et.Category and et.Category.Id == category_id:\r\n                    if safe_name(et) == name:\r\n                        return et\r\n            except:\r\n                continue\r\n    except:\r\n        pass\r\n    return None\r\n\r\n# Validaciones\r\nerrors = []\r\ntry:\r\n    count = int(count_in)\r\nexcept:\r\n    count = 0\r\n    errors.append(\"IN[0] debe ser entero > 0\")\r\n\r\nvals = values_in if isinstance(values_in, list) else ([values_in] if values_in is not None else [])\r\nif count <= 0:\r\n    errors.append(\"IN[0] debe ser entero > 0\")\r\nif len(vals) != count:\r\n    errors.append(\"IN[1] debe tener exactamente {} valores\".format(count))\r\nif base_type is None or not isinstance(base_type, ElementType):\r\n    errors.append(\"IN[3] debe ser un ElementType de empalme\")\r\n\r\nif errors:\r\n    OUT = {\"created\": [], \"names\": [], \"multipliers\": [], \"errors\": errors}\r\nelse:\r\n    created, names, multipliers, errs = [], [], [], []\r\n\r\n    TransactionManager.Instance.EnsureInTransaction(doc)\r\n\r\n    cat_id = base_type.Category.Id if base_type.Category else None\r\n\r\n    for v in vals:\r\n        try:\r\n            v_num = float(v)\r\n        except:\r\n            errs.append(\"Valor no numérico: {}\".format(v))\r\n            continue\r\n\r\n        new_name = \"{} - {}\".format(prefix, v_num)\r\n        target_val = (60.0 * v_num) / divisor\r\n\r\n        existing = find_existing(new_name, cat_id) if cat_id else None\r\n        if existing:\r\n            new_type = existing\r\n            param = get_lap_param(new_type)\r\n            val = None\r\n            try:\r\n                if param: val = param.AsDouble()\r\n            except:\r\n                pass\r\n            multipliers.append(val)\r\n            errs.append(\"Reusado '{}' (ya existía, no se modificó)\".format(new_name))\r\n        else:\r\n            try:\r\n                new_type = base_type.Duplicate(new_name)\r\n            except Exception as e:\r\n                errs.append(\"No se pudo duplicar '{}': {}\".format(new_name, e))\r\n                continue\r\n\r\n            param = get_lap_param(new_type)\r\n            if param and not param.IsReadOnly:\r\n                try:\r\n                    param.Set(target_val)\r\n                    multipliers.append(target_val)\r\n                except Exception as e:\r\n                    errs.append(\"No se pudo asignar valor en '{}': {}\".format(new_name, e))\r\n                    multipliers.append(None)\r\n            else:\r\n                errs.append(\"Parámetro no encontrado o de solo lectura en '{}'\".format(new_name))\r\n                multipliers.append(None)\r\n\r\n        created.append(new_type.ToDSType(True))\r\n        names.append(new_name)\r\n\r\n    TransactionManager.Instance.TransactionTaskDone()\r\n\r\n    OUT = {\r\n        \"created\": created,\r\n        \"names\": names,\r\n        \"multipliers\": multipliers,\r\n        \"errors\": errs\r\n    }\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "7cf9e2c470e34a4f8076d77d416e37e1",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "64cbbfa42a8f4ad28fc643bc6b053703",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "03734bb636cd425a815cf8202235b97c",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a6eb341144d8405982958ea4bf507121",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "eb5cf060fca646e982a94f476646a8be",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "e81c1b6ba05b430ca60a9b5ed4bbe765",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.BoolSelector, CoreNodeModels",
+      "Id": "aaab0adda9b74e139e21ef5d18d36281",
+      "NodeType": "BooleanInputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ef1e7d9d714841eba1c062e872657a52",
+          "Name": "",
+          "Description": "Boolean",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite la selección entre \"True\" (verdadero) y \"False\" (falso).",
+      "InputValue": true
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\nclr.AddReference(\"RevitAPI\")\r\nclr.AddReference(\"RevitServices\")\r\nclr.AddReference(\"RevitNodes\")\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\nfrom Autodesk.Revit.DB import FilteredElementCollector, BuiltInCategory, BuiltInParameter\r\nfrom RevitServices.Persistence import DocumentManager\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\ndef safe_name(e):\r\n    for getter in (\r\n        lambda: e.Name,\r\n        lambda: e.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_NAME).AsString(),\r\n        lambda: e.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString()\r\n    ):\r\n        try:\r\n            v = getter()\r\n            if v:\r\n                return v\r\n        except:\r\n            pass\r\n    return \"<sin nombre>\"\r\n\r\ndef safe_id(eid):\r\n    # Maneja distintos bindings de ElementId\r\n    for attr in (\"IntegerValue\", \"Value\"):\r\n        try:\r\n            v = getattr(eid, attr)\r\n            v = v() if callable(v) else v\r\n            return int(v)\r\n        except:\r\n            pass\r\n    try:\r\n        return int(str(eid))\r\n    except:\r\n        return None\r\n\r\nif doc is None:\r\n    OUT = \"No hay documento Revit.\"\r\nelif not hasattr(BuiltInCategory, \"OST_RebarSpliceType\"):\r\n    OUT = \"Tu Revit no expone la categoría RebarSpliceType (requiere 2025+).\"\r\nelse:\r\n    types = list(\r\n        FilteredElementCollector(doc)\r\n        .OfCategory(BuiltInCategory.OST_RebarSpliceType)\r\n        .WhereElementIsElementType()\r\n    )\r\n    if not types:\r\n        OUT = \"No hay tipos de empalme en el modelo.\"\r\n    else:\r\n        sorted_types = sorted(types, key=lambda t: safe_name(t))\r\n        names = [safe_name(t) for t in sorted_types]\r\n        ids = [safe_id(t.Id) for t in sorted_types]\r\n        elements_ds = [t.ToDSType(True) for t in sorted_types]\r\n\r\n        items = [{\"name\": n, \"id\": i, \"element\": e} for n, i, e in zip(names, ids, elements_ds)]\r\n\r\n        OUT = {\r\n            \"names\": names,\r\n            \"ids\": ids,\r\n            \"elements\": elements_ds,  # úsalo directo en GetParameterByName\r\n            \"items\": items\r\n        }\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "59c575ece41f4419baef3fff2b54e5cd",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4e9b3d62a3dd4a7d94835490111307f8",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "Id": "46e0497113534a33a4e0f5d77042ddec",
+      "NodeType": "CodeBlockNode",
+      "Inputs": [
+        {
+          "Id": "8ce866f8ef604bf28f7d4ab16cbafbaa",
+          "Name": "A",
+          "Description": "A",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "52db278dc6c444179b34f48be1130edd",
+          "Name": "function",
+          "Description": "DesignScript.Builtin.Get.ValueAtIndex(A, \"elements\")",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite creación directa de código de DesignScript",
+      "Code": "A[\"elements\"];"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "1cca7454348645038bee57f940dac843",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "63686d5b37164d14962053814a7b9c0c",
+          "Name": "list",
+          "Description": "Lista que se debe filtrar.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "5fa8481ac9fc4575a1a7b281defbf25e",
+          "Name": "mask",
+          "Description": "Lista de booleanos que representan una máscara.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "08ed665f0c504d9ca0eedb47833ff39a",
+          "Name": "in",
+          "Description": "Elementos cuyo índice de máscara es True.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b8553c96f0094857a673a344d30813b4",
+          "Name": "out",
+          "Description": "Elementos cuyo índice de máscara es False.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.FilterByBoolMask@var[]..[],var[]..[]",
+      "Replication": "Auto",
+      "Description": "Filtra una secuencia mediante la búsqueda de los índices correspondientes en una lista separada de booleanos.\n\nList.FilterByBoolMask (list: var[]..[], mask: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "4cc150e3b3524d23a8300925ee9c2103",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "8cfe6e6e587946449f836a847e6b945f",
+          "Name": "list",
+          "Description": "Lista de la que se debe obtener el primer elemento.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b6248b4293844679b541bd05708644ba",
+          "Name": "item",
+          "Description": "Primer elemento de la lista.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.FirstItem@var[]..[]",
+      "Replication": "Auto",
+      "Description": "Devuelve el primer elemento de una lista.\n\nList.FirstItem (list: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\nimport sys\r\nfrom System import Enum\r\nimport math\r\n\r\n# --- IMPORTACIONES ---\r\nclr.AddReference(\"RevitAPI\")\r\nclr.AddReference(\"RevitServices\")\r\nclr.AddReference(\"RevitNodes\")\r\n\r\nfrom Autodesk.Revit.DB import XYZ, Element, BuiltInParameter, Line\r\nfrom Autodesk.Revit.DB.Structure import (\r\n    Rebar,\r\n    RebarSpliceOptions,\r\n    RebarSpliceUtils,\r\n    RebarSplicePosition,\r\n    RebarSpliceError,\r\n    RebarSpliceGeometry\r\n)\r\n\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\nfrom System.Collections.Generic import List\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# --- INPUTS ---\r\nrun_script = IN[0]\r\nrebars_in  = IN[1]\r\ntypes_in   = IN[2]\r\nplanes_in  = IN[3]\r\n\r\n# --- CONFIGURACIÓN ---\r\nMAX_RETRIES = 10 \r\nMETROS_A_PIES = 3.280839895\r\nPIES_A_METROS = 0.3048\r\n\r\n# --- HELPERS ---\r\ndef flatten_inputs(input_obj):\r\n    flat = []\r\n    if isinstance(input_obj, list):\r\n        for i in input_obj: flat.extend(flatten_inputs(i))\r\n    else: flat.append(input_obj)\r\n    return flat\r\n\r\ndef to_list(obj):\r\n    if isinstance(obj, list): return obj\r\n    return [obj]\r\n\r\ndef to_api_units(v): return v * METROS_A_PIES\r\n\r\ndef get_id_str(element_id):\r\n    try: return str(element_id.Value)\r\n    except:\r\n        try: return str(element_id.IntegerValue)\r\n        except: return str(element_id)\r\n\r\ndef get_geometry_args(dynamo_plane):\r\n    origin, normal = None, None\r\n    if hasattr(dynamo_plane, \"Origin\") and hasattr(dynamo_plane, \"Normal\"):\r\n        o, n = dynamo_plane.Origin, dynamo_plane.Normal\r\n        origin = XYZ(to_api_units(o.X), to_api_units(o.Y), to_api_units(o.Z))\r\n        normal = XYZ(n.X, n.Y, n.Z).Normalize()\r\n    elif hasattr(dynamo_plane, \"PointAtParameter\") and hasattr(dynamo_plane, \"NormalAtParameter\"):\r\n        pt, nv = dynamo_plane.PointAtParameter(0.5, 0.5), dynamo_plane.NormalAtParameter(0.5, 0.5)\r\n        origin = XYZ(to_api_units(pt.X), to_api_units(pt.Y), to_api_units(pt.Z))\r\n        normal = XYZ(nv.X, nv.Y, nv.Z).Normalize()\r\n    return origin, normal\r\n\r\ndef get_intersection_point_on_bar(rebar, plane_z):\r\n    try:\r\n        curves = rebar.GetShapeDrivenAccessor().ComputeDrivingCurves()\r\n        for c in curves:\r\n            if isinstance(c, Line):\r\n                p0 = c.GetEndPoint(0)\r\n                p1 = c.GetEndPoint(1)\r\n                z_min, z_max = min(p0.Z, p1.Z), max(p0.Z, p1.Z)\r\n                if z_min - 0.01 <= plane_z <= z_max + 0.01:\r\n                    if abs(p1.Z - p0.Z) < 1e-9: return (p0 + p1) / 2.0\r\n                    t = (plane_z - p0.Z) / (p1.Z - p0.Z)\r\n                    return XYZ(p0.X + t * (p1.X - p0.X), p0.Y + t * (p1.Y - p0.Y), plane_z)\r\n        return None\r\n    except: return None\r\n\r\ndef try_splice_low_level(doc, rebar_id, type_id, geom, opts):\r\n    try:\r\n        rebar = doc.GetElement(rebar_id)\r\n        if not rebar or not rebar.IsValidObject: return False, [], \"Barra Inválida\"\r\n        \r\n        check = RebarSpliceUtils.CanRebarBeSpliced(rebar, opts, geom)\r\n        if check == RebarSpliceError.Success:\r\n            g_list = List[RebarSpliceGeometry]()\r\n            g_list.Add(geom)\r\n            res_ids = RebarSpliceUtils.SpliceRebar(doc, rebar_id, opts, g_list)\r\n            return True, list(res_ids), \"OK\"\r\n        \r\n        err_str = str(check)\r\n        if str(check) == \"7\" or \"DoesNotIntersect\" in str(check): err_str = \"Err7(No Intersecta)\"\r\n        elif \"TooShort\" in str(check): err_str = \"Muy Corto\"\r\n        return False, [], err_str\r\n    except Exception as e:\r\n        return False, [], str(e)\r\n\r\ndef process_single_bar_v38(bar_data, planes, splice_types):\r\n    root_rebar = bar_data['element']\r\n    if not root_rebar.IsValidObject: return False, [], [\"ID Eliminado\"]\r\n\r\n    active_pool = [root_rebar.Id]\r\n    any_modification = False\r\n    error_log = []\r\n    \r\n    total_planes = len(planes)\r\n    num_types = len(splice_types)\r\n    \r\n    # CORRECCIÓN V38: Iteramos por índice para asegurar que se procesen TODOS los planos\r\n    for i in range(total_planes):\r\n        plane = planes[i]\r\n        \r\n        # Reciclamos el tipo de empalme si hay menos tipos que planos\r\n        s_type = splice_types[i % num_types]\r\n        \r\n        raw_origin, normal = get_geometry_args(plane)\r\n        if not raw_origin: \r\n            error_log.append(f\"Corte {i+1}: Geom Nula\")\r\n            continue\r\n            \r\n        # --- LÓGICA DE POSICIÓN ---\r\n        target = \"Middle\"\r\n        if i == total_planes - 1: # Último plano\r\n            target = \"Bottom\"\r\n        else: # Planos anteriores\r\n            target = \"Middle\"\r\n\r\n        # ESTRATEGIAS\r\n        strategies = []\r\n        if target == \"Bottom\":\r\n            strategies.append({'n': normal, 'p': RebarSplicePosition.End2, 'tag': 'End2(Std)'})\r\n            strategies.append({'n': normal.Negate(), 'p': RebarSplicePosition.End1, 'tag': 'End1(Inv)'})\r\n            strategies.append({'n': normal, 'p': RebarSplicePosition.End1, 'tag': 'End1(Fallback)'})\r\n        else:\r\n            strategies.append({'n': normal, 'p': RebarSplicePosition.Middle, 'tag': 'Mid'})\r\n            strategies.append({'n': normal.Negate(), 'p': RebarSplicePosition.Middle, 'tag': 'Mid(Inv)'})\r\n\r\n        cut_success = False\r\n        candidates = list(active_pool)\r\n        \r\n        for cand_id in candidates:\r\n            try: \r\n                current_rebar = doc.GetElement(cand_id)\r\n                if not current_rebar: continue\r\n                snapped_origin = get_intersection_point_on_bar(current_rebar, raw_origin.Z)\r\n                final_origin = snapped_origin if snapped_origin else raw_origin\r\n            except: final_origin = raw_origin\r\n            \r\n            cand_errors = []\r\n            \r\n            for strat in strategies:\r\n                geom = None\r\n                try:\r\n                    geom = RebarSpliceGeometry(final_origin, strat['n'])\r\n                    opts = RebarSpliceOptions(doc, s_type.Id, strat['p'])\r\n                    \r\n                    success, res_ids, msg = try_splice_low_level(doc, cand_id, s_type.Id, geom, opts)\r\n                    \r\n                    if success:\r\n                        if cand_id in active_pool: active_pool.remove(cand_id)\r\n                        for rid in res_ids: \r\n                            if rid not in active_pool: active_pool.append(rid)\r\n                        any_modification = True\r\n                        doc.Regenerate()\r\n                        cut_success = True\r\n                        break \r\n                    else:\r\n                        cand_errors.append(f\"{strat['tag']}:{msg}\")\r\n                except Exception as ex:\r\n                    pass\r\n                finally:\r\n                    if geom: geom.Dispose()\r\n            \r\n            if cut_success: break # Ya cortamos un fragmento con este plano, pasamos al siguiente plano\r\n\r\n        if not cut_success:\r\n            error_log.append(f\"Corte {i+1} Falló. Detalles: \" + \" | \".join(cand_errors))\r\n\r\n    return any_modification, active_pool, error_log\r\n\r\n# --- EJECUCIÓN ---\r\nif not run_script:\r\n    OUT = [\"PAUSA\", [], [], []]\r\nelse:\r\n    raw_inputs = flatten_inputs(rebars_in)\r\n    \r\n    out_input_ids = []\r\n    out_traceability = []\r\n    out_failed_ids = []\r\n    out_debug_log = []\r\n    \r\n    valid_bars_queue = []\r\n    \r\n    for item in raw_inputs:\r\n        if item:\r\n            try:\r\n                u = UnwrapElement(item)\r\n                if isinstance(u, Rebar) and u.IsValidObject:\r\n                    sid = get_id_str(u.Id)\r\n                    out_input_ids.append(sid)\r\n                    entry = {'element': u, 'id': sid, 'done': False, 'logs': []}\r\n                    valid_bars_queue.append(entry)\r\n            except: pass\r\n\r\n    splice_types = []\r\n    for t in to_list(types_in):\r\n        if t:\r\n            u = UnwrapElement(t)\r\n            if isinstance(u, Element): splice_types.append(u)\r\n    planes = to_list(planes_in)\r\n\r\n    if not valid_bars_queue:\r\n        OUT = [out_input_ids, [\"No valid bars\"], [], [\"IN[1] Vacío\"]]\r\n    elif not splice_types: # Corrección de seguridad\r\n        OUT = [out_input_ids, [\"Error: No Splice Types\"], [], [\"IN[2] Vacío\"]]\r\n    elif not planes:\r\n        OUT = [out_input_ids, [\"Error: No Planes\"], [], [\"IN[3] Vacío\"]]\r\n    else:\r\n        TransactionManager.Instance.EnsureInTransaction(doc)\r\n        \r\n        pending_queue = valid_bars_queue\r\n        retry_count = 0\r\n        final_results = {}\r\n        \r\n        while len(pending_queue) > 0 and retry_count < MAX_RETRIES:\r\n            next_round = []\r\n            for entry in pending_queue:\r\n                try:\r\n                    mod, final_pool, logs = process_single_bar_v38(entry, planes, splice_types)\r\n                    entry['logs'] = logs\r\n                    \r\n                    if mod:\r\n                        final_results[entry['id']] = final_pool\r\n                        entry['done'] = True\r\n                    else:\r\n                        if entry['element'].IsValidObject: next_round.append(entry)\r\n                        else: final_results[entry['id']] = None\r\n                except Exception as e:\r\n                    entry['logs'].append(str(e))\r\n                    next_round.append(entry)\r\n            \r\n            pending_queue = next_round\r\n            if not pending_queue: break\r\n            doc.Regenerate()\r\n            retry_count += 1\r\n        \r\n        TransactionManager.Instance.TransactionTaskDone()\r\n        \r\n        global_counter = 1\r\n        for entry in valid_bars_queue:\r\n            oid = entry['id']\r\n            if oid in final_results and final_results[oid]:\r\n                for child_id in final_results[oid]:\r\n                    cid_str = get_id_str(child_id)\r\n                    out_traceability.append(f\"Barra {global_counter} - ID actual: {cid_str} - ID barra anterior: {oid}\")\r\n                    global_counter += 1\r\n            else:\r\n                out_failed_ids.append(oid)\r\n                reasons = \" || \".join(entry['logs'])\r\n                out_debug_log.append(f\"ID {oid}: {reasons}\")\r\n\r\n        OUT = [out_input_ids, out_traceability, out_failed_ids, out_debug_log]",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "82abb4bd0aba4e7baf8540311cabe415",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "39e0819150e14d028cebd4cea11d3682",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "69cdce90671b4e72855bb92e32cca825",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "046601d0e4e343bcb43cea3528ea9dea",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3e5759c2ca1a4de39434933deeb81ca3",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "951fc15f6d7d4cda943d9dbd705b1809",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "DSRevitNodesUI.Categories, DSRevitNodesUI",
+      "SelectedIndex": 32,
+      "SelectedString": "OST_Rebar",
+      "Id": "5d57aa146fd841819359d4b3501c62ea",
+      "NodeType": "ExtensionNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d148c7fc595c4e17808eca9fb7243978",
+          "Name": "Category",
+          "Description": "La categoría seleccionada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Todas las categorías integradas"
+    },
+    {
+      "ConcreteType": "DSRevitNodesUI.ElementsOfCategory, DSRevitNodesUI",
+      "Id": "abeefd04c0aa415aa4a314981291d3e4",
+      "NodeType": "ExtensionNode",
+      "Inputs": [
+        {
+          "Id": "20dc5019b05f4d158e77ec2f31598b46",
+          "Name": "Category",
+          "Description": "La categoría",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4773c79112c848fd90231265a12ece85",
+          "Name": "Elements",
+          "Description": "Una clase de elemento.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Obtiene todos los elementos de la categoría especificada en el modelo"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "4ad4299ed2dc46caa6366a69cd24b3a6",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "b5489a41f6904a01ac7708f4609041ee",
+          "Name": "element",
+          "Description": "Revit.Elements.Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3270fd7b46364fb38a07a4af7a338518",
+          "Name": "parameterName",
+          "Description": "El nombre del parámetro cuyo valor desea obtener.\n\nstring",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "b9ab038ab82f4de58158e42287ea65d1",
+          "Name": "var[]..[]",
+          "Description": "var[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "Revit.Elements.Element.GetParameterValueByName@string",
+      "Replication": "Auto",
+      "Description": "Obtiene el valor de uno de los parámetros del elemento.\n\nElement.GetParameterValueByName (parameterName: string): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "Id": "77a7e8f6e04649588c228c0a536e26c2",
+      "NodeType": "CodeBlockNode",
+      "Inputs": [
+        {
+          "Id": "7ea4c55f08ef4e8c97b3c2a63ffd9ba4",
+          "Name": "A",
+          "Description": "A",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "be8e9067ddf64983bbf730bac6683742",
+          "Name": "B",
+          "Description": "B",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "cb2f4a4915f5485b830faccc5dffea19",
+          "Name": "function",
+          "Description": "A == B",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite creación directa de código de DesignScript",
+      "Code": "A==B;"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "Id": "82a5e43f60c44f8e83b378f5ee4e4a74",
+      "NodeType": "CodeBlockNode",
+      "Inputs": [
+        {
+          "Id": "49af15f8fd0942b5b1245d8ef5ee987e",
+          "Name": "A",
+          "Description": "A",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "82c3cf844005497f99da9f7896596082",
+          "Name": "function",
+          "Description": "DesignScript.Builtin.Get.ValueAtIndex(A, 2)",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite creación directa de código de DesignScript",
+      "Code": "A[2];"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "f4b8be9041904569b369360d902fd85c",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "6d82438c17044e228284c8b79b5899f9",
+          "Name": "element",
+          "Description": "Revit.Elements.Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "241417af58904f1db688d36bd5c94a0d",
+          "Name": "int",
+          "Description": "int",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "Revit.Elements.Element.Id",
+      "Replication": "Auto",
+      "Description": "Obtiene el ID de elemento de este elemento.\n\nElement.Id: int"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "Id": "cf38b0c2ce5d4e4896425e9e32716c1d",
+      "NodeType": "CodeBlockNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ebe47a3485af492bb614d8779e404697",
+          "Name": "string",
+          "Description": "\"Empalme solapado 60D\"",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite creación directa de código de DesignScript",
+      "Code": "\"Empalme solapado 60D\";"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CodeBlockNodeModel, DynamoCore",
+      "Id": "7da6508219e541b1b9260a35f6f3ea98",
+      "NodeType": "CodeBlockNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f3aedea4be3240e4b3b959c9d0e213dd",
+          "Name": "string",
+          "Description": "\"Nombre de tipo\"",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Permite creación directa de código de DesignScript",
+      "Code": "\"Nombre de tipo\";"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "# IN[0]: lista de textos (opc. vacío)\r\n# IN[1]: lista de números (opc. vacío)\r\nimport math\r\n\r\ndef as_list(x):\r\n    return x if isinstance(x, list) else ([] if x is None else [x])\r\n\r\ndef canon(val):\r\n    # normaliza a float y redondea para comparar\r\n    try:\r\n        return round(float(val), 9)\r\n    except:\r\n        return None\r\n\r\ntexts = as_list(IN[0])\r\nnums  = as_list(IN[1])\r\n\r\ntext_vals = set()\r\nfor t in texts:\r\n    c = canon(t)\r\n    if c is not None:\r\n        text_vals.add(c)\r\n\r\nresult = []\r\nfor n in nums:\r\n    c = canon(n)\r\n    result.append(c in text_vals if c is not None else False)\r\n\r\nOUT = result\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "6c20b5edea9f4dfd96323c8bc9fb19c2",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "39873bfd081b4ad8b26dcdb12ca51d24",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "74613cac58c44d02aa4193f1205af771",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "ebf93a21d1b043258569daee57747fd4",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "f77c33227372453c8c563db0daa41380",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "080b8e99819f481597f565f3366eccf9",
+          "Name": "list",
+          "Description": "Lista que se debe filtrar.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "32084746b92547e183761882b1b37f88",
+          "Name": "mask",
+          "Description": "Lista de booleanos que representan una máscara.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "1205f05fbd6d467b9a9811dfb0a47614",
+          "Name": "in",
+          "Description": "Elementos cuyo índice de máscara es True.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4b5d9469bdd04791afd76df6f7d8cce0",
+          "Name": "out",
+          "Description": "Elementos cuyo índice de máscara es False.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.FilterByBoolMask@var[]..[],var[]..[]",
+      "Replication": "Auto",
+      "Description": "Filtra una secuencia mediante la búsqueda de los índices correspondientes en una lista separada de booleanos.\n\nList.FilterByBoolMask (list: var[]..[], mask: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Número_de_Empalmes",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "19b26b6a8ba044de9b1e223dea01def1",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d9d9895ead2f451e89985fe918fed0d0",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Longitudes_de_Empalmes",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "37df99dd5f7b40158762569fbcd1eab9",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b7a686c928d146799c64d53e9ba8e16d",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Tipo_de_barra",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "8e0055bb643f4eb1b5e224b540e9e9ee",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "394328809ee5486197a82f34dbf99805",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Rebar",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "997705fba91e46b5bedebbf250f25386",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3fe1d1bd11134efa96c283cb3e909bd1",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Planos",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "f07ee57d39094303912dba92426e2d68",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "e4d96d6f0217462ea5b381286ea052e1",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Barras sin empalmes",
+      "Id": "2d82fe7700fa49699afdbb48addd0c33",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "be1c9840a32847f4933c8e92f56e4458",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "06f739dd2c064007b54e79f821f72602",
+      "End": "046601d0e4e343bcb43cea3528ea9dea",
+      "Id": "ee21a50642bc493fa21c6d3a25924db1",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "e81c1b6ba05b430ca60a9b5ed4bbe765",
+      "End": "2440405c588a40739e30a22166990eab",
+      "Id": "1fc5482129184bd0a7af2e64897e20e7",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ef1e7d9d714841eba1c062e872657a52",
+      "End": "39e0819150e14d028cebd4cea11d3682",
+      "Id": "70c095670e254e71834b010e3b6f19bc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4e9b3d62a3dd4a7d94835490111307f8",
+      "End": "8ce866f8ef604bf28f7d4ab16cbafbaa",
+      "Id": "ff72990df02041b1b7993aecb5a87057",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "52db278dc6c444179b34f48be1130edd",
+      "End": "b5489a41f6904a01ac7708f4609041ee",
+      "Id": "31ea2b540c704b85a7dccdda54196ab7",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "52db278dc6c444179b34f48be1130edd",
+      "End": "63686d5b37164d14962053814a7b9c0c",
+      "Id": "e23bb84743634dd1a80eaba7f8760cc5",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "08ed665f0c504d9ca0eedb47833ff39a",
+      "End": "8cfe6e6e587946449f836a847e6b945f",
+      "Id": "f430dbebbd484dd5b8bedb9ab5876afe",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b6248b4293844679b541bd05708644ba",
+      "End": "eb5cf060fca646e982a94f476646a8be",
+      "Id": "93af41908e764e45b70a25f2a9f0d3eb",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "951fc15f6d7d4cda943d9dbd705b1809",
+      "End": "49af15f8fd0942b5b1245d8ef5ee987e",
+      "Id": "9d6812a000d04e4aabe049bc69a869f3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "d148c7fc595c4e17808eca9fb7243978",
+      "End": "20dc5019b05f4d158e77ec2f31598b46",
+      "Id": "5c4e70cc16b54ecfbe893e1b38175889",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4773c79112c848fd90231265a12ece85",
+      "End": "6d82438c17044e228284c8b79b5899f9",
+      "Id": "8232dfd489154b0fa18d0f4c3aa90e7a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4773c79112c848fd90231265a12ece85",
+      "End": "080b8e99819f481597f565f3366eccf9",
+      "Id": "3027ed131fad4e4e94e195e72b87c164",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b9ab038ab82f4de58158e42287ea65d1",
+      "End": "7ea4c55f08ef4e8c97b3c2a63ffd9ba4",
+      "Id": "bbdeb2dadb194fcdbb2056f988179f5c",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cb2f4a4915f5485b830faccc5dffea19",
+      "End": "5fa8481ac9fc4575a1a7b281defbf25e",
+      "Id": "1285ebeb44fe4ec4b2de25e4519c78f2",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "82c3cf844005497f99da9f7896596082",
+      "End": "39873bfd081b4ad8b26dcdb12ca51d24",
+      "Id": "4f67e4b462924c58adea0415439f9d3e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "241417af58904f1db688d36bd5c94a0d",
+      "End": "74613cac58c44d02aa4193f1205af771",
+      "Id": "3b474a8c7ec648eea2cf9bda0681d20b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ebe47a3485af492bb614d8779e404697",
+      "End": "be8e9067ddf64983bbf730bac6683742",
+      "Id": "c13929328caf41809daaade4916e99ff",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f3aedea4be3240e4b3b959c9d0e213dd",
+      "End": "3270fd7b46364fb38a07a4af7a338518",
+      "Id": "b92cf6dc489a4d898337d6452f1fbd95",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ebf93a21d1b043258569daee57747fd4",
+      "End": "32084746b92547e183761882b1b37f88",
+      "Id": "0bfaefeeeba844b8b0aae86f81b5c499",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1205f05fbd6d467b9a9811dfb0a47614",
+      "End": "be1c9840a32847f4933c8e92f56e4458",
+      "Id": "8513ea7e58824ff49d6ea24910ed3ab6",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "d9d9895ead2f451e89985fe918fed0d0",
+      "End": "64cbbfa42a8f4ad28fc643bc6b053703",
+      "Id": "903e51ce958847fea78721dd9b63dbef",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b7a686c928d146799c64d53e9ba8e16d",
+      "End": "03734bb636cd425a815cf8202235b97c",
+      "Id": "94f1d480cb0e4cfd97f4c71163626815",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "394328809ee5486197a82f34dbf99805",
+      "End": "a6eb341144d8405982958ea4bf507121",
+      "Id": "549f57ee64654f11934fbcd03b859cfc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "3fe1d1bd11134efa96c283cb3e909bd1",
+      "End": "69cdce90671b4e72855bb92e32cca825",
+      "Id": "c569cd212c3a4a6b95601f31218f80a1",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "e4d96d6f0217462ea5b381286ea052e1",
+      "End": "3e5759c2ca1a4de39434933deeb81ca3",
+      "Id": "3d6152d155d84468878a6f1112315ff1",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.6.0.9395",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": 3.5422258377075195,
+      "EyeY": 13.514360427856445,
+      "EyeZ": -24.800933837890625,
+      "LookX": 12.2752685546875,
+      "LookY": -8.176246643066406,
+      "LookZ": 14.990497589111328,
+      "UpX": 0.2463091015815735,
+      "UpY": 0.9213244915008545,
+      "UpZ": 0.3008209466934204
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "6d87608858394b2e8b22ee0b78a59eeb",
+        "Name": "Code Block",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 3383.182535752088,
+        "Y": 423.5499897303369
+      },
+      {
+        "Id": "7cf9e2c470e34a4f8076d77d416e37e1",
+        "Name": "Element type de empalmes Copiados",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2924.5315886910635,
+        "Y": 427.6798451160436
+      },
+      {
+        "Id": "aaab0adda9b74e139e21ef5d18d36281",
+        "Name": "Boolean",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 3476.753975881907,
+        "Y": 0.0
+      },
+      {
+        "Id": "59c575ece41f4419baef3fff2b54e5cd",
+        "Name": "Tipos de empalmes",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 250.0,
+        "Y": 644.2146918901462
+      },
+      {
+        "Id": "46e0497113534a33a4e0f5d77042ddec",
+        "Name": "Code Block",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 551.4490614355732,
+        "Y": 647.8146712230543
+      },
+      {
+        "Id": "1cca7454348645038bee57f940dac843",
+        "Name": "List.FilterByBoolMask",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2226.2965439333116,
+        "Y": 634.6709964168181
+      },
+      {
+        "Id": "4cc150e3b3524d23a8300925ee9c2103",
+        "Name": "List.FirstItem",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2600.3257682425815,
+        "Y": 652.1418396427953
+      },
+      {
+        "Id": "82abb4bd0aba4e7baf8540311cabe415",
+        "Name": "Empalmes",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 3839.015710865711,
+        "Y": 118.4977621116144
+      },
+      {
+        "Id": "5d57aa146fd841819359d4b3501c62ea",
+        "Name": "Categories",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 3344.620578073022,
+        "Y": 689.6561188610885
+      },
+      {
+        "Id": "abeefd04c0aa415aa4a314981291d3e4",
+        "Name": "All Elements of Category",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 3760.156101266752,
+        "Y": 682.8082379846171
+      },
+      {
+        "Id": "4ad4299ed2dc46caa6366a69cd24b3a6",
+        "Name": "Element.GetParameterValueByName",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1345.759923172834,
+        "Y": 756.9737543111858
+      },
+      {
+        "Id": "77a7e8f6e04649588c228c0a536e26c2",
+        "Name": "Code Block",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1840.7069676456426,
+        "Y": 773.9231488618609
+      },
+      {
+        "Id": "82a5e43f60c44f8e83b378f5ee4e4a74",
+        "Name": "Code Block",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 4114.92594659114,
+        "Y": 383.9103653484091
+      },
+      {
+        "Id": "f4b8be9041904569b369360d902fd85c",
+        "Name": "Element.Id",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 4121.460922823433,
+        "Y": 788.5935149213253
+      },
+      {
+        "Id": "cf38b0c2ce5d4e4896425e9e32716c1d",
+        "Name": "Code Block",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1384.3954446324474,
+        "Y": 989.6737439121458
+      },
+      {
+        "Id": "7da6508219e541b1b9260a35f6f3ea98",
+        "Name": "Code Block",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 928.8328333349696,
+        "Y": 1035.801964761535
+      },
+      {
+        "Id": "6c20b5edea9f4dfd96323c8bc9fb19c2",
+        "Name": "Python Script",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 4461.379198224797,
+        "Y": 764.0466751530869
+      },
+      {
+        "Id": "f77c33227372453c8c563db0daa41380",
+        "Name": "Barras sin empalmar",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 4713.326812652967,
+        "Y": 654.6694464719822
+      },
+      {
+        "Id": "19b26b6a8ba044de9b1e223dea01def1",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -377.00329002481305,
+        "Y": -347.9572227938654
+      },
+      {
+        "Id": "37df99dd5f7b40158762569fbcd1eab9",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -360.62047428427786,
+        "Y": -99.66032835065403
+      },
+      {
+        "Id": "8e0055bb643f4eb1b5e224b540e9e9ee",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -360.62047428427786,
+        "Y": 50.33967164934597
+      },
+      {
+        "Id": "997705fba91e46b5bedebbf250f25386",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -355.42696962885555,
+        "Y": 198.4511245019197
+      },
+      {
+        "Id": "f07ee57d39094303912dba92426e2d68",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -360.62047428427786,
+        "Y": 350.339671649346
+      },
+      {
+        "Id": "2d82fe7700fa49699afdbb48addd0c33",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 5046.6211595724635,
+        "Y": 665.1007140607869
+      }
+    ],
+    "Annotations": [],
+    "X": -3116.6998642000126,
+    "Y": 274.1161813119614,
+    "Zoom": 0.885499629976265
+  }
+}

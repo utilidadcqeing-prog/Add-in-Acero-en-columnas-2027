@@ -1,0 +1,17 @@
+# IN[0]: Lista original de cualquier jerarquía
+
+def flatten(lst):
+    for x in lst:
+        if isinstance(x, list):
+            for y in flatten(x):
+                yield y
+        else:
+            yield x
+
+# Aplana la lista
+plana = list(flatten(IN[0]))
+
+# Agrupa en sublistas de dos elementos
+agrupada = [plana[i:i+2] for i in range(0, len(plana), 2)]
+
+OUT = agrupada

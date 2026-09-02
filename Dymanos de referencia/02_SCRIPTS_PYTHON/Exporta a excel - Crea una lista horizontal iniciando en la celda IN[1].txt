@@ -1,0 +1,92 @@
+# -*- coding: utf-8 -*-
+# IN[0] = lista de textos (o un solo texto)
+# IN[1] = celda inicial, ej. "B4"
+# IN[2] = nombre de la hoja
+# IN[3] = ruta del .xlsx
+
+import os, sys, subprocess
+
+def ensure_openpyxl():
+    try:
+        import openpyxl  # noqa
+        return None
+    except ImportError:
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "openpyxl"])
+            return None
+        except Exception as e:
+            return "openpyxl no está instalado y no se pudo instalar automáticamente: {}".format(e)
+
+def ensure_xlsx(path):
+    root, ext = os.path.splitext(path or "")
+    return root + ".xlsx" if ext.lower() != ".xlsx" else path
+
+def to_list(x):
+    if x is None: return []
+    return list(x) if isinstance(x, (list, tuple)) else [x]
+
+# -------- Entradas --------
+values   = to_list(IN[0])
+startref = IN[1]
+sheet    = IN[2]
+path     = IN[3]
+
+summary = {"filepath": None, "sheet": sheet, "start": startref, "end": None, "written": 0, "errors": []}
+
+try:
+    if not (isinstance(startref, str) and startref.strip()):
+        raise ValueError("IN[1] (celda inicial) es obligatorio, ej. 'B4'.")
+    if not (isinstance(sheet, str) and sheet.strip()):
+        raise ValueError("IN[2] (nombre de hoja) es obligatorio.")
+    if not (isinstance(path, str) and path.strip()):
+        raise ValueError("IN[3] (FilePath) es obligatorio.")
+
+    err = ensure_openpyxl()
+    if err:
+        raise RuntimeError(err)
+
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.utils import coordinate_to_tuple, get_column_letter
+
+    path = ensure_xlsx(path)
+    folder = os.path.dirname(path)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder)
+
+    # Abrir o crear libro
+    if os.path.exists(path):
+        wb = load_workbook(path)
+    else:
+        wb = Workbook()
+
+    # Obtener/crear hoja
+    if sheet in wb.sheetnames:
+        ws = wb[sheet]
+    else:
+        ws = wb.create_sheet(title=sheet)
+
+    # Quitar "Sheet" por defecto si quedó sobrando
+    if "Sheet" in wb.sheetnames and sheet != "Sheet" and len(wb.sheetnames) > 1:
+        try: wb.remove(wb["Sheet"])
+        except: pass
+
+    # Coordenada inicial
+    row0, col0 = coordinate_to_tuple(startref.strip().upper())
+
+    # Escribir horizontalmente
+    for i, val in enumerate(values):
+        ws.cell(row=row0, column=col0 + i, value=("" if val is None else val))
+
+    # Guardar
+    wb.save(path)
+
+    # Rango final escrito
+    last_col_letter = get_column_letter(col0 + max(len(values) - 1, 0))
+    summary["end"] = "{}{}".format(last_col_letter, row0)
+    summary["written"] = len(values)
+    summary["filepath"] = path
+
+except Exception as e:
+    summary["errors"].append(str(e))
+
+OUT = summary

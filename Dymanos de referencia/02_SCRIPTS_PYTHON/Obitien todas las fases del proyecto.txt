@@ -1,0 +1,23 @@
+# Importaciones necesarias para la API de Revit y Dynamo
+import clr
+clr.AddReference("RevitAPI")
+from Autodesk.Revit.DB import *
+
+clr.AddReference("RevitServices")
+import RevitServices
+from RevitServices.Persistence import DocumentManager
+
+# Obtener el documento actual de Revit
+doc = DocumentManager.Instance.CurrentDBDocument
+
+# La forma más directa de obtener todas las fases es a través 
+# de la propiedad 'Phases' del documento.
+# Esto devuelve las fases en su orden cronológico.
+todas_las_fases = doc.Phases
+
+# Convertir la colección de fases de la API a una lista de Python
+# para que Dynamo la pueda manejar fácilmente.
+lista_de_fases = [fase for fase in todas_las_fases]
+
+# Asignar la lista final a la salida del nodo
+OUT = lista_de_fases

@@ -1,0 +1,74 @@
+import clr
+clr.AddReference('RevitAPI')
+clr.AddReference('RevitServices')
+from Autodesk.Revit.DB import *
+from RevitServices.Persistence import DocumentManager
+
+doc = DocumentManager.Instance.CurrentDBDocument
+
+viga_sel = UnwrapElement(IN[0])
+vigas = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralFraming).WhereElementIsNotElementType().ToElements()
+
+def get_id_val(obj):
+    # Si es int, devuelve directo
+    if type(obj) == int:
+        return obj
+    # Si es un ElementId (CPython3)
+    if obj.__class__.__name__ == "ElementId":
+        return int(str(obj))
+    # Si es un elemento Revit, accede a su Id
+    if hasattr(obj, 'Id'):
+        return get_id_val(obj.Id)
+    # Si es string, intenta convertir
+    try:
+        return int(obj)
+    except:
+        raise Exception("No se puede extraer IntegerValue del objeto (tipo {}): {}".format(type(obj), obj))
+
+def extremos_y_direccion(viga):
+    loc = viga.Location
+    if hasattr(loc, "Curve"):
+        curva = loc.Curve
+        p0 = curva.GetEndPoint(0)
+        p1 = curva.GetEndPoint(1)
+        vec = XYZ(p1.X - p0.X, p1.Y - p0.Y, p1.Z - p0.Z)
+        mag = vec.GetLength()
+        if mag == 0:
+            return [p0, p1], None
+        dir_norm = XYZ(vec.X/mag, vec.Y/mag, vec.Z/mag)
+        return [p0, p1], dir_norm
+    return [], None
+
+tolerancia = 0.001
+umbral_direccion = 0.01
+
+ext_sel, dir_sel = extremos_y_direccion(viga_sel)
+visitadas = set([get_id_val(viga_sel)])
+cola = [(viga_sel, ext_sel, dir_sel)]
+resultado = [viga_sel]
+
+while cola:
+    actual, extremos_act, dir_act = cola.pop(0)
+    for viga in vigas:
+        if get_id_val(viga) in visitadas:
+            continue
+        ext_viga, dir_viga = extremos_y_direccion(viga)
+        if dir_viga is None:
+            continue
+        dot = abs(dir_act.X * dir_viga.X + dir_act.Y * dir_viga.Y + dir_act.Z * dir_viga.Z)
+        paralelo = abs(dot - 1.0) < umbral_direccion
+        if paralelo:
+            conectado = False
+            for p1 in extremos_act:
+                for p2 in ext_viga:
+                    if p1.DistanceTo(p2) < tolerancia:
+                        conectado = True
+                        break
+                if conectado:
+                    break
+            if conectado:
+                visitadas.add(get_id_val(viga))
+                resultado.append(viga)
+                cola.append((viga, ext_viga, dir_viga))
+
+OUT = resultado

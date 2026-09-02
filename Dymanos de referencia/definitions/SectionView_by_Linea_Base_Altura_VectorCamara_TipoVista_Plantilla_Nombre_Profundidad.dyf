@@ -1,0 +1,527 @@
+{
+  "Uuid": "f13d04ef-ecc1-4d08-95b7-aa23e6fac33b",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "Crea vistas en el punto central de las lineas. Las entradas  de Linea, Base, Altura, VectorCamara y Nombre deben ser listas de igual tamaño y estructura. Las entradas de TipoVista, Plantilla y Profundidad deben ser elementos individuales. (Linea) - (Base, double) - (Altura, double) - (VectorCamara) - (TipoVista, string) - (Plantilla, string) - (Nombre, string) - (Profundidad, double).",
+  "Name": "SectionView_by_Linea_Base_Altura_VectorCamara_TipoVista_Plantilla_Nombre_Profundidad",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "# @DYNAMO v.3.6.0 © 2025 Autodesk, Inc.\r\n# Script desarrollado para crear Vistas de Sección automatizadas\r\n\r\nimport clr\r\nimport System\r\n\r\n# Importar librerías de Revit API\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\n\r\n# Importar servicios de Dynamo y gestión de documentos\r\nclr.AddReference('RevitServices')\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\n# Importar nodos de geometría de Dynamo\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\n# Obtener el documento actual\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# ---------------------------------------------------------------------------\r\n# FUNCIONES AUXILIARES\r\n# ---------------------------------------------------------------------------\r\n\r\ndef to_list(obj):\r\n    if obj is None: return []\r\n    if isinstance(obj, list): return obj\r\n    if hasattr(obj, \"GetType\") and obj.GetType().IsArray: return obj\r\n    return [obj]\r\n\r\ndef meters_to_feet(meters):\r\n    try:\r\n        if meters is None: return 1.0\r\n        return float(meters) * 3.2808399\r\n    except:\r\n        return 1.0\r\n\r\ndef to_revit_xyz(pt_or_vec):\r\n    if pt_or_vec is None: return XYZ.Zero\r\n    if isinstance(pt_or_vec, XYZ): return pt_or_vec\r\n    try:\r\n        return XYZ(float(pt_or_vec.X), float(pt_or_vec.Y), float(pt_or_vec.Z))\r\n    except:\r\n        return XYZ.Zero\r\n\r\ndef get_curve_geometry_and_convert(element):\r\n    \"\"\"\r\n    Obtiene una Linea de Revit válida y asegura que esté en PIES.\r\n    \"\"\"\r\n    if element is None: return None\r\n    \r\n    # Intento 1: Curva Nativa\r\n    if isinstance(element, Curve): return element\r\n    if hasattr(element, \"GeometryCurve\"): return element.GeometryCurve\r\n\r\n    # Intento 2: Dynamo .ToRevitType\r\n    try:\r\n        if hasattr(element, \"ToRevitType\"): return element.ToRevitType()\r\n    except: pass\r\n\r\n    # Intento 3: Reconstrucción Manual (Metros -> Pies)\r\n    try:\r\n        if hasattr(element, \"StartPoint\") and hasattr(element, \"EndPoint\"):\r\n            p1_raw = element.StartPoint\r\n            p2_raw = element.EndPoint\r\n            factor = 3.2808399\r\n            p1 = XYZ(float(p1_raw.X) * factor, float(p1_raw.Y) * factor, float(p1_raw.Z) * factor)\r\n            p2 = XYZ(float(p2_raw.X) * factor, float(p2_raw.Y) * factor, float(p2_raw.Z) * factor)\r\n            return Line.CreateBound(p1, p2)\r\n    except: pass\r\n        \r\n    return None\r\n\r\ndef find_view_template(doc, template_name):\r\n    if not template_name or not isinstance(template_name, str): return None\r\n    \r\n    collector = FilteredElementCollector(doc).OfClass(View)\r\n    for v in collector:\r\n        try:\r\n            if not v or not v.IsValidObject: continue\r\n            if v.IsTemplate and v.Name == template_name:\r\n                return v.Id\r\n        except: \r\n            continue\r\n    return None\r\n\r\ndef normalize_string(s):\r\n    \"\"\"Limpia strings para comparaciones seguras.\"\"\"\r\n    if not s: return \"\"\r\n    return str(s).strip().lower()\r\n\r\ndef get_safe_name(element):\r\n    \"\"\"Obtiene el nombre de forma segura usando Parámetros BuiltIn.\"\"\"\r\n    try:\r\n        # Intento 1: Parámetro interno (Más seguro contra corrupción)\r\n        p = element.get_Parameter(BuiltInParameter.ALL_MODEL_TYPE_NAME)\r\n        if p and p.HasValue:\r\n            return p.AsString()\r\n    except: pass\r\n    \r\n    try:\r\n        # Intento 2: Propiedad directa\r\n        return element.Name\r\n    except:\r\n        return \"\"\r\n\r\ndef get_strict_view_type_id(doc, type_name_input):\r\n    \"\"\"\r\n    Busca o crea el Tipo de Vista EXACTO.\r\n    ESTRATEGIA FORENSE: Busca por parámetro interno antes de intentar duplicar.\r\n    \"\"\"\r\n    # 1. Preparar nombre objetivo\r\n    target_name = \"New Section Type\"\r\n    if type_name_input:\r\n        if isinstance(type_name_input, list):\r\n            if len(type_name_input) > 0: target_name = str(type_name_input[0]).strip()\r\n        else:\r\n            target_name = str(type_name_input).strip()\r\n            \r\n    target_clean = normalize_string(target_name)\r\n\r\n    # 2. BÚSQUEDA EXHAUSTIVA\r\n    # Buscamos en TODOS los ViewFamilyTypes sin filtrar familia primero\r\n    # para asegurar que encontramos el nombre si existe.\r\n    collector = FilteredElementCollector(doc).OfClass(ViewFamilyType)\r\n    \r\n    potential_source = None\r\n    \r\n    for vt in collector:\r\n        try:\r\n            if not vt.IsValidObject: continue\r\n            \r\n            # Obtener nombre seguro\r\n            vt_name = get_safe_name(vt)\r\n            \r\n            # Comparar nombres\r\n            if normalize_string(vt_name) == target_clean:\r\n                # ¡ENCONTRADO! Devolvemos este ID inmediatamente.\r\n                return vt.Id, vt_name\r\n            \r\n            # Guardamos un candidato para duplicar si es Sección (Building Section, etc)\r\n            if not potential_source:\r\n                try:\r\n                    if vt.ViewFamily == ViewFamily.Section:\r\n                        if \"building\" in normalize_string(vt_name) or \"edificio\" in normalize_string(vt_name) or \"section\" in normalize_string(vt_name):\r\n                            potential_source = vt\r\n                except: pass\r\n        except: \r\n            continue\r\n            \r\n    # Si llegamos aquí, NO encontramos el nombre.\r\n    \r\n    # 3. Preparar Fuente para Duplicar\r\n    if not potential_source:\r\n        # Búsqueda secundaria de fuente\r\n        col_sec = FilteredElementCollector(doc).OfClass(ViewFamilyType)\r\n        for vt in col_sec:\r\n            try:\r\n                if vt.ViewFamily == ViewFamily.Section:\r\n                    potential_source = vt\r\n                    break\r\n            except: continue\r\n            \r\n    if not potential_source:\r\n        raise Exception(\"No existen tipos de familia 'Section' en el proyecto para duplicar.\")\r\n\r\n    # 4. DUPLICAR\r\n    try:\r\n        new_type = potential_source.Duplicate(target_name)\r\n        return new_type.Id, target_name\r\n\r\n    except Exception as e:\r\n        # Si falla diciendo que ya existe, es un error fantasma muy raro.\r\n        # Hacemos una última verificación desesperada por ID.\r\n        raise Exception(f\"CRÍTICO: El nombre '{target_name}' no se pudo encontrar ni crear. Error API: {str(e)}\")\r\n\r\n# ---------------------------------------------------------------------------\r\n# LÓGICA PRINCIPAL\r\n# ---------------------------------------------------------------------------\r\n\r\ncreated_views = []\r\n\r\ntry:\r\n    if IN[0] is None:\r\n        created_views.append(\"Error: Input IN[0] es nulo\")\r\n    else:\r\n        # Entradas\r\n        lines_raw = to_list(IN[0]) \r\n        widths = to_list(IN[1])\r\n        heights = to_list(IN[2])\r\n        vectors_raw = to_list(IN[3])\r\n        view_type_input = IN[4]\r\n        template_name = IN[5]\r\n        view_names = to_list(IN[6])\r\n        view_depth = IN[7]\r\n\r\n        TransactionManager.Instance.EnsureInTransaction(doc)\r\n        \r\n        # 1. OBTENER ID DEL TIPO (CRÍTICO)\r\n        target_type_id = None\r\n        try:\r\n            target_type_id, final_type_name = get_strict_view_type_id(doc, view_type_input)\r\n        except Exception as e:\r\n            created_views.append(f\"ERROR TIPO DE VISTA: {str(e)}\")\r\n            target_type_id = None\r\n\r\n        # Plantilla\r\n        template_id = find_view_template(doc, template_name)\r\n        \r\n        # Solo procedemos si tenemos el tipo correcto\r\n        if target_type_id:\r\n            count = len(lines_raw)\r\n            for i in range(count):\r\n                try:\r\n                    # --- GEOMETRÍA ---\r\n                    raw_item = lines_raw[i]\r\n                    line = get_curve_geometry_and_convert(UnwrapElement(raw_item))\r\n                    if not line: line = get_curve_geometry_and_convert(raw_item)\r\n                    \r\n                    if not line:\r\n                        created_views.append(f\"Error Item {i}: Geometría inválida\")\r\n                        continue\r\n                    \r\n                    # --- DATOS ---\r\n                    w_m = widths[i] if i < len(widths) else widths[0]\r\n                    h_m = heights[i] if i < len(heights) else heights[0]\r\n                    raw_vec = vectors_raw[i] if i < len(vectors_raw) else vectors_raw[0]\r\n                    direction_vec = to_revit_xyz(UnwrapElement(raw_vec))\r\n                    v_name = view_names[i] if i < len(view_names) else f\"Section {i}\"\r\n                    \r\n                    w_ft = meters_to_feet(w_m)\r\n                    h_ft = meters_to_feet(h_m)\r\n                    d_ft = meters_to_feet(view_depth)\r\n\r\n                    # --- TRANSFORMACIÓN (Centrado) ---\r\n                    p_start = line.GetEndPoint(0)\r\n                    p_end = line.GetEndPoint(1)\r\n                    mid_x = (p_start.X + p_end.X) / 2.0\r\n                    mid_y = (p_start.Y + p_end.Y) / 2.0\r\n                    mid_z = (p_start.Z + p_end.Z) / 2.0\r\n                    midpoint = XYZ(mid_x, mid_y, mid_z)\r\n                    \r\n                    view_dir = direction_vec.Normalize()\r\n                    if view_dir.IsZeroLength(): view_dir = XYZ.BasisY\r\n\r\n                    up = XYZ.BasisZ\r\n                    right = view_dir.CrossProduct(up)\r\n                    if right.IsZeroLength(): right = XYZ.BasisX\r\n                    else: right = right.Normalize()\r\n                    real_up = right.CrossProduct(view_dir).Normalize()\r\n\r\n                    t = Transform.Identity\r\n                    t.Origin = midpoint\r\n                    t.BasisX = right\r\n                    t.BasisY = real_up\r\n                    t.BasisZ = view_dir.Negate()\r\n\r\n                    # --- BOUNDING BOX ---\r\n                    bb = BoundingBoxXYZ()\r\n                    bb.Transform = t\r\n                    depth_val = d_ft if d_ft > 0.001 else 1.0\r\n                    bb.Min = XYZ(-w_ft/2, -h_ft/2, -depth_val) \r\n                    bb.Max = XYZ(w_ft/2, h_ft/2, 0.0) \r\n                    bb.MinEnabled = True\r\n                    bb.MaxEnabled = True\r\n\r\n                    # --- CREAR VISTA ---\r\n                    new_view = ViewSection.CreateSection(doc, target_type_id, bb)\r\n                    \r\n                    # --- FORZADO DE TIPO ---\r\n                    current_type_id = new_view.GetTypeId()\r\n                    \r\n                    # Comparación directa de ElementId\r\n                    if current_type_id != target_type_id:\r\n                        try:\r\n                            new_view.ChangeTypeId(target_type_id)\r\n                        except:\r\n                            try:\r\n                                p_type = new_view.get_Parameter(BuiltInParameter.ELEM_FAMILY_AND_TYPE_PARAM)\r\n                                if p_type and not p_type.IsReadOnly:\r\n                                    p_type.Set(target_type_id)\r\n                            except:\r\n                                pass\r\n\r\n                    # Nombre\r\n                    try:\r\n                        new_view.Name = str(v_name)\r\n                    except:\r\n                        new_view.Name = f\"{v_name}_{new_view.Id}\"\r\n                    \r\n                    # Plantilla\r\n                    if template_id:\r\n                        try: new_view.ViewTemplateId = template_id\r\n                        except: pass\r\n                    \r\n                    # Profundidad\r\n                    try:\r\n                        p = new_view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR)\r\n                        if p: p.Set(d_ft)\r\n                    except: pass\r\n                    \r\n                    # Activar Recorte\r\n                    try:\r\n                        new_view.CropBoxActive = True\r\n                        new_view.CropBoxVisible = True\r\n                    except: pass\r\n                        \r\n                    created_views.append(new_view)\r\n\r\n                except Exception as e_inner:\r\n                    created_views.append(f\"Error vista {i}: {str(e_inner)}\")\r\n        else:\r\n            pass \r\n\r\n        TransactionManager.Instance.TransactionTaskDone()\r\n\r\nexcept Exception as global_e:\r\n    created_views.append(f\"Error Fatal: {str(global_e)}\")\r\n\r\nOUT = created_views",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "6de365f6466341f38c71f1cf92cc07f1",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "0c22595e72e14e65aeaa47a4cfacd1c3",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3c8d7647f86c4c97af754ee20afa0e35",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "3fac8cd02b1f484598b1fee4bf6bc314",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "0828947e549641708bcd24c6e7b363fa",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "441dd9ddfedc4cdab1e938dc6e785fbc",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "b4c2f341e231435fade09ad1820cf125",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2160d79ad35143e1ba42e19f9bdde5ba",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fa62bf3d71a54553a9553e20f49400ee",
+          "Name": "IN[7]",
+          "Description": "Input #7",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3c5b7d9841204e48ba6e8ba60a30b279",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Vista",
+      "Id": "f66bb8d341ee4259b60d0a4e3b4ee46e",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "61e9fcc93a824baaa7b06bd01abc36dc",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Linea",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Línea (Dynamo)."
+      },
+      "Id": "0bc39e9ddde547658d15ca44b2bd906a",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "97464bbb4bfa4bcabd0a89e403669ab9",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Base",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Ancho de la vista (double)."
+      },
+      "Id": "cf825be1a8594021bc05cabcdf1604a5",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "06d76aa7e8344b34a3146f0c4ddfb455",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Altura",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Altura de la vista (double)."
+      },
+      "Id": "1b74602f811b4331a3e8baea9e96e7c5",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "971360167f604a1c99328a0b2c2ded1a",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "VectorCamara",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Vector en el que apunta la cámara de la vista (Dynamo)."
+      },
+      "Id": "c117bf2e12a046fbb536fe7045102fc8",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "80c3b302ecd4472f95ecdf4391b3a238",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "TipoVista",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Tipo de vista que se le asignará a la vista (string)."
+      },
+      "Id": "acd5db95f0fa49ef8f64ed5f8e6bb066",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "ef304e89b48d431599309ad8796c0893",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Plantilla",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Plantilla de vista que se le asignará a la vista (string)."
+      },
+      "Id": "d06023b09fc0452381d2a45b34f1293c",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f161a422fffd42bd8dff4957f5027bef",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Nombre",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre que se le asignará a la vista (string)."
+      },
+      "Id": "ed612435973d41a3b618201895b3d631",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f371f7ba0510438297f52de208c6026e",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Profundidad",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Profundidad de vista (double)."
+      },
+      "Id": "0ffec91988464a36b30c390981f9950b",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "d9c0386f28564e619b0d6acc524fe83d",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "3c5b7d9841204e48ba6e8ba60a30b279",
+      "End": "61e9fcc93a824baaa7b06bd01abc36dc",
+      "Id": "39fbb6cf723c4ca8bba81376f3dcb8fe",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "97464bbb4bfa4bcabd0a89e403669ab9",
+      "End": "0c22595e72e14e65aeaa47a4cfacd1c3",
+      "Id": "7b696b32f89e4af5beed9698f59d652a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "06d76aa7e8344b34a3146f0c4ddfb455",
+      "End": "3c8d7647f86c4c97af754ee20afa0e35",
+      "Id": "d5090dceb0d1461b90d36b102b4f53d7",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "971360167f604a1c99328a0b2c2ded1a",
+      "End": "3fac8cd02b1f484598b1fee4bf6bc314",
+      "Id": "e3c679548bcb489abecb705f265e7533",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "80c3b302ecd4472f95ecdf4391b3a238",
+      "End": "0828947e549641708bcd24c6e7b363fa",
+      "Id": "823fefee7597462597852aedd3170fe0",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "ef304e89b48d431599309ad8796c0893",
+      "End": "441dd9ddfedc4cdab1e938dc6e785fbc",
+      "Id": "a5f28bdaab904826a00a7f8feedd77ca",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f161a422fffd42bd8dff4957f5027bef",
+      "End": "b4c2f341e231435fade09ad1820cf125",
+      "Id": "f772869586494a6a9e83fd2969efd227",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f371f7ba0510438297f52de208c6026e",
+      "End": "2160d79ad35143e1ba42e19f9bdde5ba",
+      "Id": "0962fbbc5bcc475ea37bd97b77c5bff3",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "d9c0386f28564e619b0d6acc524fe83d",
+      "End": "fa62bf3d71a54553a9553e20f49400ee",
+      "Id": "a9d26d9c3fc24c9bb6f91c8f80f89b50",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.6.0.9395",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": -40.24299621582031,
+      "EyeY": 16.335041046142578,
+      "EyeZ": 1.8837528228759766,
+      "LookX": 30.148216247558594,
+      "LookY": -13.040485382080078,
+      "LookZ": -12.064874649047852,
+      "UpX": 0.15323294699192047,
+      "UpY": 0.9862856864929199,
+      "UpZ": -0.06132109463214874
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "6de365f6466341f38c71f1cf92cc07f1",
+        "Name": "Crea vistas de las columnas",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 547.2802995592212,
+        "Y": 452.0852481776175
+      },
+      {
+        "Id": "f66bb8d341ee4259b60d0a4e3b4ee46e",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 902.2802995592212,
+        "Y": 452.0852481776175
+      },
+      {
+        "Id": "0bc39e9ddde547658d15ca44b2bd906a",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -175.05183739339725,
+        "Y": -121.78580330078967
+      },
+      {
+        "Id": "cf825be1a8594021bc05cabcdf1604a5",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -175.05183739339725,
+        "Y": 30.877268301216475
+      },
+      {
+        "Id": "1b74602f811b4331a3e8baea9e96e7c5",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -199.85529919533172,
+        "Y": 186.12563754975315
+      },
+      {
+        "Id": "c117bf2e12a046fbb536fe7045102fc8",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -381.307658737849,
+        "Y": 343.99038309919206
+      },
+      {
+        "Id": "acd5db95f0fa49ef8f64ed5f8e6bb066",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -371.7175863922188,
+        "Y": 494.5545189255873
+      },
+      {
+        "Id": "d06023b09fc0452381d2a45b34f1293c",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -398.3081236812356,
+        "Y": 662.1776710575672
+      },
+      {
+        "Id": "ed612435973d41a3b618201895b3d631",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -310.39030834144137,
+        "Y": 819.9966913038514
+      },
+      {
+        "Id": "0ffec91988464a36b30c390981f9950b",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -151.74636557303887,
+        "Y": 967.99981699098
+      }
+    ],
+    "Annotations": [],
+    "X": -1376.8151109322089,
+    "Y": -693.4833653520053,
+    "Zoom": 1.9141738960417092
+  }
+}
