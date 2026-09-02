@@ -23,10 +23,10 @@ using practicacq.Modelo;
 /// contrato de L1). Quien la abre decide si le pasa los proveedores falsos
 /// (para probar sin Revit) o los reales (J2/J-tipos, cuando existan).
 ///
-/// El panel de la derecha es una versión mínima —alcanza para editar y
-/// persistir un <see cref="ConfigTramo"/>— pero la máquina de estados
-/// completa (modos realmente excluyentes con mensajes de validación por
-/// campo) es trabajo de L3, no de acá.
+/// El panel de la derecha implementa también L3 (máquina de estados: modos
+/// excluyentes, autocompletado del espaciado no confinado, validación por
+/// campo con mensaje concreto) — quedó todo en el mismo archivo porque L2 y
+/// L3 comparten el mismo panel, no dos controles separados.
 /// </summary>
 public partial class VentanaConfiguradorEstribos : Window
 {
@@ -60,14 +60,21 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboTipoBarra.ItemsSource = _tipos.ListarTiposBarra();
         ComboTipoGancho.ItemsSource = _tipos.ListarTiposGancho();
 
-        RadioUniforme.Checked += (_, _) => ActualizarVisibilidadModo();
-        RadioConfinado.Checked += (_, _) => ActualizarVisibilidadModo();
+        RadioUniforme.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
+        RadioConfinado.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
 
-        // Cableado acá y no en el XAML: si el TextChanged se dispara durante
-        // el parseo inicial (InitializeComponent, al asignar el Text="0.07"
-        // del propio XAML), CampoEspaciadoNoConfinado todavía no existe como
-        // campo conectado y esto revienta con NullReferenceException.
+        // Cableado acá y no en el XAML: si estos se disparan durante el
+        // parseo inicial (InitializeComponent, al asignar los Text="..." del
+        // propio XAML), los controles que tocan todavía no existen como
+        // campos conectados y esto revienta con NullReferenceException --
+        // pasó de verdad con CampoEspaciadoConfinado_TextChanged, ver commit.
         CampoEspaciadoConfinado.TextChanged += CampoEspaciadoConfinado_TextChanged;
+        CampoEspaciadoConfinado.TextChanged += (_, _) => RevalidarPanel();
+        CampoEspaciadoUniforme.TextChanged += (_, _) => RevalidarPanel();
+        CampoL1.TextChanged += (_, _) => RevalidarPanel();
+        CampoEspaciadoNoConfinado.TextChanged += (_, _) => RevalidarPanel();
+        ComboTipoBarra.SelectionChanged += (_, _) => RevalidarPanel();
+        ComboTipoGancho.SelectionChanged += (_, _) => RevalidarPanel();
 
         CargarColumnas();
     }
@@ -168,6 +175,61 @@ public partial class VentanaConfiguradorEstribos : Window
     }
 
     /// <summary>
+    /// L3: valida el <see cref="ConfigTramo"/> del panel campo por campo, con
+    /// mensaje concreto -- nunca "valor inválido" a secas. Si se pasa el
+    /// tramo activo, suma el chequeo de norma (L1 ≥ altura/2 no deja zona
+    /// central); sin tramo (por ejemplo al validar la plantilla de "aplicar a
+    /// selección", donde la altura depende de a cuáles se les vaya a aplicar)
+    /// se valida solo lo que no depende de un tramo puntual.
+    /// </summary>
+    private static List<string> Validar(ConfigTramo cfg, Tramo? tramo)
+    {
+        var errores = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(cfg.TipoBarraNombre))
+            errores.Add("Elegí un tipo de barra.");
+        if (string.IsNullOrWhiteSpace(cfg.TipoGanchoNombre))
+            errores.Add("Elegí un tipo de gancho.");
+
+        if (cfg.Modo == ModoEstribo.Uniforme)
+        {
+            if (cfg.EspaciadoUniforme <= 0)
+                errores.Add("El espaciado tiene que ser mayor que cero.");
+        }
+        else
+        {
+            if (cfg.LongitudConfinamiento <= 0)
+                errores.Add("La longitud de confinamiento (L1) tiene que ser mayor que cero.");
+            if (cfg.EspaciadoConfinado <= 0)
+                errores.Add("El espaciado confinado tiene que ser mayor que cero.");
+            if (cfg.EspaciadoNoConfinado <= 0)
+                errores.Add("El espaciado no confinado tiene que ser mayor que cero.");
+
+            if (tramo is not null && tramo.Altura > 0 && cfg.LongitudConfinamiento * 2 >= tramo.Altura)
+                errores.Add(
+                    $"L1 ({cfg.LongitudConfinamiento:0.00} m) x2 ≥ la altura del tramo " +
+                    $"({tramo.Altura:0.00} m): no queda zona central.");
+
+            if (tramo is { Tipo: TipoTramo.DentroDeViga })
+                errores.Add(
+                    "Este tramo ya es un nudo (dentro de viga): el confinamiento normalmente " +
+                    "se configura en los tramos libres adyacentes, no acá.");
+        }
+
+        return errores;
+    }
+
+    /// <summary>Revalida el panel contra el tramo activo y actualiza el mensaje en pantalla.</summary>
+    private void RevalidarPanel()
+    {
+        if (_columnaActiva is null) { TextoValidacion.Text = ""; return; }
+
+        Tramo tramo = _columnaActiva.Tramos[_tramoActivoIndice];
+        List<string> errores = Validar(LeerConfigDelPanel(), tramo);
+        TextoValidacion.Text = string.Join(Environment.NewLine, errores);
+    }
+
+    /// <summary>
     /// Autocompleta el espaciado no confinado al doble del confinado. Queda
     /// editable después: si el usuario lo toca, esto no lo vuelve a pisar en
     /// esta misma edición (la máquina de estados completa que decide cuándo
@@ -237,9 +299,7 @@ public partial class VentanaConfiguradorEstribos : Window
         Tramo tramo = _columnaActiva.Tramos[_tramoActivoIndice];
         TextoTramoActivo.Text = $"{_columnaActiva.Marca} · {_tramoActivoIndice + 1}/{_columnaActiva.Tramos.Count} · {Rotulo(tramo.Tipo)}";
 
-        TextoValidacion.Text = tramo.Tipo == TipoTramo.DentroDeViga && RadioConfinado.IsChecked == true
-            ? "Este tramo ya es un nudo (dentro de viga): el confinamiento normalmente se configura en los tramos libres adyacentes, no acá."
-            : "";
+        RevalidarPanel();
     }
 
     // ----------------------------------------------------------- selección
@@ -247,9 +307,26 @@ public partial class VentanaConfiguradorEstribos : Window
     private void BotonAplicarSeleccion_Click(object sender, RoutedEventArgs e)
     {
         ConfigTramo plantilla = LeerConfigDelPanel();
-        int aplicados = 0;
 
-        foreach (NodoLista nodo in _nodos.Where(n => !n.EsColumna && n.Marcado))
+        // Validación de campos (sin altura -- eso depende de a qué tramo se
+        // le aplique, se chequea abajo, por tramo, una vez que se sabe).
+        List<string> erroresPlantilla = Validar(plantilla, tramo: null);
+        if (erroresPlantilla.Count > 0)
+        {
+            TextoEstado.Text = "No se aplicó nada: " + string.Join(" ", erroresPlantilla);
+            return;
+        }
+
+        List<NodoLista> objetivo = _nodos.Where(n => !n.EsColumna && n.Marcado).ToList();
+        if (objetivo.Count == 0)
+        {
+            TextoEstado.Text = "No hay tramos tildados en la lista: tildá alguno (o una columna entera) para aplicarles esta configuración.";
+            return;
+        }
+
+        var conProblemaDeNorma = new List<string>();
+
+        foreach (NodoLista nodo in objetivo)
         {
             // Copia independiente por tramo -- no una referencia compartida.
             // Editar uno solo después (con las flechas) no le tiene que
@@ -264,12 +341,34 @@ public partial class VentanaConfiguradorEstribos : Window
                 EspaciadoConfinado = plantilla.EspaciadoConfinado,
                 EspaciadoNoConfinado = plantilla.EspaciadoNoConfinado,
             };
-            aplicados++;
+
+            // El chequeo de L1 vs altura sí depende de CADA tramo -- distintos
+            // tramos de la selección pueden tener distinta altura. Se avisa
+            // pero no se bloquea: es la misma filosofía del resto del código
+            // (avisos, no excepciones), la geometría incoherente de verdad la
+            // ataja el generador (J3), esto es una alerta temprana en la UI.
+            ColumnaContexto contexto = _contexto.Leer(nodo.ColumnaId);
+            Tramo tramoReal = contexto.Tramos[nodo.TramoIndice];
+            if (plantilla.Modo == ModoEstribo.Confinado
+                && tramoReal.Altura > 0
+                && plantilla.LongitudConfinamiento * 2 >= tramoReal.Altura)
+            {
+                conProblemaDeNorma.Add($"{contexto.Marca}[{nodo.TramoIndice}]");
+            }
         }
 
-        TextoEstado.Text = aplicados == 0
-            ? "No hay tramos tildados en la lista: tildá alguno (o una columna entera) para aplicarles esta configuración."
-            : $"Aplicado a {aplicados} tramo(s).";
+        TextoEstado.Text = conProblemaDeNorma.Count == 0
+            ? $"Aplicado a {objetivo.Count} tramo(s)."
+            : $"Aplicado a {objetivo.Count} tramo(s). Atención: en {string.Join(", ", conProblemaDeNorma)} " +
+              "L1 x2 ≥ la altura del tramo -- revisá esos, no queda zona central.";
+
+        // Si el tramo activo estaba entre los que se acaban de tocar, refleja
+        // el resultado en el panel en vez de dejarlo desactualizado.
+        if (_columnaActiva is not null
+            && objetivo.Any(n => n.ColumnaId == _columnaActiva.Marca && n.TramoIndice == _tramoActivoIndice))
+        {
+            CargarPanelDelTramoActivo();
+        }
     }
 
     // -------------------------------------------------------------- dibujo
