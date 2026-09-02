@@ -15,6 +15,10 @@
     <Nullable>enable</Nullable>
     <RevitInstallDir Condition="'$(RevitInstallDir)' == ''">C:\Program Files\Autodesk\Revit $(RevitVersion)\</RevitInstallDir>
 
+    <!-- Salida predecible por versión, para que tools/deploy.ps1 sepa siempre dónde buscar. -->
+    <OutputPath>bin\$(Configuration)\$(RevitVersion)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
     <!--
       practicacq.csproj vive en la raíz del repo, junto con otras carpetas que
       no son suyas (el proyecto CQEING/ de la otra rama de trabajo, material de
@@ -43,6 +47,9 @@
     <Content Include="Resources\icono16.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <None Include="practicacq.addin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>
