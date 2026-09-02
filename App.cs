@@ -1,5 +1,6 @@
 using Autodesk.Revit.UI;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Windows.Media.Imaging;
 using System.Windows.Media;
@@ -12,12 +13,22 @@ public class App : IExternalApplication
 
     public Result OnStartup(UIControlledApplication app)
     {
-        app.CreateRibbonTab(NombrePestana);
+        try
+        {
+            app.CreateRibbonTab(NombrePestana);
+        }
+        catch (Autodesk.Revit.Exceptions.ArgumentException)
+        {
+            // Ya existe: pasa si el add-in se recarga en la misma sesión de
+            // Revit, o si hay otro add-in de la empresa (por ejemplo, otra
+            // rama de este mismo repo) que ya haya creado la pestaña "CQEING"
+            // antes. No es un error real -- se sigue usando la que ya está.
+        }
 
         string dllPath = Assembly.GetExecutingAssembly().Location;
         string folder = Path.GetDirectoryName(dllPath) ?? string.Empty;
 
-        RibbonPanel panelEstructural = app.CreateRibbonPanel(NombrePestana, "Estructural");
+        RibbonPanel panelEstructural = ObtenerOCrearPanel(app, "Estructural");
 
         panelEstructural.AddItem(CrearBoton(
             "ComandoEstribos",
@@ -26,7 +37,7 @@ public class App : IExternalApplication
             "Genera el acero de estribos con espaciado uniforme en las columnas seleccionadas.",
             dllPath, folder));
 
-        RibbonPanel panelHerramientas = app.CreateRibbonPanel(NombrePestana, "Herramientas");
+        RibbonPanel panelHerramientas = ObtenerOCrearPanel(app, "Herramientas");
 
         panelHerramientas.AddItem(CrearBoton(
             "Comando",
@@ -37,6 +48,15 @@ public class App : IExternalApplication
 
         return Result.Succeeded;
     }
+
+    /// <summary>
+    /// Mismo motivo que el try/catch de arriba: si otro add-in ya creó un
+    /// panel con este nombre en la pestaña CQEING, <c>CreateRibbonPanel</c>
+    /// tira ArgumentException en vez de devolver el existente.
+    /// </summary>
+    private static RibbonPanel ObtenerOCrearPanel(UIControlledApplication app, string nombre) =>
+        app.GetRibbonPanels(NombrePestana).FirstOrDefault(p => p.Name == nombre)
+        ?? app.CreateRibbonPanel(NombrePestana, nombre);
 
     public Result OnShutdown(UIControlledApplication app)
     {
