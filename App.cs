@@ -26,6 +26,14 @@ public class App : IExternalApplication
             "Genera el acero de estribos con espaciado uniforme en las columnas seleccionadas.",
             dllPath, folder));
 
+        panelEstructural.AddItem(CrearBoton(
+            "ComandoContexto",
+            "Leer\nTramos",
+            "practicacq.ComandoContexto",
+            "Muestra en qué tramos está partida una columna: libres, dentro de viga " +
+            "y contra zapata. Solo lee, no modifica el modelo.",
+            dllPath, folder));
+
         RibbonPanel panelHerramientas = app.CreateRibbonPanel(NombrePestana, "Herramientas");
 
         panelHerramientas.AddItem(CrearBoton(
