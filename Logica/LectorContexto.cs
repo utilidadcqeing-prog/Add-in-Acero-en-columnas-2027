@@ -36,11 +36,28 @@ public sealed class LectorContexto : IProveedorContexto
 
     public LectorContexto(Document doc) => _doc = doc;
 
-    public ColumnaContexto Leer(ElementId idColumna)
+    /// <summary>
+    /// Lista las columnas estructurales del documento para poblar la selección
+    /// de L2. El id de cada una viaja como string (ver el porqué en
+    /// <see cref="IProveedorContexto"/>) — es simplemente <c>ElementId.Value</c>
+    /// convertido a texto.
+    /// </summary>
+    public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
+        new FilteredElementCollector(_doc)
+            .OfCategory(BuiltInCategory.OST_StructuralColumns)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .Select(c => new ColumnaResumen(IdTexto(c.Id), Marca(c)))
+            .ToList();
+
+    public ColumnaContexto Leer(string idColumna)
     {
         var avisos = new List<string>();
 
-        if (_doc.GetElement(idColumna) is not FamilyInstance columna)
+        if (!long.TryParse(idColumna, out long valor))
+            throw new InvalidOperationException($"«{idColumna}» no es un id de columna válido.");
+
+        if (_doc.GetElement(new ElementId(valor)) is not FamilyInstance columna)
             throw new InvalidOperationException($"El elemento {idColumna} no es una columna.");
 
         Solid solido = SolidoMayor(columna.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }))
@@ -357,6 +374,10 @@ public sealed class LectorContexto : IProveedorContexto
         columna.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } marca
             ? marca
             : $"[{columna.Id}]";
+
+    /// <summary>Simétrico de <c>new ElementId(long.Parse(id))</c> del lado de lectura.</summary>
+    private static string IdTexto(ElementId id) =>
+        id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private static double AMetros(double pies) =>
         UnitUtils.ConvertFromInternalUnits(pies, UnitTypeId.Meters);

@@ -1,6 +1,7 @@
 namespace practicacq.Modelo;
 
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 /// <summary>
 /// Lo que la ventana necesita saber de una columna para poder configurarla:
@@ -50,6 +51,7 @@ public sealed class ColumnaContexto
 }
 
 /// <summary>Qué cierra un tramo por abajo y por arriba.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TipoTramo
 {
     /// <summary>Entre dos vigas, o entre el arranque y la primera viga.</summary>
