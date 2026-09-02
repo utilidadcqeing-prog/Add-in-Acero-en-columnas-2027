@@ -1,0 +1,86 @@
+<Window x:Class="practicacq.Vistas.VentanaEstribos"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Estribos de Columna"
+        Height="470" Width="360"
+        MinHeight="440" MinWidth="340"
+        WindowStartupLocation="CenterOwner"
+        Background="#F0F0F0">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Etiqueta">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,10,0,4" />
+        </Style>
+
+        <!-- Encabezado de grupo dentro de los desplegables -->
+        <GroupStyle x:Key="GrupoCombo">
+            <GroupStyle.HeaderTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding Name}"
+                               FontWeight="Bold" FontSize="11"
+                               Foreground="#555555"
+                               Margin="4,6,0,2" />
+                </DataTemplate>
+            </GroupStyle.HeaderTemplate>
+        </GroupStyle>
+    </Window.Resources>
+
+    <DockPanel Margin="12">
+
+        <Button DockPanel.Dock="Top"
+                x:Name="BotonSeleccionar"
+                Content="Seleccionar Columnas"
+                Height="30"
+                Background="#0B63CE" Foreground="White"
+                FontWeight="Bold" BorderThickness="0"
+                Click="BotonSeleccionar_Click" />
+
+        <Button DockPanel.Dock="Bottom"
+                x:Name="BotonGenerar"
+                Content="Generar Estribos"
+                Height="34" Margin="0,12,0,0"
+                Background="#1E8449" Foreground="White"
+                FontWeight="Bold" BorderThickness="0"
+                Click="BotonGenerar_Click" />
+
+        <StackPanel>
+            <TextBlock x:Name="TextoSeleccion"
+                       Text="Ninguna columna seleccionada"
+                       Foreground="Gray"
+                       Margin="0,8,0,0" />
+
+            <TextBlock Text="Tipo de barra:" Style="{StaticResource Etiqueta}" />
+            <ComboBox x:Name="ComboBarras" Height="24" DisplayMemberPath="Etiqueta">
+                <ComboBox.GroupStyle>
+                    <StaticResource ResourceKey="GrupoCombo" />
+                </ComboBox.GroupStyle>
+            </ComboBox>
+
+            <TextBlock Text="Gancho de los extremos:" Style="{StaticResource Etiqueta}" />
+            <ComboBox x:Name="ComboGanchos" Height="24" DisplayMemberPath="Etiqueta">
+                <ComboBox.GroupStyle>
+                    <StaticResource ResourceKey="GrupoCombo" />
+                </ComboBox.GroupStyle>
+            </ComboBox>
+            <TextBlock Text="Para estribo va uno de 135°. Si la pata sale muy larga, es que ese no es el de estribo."
+                       TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
+
+            <TextBlock Text="Espaciado entre estribos (m):" Style="{StaticResource Etiqueta}" />
+            <TextBox x:Name="CampoEspaciado" Text="0.15" Height="22" />
+
+            <TextBlock Text="Separación en los extremos (m):" Style="{StaticResource Etiqueta}" />
+            <TextBox x:Name="CampoExtremos" Text="0.05" Height="22" />
+            <TextBlock Text="Distancia fija de norma entre la cara del elemento y el primer estribo."
+                       TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
+
+            <TextBlock Text="Recubrimiento lateral (m):" Style="{StaticResource Etiqueta}" />
+            <TextBox x:Name="CampoRecubrimiento" Text="0.04" Height="22" />
+            <CheckBox x:Name="ChkCorregir"
+                      Content="Corregir la columna si trae otro recubrimiento"
+                      IsChecked="True" Margin="0,6,0,0" />
+            <TextBlock Text="El desfase del estribo siempre se lee del parámetro de la columna, no se impone."
+                       TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
+        </StackPanel>
+    </DockPanel>
+</Window>

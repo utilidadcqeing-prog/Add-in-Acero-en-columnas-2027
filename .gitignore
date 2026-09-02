@@ -1,0 +1,11 @@
+# Compilación .NET
+bin/
+obj/
+*.user
+
+# Editor
+.vs/
+.vscode/
+
+# Claude Code local
+.claude/settings.local.json

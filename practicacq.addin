@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>practicacq</Name>
+    <Assembly>C:\Users\LENOVO\Desktop\practicacq\bin\Debug\net8.0-windows\practicacq.dll</Assembly>
+    <FullClassName>practicacq.App</FullClassName>
+    <ClientId>2044e120-cc19-42a1-8018-a97f13adf192</ClientId>
+    <VendorId>ADSK</VendorId>
+    <VendorDescription>Practica CQ</VendorDescription>
+  </AddIn>
+</RevitAddIns>
