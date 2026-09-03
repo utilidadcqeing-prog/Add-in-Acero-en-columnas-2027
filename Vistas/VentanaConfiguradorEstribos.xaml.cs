@@ -42,6 +42,13 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     private readonly Dictionary<(string ColumnaId, int Indice), ConfigTramo> _configPorTramo = new();
 
+    /// <summary>
+    /// Una copia de <see cref="ConfigLongitudinal"/> por columna (no por
+    /// tramo: el acero longitudinal corre toda la altura de la columna). L4
+    /// vive del lado de "EstribosMenores" dentro de este mismo tipo.
+    /// </summary>
+    private readonly Dictionary<string, ConfigLongitudinal> _longitudinalPorColumna = new();
+
     private readonly ObservableCollection<NodoLista> _nodos = new();
 
     private ColumnaContexto? _columnaActiva;
@@ -59,6 +66,9 @@ public partial class VentanaConfiguradorEstribos : Window
         ListaSeleccion.ItemsSource = _nodos;
         ComboTipoBarra.ItemsSource = _tipos.ListarTiposBarra();
         ComboTipoGancho.ItemsSource = _tipos.ListarTiposGancho();
+        ComboBarraCaraX.ItemsSource = _tipos.ListarTiposBarra();
+        ComboBarraCaraY.ItemsSource = _tipos.ListarTiposBarra();
+        ComboBarraEsquinas.ItemsSource = _tipos.ListarTiposBarra();
 
         RadioUniforme.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
         RadioConfinado.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
@@ -143,12 +153,14 @@ public partial class VentanaConfiguradorEstribos : Window
     private void Activar(NodoLista nodo)
     {
         GuardarPanelEnTramoActivo();
+        GuardarLongitudinalDeColumnaActiva();
 
         _columnaActiva = _contexto.Leer(nodo.ColumnaId);
         _tramoActivoIndice = nodo.EsColumna ? 0 : nodo.TramoIndice;
 
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
+        CargarLongitudinalDeColumnaActiva();
     }
 
     private void IrA(int indice)
@@ -300,6 +312,96 @@ public partial class VentanaConfiguradorEstribos : Window
         TextoTramoActivo.Text = $"{_columnaActiva.Marca} · {_tramoActivoIndice + 1}/{_columnaActiva.Tramos.Count} · {Rotulo(tramo.Tipo)}";
 
         RevalidarPanel();
+    }
+
+    // -------------------------------------------------- acero longitudinal (L4)
+
+    private ConfigLongitudinal LeerLongitudinalDelPanel() => new()
+    {
+        BarrasPorCaraX = (int)LeerDouble(CampoBarrasX.Text),
+        BarrasPorCaraY = (int)LeerDouble(CampoBarrasY.Text),
+        TipoBarraCaraXNombre = ComboBarraCaraX.SelectedItem as string,
+        TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
+        TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
+        // Las posiciones de grapas/cajas no se leen del panel: se editan aparte
+        // en L4 y viven en _longitudinalPorColumna hasta que este método las
+        // pisa -- por eso Guardar... las vuelve a copiar explícitamente.
+    };
+
+    private void MostrarLongitudinalEnPanel(ConfigLongitudinal cfg)
+    {
+        CampoBarrasX.Text = cfg.BarrasPorCaraX.ToString();
+        CampoBarrasY.Text = cfg.BarrasPorCaraY.ToString();
+        ComboBarraCaraX.SelectedItem = cfg.TipoBarraCaraXNombre;
+        ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
+        ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
+
+        TextoEstribosMenores.Text = cfg.EstribosMenores.Count == 0
+            ? "Sin estribos menores configurados."
+            : $"{cfg.EstribosMenores.Count} estribo(s) menor(es) configurado(s).";
+    }
+
+    private static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
+    {
+        BarrasPorCaraX = 2,
+        BarrasPorCaraY = 2,
+        TipoBarraCaraXNombre = tipos.ListarTiposBarra().FirstOrDefault(),
+        TipoBarraCaraYNombre = tipos.ListarTiposBarra().FirstOrDefault(),
+        TipoBarraEsquinasNombre = tipos.ListarTiposBarra().FirstOrDefault(),
+    };
+
+    private void GuardarLongitudinalDeColumnaActiva()
+    {
+        if (_columnaActiva is null) return;
+
+        // Las posiciones de grapas/cajas ya editadas en L4 (si las hay) se
+        // preservan -- este panel no las toca, solo cantidad/tipo de barra.
+        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(_columnaActiva.Marca, out ConfigLongitudinal? previo)
+            ? previo.EstribosMenores
+            : new List<EstriboMenor>();
+
+        ConfigLongitudinal nuevo = LeerLongitudinalDelPanel();
+        nuevo.EstribosMenores = existentes;
+        _longitudinalPorColumna[_columnaActiva.Marca] = nuevo;
+    }
+
+    private void CargarLongitudinalDeColumnaActiva()
+    {
+        if (_columnaActiva is null) return;
+
+        ConfigLongitudinal cfg = _longitudinalPorColumna.TryGetValue(_columnaActiva.Marca, out ConfigLongitudinal? existente)
+            ? existente
+            : ConfigLongitudinalPorDefecto(_tipos);
+
+        MostrarLongitudinalEnPanel(cfg);
+    }
+
+    private void BotonEstribosMenores_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnaActiva is null) return;
+
+        int barrasX = (int)LeerDouble(CampoBarrasX.Text);
+        int barrasY = (int)LeerDouble(CampoBarrasY.Text);
+
+        if (barrasX <= 0 || barrasY <= 0)
+        {
+            TextoEstado.Text = "Cargá N. barras X y N. barras Y (mayores que cero) antes de editar los estribos menores.";
+            return;
+        }
+
+        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(_columnaActiva.Marca, out ConfigLongitudinal? actual)
+            ? actual.EstribosMenores
+            : new List<EstriboMenor>();
+
+        var dialogo = new VentanaEstribosMenores(barrasX, barrasY, existentes) { Owner = this };
+        if (dialogo.ShowDialog() != true) return;
+
+        GuardarLongitudinalDeColumnaActiva();
+        _longitudinalPorColumna[_columnaActiva.Marca].EstribosMenores = dialogo.Resultado;
+
+        TextoEstribosMenores.Text = dialogo.Resultado.Count == 0
+            ? "Sin estribos menores configurados."
+            : $"{dialogo.Resultado.Count} estribo(s) menor(es) configurado(s).";
     }
 
     // ----------------------------------------------------------- selección
@@ -560,6 +662,7 @@ public partial class VentanaConfiguradorEstribos : Window
     private void BotonExportar_Click(object sender, RoutedEventArgs e)
     {
         GuardarPanelEnTramoActivo();
+        GuardarLongitudinalDeColumnaActiva();
 
         var plan = new PlanArmado();
 
@@ -573,7 +676,11 @@ public partial class VentanaConfiguradorEstribos : Window
                 tramos.Add(_configPorTramo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos));
             }
 
-            plan.Columnas.Add(new ColumnaPlan { Id = id, Contexto = contexto, Tramos = tramos });
+            ConfigLongitudinal longitudinal = _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? l)
+                ? l
+                : ConfigLongitudinalPorDefecto(_tipos);
+
+            plan.Columnas.Add(new ColumnaPlan { Id = id, Contexto = contexto, Tramos = tramos, Longitudinal = longitudinal });
         }
 
         var dialogo = new SaveFileDialog { Filter = "JSON (*.json)|*.json", FileName = "PlanArmado.json" };

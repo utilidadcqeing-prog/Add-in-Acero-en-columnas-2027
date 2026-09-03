@@ -134,6 +134,7 @@
 
             <!-- Panel del tramo activo -->
             <Border Grid.Column="4" Style="{StaticResource Panel}">
+              <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <TextBlock Text="Configuración del tramo activo" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
 
@@ -170,7 +171,42 @@
 
                     <TextBlock x:Name="TextoValidacion" TextWrapping="Wrap" Foreground="#B91C1C"
                                FontSize="11" Margin="0,10,0,0" />
+
+                    <Border Height="1" Background="#E5E5E5" Margin="0,16,0,12" />
+
+                    <!-- L4: acero longitudinal, es por columna entera; no cambia con el tramo activo -->
+                    <TextBlock Text="Acero longitudinal (toda la columna)" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="N. barras X:" Style="{StaticResource Etiqueta}" />
+                            <TextBox x:Name="CampoBarrasX" Height="22" Text="2" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="N. barras Y:" Style="{StaticResource Etiqueta}" />
+                            <TextBox x:Name="CampoBarrasY" Height="22" Text="2" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="Tipo barra cara X:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraCaraX" Height="24" />
+
+                    <TextBlock Text="Tipo barra cara Y:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraCaraY" Height="24" />
+
+                    <TextBlock Text="Tipo barra esquinas:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraEsquinas" Height="24" />
+
+                    <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Margin="0,12,0,0"
+                            Click="BotonEstribosMenores_Click" />
+                    <TextBlock x:Name="TextoEstribosMenores" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,4,0,0" />
                 </StackPanel>
+              </ScrollViewer>
             </Border>
         </Grid>
 
