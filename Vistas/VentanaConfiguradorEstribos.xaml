@@ -223,11 +223,18 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" x:Name="TextoEstado" Foreground="Gray" VerticalAlignment="Center" />
-            <Button Grid.Column="1" x:Name="BotonExportar" Content="Exportar PlanArmado (JSON)"
+            <TextBlock Grid.Column="0" x:Name="TextoEstado" Foreground="Gray" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar estribos generados antes en estas columnas"
+                      VerticalAlignment="Center" Margin="0,0,12,0" />
+            <Button Grid.Column="2" x:Name="BotonExportar" Content="Exportar PlanArmado (JSON)"
                     Height="32" Padding="12,0" Background="#1E8449" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0" Click="BotonExportar_Click" />
+                    FontWeight="Bold" BorderThickness="0" Margin="0,0,8,0" Click="BotonExportar_Click" />
+            <Button Grid.Column="3" x:Name="BotonGenerar" Content="Generar armado en Revit"
+                    Height="32" Padding="12,0" Background="#B45309" Foreground="White"
+                    FontWeight="Bold" BorderThickness="0" Click="BotonGenerar_Click" />
         </Grid>
     </Grid>
 </Window>

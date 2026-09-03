@@ -87,6 +87,16 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     public event Action<IReadOnlyList<string>>? SeleccionMarcadaCambio;
 
+    /// <summary>
+    /// Issue #5 (J3): se dispara con el <see cref="OpcionesArmado"/> armado
+    /// (mismo <see cref="PlanArmado"/> que <see cref="BotonExportar_Click"/>,
+    /// más el estado del checkbox de borrado) cuando se pide generar el
+    /// armado real. Sin una sola línea de Autodesk.Revit acá adentro:
+    /// <c>ComandoEstribos</c> es quien lo traduce a la API real y devuelve el
+    /// resultado por <see cref="MostrarResultadoGeneracion"/>.
+    /// </summary>
+    public event Action<OpcionesArmado>? GenerarSolicitado;
+
     public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
     {
         InitializeComponent();
@@ -411,17 +421,17 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void GuardarPanelEnTramoActivo()
     {
-        if (_columnaActiva is null) return;
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
-        var clave = (_columnaActiva.Marca, _tramoActivoIndice);
+        var clave = (idColumna, _tramoActivoIndice);
         _configPorTramo[clave] = LeerConfigDelPanel();
     }
 
     private void CargarPanelDelTramoActivo()
     {
-        if (_columnaActiva is null) return;
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
-        var clave = (_columnaActiva.Marca, _tramoActivoIndice);
+        var clave = (idColumna, _tramoActivoIndice);
         ConfigTramo cfg = _configPorTramo.TryGetValue(clave, out ConfigTramo? existente)
             ? existente
             : ConfigPorDefecto(_tipos);
@@ -472,24 +482,24 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void GuardarLongitudinalDeColumnaActiva()
     {
-        if (_columnaActiva is null) return;
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
         // Las posiciones de grapas/cajas ya editadas en L4 (si las hay) se
         // preservan -- este panel no las toca, solo cantidad/tipo de barra.
-        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(_columnaActiva.Marca, out ConfigLongitudinal? previo)
+        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo)
             ? previo.EstribosMenores
             : new List<EstriboMenor>();
 
         ConfigLongitudinal nuevo = LeerLongitudinalDelPanel();
         nuevo.EstribosMenores = existentes;
-        _longitudinalPorColumna[_columnaActiva.Marca] = nuevo;
+        _longitudinalPorColumna[idColumna] = nuevo;
     }
 
     private void CargarLongitudinalDeColumnaActiva()
     {
-        if (_columnaActiva is null) return;
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
-        ConfigLongitudinal cfg = _longitudinalPorColumna.TryGetValue(_columnaActiva.Marca, out ConfigLongitudinal? existente)
+        ConfigLongitudinal cfg = _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? existente)
             ? existente
             : ConfigLongitudinalPorDefecto(_tipos);
 
@@ -498,7 +508,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void BotonEstribosMenores_Click(object sender, RoutedEventArgs e)
     {
-        if (_columnaActiva is null) return;
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
         int barrasX = ComboBarrasX.SelectedItem as int? ?? 0;
         int barrasY = ComboBarrasY.SelectedItem as int? ?? 0;
@@ -509,7 +519,7 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
-        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(_columnaActiva.Marca, out ConfigLongitudinal? actual)
+        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? actual)
             ? actual.EstribosMenores
             : new List<EstriboMenor>();
 
@@ -517,7 +527,7 @@ public partial class VentanaConfiguradorEstribos : Window
         if (dialogo.ShowDialog() != true) return;
 
         GuardarLongitudinalDeColumnaActiva();
-        _longitudinalPorColumna[_columnaActiva.Marca].EstribosMenores = dialogo.Resultado;
+        _longitudinalPorColumna[idColumna].EstribosMenores = dialogo.Resultado;
 
         TextoEstribosMenores.Text = dialogo.Resultado.Count == 0
             ? "Sin estribos menores configurados."
@@ -587,7 +597,7 @@ public partial class VentanaConfiguradorEstribos : Window
         // Si el tramo activo estaba entre los que se acaban de tocar, refleja
         // el resultado en el panel en vez de dejarlo desactualizado.
         if (_columnaActiva is not null
-            && objetivo.Any(n => n.ColumnaId == _columnaActiva.Marca && n.TramoIndice == _tramoActivoIndice))
+            && objetivo.Any(n => n.ColumnaId == _columnaIdActiva && n.TramoIndice == _tramoActivoIndice))
         {
             CargarPanelDelTramoActivo();
         }
@@ -685,7 +695,7 @@ public partial class VentanaConfiguradorEstribos : Window
             double yTop = Y(tramo.ZSuperior);
             double alto = Math.Max(1, Y(tramo.ZInferior) - yTop);
             bool activo = i == _tramoActivoIndice;
-            bool configurado = _configPorTramo.ContainsKey((_columnaActiva.Marca, i));
+            bool configurado = _columnaIdActiva is not null && _configPorTramo.ContainsKey((_columnaIdActiva, i));
 
             if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
             {
@@ -822,6 +832,49 @@ public partial class VentanaConfiguradorEstribos : Window
         File.WriteAllText(dialogo.FileName, json);
 
         TextoEstado.Text = $"Exportado: {dialogo.FileName}";
+    }
+
+    private void BotonGenerar_Click(object sender, RoutedEventArgs e)
+    {
+        var opciones = new OpcionesArmado
+        {
+            Plan = ConstruirPlanArmado(),
+            BorrarAnteriores = CheckBorrarAnteriores.IsChecked == true,
+        };
+
+        TextoEstado.Text = "Generando armado en Revit…";
+        BotonGenerar.IsEnabled = false;
+
+        GenerarSolicitado?.Invoke(opciones);
+    }
+
+    /// <summary>
+    /// Llamado por <c>ComandoEstribos</c> cuando la generación (#5) terminó --
+    /// re-habilita el botón y deja un resumen en <see cref="TextoEstado"/>. Los
+    /// avisos van aparte en un <see cref="MessageBox"/> (WPF puro, sin
+    /// Autodesk.Revit) para no perderlos entre el resto del texto de estado.
+    /// </summary>
+    public void MostrarResultadoGeneracion(ResultadoArmado resultado)
+    {
+        BotonGenerar.IsEnabled = true;
+
+        TextoEstado.Text =
+            $"Generado: {resultado.GruposCreados} estribo(s) creado(s)" +
+            (resultado.Eliminados > 0 ? $", {resultado.Eliminados} anterior(es) borrado(s)" : "") +
+            (resultado.TramosOmitidos > 0 ? $", {resultado.TramosOmitidos} tramo(s) omitido(s)" : "") +
+            ".";
+
+        if (resultado.Avisos.Count > 0)
+            MessageBox.Show(string.Join("\n\n", resultado.Avisos), "Avisos de la generación",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>Llamado por <c>ComandoEstribos</c> si la generación tiró una excepción no anticipada.</summary>
+    public void MostrarErrorGeneracion(string mensaje)
+    {
+        BotonGenerar.IsEnabled = true;
+        TextoEstado.Text = "La generación falló.";
+        MessageBox.Show(mensaje, "Error al generar", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 
     private static double LeerDouble(string texto) =>

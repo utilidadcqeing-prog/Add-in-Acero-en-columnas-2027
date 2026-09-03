@@ -26,6 +26,11 @@ public class ComandoEstribos : IExternalCommand
     private static readonly ManejadorSeleccionElemento _manejadorMarcado = new() { CentrarVista = false };
     private static readonly ExternalEvent _eventoMarcado = ExternalEvent.Create(_manejadorMarcado);
 
+    // J3 (#5): generar el armado real necesita transacción, por eso pasa por
+    // el mismo patrón ExternalEvent que la selección de arriba.
+    private static readonly ManejadorGeneracionArmado _manejadorGenerar = new();
+    private static readonly ExternalEvent _eventoGenerar = ExternalEvent.Create(_manejadorGenerar);
+
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
         UIApplication uiapp = commandData.Application;
@@ -67,6 +72,19 @@ public class ComandoEstribos : IExternalCommand
         {
             _manejadorMarcado.Objetivos = ParsearIds(ids);
             _eventoMarcado.Raise();
+        };
+
+        // La ventana que dispara esto puede haberse cerrado (y reabierto) para
+        // cuando Revit termina de procesar el evento -- por eso los callbacks
+        // van contra la ventana viva del momento (_ventana), no contra una
+        // referencia capturada acá.
+        _manejadorGenerar.AlTerminar = res => _ventana?.MostrarResultadoGeneracion(res);
+        _manejadorGenerar.AlFallar = msg => _ventana?.MostrarErrorGeneracion(msg);
+
+        _ventana.GenerarSolicitado += opciones =>
+        {
+            _manejadorGenerar.Opciones = opciones;
+            _eventoGenerar.Raise();
         };
 
         new WindowInteropHelper(_ventana).Owner = uiapp.MainWindowHandle;
