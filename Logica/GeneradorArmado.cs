@@ -83,15 +83,18 @@ public static class GeneradorArmado
             res.Avisos.Add(
                 $"{contexto.Marca}: no tiene recubrimiento lateral asignado en el modelo. " +
                 "Asignale un recubrimiento en Revit y volvé a generar -- acá no se impone ninguno.");
-            res.TramosOmitidos += contexto.Tramos.Count;
+            res.TramosOmitidos += columnaPlan.Tramos.Count(t => t is not null);
             return;
         }
 
         int n = Math.Min(contexto.Tramos.Count, columnaPlan.Tramos.Count);
         for (int i = 0; i < n; i++)
         {
+            // null: este tramo no estaba tildado en la ventana -- no es un
+            // problema que reportar, es simplemente "no pedido en esta corrida".
+            if (columnaPlan.Tramos[i] is not ConfigTramo cfg) continue;
+
             Tramo tramo = contexto.Tramos[i];
-            ConfigTramo cfg = columnaPlan.Tramos[i];
 
             try
             {

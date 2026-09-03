@@ -98,9 +98,24 @@ public sealed class LectorContexto : IProveedorContexto
             // más arriba no hay nada contra qué arrancar.
             if (primero)
             {
-                double zZapata = TopeDeZapata(el.Solido, avisos);
-                sobreZapata = zZapata > el.ZInf + TramoMinimo;
-                if (sobreZapata) zArranque = zZapata;
+                double zZapata = TopeDeZapata(el.Solido);
+
+                // Toca zapata en cuanto se encontró una -- no solo cuando el
+                // sólido de la columna se mete DENTRO de ella (zZapata bien
+                // por debajo de el.ZInf, el caso original). El caso normal de
+                // modelado es la columna apoyada A RAS de la cara superior de
+                // la zapata (zZapata ≈ el.ZInf, sin empotrar), y con la
+                // condición vieja (zZapata > el.ZInf + 1cm) eso nunca daba
+                // true: el tramo de abajo quedaba "libre" en vez de "contra
+                // zapata" en el caso más común, no en el raro. Confirmado
+                // sobre el modelo de prueba (columna de esquina, 3-sep).
+                sobreZapata = zZapata > double.MinValue;
+
+                if (sobreZapata)
+                {
+                    zArranque = Math.Max(el.ZInf, zZapata);
+                    avisos.Add($"Arranca sobre cimentación: el acero empieza en {AMetros(zArranque):0.00} m.");
+                }
             }
 
             if (el.ZSup - zArranque <= TramoMinimo)
@@ -342,9 +357,11 @@ public sealed class LectorContexto : IProveedorContexto
 
     /// <summary>
     /// Cota superior de la zapata sobre la que arranca la columna, o
-    /// <see cref="double.MinValue"/> si no hay ninguna.
+    /// <see cref="double.MinValue"/> si no hay ninguna. Solo lee -- el aviso y
+    /// la decisión de qué hacer con el valor son de quien llama (<see cref="Leer"/>),
+    /// que es quien sabe si además hace falta subir <c>zArranque</c>.
     /// </summary>
-    private double TopeDeZapata(Solid columna, List<string> avisos)
+    private double TopeDeZapata(Solid columna)
     {
         double tope = double.MinValue;
         Huella huellaColumna = HuellaPlanta(columna);
@@ -358,9 +375,6 @@ public sealed class LectorContexto : IProveedorContexto
 
             tope = Math.Max(tope, ExtensionZ(solidoZapata).Sup);
         }
-
-        if (tope > double.MinValue)
-            avisos.Add($"Arranca sobre cimentación: el acero empieza en {AMetros(tope):0.00} m.");
 
         return tope;
     }

@@ -794,21 +794,39 @@ public partial class VentanaConfiguradorEstribos : Window
     /// de <see cref="BotonExportar_Click"/> para poder probarlo sin disparar
     /// el SaveFileDialog real (L5).
     /// </summary>
+    /// <summary>
+    /// Solo con lo tildado en la lista -- exportar o generar sobre TODAS las
+    /// columnas del modelo (rellenando con la config por defecto lo que
+    /// nadie tocó) inundaba de avisos irrelevantes y armaba de más sin que
+    /// nadie lo pidiera. Un tramo no tildado queda en <c>null</c> en
+    /// <see cref="ColumnaPlan.Tramos"/> (ver su comentario), no con un
+    /// default inventado; una columna sin ningún tramo tildado ni siquiera
+    /// entra en <see cref="PlanArmado.Columnas"/>.
+    /// </summary>
     private PlanArmado ConstruirPlanArmado()
     {
         GuardarPanelEnTramoActivo();
         GuardarLongitudinalDeColumnaActiva();
 
+        ILookup<string, int> tramosMarcadosPorColumna = _nodos
+            .Where(n => !n.EsColumna && n.Marcado)
+            .ToLookup(n => n.ColumnaId, n => n.TramoIndice);
+
         var plan = new PlanArmado();
 
         foreach (string id in _nodos.Where(n => n.EsColumna).Select(n => n.ColumnaId))
         {
+            HashSet<int> marcados = tramosMarcadosPorColumna[id].ToHashSet();
+            if (marcados.Count == 0) continue;
+
             ColumnaContexto contexto = _contexto.Leer(id);
-            var tramos = new List<ConfigTramo>();
+            var tramos = new List<ConfigTramo?>();
 
             for (int i = 0; i < contexto.Tramos.Count; i++)
             {
-                tramos.Add(_configPorTramo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos));
+                tramos.Add(marcados.Contains(i)
+                    ? (_configPorTramo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos))
+                    : null);
             }
 
             ConfigLongitudinal longitudinal = _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? l)
@@ -824,6 +842,11 @@ public partial class VentanaConfiguradorEstribos : Window
     private void BotonExportar_Click(object sender, RoutedEventArgs e)
     {
         PlanArmado plan = ConstruirPlanArmado();
+        if (plan.Columnas.Count == 0)
+        {
+            TextoEstado.Text = "Tildá al menos un tramo (o una columna entera) antes de exportar.";
+            return;
+        }
 
         var dialogo = new SaveFileDialog { Filter = "JSON (*.json)|*.json", FileName = "PlanArmado.json" };
         if (dialogo.ShowDialog() != true) return;
@@ -836,9 +859,16 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void BotonGenerar_Click(object sender, RoutedEventArgs e)
     {
+        PlanArmado plan = ConstruirPlanArmado();
+        if (plan.Columnas.Count == 0)
+        {
+            TextoEstado.Text = "Tildá al menos un tramo (o una columna entera) antes de generar.";
+            return;
+        }
+
         var opciones = new OpcionesArmado
         {
-            Plan = ConstruirPlanArmado(),
+            Plan = plan,
             BorrarAnteriores = CheckBorrarAnteriores.IsChecked == true,
         };
 
@@ -846,6 +876,20 @@ public partial class VentanaConfiguradorEstribos : Window
         BotonGenerar.IsEnabled = false;
 
         GenerarSolicitado?.Invoke(opciones);
+    }
+
+    private void BotonLimpiarSeleccion_Click(object sender, RoutedEventArgs e)
+    {
+        // Asignación directa, no vía la cascada de CheckBoxNodo_Changed: la
+        // ListBox virtualiza filas fuera de pantalla, así que tocar la
+        // propiedad de un nodo no realizado no dispara Checked/Unchecked en
+        // ningún control real. Se notifica una sola vez al final en vez de
+        // depender de eso.
+        foreach (NodoLista nodo in _nodos)
+            nodo.Marcado = false;
+
+        NotificarSeleccionMarcada();
+        TextoEstado.Text = "Selección limpiada.";
     }
 
     /// <summary>

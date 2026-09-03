@@ -33,8 +33,15 @@ public sealed class ColumnaPlan
     /// </summary>
     public ColumnaContexto? Contexto { get; set; }
 
-    /// <summary>Uno por tramo de <see cref="Contexto"/>, mismo índice.</summary>
-    public List<ConfigTramo> Tramos { get; set; } = new();
+    /// <summary>
+    /// Uno por tramo de <see cref="Contexto"/>, mismo índice -- pero solo para
+    /// los tramos que estaban tildados en la lista al exportar/generar; los
+    /// demás índices quedan en <c>null</c> (no "sin tildar" descartado del
+    /// array, porque eso correría los índices y los desalinearía de
+    /// <c>Contexto.Tramos</c>). Un tramo en <c>null</c> significa "no pedido
+    /// en esta corrida", no "usar la config por defecto".
+    /// </summary>
+    public List<ConfigTramo?> Tramos { get; set; } = new();
 
     public ConfigLongitudinal? Longitudinal { get; set; }
 }
