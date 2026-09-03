@@ -70,6 +70,14 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraY.ItemsSource = _tipos.ListarTiposBarra();
         ComboBarraEsquinas.ItemsSource = _tipos.ListarTiposBarra();
 
+        // Pares del 2 al 20 -- "nada se teclea a mano" aplica también acá,
+        // no solo a los tipos de barra.
+        List<int> paresHasta20 = Enumerable.Range(1, 10).Select(n => n * 2).ToList();
+        ComboBarrasX.ItemsSource = paresHasta20;
+        ComboBarrasY.ItemsSource = paresHasta20;
+        ComboBarrasX.SelectedItem = 2;
+        ComboBarrasY.SelectedItem = 2;
+
         RadioUniforme.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
         RadioConfinado.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
 
@@ -318,8 +326,8 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private ConfigLongitudinal LeerLongitudinalDelPanel() => new()
     {
-        BarrasPorCaraX = (int)LeerDouble(CampoBarrasX.Text),
-        BarrasPorCaraY = (int)LeerDouble(CampoBarrasY.Text),
+        BarrasPorCaraX = ComboBarrasX.SelectedItem as int? ?? 2,
+        BarrasPorCaraY = ComboBarrasY.SelectedItem as int? ?? 2,
         TipoBarraCaraXNombre = ComboBarraCaraX.SelectedItem as string,
         TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
         TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
@@ -330,8 +338,8 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void MostrarLongitudinalEnPanel(ConfigLongitudinal cfg)
     {
-        CampoBarrasX.Text = cfg.BarrasPorCaraX.ToString();
-        CampoBarrasY.Text = cfg.BarrasPorCaraY.ToString();
+        ComboBarrasX.SelectedItem = cfg.BarrasPorCaraX;
+        ComboBarrasY.SelectedItem = cfg.BarrasPorCaraY;
         ComboBarraCaraX.SelectedItem = cfg.TipoBarraCaraXNombre;
         ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
         ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
@@ -380,12 +388,12 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         if (_columnaActiva is null) return;
 
-        int barrasX = (int)LeerDouble(CampoBarrasX.Text);
-        int barrasY = (int)LeerDouble(CampoBarrasY.Text);
+        int barrasX = ComboBarrasX.SelectedItem as int? ?? 0;
+        int barrasY = ComboBarrasY.SelectedItem as int? ?? 0;
 
         if (barrasX <= 0 || barrasY <= 0)
         {
-            TextoEstado.Text = "Cargá N. barras X y N. barras Y (mayores que cero) antes de editar los estribos menores.";
+            TextoEstado.Text = "Elegí N. barras X y N. barras Y antes de editar los estribos menores.";
             return;
         }
 

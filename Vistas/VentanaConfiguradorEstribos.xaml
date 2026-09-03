@@ -185,11 +185,11 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="N. barras X:" Style="{StaticResource Etiqueta}" />
-                            <TextBox x:Name="CampoBarrasX" Height="22" Text="2" />
+                            <ComboBox x:Name="ComboBarrasX" Height="24" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="N. barras Y:" Style="{StaticResource Etiqueta}" />
-                            <TextBox x:Name="CampoBarrasY" Height="22" Text="2" />
+                            <ComboBox x:Name="ComboBarrasY" Height="24" />
                         </StackPanel>
                     </Grid>
 
