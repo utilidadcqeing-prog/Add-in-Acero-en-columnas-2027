@@ -211,24 +211,11 @@ public sealed class LectorContexto : IProveedorContexto
         return pilas;
     }
 
-    /// <summary>Centro en planta del sólido (promedio de su caja en X/Y, Z en 0).</summary>
+    /// <summary>Centro en planta del sólido (promedio de su huella en X/Y, Z en 0).</summary>
     private static XYZ CentroPlanta(Solid solido)
     {
-        double minX = double.MaxValue, maxX = double.MinValue;
-        double minY = double.MaxValue, maxY = double.MinValue;
-
-        foreach (Edge arista in solido.Edges)
-        {
-            foreach (XYZ p in arista.Tessellate())
-            {
-                minX = Math.Min(minX, p.X);
-                maxX = Math.Max(maxX, p.X);
-                minY = Math.Min(minY, p.Y);
-                maxY = Math.Max(maxY, p.Y);
-            }
-        }
-
-        return new XYZ((minX + maxX) / 2, (minY + maxY) / 2, 0);
+        Huella h = HuellaPlanta(solido);
+        return new XYZ((h.XMin + h.XMax) / 2, (h.YMin + h.YMax) / 2, 0);
     }
 
     /// <summary>
@@ -305,24 +292,24 @@ public sealed class LectorContexto : IProveedorContexto
     /// Las franjas de altura que las vigas le quitan a la columna, fusionadas y
     /// ordenadas. Se fusionan porque en un nudo suelen concurrir dos o cuatro
     /// vigas al mismo canto, y eso es un solo sólido para la ventana, no cuatro.
+    ///
+    /// No exige que los sólidos se solapen en volumen (ver por qué en
+    /// <see cref="SeTocan"/>): la banda sale directo del propio alto de la
+    /// viga, recortado al rango de este elemento de columna.
     /// </summary>
     private List<(double Inf, double Sup)> BandasDeViga(Solid columna, double zArranque, double zTope)
     {
         var crudas = new List<(double Inf, double Sup)>();
+        Huella huellaColumna = HuellaPlanta(columna);
 
-        foreach (Element viga in Tocan(columna, BuiltInCategory.OST_StructuralFraming))
+        foreach (Element viga in CandidatasPorCaja(huellaColumna, BuiltInCategory.OST_StructuralFraming))
         {
             Solid? solidoViga = SolidoMayor(
                 viga.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }));
 
-            if (solidoViga is null) continue;
+            if (solidoViga is null || !SeTocan(huellaColumna, HuellaPlanta(solidoViga))) continue;
 
-            // La banda es la intersección real de los dos sólidos, no el alto de la
-            // viga: una viga que apenas muerde la esquina no se come todo el canto,
-            // y una inclinada toca en un rango distinto al de su bounding box.
-            if (Interseccion(columna, solidoViga) is not Solid corte) continue;
-
-            (double inf, double sup) = ExtensionZ(corte);
+            (double inf, double sup) = ExtensionZ(solidoViga);
 
             inf = Math.Max(inf, zArranque);
             sup = Math.Min(sup, zTope);
@@ -360,16 +347,16 @@ public sealed class LectorContexto : IProveedorContexto
     private double TopeDeZapata(Solid columna, List<string> avisos)
     {
         double tope = double.MinValue;
+        Huella huellaColumna = HuellaPlanta(columna);
 
-        foreach (Element zapata in Tocan(columna, BuiltInCategory.OST_StructuralFoundation))
+        foreach (Element zapata in CandidatasPorCaja(huellaColumna, BuiltInCategory.OST_StructuralFoundation))
         {
             Solid? solidoZapata = SolidoMayor(
                 zapata.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }));
 
-            if (solidoZapata is null) continue;
-            if (Interseccion(columna, solidoZapata) is not Solid corte) continue;
+            if (solidoZapata is null || !SeTocan(huellaColumna, HuellaPlanta(solidoZapata))) continue;
 
-            tope = Math.Max(tope, ExtensionZ(corte).Sup);
+            tope = Math.Max(tope, ExtensionZ(solidoZapata).Sup);
         }
 
         if (tope > double.MinValue)
@@ -378,17 +365,70 @@ public sealed class LectorContexto : IProveedorContexto
         return tope;
     }
 
+    /// <summary>Rectángulo en planta que envuelve al sólido: (xMin, xMax, yMin, yMax).</summary>
+    private readonly record struct Huella(double XMin, double XMax, double YMin, double YMax);
+
     /// <summary>
-    /// Elementos de esa categoría que se cruzan con el sólido de la columna.
-    /// Es intersección real, no proximidad: una viga que pasa al lado sin llegar
-    /// a tocarla no forma nudo.
+    /// Candidatos de esa categoría cuya caja (ampliada un margen) se cruza con
+    /// la huella en planta de la columna. Es un filtro barato para no recorrer
+    /// el documento entero: el corte de verdad lo hace <see cref="SeTocan"/>.
     /// </summary>
-    private IEnumerable<Element> Tocan(Solid columna, BuiltInCategory categoria) =>
-        new FilteredElementCollector(_doc)
+    private IEnumerable<Element> CandidatasPorCaja(Huella huella, BuiltInCategory categoria)
+    {
+        var caja = new Outline(
+            new XYZ(huella.XMin - MargenCaja, huella.YMin - MargenCaja, -RangoZ),
+            new XYZ(huella.XMax + MargenCaja, huella.YMax + MargenCaja, RangoZ));
+
+        return new FilteredElementCollector(_doc)
             .OfCategory(categoria)
             .WhereElementIsNotElementType()
-            .WherePasses(new ElementIntersectsSolidFilter(columna))
+            .WherePasses(new BoundingBoxIntersectsFilter(caja))
             .ToElements();
+    }
+
+    /// <summary>Un metro y medio en pies: rango vertical de sobra para cualquier edificio real.</summary>
+    private static readonly double RangoZ = APies(1500);
+
+    /// <summary>Diez centímetros en pies: margen de la caja candidata, no de la huella real.</summary>
+    private static readonly double MargenCaja = APies(0.10);
+
+    /// <summary>
+    /// Si dos huellas en planta se cruzan — el corte de verdad de «esta viga
+    /// toca esta columna».
+    ///
+    /// A propósito NO exige que los sólidos se solapen en volumen (lo que
+    /// hacía la versión anterior con <c>BooleanOperationsUtils</c>): cuando
+    /// columna y viga están unidas con «Join Geometry» — el caso normal en
+    /// cualquier modelo real — Revit recorta el sólido de la viga justo hasta
+    /// la cara de la columna, y ahí ya no queda volumen que se solape aunque
+    /// sí se estén tocando de verdad. Confirmado sobre el modelo de prueba:
+    /// con la intersección booleana estricta, ninguna columna detectaba
+    /// ningún nudo. Cruzar huellas en planta es más laxo pero, en un modelo
+    /// estructural con grilla, una viga cuya huella cruza la de una columna
+    /// casi siempre significa que apoya ahí — no que pasa cerca por casualidad.
+    /// </summary>
+    private static bool SeTocan(Huella a, Huella b) =>
+        a.XMin <= b.XMax && b.XMin <= a.XMax && a.YMin <= b.YMax && b.YMin <= a.YMax;
+
+    /// <summary>Huella del sólido en planta: extensión en X/Y de sus aristas, ignorando Z.</summary>
+    private static Huella HuellaPlanta(Solid solido)
+    {
+        double xMin = double.MaxValue, xMax = double.MinValue;
+        double yMin = double.MaxValue, yMax = double.MinValue;
+
+        foreach (Edge arista in solido.Edges)
+        {
+            foreach (XYZ p in arista.Tessellate())
+            {
+                xMin = Math.Min(xMin, p.X);
+                xMax = Math.Max(xMax, p.X);
+                yMin = Math.Min(yMin, p.Y);
+                yMax = Math.Max(yMax, p.Y);
+            }
+        }
+
+        return new Huella(xMin, xMax, yMin, yMax);
+    }
 
     // ------------------------------------------------------------- geometría
 
@@ -443,23 +483,6 @@ public sealed class LectorContexto : IProveedorContexto
         }
 
         return max - min;
-    }
-
-    private static Solid? Interseccion(Solid a, Solid b)
-    {
-        try
-        {
-            Solid corte = BooleanOperationsUtils.ExecuteBooleanOperation(
-                a, b, BooleanOperationsType.Intersect);
-
-            return corte.Volume > Tolerancia ? corte : null;
-        }
-        catch (Autodesk.Revit.Exceptions.ApplicationException)
-        {
-            // Sólidos que Revit no sabe cruzar (mallas sucias, caras degeneradas).
-            // Se ignora ese elemento en vez de tumbar la lectura entera.
-            return null;
-        }
     }
 
     private static Solid? SolidoMayor(GeometryElement? ge)
