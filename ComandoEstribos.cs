@@ -46,7 +46,7 @@ public class ComandoEstribos : IExternalCommand
             new ProveedorTiposReal(doc),
             modoSimulado: false);
 
-        _ventana.ColumnaActivada += idsColumna =>
+        _ventana.ElementosActivados += idsColumna =>
         {
             // long? (no ElementId?) a propósito: ElementId ya tiene su propio
             // .Value (el long interno, ver LectorContexto), y mezclar los dos

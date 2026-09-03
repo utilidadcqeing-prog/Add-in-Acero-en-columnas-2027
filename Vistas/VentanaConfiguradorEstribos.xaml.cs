@@ -53,18 +53,29 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private ColumnaContexto? _columnaActiva;
     private int _tramoActivoIndice;
-    private string? _ultimoColumnaIdActivada;
+
+    /// <summary>Id representativo de la columna activa — fallback si algún tramo no trae <see cref="Tramo.IdElementoHost"/>.</summary>
+    private string? _columnaIdActiva;
 
     /// <summary>
-    /// Se dispara con los ids de TODOS los elementos de Revit que forman la
-    /// columna activa (uno por cada <see cref="Tramo.IdElementoHost"/> distinto
-    /// -- una columna lógica puede ser varios <c>FamilyInstance</c> apilados,
-    /// ver #28) cada vez que cambia. Sin una sola línea de <c>Autodesk.Revit</c>
-    /// acá adentro -- quien abre la ventana (ComandoEstribos) lo engancha para
+    /// Si el nodo activado fue la columna entera (true) o un tramo suelto
+    /// (false) — decide si <see cref="NotificarElementosActivos"/> selecciona
+    /// toda la pila o un único elemento. Pedido explícito: tocar un tramo
+    /// selecciona solo ese tramo, tocar la columna selecciona todo.
+    /// </summary>
+    private bool _modoColumnaCompleta;
+
+    /// <summary>
+    /// Se dispara con los ids de los elementos de Revit a seleccionar: todos
+    /// los de la pila si se activó la columna entera, o uno solo (el
+    /// <see cref="Tramo.IdElementoHost"/> del tramo) si se activó un tramo
+    /// suelto -- una columna lógica puede ser varios <c>FamilyInstance</c>
+    /// apilados, ver #28. Sin una sola línea de <c>Autodesk.Revit</c> acá
+    /// adentro -- quien abre la ventana (ComandoEstribos) lo engancha para
     /// seleccionar los elementos reales en Revit (issue #24): selección
     /// liviana nada más, nunca abrir la familia.
     /// </summary>
-    public event Action<IReadOnlyList<string>>? ColumnaActivada;
+    public event Action<IReadOnlyList<string>>? ElementosActivados;
 
     public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
     {
@@ -175,35 +186,16 @@ public partial class VentanaConfiguradorEstribos : Window
         GuardarPanelEnTramoActivo();
         GuardarLongitudinalDeColumnaActiva();
 
-        bool cambioDeColumna = _columnaActiva is null || nodo.ColumnaId != _ultimoColumnaIdActivada;
-
         _columnaActiva = _contexto.Leer(nodo.ColumnaId);
+        _columnaIdActiva = nodo.ColumnaId;
         _tramoActivoIndice = nodo.EsColumna ? 0 : nodo.TramoIndice;
+        _modoColumnaCompleta = nodo.EsColumna;
 
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
         MostrarAvisos();
-
-        // Solo re-selecciona en Revit si de verdad cambió la columna -- pasar
-        // de un tramo a otro de la misma columna no necesita tocar la
-        // selección, ya que sigue siendo (parte de) el mismo grupo de elementos.
-        if (cambioDeColumna)
-        {
-            _ultimoColumnaIdActivada = nodo.ColumnaId;
-
-            // Toda la pila, no solo el elemento representativo: si no, seleccionar
-            // una columna con zapata solo resaltaba el tramo de más abajo (#28).
-            List<string> idsElementos = _columnaActiva.Tramos
-                .Select(t => t.IdElementoHost)
-                .Where(id => id is not null)
-                .Distinct()
-                .ToList()!;
-
-            if (idsElementos.Count == 0) idsElementos.Add(nodo.ColumnaId);
-
-            ColumnaActivada?.Invoke(idsElementos);
-        }
+        NotificarElementosActivos();
     }
 
     private void IrA(int indice)
@@ -212,8 +204,46 @@ public partial class VentanaConfiguradorEstribos : Window
 
         GuardarPanelEnTramoActivo();
         _tramoActivoIndice = Math.Clamp(indice, 0, _columnaActiva.Tramos.Count - 1);
+
+        // Moverse con las flechas siempre para en un tramo puntual, nunca en
+        // "la columna entera" -- eso solo se activa desde la fila en negrita.
+        _modoColumnaCompleta = false;
+
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
+        NotificarElementosActivos();
+    }
+
+    /// <summary>
+    /// Selecciona en Revit toda la pila si está activa la columna entera, o
+    /// solo el elemento del tramo puntual si no -- pedido explícito: tocar un
+    /// tramo selecciona ese tramo, tocar la columna selecciona todo (#24).
+    /// </summary>
+    private void NotificarElementosActivos()
+    {
+        if (_columnaActiva is null) return;
+
+        List<string> ids;
+
+        if (_modoColumnaCompleta)
+        {
+            ids = _columnaActiva.Tramos
+                .Select(t => t.IdElementoHost)
+                .Where(id => id is not null)
+                .Distinct()
+                .ToList()!;
+        }
+        else
+        {
+            string? idTramo = _columnaActiva.Tramos.ElementAtOrDefault(_tramoActivoIndice)?.IdElementoHost;
+            ids = idTramo is not null ? new List<string> { idTramo } : new List<string>();
+        }
+
+        // Sin IdElementoHost (proveedor falso, o algo no se pudo resolver):
+        // cae al id representativo de la columna en vez de no seleccionar nada.
+        if (ids.Count == 0 && _columnaIdActiva is not null) ids.Add(_columnaIdActiva);
+
+        if (ids.Count > 0) ElementosActivados?.Invoke(ids);
     }
 
     private void BotonAnterior_Click(object sender, RoutedEventArgs e) => IrA(_tramoActivoIndice - 1);
