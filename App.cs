@@ -35,7 +35,7 @@ public class App : IExternalApplication
             "Estribos\nde Columna",
             "practicacq.ComandoEstribos",
             "Genera el acero de estribos con espaciado uniforme en las columnas seleccionadas.",
-            dllPath, folder));
+            dllPath, folder, "icono"));
 
         RibbonPanel panelHerramientas = ObtenerOCrearPanel(app, "Herramientas");
 
@@ -44,7 +44,7 @@ public class App : IExternalApplication
             "Columnetas\ny Viguetas",
             "practicacq.Comando",
             "Genera columnetas y viguetas de confinamiento en los muros seleccionados.",
-            dllPath, folder));
+            dllPath, folder, "iconoCQ"));
 
         return Result.Succeeded;
     }
@@ -64,12 +64,12 @@ public class App : IExternalApplication
     }
 
     private PushButtonData CrearBoton(
-        string nombre, string texto, string clase, string ayuda, string dllPath, string folder)
+        string nombre, string texto, string clase, string ayuda, string dllPath, string folder, string iconoBase)
     {
         var boton = new PushButtonData(nombre, texto, dllPath, clase) { ToolTip = ayuda };
 
-        boton.LargeImage = CargarIcono(Path.Combine(folder, "Resources", "icono32.png"));
-        boton.Image = CargarIcono(Path.Combine(folder, "Resources", "icono16.png"));
+        boton.LargeImage = CargarIcono(Path.Combine(folder, "Resources", $"{iconoBase}32.png"));
+        boton.Image = CargarIcono(Path.Combine(folder, "Resources", $"{iconoBase}16.png"));
 
         return boton;
     }
