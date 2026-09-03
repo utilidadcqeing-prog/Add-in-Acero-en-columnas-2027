@@ -50,6 +50,20 @@ public sealed class LectorContexto : IProveedorContexto
 
     private readonly Document _doc;
 
+    /// <summary>
+    /// Memoiza <see cref="LeerElementos"/> durante la vida de este
+    /// <see cref="LectorContexto"/> (issue #28: recorrer y calcular geometría
+    /// de TODAS las columnas del documento en cada click de la ventana no
+    /// se nota en el modelo de prueba, pero sí en uno con muchas columnas).
+    /// <c>ComandoEstribos</c> crea uno solo por apertura de ventana, así que
+    /// esto alcanza para todo lo que se haga sin cerrarla -- si el usuario
+    /// edita el modelo con la ventana abierta y vuelve a hacer click en una
+    /// columna, ve la lectura de cuando la abrió, no la última: mismo
+    /// comportamiento que ya tiene el resto de la ventana (no hay un botón
+    /// "refrescar" ni un listener de cambios del documento todavía).
+    /// </summary>
+    private List<ElementoColumna>? _cacheElementos;
+
     public LectorContexto(Document doc) => _doc = doc;
 
     /// <summary>Un elemento de columna ya resuelto: su sólido y dónde cae en el espacio.</summary>
@@ -191,13 +205,13 @@ public sealed class LectorContexto : IProveedorContexto
 
     /// <summary>
     /// Todas las columnas estructurales del documento, resueltas a su sólido
-    /// mayor, su centro en planta y su rango en Z. Recorrer esto una sola vez
-    /// por llamada es más caro de lo estrictamente necesario, pero mantiene
-    /// la lectura correcta ante cualquier tamaño de modelo real antes de
-    /// optimizar por adelantado.
+    /// mayor, su centro en planta y su rango en Z -- ver <see cref="_cacheElementos"/>
+    /// para hasta cuándo vale la memoización.
     /// </summary>
     private List<ElementoColumna> LeerElementos()
     {
+        if (_cacheElementos is not null) return _cacheElementos;
+
         var elementos = new List<ElementoColumna>();
 
         foreach (FamilyInstance c in new FilteredElementCollector(_doc)
@@ -212,6 +226,7 @@ public sealed class LectorContexto : IProveedorContexto
             elementos.Add(new ElementoColumna(c, solido, CentroPlanta(solido), zInf, zSup));
         }
 
+        _cacheElementos = elementos;
         return elementos;
     }
 
