@@ -266,7 +266,12 @@ public static class GeneradorArmado
         if (longitud <= Tolerancia || espaciado <= Tolerancia) return;
 
         var mover = Transform.CreateTranslation(XYZ.BasisZ * (zInicio - zBaseContorno));
-        IList<Curve> curvas = contorno.Select(c => c.CreateTransformed(mover)).ToList();
+        IList<Curve> curvasTrasladadas = contorno.Select(c => c.CreateTransformed(mover)).ToList();
+
+        // Ver GeometriaSeccion.ConEmpalmeEnMedioDeLado: sin esto, la esquina
+        // donde el loop se cierra queda sin el fillet de 90° que debería
+        // atrapar la barra longitudinal de ese vértice.
+        IList<Curve> curvas = GeometriaSeccion.ConEmpalmeEnMedioDeLado(curvasTrasladadas);
 
         Rebar estribo = Rebar.CreateFromCurves(
             doc,

@@ -409,14 +409,17 @@ public static class GeneradorLongitudinal
     {
         try
         {
-            var curvas = new List<Curve>
+            var curvasRectangulo = new List<Curve>
             {
                 Line.CreateBound(new XYZ(x1, y1, z), new XYZ(x2, y1, z)),
                 Line.CreateBound(new XYZ(x2, y1, z), new XYZ(x2, y2, z)),
                 Line.CreateBound(new XYZ(x2, y2, z), new XYZ(x1, y2, z)),
                 Line.CreateBound(new XYZ(x1, y2, z), new XYZ(x1, y1, z)),
             };
-            CurveLoop loop = CurveLoop.Create(curvas);
+
+            // Ver GeometriaSeccion.ConEmpalmeEnMedioDeLado: sin esto, la
+            // esquina donde el loop se cierra queda sin el fillet de 90°.
+            IList<Curve> curvas = GeometriaSeccion.ConEmpalmeEnMedioDeLado(curvasRectangulo);
 
             using var terminaciones = new BarTerminationsData(doc)
             {
@@ -432,7 +435,7 @@ public static class GeneradorLongitudinal
                 barra,
                 host,
                 XYZ.BasisZ,
-                loop.ToList(),
+                curvas,
                 terminaciones,
                 useExistingShapeIfPossible: true,
                 createNewShape: true);

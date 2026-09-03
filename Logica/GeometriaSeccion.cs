@@ -41,7 +41,10 @@ internal static class GeometriaSeccion
                 $"el elemento {host.Id} no tiene tapa superior e inferior horizontales (¿inclinado o recortado?).");
 
         PlanarFace caraInferior = carasHorizontales.OrderBy(f => f.Origin.Z).First();
-        var resultado = (LoopExterior(caraInferior), caraInferior.Origin.Z);
+        CurveLoop contorno = LoopExterior(caraInferior);
+        ValidarRectangular(contorno, host.Id);
+
+        var resultado = (contorno, caraInferior.Origin.Z);
         cache[host.Id] = resultado;
         return resultado;
     }
@@ -100,6 +103,27 @@ internal static class GeometriaSeccion
         cara.GetEdgesAsCurveLoops().OrderByDescending(Longitud).First();
 
     /// <summary>
+    /// Todo el carril (offset del contorno, esquinas de #4, cara X/cara Y de
+    /// J4) asume una sección rectangular -- ver #11. Nada de esto tiene
+    /// sentido geométrico para una columna circular o de más de 4 lados
+    /// (Revit devolvería <c>Arc</c> en vez de <c>Line</c>, o más de 4 curvas),
+    /// así que se corta acá con un mensaje claro en vez de generar acero mal
+    /// puesto en silencio.
+    /// </summary>
+    private static void ValidarRectangular(CurveLoop contorno, ElementId hostId)
+    {
+        List<Curve> curvas = contorno.ToList();
+
+        if (curvas.Any(c => c is not Line))
+            throw new InvalidOperationException(
+                $"el elemento {hostId} no tiene una sección rectangular (borde curvo) -- no soportado por ahora (#11).");
+
+        if (curvas.Count != 4)
+            throw new InvalidOperationException(
+                $"el elemento {hostId} tiene una sección de {curvas.Count} lados, no rectangular -- no soportado por ahora (#11).");
+    }
+
+    /// <summary>
     /// Mete el contorno hacia adentro. Prueba los dos signos y se queda con el
     /// que encoge, así no importa cómo venga orientado el loop.
     /// </summary>
@@ -133,6 +157,36 @@ internal static class GeometriaSeccion
     }
 
     public static double Longitud(CurveLoop loop) => loop.Sum(c => c.Length);
+
+    /// <summary>
+    /// Parte la primera curva de un loop cerrado por su punto medio, así el
+    /// arranque/cierre del <c>IList&lt;Curve&gt;</c> que recibe
+    /// <c>Rebar.CreateFromCurves</c> cae en la mitad de un lado recto, no en
+    /// una esquina.
+    ///
+    /// Revit no arma el fillet de 90° en el vértice donde el loop se cierra
+    /// cuando ahí también van los ganchos de 135° -- el gancho se come el
+    /// doblez que debería atrapar la barra longitudinal de esa esquina,
+    /// dejándola sin amarrar (documentado en el informe técnico de
+    /// referencia de otro intento del mismo problema -- ver issue de
+    /// seguimiento). Partir un lado por la mitad deja los 4 vértices reales
+    /// con continuidad entre dos curvas normales, así que sí reciben el
+    /// fillet; los ganchos quedan sobre el tramo recto en su lugar, que es
+    /// justo la solución que Autodesk documenta para esto sin cambiar de API.
+    /// </summary>
+    public static IList<Curve> ConEmpalmeEnMedioDeLado(IList<Curve> curvas)
+    {
+        if (curvas.Count == 0) return curvas;
+
+        Curve primera = curvas[0];
+        XYZ inicio = primera.GetEndPoint(0);
+        XYZ fin = primera.GetEndPoint(1);
+        XYZ medio = (inicio + fin) / 2;
+
+        var resultado = new List<Curve> { Line.CreateBound(inicio, medio), Line.CreateBound(medio, fin) };
+        resultado.AddRange(curvas.Skip(1));
+        return resultado;
+    }
 
     public static double Metros(double pies) =>
         UnitUtils.ConvertFromInternalUnits(pies, UnitTypeId.Meters);
