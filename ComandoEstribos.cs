@@ -14,12 +14,17 @@ public class ComandoEstribos : IExternalCommand
 {
     private static VentanaConfiguradorEstribos? _ventana;
 
-    // Issue #24 (sincronizar selección): vive a nivel de comando, no de
+    // Issue #24 (sincronizar selección): viven a nivel de comando, no de
     // ventana, porque VentanaConfiguradorEstribos no puede referenciar
     // Autodesk.Revit -- es la misma regla de L1 que la mantiene corriendo
-    // sin Revit abierto.
-    private static readonly ManejadorSeleccionElemento _manejadorSeleccion = new();
-    private static readonly ExternalEvent _eventoSeleccion = ExternalEvent.Create(_manejadorSeleccion);
+    // sin Revit abierto. Dos pares separados y no uno compartido: activar
+    // una fila mueve la cámara, tildar en la lista no debe hacerlo, y son
+    // dos eventos de la ventana que pueden dispararse en cualquier orden.
+    private static readonly ManejadorSeleccionElemento _manejadorActivar = new() { CentrarVista = true };
+    private static readonly ExternalEvent _eventoActivar = ExternalEvent.Create(_manejadorActivar);
+
+    private static readonly ManejadorSeleccionElemento _manejadorMarcado = new() { CentrarVista = false };
+    private static readonly ExternalEvent _eventoMarcado = ExternalEvent.Create(_manejadorMarcado);
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
@@ -46,23 +51,22 @@ public class ComandoEstribos : IExternalCommand
             new ProveedorTiposReal(doc),
             modoSimulado: false);
 
-        _ventana.ElementosActivados += idsColumna =>
+        _ventana.ElementosActivados += ids =>
         {
-            // long? (no ElementId?) a propósito: ElementId ya tiene su propio
-            // .Value (el long interno, ver LectorContexto), y mezclar los dos
-            // Nullable en la misma expresión es una trampa segura para
-            // confundirse. Acá se resuelve el nullable antes de construir el
-            // ElementId, no después.
-            List<ElementId> ids = idsColumna
-                .Select(id => long.TryParse(id, out long valor) ? valor : (long?)null)
-                .Where(valor => valor is not null)
-                .Select(valor => new ElementId(valor!.Value))
-                .ToList();
+            List<ElementId> objetivos = ParsearIds(ids);
+            if (objetivos.Count == 0) return;
 
-            if (ids.Count == 0) return;
+            _manejadorActivar.Objetivos = objetivos;
+            _eventoActivar.Raise();
+        };
 
-            _manejadorSeleccion.Objetivos = ids;
-            _eventoSeleccion.Raise();
+        // Tildar puede vaciar el conjunto (destildar todo) -- a diferencia de
+        // ElementosActivados, acá sí hay que avisarle a Revit para que
+        // deseleccione, no cortar antes.
+        _ventana.SeleccionMarcadaCambio += ids =>
+        {
+            _manejadorMarcado.Objetivos = ParsearIds(ids);
+            _eventoMarcado.Raise();
         };
 
         new WindowInteropHelper(_ventana).Owner = uiapp.MainWindowHandle;
@@ -71,4 +75,14 @@ public class ComandoEstribos : IExternalCommand
 
         return Result.Succeeded;
     }
+
+    // long? (no ElementId?) a propósito: ElementId ya tiene su propio .Value
+    // (el long interno, ver LectorContexto), y mezclar los dos Nullable en la
+    // misma expresión es una trampa segura para confundirse. Acá se resuelve
+    // el nullable antes de construir el ElementId, no después.
+    private static List<ElementId> ParsearIds(IReadOnlyList<string> ids) => ids
+        .Select(id => long.TryParse(id, out long valor) ? valor : (long?)null)
+        .Where(valor => valor is not null)
+        .Select(valor => new ElementId(valor!.Value))
+        .ToList();
 }

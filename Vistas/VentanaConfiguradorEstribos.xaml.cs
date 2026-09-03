@@ -77,6 +77,16 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     public event Action<IReadOnlyList<string>>? ElementosActivados;
 
+    /// <summary>
+    /// Se dispara con los ids de TODOS los elementos cuyo tramo está tildado en
+    /// la lista, cada vez que cambia una tilde -- puede venir vacía (nada
+    /// tildado). A diferencia de <see cref="ElementosActivados"/>, quien lo
+    /// escucha NO debe mover la cámara: es solo reflejar en Revit qué está
+    /// marcado para "Aplicar a selección", sin interrumpir al usuario mirando
+    /// otra cosa.
+    /// </summary>
+    public event Action<IReadOnlyList<string>>? SeleccionMarcadaCambio;
+
     public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
     {
         InitializeComponent();
@@ -145,6 +155,7 @@ public partial class VentanaConfiguradorEstribos : Window
                     ColumnaId = resumen.Id,
                     TramoIndice = tramo.Indice,
                     Etiqueta = $"     Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
+                    IdElementoHost = tramo.IdElementoHost,
                 });
             }
         }
@@ -173,10 +184,32 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     private void CheckBoxNodo_Changed(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: NodoLista nodo } || !nodo.EsColumna) return;
+        if (sender is not FrameworkElement { DataContext: NodoLista nodo }) return;
 
-        foreach (NodoLista tramo in _nodos.Where(n => !n.EsColumna && n.ColumnaId == nodo.ColumnaId))
-            tramo.Marcado = nodo.Marcado;
+        if (nodo.EsColumna)
+        {
+            foreach (NodoLista tramo in _nodos.Where(n => !n.EsColumna && n.ColumnaId == nodo.ColumnaId))
+                tramo.Marcado = nodo.Marcado;
+        }
+
+        NotificarSeleccionMarcada();
+    }
+
+    /// <summary>
+    /// Junta los elementos de todos los tramos tildados (la cascada de arriba
+    /// ya se encargó de que tildar una columna tilde a sus tramos) y avisa --
+    /// puede salir vacía si se destildó todo, y eso también hay que avisarlo
+    /// para que Revit deseleccione.
+    /// </summary>
+    private void NotificarSeleccionMarcada()
+    {
+        List<string> ids = _nodos
+            .Where(n => !n.EsColumna && n.Marcado && n.IdElementoHost is not null)
+            .Select(n => n.IdElementoHost!)
+            .Distinct()
+            .ToList();
+
+        SeleccionMarcadaCambio?.Invoke(ids);
     }
 
     // ------------------------------------------------------- tramo activo
@@ -808,6 +841,13 @@ public sealed class NodoLista : INotifyPropertyChanged
     public string ColumnaId { get; init; } = "";
     public int TramoIndice { get; init; }
     public string Etiqueta { get; init; } = "";
+
+    /// <summary>
+    /// Solo en filas de tramo: el elemento de Revit que lo hostea (ver
+    /// <see cref="Tramo.IdElementoHost"/>). Se guarda acá para no tener que
+    /// releer el contexto de la columna entera cada vez que cambia una tilde.
+    /// </summary>
+    public string? IdElementoHost { get; init; }
 
     private bool _marcado;
     public bool Marcado

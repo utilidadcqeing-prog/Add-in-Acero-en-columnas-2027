@@ -22,13 +22,25 @@ using Autodesk.Revit.UI;
 /// </summary>
 public sealed class ManejadorSeleccionElemento : IExternalEventHandler
 {
-    /// <summary>Los elementos a seleccionar. Se fija antes de llamar a <c>Raise()</c>.</summary>
+    /// <summary>
+    /// Los elementos a seleccionar. Se fija antes de llamar a <c>Raise()</c>.
+    /// Una lista vacía (no <c>null</c>) es válida y significa "deseleccionar
+    /// todo" -- pasa cuando se destildan todos los tramos de la lista.
+    /// </summary>
     public IReadOnlyList<ElementId>? Objetivos { get; set; }
+
+    /// <summary>
+    /// Si además de seleccionar hay que mover la cámara a los elementos.
+    /// Pedido explícito: tildar en la lista solo debe reflejarse como
+    /// seleccionado, sin saltarle la vista al usuario -- eso queda reservado
+    /// para activar una fila (clic o flechas).
+    /// </summary>
+    public bool CentrarVista { get; set; } = true;
 
     public void Execute(UIApplication app)
     {
         UIDocument? uidoc = app.ActiveUIDocument;
-        if (uidoc is null || Objetivos is null || Objetivos.Count == 0) return;
+        if (uidoc is null || Objetivos is null) return;
 
         // Elementos borrados o de otro documento entretanto: se filtran en vez
         // de reventar la ventana con una excepción de Revit.
@@ -36,10 +48,10 @@ public sealed class ManejadorSeleccionElemento : IExternalEventHandler
             .Where(id => uidoc.Document.GetElement(id) is not null)
             .ToList();
 
-        if (existentes.Count == 0) return;
-
         uidoc.Selection.SetElementIds(existentes);
-        uidoc.ShowElements(existentes);
+
+        if (CentrarVista && existentes.Count > 0)
+            uidoc.ShowElements(existentes);
     }
 
     public string GetName() => "Seleccionar elemento desde el addin";
