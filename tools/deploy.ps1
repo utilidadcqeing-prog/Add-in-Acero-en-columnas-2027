@@ -8,10 +8,15 @@
   .\tools\deploy.ps1
   .\tools\deploy.ps1 -Versions 2027
   .\tools\deploy.ps1 -Configuration Release
+  .\tools\deploy.ps1 -Versions 2026 -TargetFramework net10.0-windows   # Revit 2026.5+ (ver #14)
 #>
 param(
     [string[]]$Versions = @('2026', '2027'),
-    [string]$Configuration = 'Debug'
+    [string]$Configuration = 'Debug',
+    # Revit 2026.0-2026.4 usa net8.0-windows; 2026.5+ pasa a net10.0-windows,
+    # y las dos instalan en la misma carpeta "Revit 2026" -- si tu 2026 es
+    # 2026.5 o mas nuevo, pasa esto explicito (ver el comentario del .csproj).
+    [string]$TargetFramework
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,7 +33,11 @@ foreach ($year in $Versions) {
     }
 
     Write-Host "== Compilando practicacq para Revit $year ==" -ForegroundColor Cyan
-    dotnet build $proj -c $Configuration -p:RevitVersion=$year
+    if ($TargetFramework) {
+        dotnet build $proj -c $Configuration -p:RevitVersion=$year -p:TargetFramework=$TargetFramework
+    } else {
+        dotnet build $proj -c $Configuration -p:RevitVersion=$year
+    }
     if ($LASTEXITCODE -ne 0) { throw "Fallo la compilacion para Revit $year" }
 
     $outDir = Join-Path $root "bin\$Configuration\$year"
