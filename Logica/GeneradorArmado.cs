@@ -108,7 +108,7 @@ public static class GeneradorArmado
             catch (Exception ex)
             {
                 res.TramosOmitidos++;
-                res.Avisos.Add($"{contexto.Marca} tramo {i + 1}: {Explicar(ex)}");
+                res.Avisos.Add($"{contexto.Marca} tramo {i + 1}: {GeometriaSeccion.Explicar(ex)}");
             }
         }
     }
@@ -118,7 +118,7 @@ public static class GeneradorArmado
     /// tirar excepción) para los motivos "esperables" -- viga, host borrado,
     /// tipo de barra/gancho que ya no existe -- y deja que una excepción real
     /// de geometría se propague para que <see cref="GenerarColumna"/> la
-    /// registre con <see cref="Explicar"/> sin tumbar el resto del lote.
+    /// registre con <see cref="GeometriaSeccion.Explicar"/> sin tumbar el resto del lote.
     /// </summary>
     private static bool GenerarTramo(
         Document doc,
@@ -165,20 +165,20 @@ public static class GeneradorArmado
         if (RebarHostData.GetRebarHostData(host) is null)
             throw new InvalidOperationException($"el elemento {host.Id} no admite armadura (host no válido para rebar).");
 
-        (CurveLoop contornoCrudo, double zBase) = ObtenerContornoHost(host, cacheHost);
+        (CurveLoop contornoCrudo, double zBase) = GeometriaSeccion.ObtenerContornoHost(host, cacheHost);
 
         // Recubrimiento a la cara EXTERIOR de la barra, no a su centro (#1):
         // la curva que le pasamos a Rebar.CreateFromCurves es el eje de la
         // barra, así que hay que meter el contorno medio diámetro más que el
         // recubrimiento puro para que el borde de la barra quede justo ahí.
-        CurveLoop contorno = OffsetHaciaAdentro(contornoCrudo, recubrimientoPies + barra.BarNominalDiameter / 2);
+        CurveLoop contorno = GeometriaSeccion.OffsetHaciaAdentro(contornoCrudo, recubrimientoPies + barra.BarNominalDiameter / 2);
 
         double ladoMenor = contorno.Min(c => c.Length);
         double doblez = barra.StirrupTieBendDiameter;
         if (ladoMenor <= doblez)
             throw new InvalidOperationException(
                 $"la barra {barra.Name} es demasiado gruesa para esta sección: su doblez de estribo mide " +
-                $"{Metros(doblez) * 100:0.#} cm y el lado más corto del estribo queda en {Metros(ladoMenor) * 100:0.#} cm.");
+                $"{GeometriaSeccion.Metros(doblez) * 100:0.#} cm y el lado más corto del estribo queda en {GeometriaSeccion.Metros(ladoMenor) * 100:0.#} cm.");
 
         AvisarSiGanchoNoCumpleNorma(barra, gancho, ganchosYaAvisados, res);
 
@@ -296,7 +296,7 @@ public static class GeneradorArmado
         res.GruposCreados++;
         res.Detalles.Add(
             $"{etiquetaTramo} ({etiquetaGrupo}): {posiciones} estribos cada " +
-            $"{Metros(separacionReal) * 100:0.#} cm sobre {Metros(reparto):0.00} m.");
+            $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
     }
 
     /// <summary>
@@ -356,119 +356,8 @@ public static class GeneradorArmado
 
         if (Math.Abs(real - esperado) > EstandarCQ.APies(0.005))
             res.Avisos.Add(
-                $"El gancho «{gancho.Name}» mide {Metros(real) * 100:0.#} cm con la barra {barra.Name}, " +
+                $"El gancho «{gancho.Name}» mide {GeometriaSeccion.Metros(real) * 100:0.#} cm con la barra {barra.Name}, " +
                 $"y el cuadro de la empresa pide {varilla.GanchoEstribo * 100:0.#} cm para la #{varilla.Numero}.");
     }
 
-    /// <summary>
-    /// El contorno exterior del elemento host, sin offset -- se cachea porque
-    /// varios tramos de la pila pueden compartir el mismo host (una viga que
-    /// cruza a mitad de un elemento parte ese elemento en dos tramos, ver
-    /// <c>LectorContexto.ArmarTramos</c>).
-    /// </summary>
-    private static (CurveLoop ContornoCrudo, double ZBase) ObtenerContornoHost(
-        FamilyInstance host, Dictionary<ElementId, (CurveLoop, double)> cache)
-    {
-        if (cache.TryGetValue(host.Id, out var cacheado)) return cacheado;
-
-        Solid solido = ObtenerSolido(host)
-            ?? throw new InvalidOperationException($"no se pudo leer la geometría del elemento {host.Id}.");
-
-        var carasHorizontales = solido.Faces
-            .OfType<PlanarFace>()
-            .Where(f => Math.Abs(f.FaceNormal.Normalize().DotProduct(XYZ.BasisZ)) > 1 - 1e-4)
-            .ToList();
-
-        if (carasHorizontales.Count < 2)
-            throw new InvalidOperationException(
-                $"el elemento {host.Id} no tiene tapa superior e inferior horizontales (¿inclinado o recortado?).");
-
-        PlanarFace caraInferior = carasHorizontales.OrderBy(f => f.Origin.Z).First();
-        var resultado = (LoopExterior(caraInferior), caraInferior.Origin.Z);
-        cache[host.Id] = resultado;
-        return resultado;
-    }
-
-    private static Solid? ObtenerSolido(Element el)
-    {
-        var opts = new Options { DetailLevel = ViewDetailLevel.Fine };
-        return SolidoMayor(el.get_Geometry(opts));
-    }
-
-    private static Solid? SolidoMayor(GeometryElement? ge)
-    {
-        if (ge is null) return null;
-
-        Solid? mejor = null;
-        foreach (GeometryObject go in ge)
-        {
-            Solid? candidato = go switch
-            {
-                Solid s when s.Volume > Tolerancia => s,
-                GeometryInstance gi => SolidoMayor(gi.GetInstanceGeometry()),
-                _ => null
-            };
-
-            if (candidato is not null && (mejor is null || candidato.Volume > mejor.Volume))
-                mejor = candidato;
-        }
-        return mejor;
-    }
-
-    /// <summary>El loop más largo de la cara es el contorno exterior; los demás son huecos.</summary>
-    private static CurveLoop LoopExterior(PlanarFace cara) =>
-        cara.GetEdgesAsCurveLoops().OrderByDescending(Longitud).First();
-
-    /// <summary>
-    /// Mete el contorno hacia adentro. Prueba los dos signos y se queda con el
-    /// que encoge, así no importa cómo venga orientado el loop.
-    /// </summary>
-    private static CurveLoop OffsetHaciaAdentro(CurveLoop loop, double distancia)
-    {
-        CurveLoop a = CurveLoop.CreateViaOffset(loop, distancia, XYZ.BasisZ);
-        CurveLoop b = CurveLoop.CreateViaOffset(loop, -distancia, XYZ.BasisZ);
-        return Normalizar(Longitud(a) < Longitud(b) ? a : b);
-    }
-
-    /// <summary>
-    /// Deja el contorno siempre en sentido antihorario visto desde +Z -- la
-    /// orientación del gancho (Left/Right) se interpreta respecto al sentido
-    /// de recorrido de la curva, y sin normalizar la misma configuración mete
-    /// los ganchos hacia adentro en una columna y hacia afuera en la siguiente.
-    /// </summary>
-    private static CurveLoop Normalizar(CurveLoop loop)
-    {
-        try
-        {
-            if (!loop.IsCounterclockwise(XYZ.BasisZ))
-                loop.Flip();
-        }
-        catch (Autodesk.Revit.Exceptions.ArgumentException)
-        {
-            // Loop no planar o degenerado: se deja como está y que falle más
-            // adelante con un mensaje que sí diga algo.
-        }
-
-        return loop;
-    }
-
-    private static double Longitud(CurveLoop loop) => loop.Sum(c => c.Length);
-
-    /// <summary>
-    /// Revit contesta "An internal error has occurred" cuando la armadura le
-    /// sale geométricamente inválida, sin decir por qué. Casi siempre es que
-    /// el gancho no cabe: o la pata es muy larga para la sección, o la barra
-    /// muy gruesa.
-    /// </summary>
-    private static string Explicar(Exception ex)
-    {
-        if (ex.Message.Contains("internal error", StringComparison.OrdinalIgnoreCase))
-            return "Revit rechazó la armadura sin dar motivo. Suele ser el gancho: " +
-                   "prueba otro tipo de 135°, o una barra más delgada.";
-
-        return ex.Message;
-    }
-
-    private static double Metros(double pies) =>
-        UnitUtils.ConvertFromInternalUnits(pies, UnitTypeId.Meters);
 }

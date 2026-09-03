@@ -31,8 +31,16 @@ public sealed class ColumnaContexto
     /// </summary>
     public double Recubrimiento { get; init; }
 
-    /// <summary>Cota real de arranque del acero. Si hay zapata, es su cara superior.</summary>
+    /// <summary>Cota real de arranque del estribo. Si hay zapata, es su cara superior.</summary>
     public double ZInferior { get; init; }
+
+    /// <summary>
+    /// Cota real de arranque del acero LONGITUDINAL -- a diferencia del
+    /// estribo (<see cref="ZInferior"/>), si hay zapata el longitudinal entra
+    /// a anclarse hasta quedar a 7.5cm de su cara inferior (issue #26). Sin
+    /// zapata, vale lo mismo que <see cref="ZInferior"/>.
+    /// </summary>
+    public double ZInferiorLongitudinal { get; init; }
 
     /// <summary>Cota real del remate, sacada de la geometría y no de «Longitud del sistema».</summary>
     public double ZSuperior { get; init; }

@@ -101,6 +101,9 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
             BaseY = 0.40,
             Recubrimiento = 0.04,
             ZInferior = 0.0,
+            // El longitudinal entra a la zapata, a diferencia del estribo:
+            // valor ilustrativo (issue #26), no viene de una zapata real acá.
+            ZInferiorLongitudinal = -0.30,
             ZSuperior = z,
             Tramos = tramos,
             Niveles = niveles,

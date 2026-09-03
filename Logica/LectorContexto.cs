@@ -89,6 +89,15 @@ public sealed class LectorContexto : IProveedorContexto
         bool huboNudo = false;
         bool primero = true;
 
+        // El acero longitudinal SÍ entra en la zapata a anclarse (a 7.5cm de
+        // su cara inferior -- issue #26, confirmado con Luciano), a
+        // diferencia del estribo, que arranca en la cara superior. Por eso
+        // esta cota se guarda aparte de zArranque/ZInferior: si no hay
+        // zapata, vale lo mismo que el arranque normal (no hay dónde
+        // anclarse más abajo).
+        double zInferiorLongitudinal = double.MinValue;
+        const double AnclajeSobreElFondo = 0.075; // 7.5cm, issue #26.
+
         foreach (ElementoColumna el in pila)
         {
             double zArranque = el.ZInf;
@@ -98,7 +107,7 @@ public sealed class LectorContexto : IProveedorContexto
             // más arriba no hay nada contra qué arrancar.
             if (primero)
             {
-                double zZapata = TopeDeZapata(el.Solido);
+                (double zZapata, double fondoZapata) = TopeDeZapata(el.Solido);
 
                 // Toca zapata en cuanto se encontró una -- no solo cuando el
                 // sólido de la columna se mete DENTRO de ella (zZapata bien
@@ -114,6 +123,7 @@ public sealed class LectorContexto : IProveedorContexto
                 if (sobreZapata)
                 {
                     zArranque = Math.Max(el.ZInf, zZapata);
+                    zInferiorLongitudinal = fondoZapata + APies(AnclajeSobreElFondo);
                     avisos.Add($"Arranca sobre cimentación: el acero empieza en {AMetros(zArranque):0.00} m.");
                 }
             }
@@ -156,6 +166,12 @@ public sealed class LectorContexto : IProveedorContexto
         // vuelta del propio tramo evita duplicar esa cuenta.
         double zInferiorGlobal = APies(tramos[0].ZInferior);
 
+        // Sin zapata (o si por algún motivo no se pudo leer el fondo), el
+        // longitudinal arranca en el mismo punto que el estribo -- no hay
+        // dónde anclarse más abajo.
+        double zInferiorLongitudinalGlobal =
+            zInferiorLongitudinal > double.MinValue ? zInferiorLongitudinal : zInferiorGlobal;
+
         return new ColumnaContexto
         {
             Marca = Marca(base_.Instancia),
@@ -163,6 +179,7 @@ public sealed class LectorContexto : IProveedorContexto
             BaseY = AMetros(LadoY(base_.Solido)),
             Recubrimiento = AMetros(Recubrimiento(base_.Instancia, avisos)),
             ZInferior = AMetros(zInferiorGlobal),
+            ZInferiorLongitudinal = AMetros(zInferiorLongitudinalGlobal),
             ZSuperior = AMetros(pila[^1].ZSup),
             Tramos = tramos,
             Niveles = Rotulos(zInferiorGlobal, pila[^1].ZSup),
@@ -356,14 +373,21 @@ public sealed class LectorContexto : IProveedorContexto
     }
 
     /// <summary>
-    /// Cota superior de la zapata sobre la que arranca la columna, o
-    /// <see cref="double.MinValue"/> si no hay ninguna. Solo lee -- el aviso y
-    /// la decisión de qué hacer con el valor son de quien llama (<see cref="Leer"/>),
-    /// que es quien sabe si además hace falta subir <c>zArranque</c>.
+    /// Cota superior e inferior de la zapata sobre la que arranca la columna
+    /// (<see cref="double.MinValue"/> en ambas si no hay ninguna). Solo lee --
+    /// el aviso y la decisión de qué hacer con el valor son de quien llama
+    /// (<see cref="Leer"/>), que es quien sabe si además hace falta subir
+    /// <c>zArranque</c>.
+    ///
+    /// Se leen las dos caras (no solo la superior, como antes) porque el
+    /// acero longitudinal SÍ entra en la zapata a anclarse -- a diferencia
+    /// del estribo, que arranca en la cara superior -- y para eso hace falta
+    /// saber dónde está el fondo (ver <see cref="ColumnaContexto.ZInferiorLongitudinal"/>).
     /// </summary>
-    private double TopeDeZapata(Solid columna)
+    private (double Sup, double Inf) TopeDeZapata(Solid columna)
     {
         double tope = double.MinValue;
+        double fondo = double.MinValue;
         Huella huellaColumna = HuellaPlanta(columna);
 
         foreach (Element zapata in CandidatasPorCaja(huellaColumna, BuiltInCategory.OST_StructuralFoundation))
@@ -373,10 +397,17 @@ public sealed class LectorContexto : IProveedorContexto
 
             if (solidoZapata is null || !SeTocan(huellaColumna, HuellaPlanta(solidoZapata))) continue;
 
-            tope = Math.Max(tope, ExtensionZ(solidoZapata).Sup);
+            (double inf, double sup) = ExtensionZ(solidoZapata);
+
+            // Del lado del fondo, si hay más de una zapata candidata (no
+            // debería, pero por las dudas) nos quedamos con la MÁS PROFUNDA:
+            // el ZInferiorLongitudinal tiene que valer para cualquiera que
+            // esté ahí tocando, no solo la que dio el tope más alto.
+            if (sup > tope) tope = sup;
+            if (fondo == double.MinValue || inf < fondo) fondo = inf;
         }
 
-        return tope;
+        return (tope, fondo);
     }
 
     /// <summary>Rectángulo en planta que envuelve al sólido: (xMin, xMax, yMin, yMax).</summary>
