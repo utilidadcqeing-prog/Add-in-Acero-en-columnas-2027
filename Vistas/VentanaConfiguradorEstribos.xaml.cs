@@ -53,6 +53,16 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private ColumnaContexto? _columnaActiva;
     private int _tramoActivoIndice;
+    private string? _ultimoColumnaIdActivada;
+
+    /// <summary>
+    /// Se dispara con el id (el mismo texto que recibe <see cref="IProveedorContexto.Leer"/>)
+    /// cada vez que cambia la columna activa. Sin una sola línea de
+    /// <c>Autodesk.Revit</c> acá adentro -- quien abre la ventana (ComandoEstribos)
+    /// lo engancha para seleccionar el elemento real en Revit (issue #24):
+    /// selección liviana nada más, nunca abrir la familia.
+    /// </summary>
+    public event Action<string>? ColumnaActivada;
 
     public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
     {
@@ -163,12 +173,23 @@ public partial class VentanaConfiguradorEstribos : Window
         GuardarPanelEnTramoActivo();
         GuardarLongitudinalDeColumnaActiva();
 
+        bool cambioDeColumna = _columnaActiva is null || nodo.ColumnaId != _ultimoColumnaIdActivada;
+
         _columnaActiva = _contexto.Leer(nodo.ColumnaId);
         _tramoActivoIndice = nodo.EsColumna ? 0 : nodo.TramoIndice;
 
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
+
+        // Solo re-selecciona en Revit si de verdad cambió la columna -- pasar
+        // de un tramo a otro de la misma columna no necesita tocar la
+        // selección, porque los tramos no son elementos separados en Revit.
+        if (cambioDeColumna)
+        {
+            _ultimoColumnaIdActivada = nodo.ColumnaId;
+            ColumnaActivada?.Invoke(nodo.ColumnaId);
+        }
     }
 
     private void IrA(int indice)

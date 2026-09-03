@@ -4,13 +4,20 @@ using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using practicacq.Modelo;
+using practicacq.Logica;
 using practicacq.Vistas;
 
 [Transaction(TransactionMode.Manual)]
 public class ComandoEstribos : IExternalCommand
 {
     private static VentanaConfiguradorEstribos? _ventana;
+
+    // Issue #24 (sincronizar selección): vive a nivel de comando, no de
+    // ventana, porque VentanaConfiguradorEstribos no puede referenciar
+    // Autodesk.Revit -- es la misma regla de L1 que la mantiene corriendo
+    // sin Revit abierto.
+    private static readonly ManejadorSeleccionElemento _manejadorSeleccion = new();
+    private static readonly ExternalEvent _eventoSeleccion = ExternalEvent.Create(_manejadorSeleccion);
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
@@ -28,13 +35,22 @@ public class ComandoEstribos : IExternalCommand
             return Result.Succeeded;
         }
 
-        // TODO(J2): reemplazar por LectorContexto(uiapp.ActiveUIDocument.Document)
-        // y un proveedor de tipos real (RebarBarType/RebarHookType del documento)
-        // cuando J2 los tenga listos. La ventana no cambia una línea -- ver L1.
+        // J2: proveedores reales sobre el documento activo. La ventana no cambió
+        // una línea -- ver L1, este era exactamente el punto de la interfaz.
+        Document doc = uiapp.ActiveUIDocument.Document;
+
         _ventana = new VentanaConfiguradorEstribos(
-            new ProveedorContextoFalso(),
-            new ProveedorTiposFalso(),
-            modoSimulado: true);
+            new LectorContexto(doc),
+            new ProveedorTiposReal(doc),
+            modoSimulado: false);
+
+        _ventana.ColumnaActivada += idColumna =>
+        {
+            if (!long.TryParse(idColumna, out long valor)) return;
+
+            _manejadorSeleccion.Objetivo = new ElementId(valor);
+            _eventoSeleccion.Raise();
+        };
 
         new WindowInteropHelper(_ventana).Owner = uiapp.MainWindowHandle;
         _ventana.Closed += (_, _) => _ventana = null;
