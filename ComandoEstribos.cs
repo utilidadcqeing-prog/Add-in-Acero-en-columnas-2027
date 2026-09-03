@@ -1,5 +1,7 @@
 namespace practicacq;
 
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -44,11 +46,22 @@ public class ComandoEstribos : IExternalCommand
             new ProveedorTiposReal(doc),
             modoSimulado: false);
 
-        _ventana.ColumnaActivada += idColumna =>
+        _ventana.ColumnaActivada += idsColumna =>
         {
-            if (!long.TryParse(idColumna, out long valor)) return;
+            // long? (no ElementId?) a propósito: ElementId ya tiene su propio
+            // .Value (el long interno, ver LectorContexto), y mezclar los dos
+            // Nullable en la misma expresión es una trampa segura para
+            // confundirse. Acá se resuelve el nullable antes de construir el
+            // ElementId, no después.
+            List<ElementId> ids = idsColumna
+                .Select(id => long.TryParse(id, out long valor) ? valor : (long?)null)
+                .Where(valor => valor is not null)
+                .Select(valor => new ElementId(valor!.Value))
+                .ToList();
 
-            _manejadorSeleccion.Objetivo = new ElementId(valor);
+            if (ids.Count == 0) return;
+
+            _manejadorSeleccion.Objetivos = ids;
             _eventoSeleccion.Raise();
         };
 

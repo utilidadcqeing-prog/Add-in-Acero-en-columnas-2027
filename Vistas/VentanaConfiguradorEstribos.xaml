@@ -92,6 +92,14 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Elevación (detalle)" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
 
+                    <!-- Lo que LectorContexto no pudo determinar solo, o dejó como
+                         constancia (zapata, sin vigas que la toquen, sección que
+                         cambia entre elementos). Vacío la mayoría de las veces. -->
+                    <Border x:Name="PanelAvisos" DockPanel.Dock="Top" Background="#FEF3C7" BorderBrush="#F59E0B"
+                            BorderThickness="1" Padding="6,4" Margin="0,0,0,8" Visibility="Collapsed">
+                        <TextBlock x:Name="TextoAvisos" TextWrapping="Wrap" FontSize="11" Foreground="#92400E" />
+                    </Border>
+
                     <!-- Leyenda -->
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Rectangle Width="12" Height="12" Fill="#3B82F6" Margin="0,0,4,0" />

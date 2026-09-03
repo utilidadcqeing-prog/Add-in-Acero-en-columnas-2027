@@ -56,13 +56,15 @@ public partial class VentanaConfiguradorEstribos : Window
     private string? _ultimoColumnaIdActivada;
 
     /// <summary>
-    /// Se dispara con el id (el mismo texto que recibe <see cref="IProveedorContexto.Leer"/>)
-    /// cada vez que cambia la columna activa. Sin una sola línea de
-    /// <c>Autodesk.Revit</c> acá adentro -- quien abre la ventana (ComandoEstribos)
-    /// lo engancha para seleccionar el elemento real en Revit (issue #24):
-    /// selección liviana nada más, nunca abrir la familia.
+    /// Se dispara con los ids de TODOS los elementos de Revit que forman la
+    /// columna activa (uno por cada <see cref="Tramo.IdElementoHost"/> distinto
+    /// -- una columna lógica puede ser varios <c>FamilyInstance</c> apilados,
+    /// ver #28) cada vez que cambia. Sin una sola línea de <c>Autodesk.Revit</c>
+    /// acá adentro -- quien abre la ventana (ComandoEstribos) lo engancha para
+    /// seleccionar los elementos reales en Revit (issue #24): selección
+    /// liviana nada más, nunca abrir la familia.
     /// </summary>
-    public event Action<string>? ColumnaActivada;
+    public event Action<IReadOnlyList<string>>? ColumnaActivada;
 
     public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
     {
@@ -181,14 +183,26 @@ public partial class VentanaConfiguradorEstribos : Window
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
+        MostrarAvisos();
 
         // Solo re-selecciona en Revit si de verdad cambió la columna -- pasar
         // de un tramo a otro de la misma columna no necesita tocar la
-        // selección, porque los tramos no son elementos separados en Revit.
+        // selección, ya que sigue siendo (parte de) el mismo grupo de elementos.
         if (cambioDeColumna)
         {
             _ultimoColumnaIdActivada = nodo.ColumnaId;
-            ColumnaActivada?.Invoke(nodo.ColumnaId);
+
+            // Toda la pila, no solo el elemento representativo: si no, seleccionar
+            // una columna con zapata solo resaltaba el tramo de más abajo (#28).
+            List<string> idsElementos = _columnaActiva.Tramos
+                .Select(t => t.IdElementoHost)
+                .Where(id => id is not null)
+                .Distinct()
+                .ToList()!;
+
+            if (idsElementos.Count == 0) idsElementos.Add(nodo.ColumnaId);
+
+            ColumnaActivada?.Invoke(idsElementos);
         }
     }
 
@@ -205,6 +219,20 @@ public partial class VentanaConfiguradorEstribos : Window
     private void BotonAnterior_Click(object sender, RoutedEventArgs e) => IrA(_tramoActivoIndice - 1);
 
     private void BotonSiguiente_Click(object sender, RoutedEventArgs e) => IrA(_tramoActivoIndice + 1);
+
+    /// <summary>
+    /// Los avisos que <c>LectorContexto</c> dejó al leer esta columna (zapata,
+    /// sección que cambia, ninguna viga tocándola...) — antes se calculaban y
+    /// se perdían: no había dónde verlos. Vacío casi siempre, por eso el panel
+    /// se oculta entero cuando no hay nada que decir.
+    /// </summary>
+    private void MostrarAvisos()
+    {
+        IReadOnlyList<string> avisos = _columnaActiva?.Avisos ?? Array.Empty<string>();
+
+        PanelAvisos.Visibility = avisos.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        TextoAvisos.Text = string.Join("\n", avisos.Select(a => "• " + a));
+    }
 
     // --------------------------------------------------------------- panel
 
