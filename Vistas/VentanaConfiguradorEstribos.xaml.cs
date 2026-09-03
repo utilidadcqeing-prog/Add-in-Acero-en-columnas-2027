@@ -659,7 +659,12 @@ public partial class VentanaConfiguradorEstribos : Window
 
     // ---------------------------------------------------------- exportar
 
-    private void BotonExportar_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Arma el PlanArmado completo a partir del estado en memoria -- separado
+    /// de <see cref="BotonExportar_Click"/> para poder probarlo sin disparar
+    /// el SaveFileDialog real (L5).
+    /// </summary>
+    private PlanArmado ConstruirPlanArmado()
     {
         GuardarPanelEnTramoActivo();
         GuardarLongitudinalDeColumnaActiva();
@@ -682,6 +687,13 @@ public partial class VentanaConfiguradorEstribos : Window
 
             plan.Columnas.Add(new ColumnaPlan { Id = id, Contexto = contexto, Tramos = tramos, Longitudinal = longitudinal });
         }
+
+        return plan;
+    }
+
+    private void BotonExportar_Click(object sender, RoutedEventArgs e)
+    {
+        PlanArmado plan = ConstruirPlanArmado();
 
         var dialogo = new SaveFileDialog { Filter = "JSON (*.json)|*.json", FileName = "PlanArmado.json" };
         if (dialogo.ShowDialog() != true) return;
