@@ -25,6 +25,20 @@ public sealed class ConfigLongitudinal
     public string? TipoBarraCaraXNombre { get; set; }
     public string? TipoBarraCaraYNombre { get; set; }
 
-    /// <summary>La rejilla que arma L4 a partir de <see cref="BarrasPorCaraX"/>/<see cref="BarrasPorCaraY"/>.</summary>
-    public List<EstriboMenor> EstribosMenores { get; set; } = new();
+    /// <summary>
+    /// Filas (posiciones Y, 0-based) con una grapa horizontal de borde a
+    /// borde -- conecta la barra intermedia de la cara izquierda con la de
+    /// la cara derecha, a esa altura, con gancho a cada punta.
+    /// </summary>
+    public List<int> GrapasFila { get; set; } = new();
+
+    /// <summary>
+    /// Columnas (posiciones X, 0-based) con una grapa vertical de borde a
+    /// borde -- conecta la barra intermedia de la cara superior con la de
+    /// la cara inferior, en esa posición.
+    /// </summary>
+    public List<int> GrapasColumna { get; set; } = new();
+
+    /// <summary>Las cajas que arma L4 cruzando filas y columnas tildadas.</summary>
+    public List<CajaMenor> Cajas { get; set; } = new();
 }

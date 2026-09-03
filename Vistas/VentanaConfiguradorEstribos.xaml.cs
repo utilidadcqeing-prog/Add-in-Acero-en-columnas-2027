@@ -45,7 +45,9 @@ public partial class VentanaConfiguradorEstribos : Window
     /// <summary>
     /// Una copia de <see cref="ConfigLongitudinal"/> por columna (no por
     /// tramo: el acero longitudinal corre toda la altura de la columna). L4
-    /// vive del lado de "EstribosMenores" dentro de este mismo tipo.
+    /// vive del lado de sus grapas/cajas (<see cref="ConfigLongitudinal.GrapasFila"/>,
+    /// <see cref="ConfigLongitudinal.GrapasColumna"/>, <see cref="ConfigLongitudinal.Cajas"/>)
+    /// dentro de este mismo tipo.
     /// </summary>
     private readonly Dictionary<string, ConfigLongitudinal> _longitudinalPorColumna = new();
 
@@ -466,9 +468,17 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
         ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
 
-        TextoEstribosMenores.Text = cfg.EstribosMenores.Count == 0
+        TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
+    }
+
+    private static string ResumenEstribosMenores(ConfigLongitudinal cfg)
+    {
+        int grapas = cfg.GrapasFila.Count + cfg.GrapasColumna.Count;
+        int cajas = cfg.Cajas.Count;
+
+        return grapas == 0 && cajas == 0
             ? "Sin estribos menores configurados."
-            : $"{cfg.EstribosMenores.Count} estribo(s) menor(es) configurado(s).";
+            : $"{grapas} grapa(s), {cajas} caja(s) configurada(s).";
     }
 
     private static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
@@ -484,14 +494,17 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
-        // Las posiciones de grapas/cajas ya editadas en L4 (si las hay) se
-        // preservan -- este panel no las toca, solo cantidad/tipo de barra.
-        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo)
-            ? previo.EstribosMenores
-            : new List<EstriboMenor>();
-
+        // Las grapas/cajas ya editadas en L4 (si las hay) se preservan --
+        // este panel no las toca, solo cantidad/tipo de barra.
         ConfigLongitudinal nuevo = LeerLongitudinalDelPanel();
-        nuevo.EstribosMenores = existentes;
+
+        if (_longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo))
+        {
+            nuevo.GrapasFila = previo.GrapasFila;
+            nuevo.GrapasColumna = previo.GrapasColumna;
+            nuevo.Cajas = previo.Cajas;
+        }
+
         _longitudinalPorColumna[idColumna] = nuevo;
     }
 
@@ -519,19 +532,24 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
-        List<EstriboMenor> existentes = _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? actual)
-            ? actual.EstribosMenores
-            : new List<EstriboMenor>();
+        _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? actual);
 
-        var dialogo = new VentanaEstribosMenores(barrasX, barrasY, existentes) { Owner = this };
+        var dialogo = new VentanaEstribosMenores(
+            barrasX, barrasY,
+            actual?.GrapasFila ?? new List<int>(),
+            actual?.GrapasColumna ?? new List<int>(),
+            actual?.Cajas ?? new List<CajaMenor>())
+        { Owner = this };
+
         if (dialogo.ShowDialog() != true) return;
 
         GuardarLongitudinalDeColumnaActiva();
-        _longitudinalPorColumna[idColumna].EstribosMenores = dialogo.Resultado;
+        ConfigLongitudinal cfg = _longitudinalPorColumna[idColumna];
+        cfg.GrapasFila = dialogo.GrapasFila;
+        cfg.GrapasColumna = dialogo.GrapasColumna;
+        cfg.Cajas = dialogo.Cajas;
 
-        TextoEstribosMenores.Text = dialogo.Resultado.Count == 0
-            ? "Sin estribos menores configurados."
-            : $"{dialogo.Resultado.Count} estribo(s) menor(es) configurado(s).";
+        TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
     }
 
     // ----------------------------------------------------------- selección
