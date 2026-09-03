@@ -125,16 +125,22 @@
                         <TextBlock Text="configurado" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
                     </StackPanel>
 
+                    <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
+                         del texto: la elevación de abajo también es vertical (de piso a
+                         techo), así que "siguiente" sube (▲) y "anterior" baja (▼). -->
                     <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Button Grid.Column="0" x:Name="BotonAnterior" Content="◀" Width="28" Click="BotonAnterior_Click" />
-                        <TextBlock Grid.Column="1" x:Name="TextoTramoActivo" Text="—" HorizontalAlignment="Center"
+                        <TextBlock Grid.Column="0" x:Name="TextoTramoActivo" Text="—" HorizontalAlignment="Left"
                                    VerticalAlignment="Center" FontSize="11" />
-                        <Button Grid.Column="2" x:Name="BotonSiguiente" Content="▶" Width="28" Click="BotonSiguiente_Click" />
+                        <StackPanel Grid.Column="1">
+                            <Button x:Name="BotonSiguiente" Content="▲" Width="26" Height="17" Padding="0"
+                                    FontSize="9" Click="BotonSiguiente_Click" />
+                            <Button x:Name="BotonAnterior" Content="▼" Width="26" Height="17" Padding="0"
+                                    FontSize="9" Margin="0,1,0,0" Click="BotonAnterior_Click" />
+                        </StackPanel>
                     </Grid>
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
