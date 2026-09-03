@@ -21,6 +21,14 @@ using practicacq.Modelo;
 ///  - Un nivel sin viga no corta nada: no es nivel de confinamiento. Los niveles
 ///    solo sirven para rotular la elevación.
 ///  - Una viga cuenta si TOCA la columna. Una viga que pasa cerca, no.
+///  - Una «columna» para el ingeniero no siempre es un solo elemento de Revit:
+///    validado sobre el modelo de prueba (3-sep-2026), este parte cada columna
+///    en un <c>FamilyInstance</c> por piso -- uno para la cimentación, uno por
+///    nivel libre, uno por nudo de viga -- apilados en la misma posición en
+///    planta. Lógicamente es una sola columna corrida y así se lee: se
+///    agrupan por posición en planta (<see cref="AgruparPilas"/>) y se arman
+///    los tramos de abajo hacia arriba recorriendo toda la pila, no un solo
+///    elemento.
 ///
 /// Ninguna columna mal modelada tumba el lote: lo que no se pudo determinar sale
 /// como aviso dentro del propio contexto.
@@ -30,24 +38,30 @@ public sealed class LectorContexto : IProveedorContexto
     /// <summary>Un centímetro en pies. Por debajo de esto un tramo no es un tramo.</summary>
     private static readonly double TramoMinimo = APies(0.01);
 
+    /// <summary>
+    /// Dos elementos de columna cuyo centro en planta cae a menos de esto se
+    /// consideran la misma pila. Generoso a propósito (encaje de grilla,
+    /// redondeos de modelado) pero corto para no fusionar dos columnas
+    /// vecinas de verdad.
+    /// </summary>
+    private static readonly double ToleranciaPlanta = APies(0.05);
+
     private const double Tolerancia = 1e-6;
 
     private readonly Document _doc;
 
     public LectorContexto(Document doc) => _doc = doc;
 
+    /// <summary>Un elemento de columna ya resuelto: su sólido y dónde cae en el espacio.</summary>
+    private sealed record ElementoColumna(FamilyInstance Instancia, Solid Solido, XYZ Centro, double ZInf, double ZSup);
+
     /// <summary>
-    /// Lista las columnas estructurales del documento para poblar la selección
-    /// de L2. El id de cada una viaja como string (ver el porqué en
-    /// <see cref="IProveedorContexto"/>) — es simplemente <c>ElementId.Value</c>
-    /// convertido a texto.
+    /// Lista las columnas «lógicas» (pilas) del documento para poblar la
+    /// selección de L2 — una fila por pila, no por elemento.
     /// </summary>
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
-        new FilteredElementCollector(_doc)
-            .OfCategory(BuiltInCategory.OST_StructuralColumns)
-            .OfClass(typeof(FamilyInstance))
-            .Cast<FamilyInstance>()
-            .Select(c => new ColumnaResumen(IdTexto(c.Id), Marca(c)))
+        AgruparPilas(LeerElementos())
+            .Select(pila => new ColumnaResumen(IdTexto(pila[0].Instancia.Id), Marca(pila[0].Instancia)))
             .ToList();
 
     public ColumnaContexto Leer(string idColumna)
@@ -57,58 +71,201 @@ public sealed class LectorContexto : IProveedorContexto
         if (!long.TryParse(idColumna, out long valor))
             throw new InvalidOperationException($"«{idColumna}» no es un id de columna válido.");
 
-        if (_doc.GetElement(new ElementId(valor)) is not FamilyInstance columna)
+        if (_doc.GetElement(new ElementId(valor)) is not FamilyInstance objetivo)
             throw new InvalidOperationException($"El elemento {idColumna} no es una columna.");
 
-        Solid solido = SolidoMayor(columna.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }))
+        List<ElementoColumna> elementos = LeerElementos();
+
+        ElementoColumna? elObjetivo = elementos.FirstOrDefault(e => e.Instancia.Id == objetivo.Id)
             ?? throw new InvalidOperationException(
-                $"No se pudo leer la geometría de la columna {Marca(columna)}.");
+                $"No se pudo leer la geometría de la columna {Marca(objetivo)}.");
 
-        (double zPie, double zTope) = ExtensionZ(solido);
+        List<ElementoColumna> pila = elementos
+            .Where(e => e.Centro.DistanceTo(elObjetivo.Centro) <= ToleranciaPlanta)
+            .OrderBy(e => e.ZInf)
+            .ToList();
 
-        // La zapata manda sobre el arranque: el acero de la columna no entra en ella.
-        double zZapata = TopeDeZapata(solido, avisos);
-        bool sobreZapata = zZapata > zPie + TramoMinimo;
-        double zArranque = sobreZapata ? zZapata : zPie;
+        var tramos = new List<Tramo>();
+        bool huboNudo = false;
+        bool primero = true;
 
-        if (zTope - zArranque <= TramoMinimo)
-            throw new InvalidOperationException(
-                $"La columna {Marca(columna)} no deja altura libre sobre la cimentación.");
+        foreach (ElementoColumna el in pila)
+        {
+            double zArranque = el.ZInf;
+            bool sobreZapata = false;
 
-        List<(double Inf, double Sup)> nudos = BandasDeViga(solido, zArranque, zTope);
+            // La zapata solo puede tocar el elemento de más abajo de la pila:
+            // más arriba no hay nada contra qué arrancar.
+            if (primero)
+            {
+                double zZapata = TopeDeZapata(el.Solido, avisos);
+                sobreZapata = zZapata > el.ZInf + TramoMinimo;
+                if (sobreZapata) zArranque = zZapata;
+            }
 
-        if (nudos.Count == 0)
+            if (el.ZSup - zArranque <= TramoMinimo)
+            {
+                if (primero)
+                    throw new InvalidOperationException(
+                        $"La columna {Marca(objetivo)} no deja altura libre sobre la cimentación.");
+
+                avisos.Add($"El elemento {Marca(el.Instancia)} no dejó altura libre; se omitió.");
+                primero = false;
+                continue;
+            }
+
+            List<(double Inf, double Sup)> nudos = BandasDeViga(el.Solido, zArranque, el.ZSup);
+            if (nudos.Count > 0) huboNudo = true;
+
+            tramos.AddRange(ArmarTramos(
+                zArranque, el.ZSup, nudos, sobreZapata, IdTexto(el.Instancia.Id), tramos.Count));
+
+            primero = false;
+        }
+
+        if (tramos.Count == 0)
+            throw new InvalidOperationException($"La columna {Marca(objetivo)} no dejó ningún tramo legible.");
+
+        if (!huboNudo)
             avisos.Add(
                 "Ninguna viga toca esta columna: queda un solo tramo libre de punta a punta. " +
                 "Si esperabas nudos, revisa que las vigas lleguen a tocarla.");
 
+        if (pila.Count > 1)
+            AvisarSiCambiaLaSeccion(pila, avisos);
+
+        ElementoColumna base_ = pila[0];
+
+        // El primer sub-tramo del primer elemento siempre arranca en el mismo
+        // zArranque que se calculó ahí arriba (con o sin zapata): tomarlo de
+        // vuelta del propio tramo evita duplicar esa cuenta.
+        double zInferiorGlobal = APies(tramos[0].ZInferior);
+
         return new ColumnaContexto
         {
-            Marca = Marca(columna),
-            BaseX = AMetros(LadoX(solido)),
-            BaseY = AMetros(LadoY(solido)),
-            Recubrimiento = AMetros(Recubrimiento(columna, avisos)),
-            ZInferior = AMetros(zArranque),
-            ZSuperior = AMetros(zTope),
-            Tramos = ArmarTramos(zArranque, zTope, nudos, sobreZapata),
-            Niveles = Rotulos(zArranque, zTope),
+            Marca = Marca(base_.Instancia),
+            BaseX = AMetros(LadoX(base_.Solido)),
+            BaseY = AMetros(LadoY(base_.Solido)),
+            Recubrimiento = AMetros(Recubrimiento(base_.Instancia, avisos)),
+            ZInferior = AMetros(zInferiorGlobal),
+            ZSuperior = AMetros(pila[^1].ZSup),
+            Tramos = tramos,
+            Niveles = Rotulos(zInferiorGlobal, pila[^1].ZSup),
             Avisos = avisos
         };
+    }
+
+    // ------------------------------------------------------------ agrupado
+
+    /// <summary>
+    /// Todas las columnas estructurales del documento, resueltas a su sólido
+    /// mayor, su centro en planta y su rango en Z. Recorrer esto una sola vez
+    /// por llamada es más caro de lo estrictamente necesario, pero mantiene
+    /// la lectura correcta ante cualquier tamaño de modelo real antes de
+    /// optimizar por adelantado.
+    /// </summary>
+    private List<ElementoColumna> LeerElementos()
+    {
+        var elementos = new List<ElementoColumna>();
+
+        foreach (FamilyInstance c in new FilteredElementCollector(_doc)
+            .OfCategory(BuiltInCategory.OST_StructuralColumns)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>())
+        {
+            Solid? solido = SolidoMayor(c.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }));
+            if (solido is null) continue;
+
+            (double zInf, double zSup) = ExtensionZ(solido);
+            elementos.Add(new ElementoColumna(c, solido, CentroPlanta(solido), zInf, zSup));
+        }
+
+        return elementos;
+    }
+
+    /// <summary>
+    /// Junta los elementos que comparten posición en planta en pilas, cada
+    /// una ordenada de abajo hacia arriba — una pila es una columna lógica.
+    /// </summary>
+    private static List<List<ElementoColumna>> AgruparPilas(List<ElementoColumna> elementos)
+    {
+        var pilas = new List<List<ElementoColumna>>();
+
+        foreach (ElementoColumna el in elementos)
+        {
+            List<ElementoColumna>? pila = pilas.FirstOrDefault(
+                p => p[0].Centro.DistanceTo(el.Centro) <= ToleranciaPlanta);
+
+            if (pila is null)
+            {
+                pila = new List<ElementoColumna>();
+                pilas.Add(pila);
+            }
+
+            pila.Add(el);
+        }
+
+        foreach (List<ElementoColumna> pila in pilas)
+            pila.Sort((a, b) => a.ZInf.CompareTo(b.ZInf));
+
+        return pilas;
+    }
+
+    /// <summary>Centro en planta del sólido (promedio de su caja en X/Y, Z en 0).</summary>
+    private static XYZ CentroPlanta(Solid solido)
+    {
+        double minX = double.MaxValue, maxX = double.MinValue;
+        double minY = double.MaxValue, maxY = double.MinValue;
+
+        foreach (Edge arista in solido.Edges)
+        {
+            foreach (XYZ p in arista.Tessellate())
+            {
+                minX = Math.Min(minX, p.X);
+                maxX = Math.Max(maxX, p.X);
+                minY = Math.Min(minY, p.Y);
+                maxY = Math.Max(maxY, p.Y);
+            }
+        }
+
+        return new XYZ((minX + maxX) / 2, (minY + maxY) / 2, 0);
+    }
+
+    /// <summary>
+    /// La sección puede cambiar de un piso a otro (columna que se achica al
+    /// subir). Por ahora la ventana solo admite una sección por columna, así
+    /// que se usa la del elemento más bajo y se avisa si alguna otra difiere.
+    /// </summary>
+    private static void AvisarSiCambiaLaSeccion(List<ElementoColumna> pila, List<string> avisos)
+    {
+        double baseX = LadoX(pila[0].Solido);
+        double baseY = LadoY(pila[0].Solido);
+        const double margen = 0.01; // un centímetro en pies, aprox.
+
+        bool cambia = pila.Skip(1).Any(el =>
+            Math.Abs(LadoX(el.Solido) - baseX) > margen || Math.Abs(LadoY(el.Solido) - baseY) > margen);
+
+        if (cambia)
+            avisos.Add(
+                "La sección cambia entre los elementos que forman esta columna. " +
+                "Se usó la del tramo más bajo para toda la columna.");
     }
 
     // ---------------------------------------------------------------- tramos
 
     /// <summary>
-    /// Cose las bandas de viga con lo que queda libre entre ellas, de abajo hacia
-    /// arriba y sin dejar huecos. El primero se marca contra zapata si la columna
-    /// arranca sobre una, porque ese borde no admite el mismo tratamiento que un
-    /// extremo libre.
+    /// Cose las bandas de viga de UN elemento con lo que queda libre entre
+    /// ellas, de abajo hacia arriba y sin dejar huecos. El primer tramo de la
+    /// pila entera se marca contra zapata si corresponde: ese borde no admite
+    /// el mismo tratamiento que un extremo libre.
     /// </summary>
     private static List<Tramo> ArmarTramos(
         double zArranque,
         double zTope,
         List<(double Inf, double Sup)> nudos,
-        bool sobreZapata)
+        bool sobreZapata,
+        string idElementoHost,
+        int indiceBase)
     {
         var tramos = new List<Tramo>();
         double cursor = zArranque;
@@ -119,14 +276,16 @@ public sealed class LectorContexto : IProveedorContexto
 
             tramos.Add(new Tramo
             {
-                Indice = tramos.Count,
+                Indice = indiceBase + tramos.Count,
                 ZInferior = AMetros(inf),
                 ZSuperior = AMetros(sup),
-                // Solo el primero, y solo si es un tramo libre: si la columna
-                // arrancara dentro de una viga, saber eso importa más.
+                // Solo el primer sub-tramo de este elemento, y solo si es
+                // libre: si el elemento arrancara dentro de una viga, saber
+                // eso importa más.
                 Tipo = tramos.Count == 0 && sobreZapata && tipo == TipoTramo.Libre
                     ? TipoTramo.ContraZapata
-                    : tipo
+                    : tipo,
+                IdElementoHost = idElementoHost
             });
         }
 

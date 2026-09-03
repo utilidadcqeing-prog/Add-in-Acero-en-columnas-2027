@@ -80,6 +80,20 @@ public sealed class Tramo
 
     /// <summary>Altura libre del tramo, en metros.</summary>
     public double Altura => ZSuperior - ZInferior;
+
+    /// <summary>
+    /// Id del elemento de Revit que físicamente contiene este tramo — mismo
+    /// formato que <see cref="ColumnaResumen.Id"/>. No es redundante con el id
+    /// de la columna: cuando el modelo parte una columna en un elemento por
+    /// piso (caso real, confirmado sobre el modelo de prueba: cimentación,
+    /// primer piso, nudo de viga y segundo piso llegan como cuatro
+    /// <c>FamilyInstance</c> distintos, no como una sola columna continua),
+    /// cada tramo puede vivir en un elemento distinto dentro de la misma
+    /// columna «lógica». La generación real (J3) lo necesita para saber en
+    /// qué elemento hostear cada Rebar. <c>null</c> del lado del proveedor
+    /// falso, donde no aplica.
+    /// </summary>
+    public string? IdElementoHost { get; init; }
 }
 
 /// <summary>Una etiqueta de la elevación: «N+8.41  P3».</summary>
