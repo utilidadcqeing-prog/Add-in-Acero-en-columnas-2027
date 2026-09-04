@@ -25,7 +25,7 @@ using practicacq.Modelo;
 ///    <see cref="ConfigLongitudinal"/> no tiene hoy un tipo de gancho propio
 ///    para longitudinal.
 ///  - Grapas y cajas reutilizan el gancho del tramo (<see cref="ConfigTramo.TipoGanchoNombre"/>)
-///    en cuyo borde caen -- no hay un campo de gancho propio para
+///    en el que se generan -- no hay un campo de gancho propio para
 ///    estribos menores todavía.
 ///  - La geometría exacta de la "caja" (issue #26/#29-style: rectángulo más
 ///    chico centrado, usando la columna tildada como alcance en X y la fila
@@ -36,9 +36,6 @@ using practicacq.Modelo;
 public static class GeneradorLongitudinal
 {
     private const double Tolerancia = 1e-6;
-
-    /// <summary>Mismo valor que <see cref="GeneradorArmado"/> -- 5cm de norma en los bordes de cada tramo.</summary>
-    private const double SeparacionExtremosMetros = 0.05;
 
     public static void Generar(Document doc, OpcionesArmado opciones, ResultadoArmado res)
     {
@@ -168,10 +165,14 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Grapas y cajas al comienzo y al final de cada tramo LIBRE tildado (no
-    /// dentro de una viga): según el criterio que trasladó Luciano, ahí es
-    /// donde suele haber traslapo y riesgo de pandeo -- no en cada estribo
-    /// principal.
+    /// Grapas y cajas en cada tramo LIBRE tildado (no dentro de una viga), en
+    /// las mismas posiciones Z que los estribos principales de ese tramo --
+    /// issue #32: William confirmó en la reunión del 4-sep que van "en la
+    /// misma parte donde van los estribos normales", no solo en los extremos
+    /// del tramo (el supuesto anterior, atribuido a un criterio de Luciano,
+    /// quedó descartado). Las posiciones se leen de
+    /// <see cref="ResultadoArmado.PosicionesEstribosPorTramo"/>, que llena
+    /// <see cref="GeneradorArmado"/> al crear cada estribo real.
     /// </summary>
     private static void GenerarMenores(
         Document doc,
@@ -199,7 +200,6 @@ public static class GeneradorLongitudinal
         if (barraCaja is null && cfg.Cajas.Count > 0)
             res.Avisos.Add($"{contexto.Marca}: sin tipo de barra de cara válido, no se generan cajas.");
 
-        double separacionExtremos = EstandarCQ.APies(SeparacionExtremosMetros);
         int creadas = 0;
 
         for (int i = 0; i < contexto.Tramos.Count && i < columnaPlan.Tramos.Count; i++)
@@ -218,14 +218,17 @@ public static class GeneradorLongitudinal
                 !ganchosPorNombre.TryGetValue(cfgTramo.TipoGanchoNombre, out RebarHookType? gancho))
                 continue;
 
+            // Sin estribos principales registrados en este tramo (por ejemplo,
+            // GeneradorArmado lo omitió por algún motivo), no hay dónde poner
+            // los menores -- issue #32, ya no se calcula un zInf/zSup propio.
+            if (!res.PosicionesEstribosPorTramo.TryGetValue((tramo.IdElementoHost, tramo.Indice), out List<double>? posicionesZ) ||
+                posicionesZ.Count == 0)
+                continue;
+
             (CurveLoop contornoCrudo, double _) = GeometriaSeccion.ObtenerContornoHost(host, cacheHost);
             (double xMin, double xMax, double yMin, double yMax) = GeometriaSeccion.Huella(contornoCrudo);
 
-            double zInf = EstandarCQ.APies(tramo.ZInferior) + separacionExtremos;
-            double zSup = EstandarCQ.APies(tramo.ZSuperior) - separacionExtremos;
-            if (zSup <= zInf) continue;
-
-            foreach (double z in new[] { zInf, zSup })
+            foreach (double z in posicionesZ)
             {
                 if (barraCaraY is not null)
                     foreach (int fila in cfg.GrapasFila.Where(f => f < filas))

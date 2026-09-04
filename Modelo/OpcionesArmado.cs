@@ -41,4 +41,14 @@ public sealed class ResultadoArmado
 
     /// <summary>Lo que quedó creado, para no tener que ir a buscarlo a Propiedades.</summary>
     public List<string> Detalles { get; } = new();
+
+    /// <summary>
+    /// Posiciones Z (pies, coordenadas internas de Revit) de cada estribo
+    /// principal realmente creado, agrupadas por (IdElementoHost, Indice del
+    /// tramo). <see cref="practicacq.Logica.GeneradorLongitudinal"/> (J4) genera los
+    /// estribos menores en estas mismas posiciones en vez de calcular las
+    /// suyas propias -- issue #32: William confirmó que van en cada estribo
+    /// principal, no solo en los extremos del tramo.
+    /// </summary>
+    public Dictionary<(string IdElementoHost, int IndiceTramo), List<double>> PosicionesEstribosPorTramo { get; } = new();
 }

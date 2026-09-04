@@ -13,7 +13,7 @@
       por si solo.
 
       tools/deploy.ps1 detecta esto solo (lee el TargetFrameworkAttribute real
-      de RevitAPI.dll) y pasa -p:TargetFramework explicito -- por eso el
+      de RevitAPI.dll) y pasa -p:TargetFramework explicito - por eso el
       default de aca abajo (net8.0-windows) solo importa si se compila este
       .csproj directo con `dotnet build`/`msbuild` sin pasar por deploy.ps1.
       En ese caso, si tu Revit 2026 es 2026.5+, forza el framework a mano:

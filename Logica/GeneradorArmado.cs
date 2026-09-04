@@ -202,10 +202,12 @@ public static class GeneradorArmado
             TerminationOrientationAtEnd = RebarTerminationOrientation.Left
         };
 
+        var claveTramo = (tramo.IdElementoHost!, tramo.Indice);
+
         if (cfg.Modo == ModoEstribo.Uniforme)
         {
             double espaciado = EstandarCQ.APies(cfg.EspaciadoUniforme);
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, terminaciones, espaciado, etiquetaTramo, "uniforme", res);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
             return true;
         }
 
@@ -223,20 +225,20 @@ public static class GeneradorArmado
             res.Avisos.Add(
                 $"{etiquetaTramo}: la longitud de confinamiento ×2 no deja zona central; " +
                 "se armó confinado de punta a punta.");
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
             return true;
         }
 
         double l2 = altura - 2 * l1;
 
         CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, terminaciones, espaciadoConf,
-            etiquetaTramo, "confinado inferior", res, incluirUltimo: false);
+            etiquetaTramo, "confinado inferior", res, claveTramo, incluirUltimo: false);
 
         CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, terminaciones, espaciadoNoConf,
-            etiquetaTramo, "zona central", res, incluirUltimo: false);
+            etiquetaTramo, "zona central", res, claveTramo, incluirUltimo: false);
 
         CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, terminaciones, espaciadoConf,
-            etiquetaTramo, "confinado superior", res);
+            etiquetaTramo, "confinado superior", res, claveTramo);
 
         return true;
     }
@@ -261,6 +263,7 @@ public static class GeneradorArmado
         string etiquetaTramo,
         string etiquetaGrupo,
         ResultadoArmado res,
+        (string IdElementoHost, int IndiceTramo) claveTramo,
         bool incluirUltimo = true)
     {
         if (longitud <= Tolerancia || espaciado <= Tolerancia) return;
@@ -302,6 +305,43 @@ public static class GeneradorArmado
         res.Detalles.Add(
             $"{etiquetaTramo} ({etiquetaGrupo}): {posiciones} estribos cada " +
             $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
+
+        RegistrarPosiciones(estribo, posiciones, claveTramo, res);
+    }
+
+    /// <summary>
+    /// Guarda la cota Z real de cada estribo de este grupo en
+    /// <see cref="ResultadoArmado.PosicionesEstribosPorTramo"/> -- issue #32:
+    /// GeneradorLongitudinal (J4) los lee de acá para poner los estribos
+    /// menores exactamente ahí, en vez de calcular sus propias posiciones.
+    /// </summary>
+    private static void RegistrarPosiciones(
+        Rebar estribo, int posiciones, (string IdElementoHost, int IndiceTramo) claveTramo, ResultadoArmado res)
+    {
+        if (!res.PosicionesEstribosPorTramo.TryGetValue(claveTramo, out List<double>? zetas))
+        {
+            zetas = new List<double>();
+            res.PosicionesEstribosPorTramo[claveTramo] = zetas;
+        }
+
+        for (int i = 0; i < posiciones; i++)
+        {
+            // Sin nombres de parámetro a propósito: el nombre del segundo
+            // booleano cambió entre versiones de RevitAPI (se confirmó por
+            // reflexión contra el RevitAPI.dll real de 2027 -- ver #32), y
+            // esta app compila tanto contra 2026 como contra 2027 (mismo
+            // .csproj, ver RevitVersion). Posicional es más resistente a
+            // ese tipo de rename que un parámetro nombrado.
+            IList<Curve> curvas = estribo.GetCenterlineCurves(
+                false,   // adjustForSelfIntersection
+                false,   // suppressHooksAndCranks (o como se llame en esta versión)
+                false,   // suppressBendRadius
+                MultiplanarOption.IncludeOnlyPlanarCurves,
+                i);      // barPositionIndex
+
+            if (curvas.Count > 0)
+                zetas.Add(curvas[0].GetEndPoint(0).Z);
+        }
     }
 
     /// <summary>

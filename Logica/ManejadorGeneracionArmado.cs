@@ -32,7 +32,9 @@ public class ManejadorGeneracionArmado : IExternalEventHandler
             // Estribos primero: es quien corre BorrarAnteriores (issue #2),
             // así que cualquier longitudinal/menor de una corrida vieja
             // (misma marca, mismo esquema) ya queda limpio antes de que J4
-            // cree lo nuevo.
+            // cree lo nuevo. También es quien llena
+            // res.PosicionesEstribosPorTramo (issue #32) -- J4 depende de que
+            // esto ya corrió para saber dónde poner los estribos menores.
             ResultadoArmado res = GeneradorArmado.Generar(doc, Opciones);
             GeneradorLongitudinal.Generar(doc, Opciones, res);
 
