@@ -167,6 +167,16 @@ public static class GeneradorLongitudinal
         // issue de seguimiento de Fase 5.
         int posicion = 0;
 
+        // El plan de cortes (traslapos reales + límites de host) es el mismo
+        // para todas las barras que comparten tipo de barra Y grupo par/impar
+        // -- no depende de la posición X/Y, solo de niveles/porHost/longitud
+        // comercial, que son iguales para toda la columna. Se cachea acá en
+        // vez de recalcularlo por cada una de las (hasta 2 + 2*columnas +
+        // 2*filas) barras -- perfila igual, sin este cache se repetía la
+        // misma cuenta (y el mismo aviso, si la barra no está en el cuadro)
+        // hasta 20 veces por cara.
+        var cortesPorBarraYGrupo = new Dictionary<(ElementId BarraId, bool EsPar), PlanDeCortes>();
+
         Func<FootprintHost, (double X, double Y)>[] esquinas =
         {
             fp => (fp.XMin + insetEsquinas, fp.YMin + insetEsquinas),
@@ -179,7 +189,7 @@ public static class GeneradorLongitudinal
         {
             CrearBarraConTraslapos(
                 doc, porHost, footprintPorHost, barraEsquinas, esquinaFn, posicion++ % 2 == 0,
-                niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
                 contexto.Marca, res, ref creadas);
         }
 
@@ -193,14 +203,14 @@ public static class GeneradorLongitudinal
                     doc, porHost, footprintPorHost, barraCaraX,
                     fp => (PosicionIntermedia(fp.XMin + insetEsquinas, fp.XMax - insetEsquinas, columnas, cCapturado), fp.YMin + insetX),
                     posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
                     contexto.Marca, res, ref creadas);
 
                 CrearBarraConTraslapos(
                     doc, porHost, footprintPorHost, barraCaraX,
                     fp => (PosicionIntermedia(fp.XMin + insetEsquinas, fp.XMax - insetEsquinas, columnas, cCapturado), fp.YMax - insetX),
                     posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
                     contexto.Marca, res, ref creadas);
             }
         }
@@ -215,14 +225,14 @@ public static class GeneradorLongitudinal
                     doc, porHost, footprintPorHost, barraCaraY,
                     fp => (fp.XMin + insetY, PosicionIntermedia(fp.YMin + insetEsquinas, fp.YMax - insetEsquinas, filas, fCapturado)),
                     posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
                     contexto.Marca, res, ref creadas);
 
                 CrearBarraConTraslapos(
                     doc, porHost, footprintPorHost, barraCaraY,
                     fp => (fp.XMax - insetY, PosicionIntermedia(fp.YMin + insetEsquinas, fp.YMax - insetEsquinas, filas, fCapturado)),
                     posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
                     contexto.Marca, res, ref creadas);
             }
         }
@@ -389,10 +399,76 @@ public static class GeneradorLongitudinal
         return porHost;
     }
 
+    /// <summary>Resultado de <see cref="PlanificarCortes"/>, cacheado por (tipo de barra, grupo par/impar).</summary>
+    private sealed record PlanDeCortes(double TraslapoMetros, List<(double Z, bool EsReal)> Cortes);
+
     /// <summary>
     /// Fase 5 (#7): arma UNA posición longitudinal (una esquina o una barra
-    /// de cara) a lo largo de TODA la columna, resolviendo dos tipos de
-    /// corte muy distintos entre sí:
+    /// de cara) a lo largo de TODA la columna a partir del plan de cortes de
+    /// su (tipo de barra, grupo par/impar) -- ver <see cref="PlanificarCortes"/>
+    /// para qué es cada tipo de corte.
+    /// </summary>
+    private static void CrearBarraConTraslapos(
+        Document doc,
+        List<(string IdHost, double ZInf, double ZSup)> porHost,
+        Dictionary<string, FootprintHost> footprintPorHost,
+        RebarBarType barra,
+        Func<FootprintHost, (double X, double Y)> calcularXY,
+        bool esParGrupo,
+        List<(int Ordinal, double ZInf, double ZSup)> niveles,
+        double zInicioTotalMetros,
+        double zFinTotalMetros,
+        double longitudComercialMetros,
+        Dictionary<(ElementId BarraId, bool EsPar), PlanDeCortes> cortesPorBarraYGrupo,
+        string marcaColumna,
+        ResultadoArmado res,
+        ref int creadas)
+    {
+        if (zFinTotalMetros - zInicioTotalMetros <= Tolerancia) return;
+
+        var claveGrupo = (barra.Id, esParGrupo);
+        if (!cortesPorBarraYGrupo.TryGetValue(claveGrupo, out PlanDeCortes? plan))
+        {
+            plan = PlanificarCortes(
+                barra, esParGrupo, porHost, niveles, zInicioTotalMetros, zFinTotalMetros,
+                longitudComercialMetros, marcaColumna, res);
+            cortesPorBarraYGrupo[claveGrupo] = plan;
+        }
+
+        List<(double Z, bool EsReal)> cortes = plan.Cortes;
+        var limites = new List<double> { zInicioTotalMetros };
+        limites.AddRange(cortes.Select(c => c.Z));
+        limites.Add(zFinTotalMetros);
+
+        for (int s = 0; s < limites.Count - 1; s++)
+        {
+            bool iniEsReal = s >= 1 && cortes[s - 1].EsReal;
+            bool finEsReal = s < cortes.Count && cortes[s].EsReal;
+
+            double zIniSinSolape = limites[s];
+            double zFinSinSolape = limites[s + 1];
+            double zIni = iniEsReal ? zIniSinSolape - plan.TraslapoMetros / 2 : zIniSinSolape;
+            double zFin = finEsReal ? zFinSinSolape + plan.TraslapoMetros / 2 : zFinSinSolape;
+
+            if (zFin - zIni <= Tolerancia) continue;
+
+            double medio = (zIniSinSolape + zFinSinSolape) / 2;
+            var hostEntry = porHost.FirstOrDefault(h => medio >= h.ZInf - Tolerancia && medio <= h.ZSup + Tolerancia);
+            if (hostEntry.IdHost is null || !footprintPorHost.TryGetValue(hostEntry.IdHost, out FootprintHost fp))
+                continue; // host inexistente o borrado -- ya avisado al armar footprintPorHost
+
+            (double x, double y) = calcularXY(fp);
+            CrearBarraVertical(
+                doc, fp.Host, barra, x, y,
+                EstandarCQ.APies(zIni), EstandarCQ.APies(zFin),
+                marcaColumna, res, ref creadas);
+        }
+    }
+
+    /// <summary>
+    /// El plan de cortes de un (tipo de barra, grupo par/impar): dónde corta
+    /// y con qué solape, resolviendo dos tipos de corte muy distintos entre
+    /// sí --
     ///
     ///  - Corte OBLIGADO por límite de host (ya existía desde #28: Revit no
     ///    permite un mismo Rebar en dos FamilyInstance). Las dos piezas
@@ -408,24 +484,23 @@ public static class GeneradorLongitudinal
     ///
     /// Cuando un corte obligado cae muy cerca de un traslapo real elegido
     /// para este grupo, se resuelve como real (el solape ya cubre esa junta).
+    ///
+    /// No depende de la posición X/Y de la barra -- solo del tipo de barra
+    /// (por su Traslapo del cuadro) y del grupo par/impar -- por eso
+    /// <see cref="CrearBarraConTraslapos"/> lo cachea y lo calcula una sola
+    /// vez por combinación en vez de una vez por barra.
     /// </summary>
-    private static void CrearBarraConTraslapos(
-        Document doc,
-        List<(string IdHost, double ZInf, double ZSup)> porHost,
-        Dictionary<string, FootprintHost> footprintPorHost,
+    private static PlanDeCortes PlanificarCortes(
         RebarBarType barra,
-        Func<FootprintHost, (double X, double Y)> calcularXY,
         bool esParGrupo,
+        List<(string IdHost, double ZInf, double ZSup)> porHost,
         List<(int Ordinal, double ZInf, double ZSup)> niveles,
         double zInicioTotalMetros,
         double zFinTotalMetros,
         double longitudComercialMetros,
         string marcaColumna,
-        ResultadoArmado res,
-        ref int creadas)
+        ResultadoArmado res)
     {
-        if (zFinTotalMetros - zInicioTotalMetros <= Tolerancia) return;
-
         EstandarCQ.Varilla? varilla = EstandarCQ.Buscar(barra);
         double traslapoMetros = varilla?.Traslapo ?? 0;
         if (varilla is null)
@@ -452,33 +527,7 @@ public static class GeneradorLongitudinal
         }
         cortes.Sort((a, b) => a.Z.CompareTo(b.Z));
 
-        var limites = new List<double> { zInicioTotalMetros };
-        limites.AddRange(cortes.Select(c => c.Z));
-        limites.Add(zFinTotalMetros);
-
-        for (int s = 0; s < limites.Count - 1; s++)
-        {
-            bool iniEsReal = s >= 1 && cortes[s - 1].EsReal;
-            bool finEsReal = s < cortes.Count && cortes[s].EsReal;
-
-            double zIniSinSolape = limites[s];
-            double zFinSinSolape = limites[s + 1];
-            double zIni = iniEsReal ? zIniSinSolape - traslapoMetros / 2 : zIniSinSolape;
-            double zFin = finEsReal ? zFinSinSolape + traslapoMetros / 2 : zFinSinSolape;
-
-            if (zFin - zIni <= Tolerancia) continue;
-
-            double medio = (zIniSinSolape + zFinSinSolape) / 2;
-            var hostEntry = porHost.FirstOrDefault(h => medio >= h.ZInf - Tolerancia && medio <= h.ZSup + Tolerancia);
-            if (hostEntry.IdHost is null || !footprintPorHost.TryGetValue(hostEntry.IdHost, out FootprintHost fp))
-                continue; // host inexistente o borrado -- ya avisado al armar footprintPorHost
-
-            (double x, double y) = calcularXY(fp);
-            CrearBarraVertical(
-                doc, fp.Host, barra, x, y,
-                EstandarCQ.APies(zIni), EstandarCQ.APies(zFin),
-                marcaColumna, res, ref creadas);
-        }
+        return new PlanDeCortes(traslapoMetros, cortes);
     }
 
     /// <summary>

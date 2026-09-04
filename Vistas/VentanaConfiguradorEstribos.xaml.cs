@@ -2,7 +2,6 @@ namespace practicacq.Vistas;
 
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
@@ -51,7 +50,15 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     private readonly Dictionary<string, ConfigLongitudinal> _longitudinalPorColumna = new();
 
-    private readonly ObservableCollection<NodoLista> _nodos = new();
+    /// <summary>
+    /// Lista maestra de todas las filas (columnas + tramos), las dos pestañas
+    /// (issue #33) son vistas filtradas de esto. <see cref="List{T}"/> y no
+    /// <see cref="ObservableCollection{T}"/> a propósito: nada se bindea
+    /// directo a esto -- cada <c>ListBox.ItemsSource</c> recibe su propio
+    /// snapshot filtrado (<c>CargarColumnas</c>), así que la notificación de
+    /// cambios de ObservableCollection no aporta nada acá, solo overhead.
+    /// </summary>
+    private readonly List<NodoLista> _nodos = new();
 
     private ColumnaContexto? _columnaActiva;
     private int _tramoActivoIndice;
@@ -108,7 +115,6 @@ public partial class VentanaConfiguradorEstribos : Window
 
         BannerSimulado.Visibility = modoSimulado ? Visibility.Visible : Visibility.Collapsed;
 
-        ListaSeleccion.ItemsSource = _nodos;
         ComboTipoBarra.ItemsSource = _tipos.ListarTiposBarra();
         ComboTipoGancho.ItemsSource = _tipos.ListarTiposGancho();
         ComboBarraCaraX.ItemsSource = _tipos.ListarTiposBarra();
@@ -155,27 +161,23 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         _nodos.Clear();
 
-        List<ColumnaResumen> resumenes = _contexto.ListarColumnas().ToList();
-        List<ColumnaResumen> principales = resumenes.Where(r => !r.EsColumneta).ToList();
-        List<ColumnaResumen> columnetas = resumenes.Where(r => r.EsColumneta).ToList();
+        foreach (ColumnaResumen resumen in _contexto.ListarColumnas())
+            AgregarColumnaYTramos(resumen);
 
-        // Issue #33: agrupar aparte solo cuando de verdad hay una columneta
-        // que mezclar -- si el modelo no tiene ninguna, la lista se ve igual
-        // que siempre (sin encabezados de más).
-        bool separarGrupos = principales.Count > 0 && columnetas.Count > 0;
+        // Issue #33: dos pestañas en vez de una sola lista -- cada ListBox
+        // muestra un subconjunto de los mismos NodoLista (comparten
+        // instancia, así que tildar en una pestaña no desincroniza nada de
+        // lo que ya recorre _nodos completo). La pestaña de columnetas se
+        // oculta si el modelo no tiene ninguna, para no agregar una pestaña
+        // vacía de más.
+        ListaPrincipales.ItemsSource = _nodos.Where(n => !n.EsColumneta).ToList();
+        List<NodoLista> columnetas = _nodos.Where(n => n.EsColumneta).ToList();
+        ListaColumnetas.ItemsSource = columnetas;
+        PestanaColumnetas.Visibility = columnetas.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-        if (separarGrupos) AgregarEncabezado("Columnas principales");
-        foreach (ColumnaResumen resumen in principales) AgregarColumnaYTramos(resumen);
-
-        if (separarGrupos) AgregarEncabezado("Columnetas (base o altura < 20 cm)");
-        foreach (ColumnaResumen resumen in columnetas) AgregarColumnaYTramos(resumen);
-
-        NodoLista? primerTramo = _nodos.FirstOrDefault(n => !n.EsColumna && !n.EsEncabezado);
+        NodoLista? primerTramo = _nodos.FirstOrDefault(n => !n.EsColumna);
         if (primerTramo is not null) Activar(primerTramo);
     }
-
-    private void AgregarEncabezado(string texto) =>
-        _nodos.Add(new NodoLista { EsEncabezado = true, Etiqueta = texto });
 
     private void AgregarColumnaYTramos(ColumnaResumen resumen)
     {
@@ -184,6 +186,7 @@ public partial class VentanaConfiguradorEstribos : Window
         _nodos.Add(new NodoLista
         {
             EsColumna = true,
+            EsColumneta = resumen.EsColumneta,
             ColumnaId = resumen.Id,
             Etiqueta = $"{resumen.Marca}  ({columna.Tramos.Count} tramos)",
         });
@@ -193,6 +196,7 @@ public partial class VentanaConfiguradorEstribos : Window
             _nodos.Add(new NodoLista
             {
                 EsColumna = false,
+                EsColumneta = resumen.EsColumneta,
                 ColumnaId = resumen.Id,
                 TramoIndice = tramo.Indice,
                 Etiqueta = $"     Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
@@ -209,9 +213,10 @@ public partial class VentanaConfiguradorEstribos : Window
         _ => tipo.ToString(),
     };
 
+    /// <summary>Handler compartido por las dos pestañas (issue #33) -- cada una es un ListBox distinto.</summary>
     private void ListaSeleccion_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ListaSeleccion.SelectedItem is NodoLista { EsEncabezado: false } nodo) Activar(nodo);
+        if (sender is ListBox { SelectedItem: NodoLista nodo }) Activar(nodo);
     }
 
     /// <summary>
@@ -974,19 +979,17 @@ public partial class VentanaConfiguradorEstribos : Window
 }
 
 /// <summary>
-/// Fila de <see cref="ListaSeleccion"/> — una columna o uno de sus tramos.
-/// Vive acá y no en Modelo/ porque es puro estado de presentación (el
-/// checkbox tildado), no algo que tenga sentido serializar en un PlanArmado.
+/// Fila de <c>ListaPrincipales</c>/<c>ListaColumnetas</c> (issue #33) — una
+/// columna o uno de sus tramos. Vive acá y no en Modelo/ porque es puro
+/// estado de presentación (el checkbox tildado), no algo que tenga sentido
+/// serializar en un PlanArmado.
 /// </summary>
 public sealed class NodoLista : INotifyPropertyChanged
 {
     public bool EsColumna { get; init; }
 
-    /// <summary>
-    /// Fila separadora ("Columnas principales" / "Columnetas", issue #33) --
-    /// no representa una columna ni un tramo, no se puede tildar ni activar.
-    /// </summary>
-    public bool EsEncabezado { get; init; }
+    /// <summary>Issue #33: a qué pestaña pertenece (heredado de <see cref="ColumnaResumen.EsColumneta"/> de su columna).</summary>
+    public bool EsColumneta { get; init; }
 
     public string ColumnaId { get; init; } = "";
     public int TramoIndice { get; init; }

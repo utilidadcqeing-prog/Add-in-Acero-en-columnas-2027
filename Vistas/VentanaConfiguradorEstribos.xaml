@@ -18,6 +18,26 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="10" />
         </Style>
+
+        <!-- Compartida entre las dos pestañas (columnas principales / columnetas, issue #33) -->
+        <DataTemplate x:Key="PlantillaNodo">
+            <StackPanel Orientation="Horizontal" Margin="0,1">
+                <CheckBox IsChecked="{Binding Marcado, Mode=TwoWay}"
+                          Checked="CheckBoxNodo_Changed" Unchecked="CheckBoxNodo_Changed"
+                          VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Text="{Binding Etiqueta}" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding EsColumna}" Value="True">
+                                    <Setter Property="FontWeight" Value="Bold" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid Margin="10">
@@ -64,54 +84,22 @@
             <Border Grid.Column="0" Style="{StaticResource Panel}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Columnas y tramos" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
-                    <ListBox x:Name="ListaSeleccion" BorderThickness="0"
-                             SelectionChanged="ListaSeleccion_SelectionChanged">
-                        <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding EsEncabezado}" Value="True">
-                                        <Setter Property="IsHitTestVisible" Value="False" />
-                                        <Setter Property="Focusable" Value="False" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="0,1">
-                                    <CheckBox IsChecked="{Binding Marcado, Mode=TwoWay}"
-                                              Checked="CheckBoxNodo_Changed" Unchecked="CheckBoxNodo_Changed"
-                                              VerticalAlignment="Center" Margin="0,0,4,0">
-                                        <CheckBox.Style>
-                                            <Style TargetType="CheckBox">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding EsEncabezado}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </CheckBox.Style>
-                                    </CheckBox>
-                                    <TextBlock Text="{Binding Etiqueta}" VerticalAlignment="Center">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding EsColumna}" Value="True">
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding EsEncabezado}" Value="True">
-                                                        <Setter Property="FontWeight" Value="Bold" />
-                                                        <Setter Property="Foreground" Value="Gray" />
-                                                        <Setter Property="FontStyle" Value="Italic" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+
+                    <!-- Issue #33: dos pestañas en vez de una sola lista con
+                         encabezados. La de Columnetas se oculta sola si el
+                         modelo no tiene ninguna. -->
+                    <TabControl BorderThickness="0" Background="Transparent">
+                        <TabItem Header="Columnas principales">
+                            <ListBox x:Name="ListaPrincipales" BorderThickness="0"
+                                     ItemTemplate="{StaticResource PlantillaNodo}"
+                                     SelectionChanged="ListaSeleccion_SelectionChanged" />
+                        </TabItem>
+                        <TabItem x:Name="PestanaColumnetas" Header="Columnetas">
+                            <ListBox x:Name="ListaColumnetas" BorderThickness="0"
+                                     ItemTemplate="{StaticResource PlantillaNodo}"
+                                     SelectionChanged="ListaSeleccion_SelectionChanged" />
+                        </TabItem>
+                    </TabControl>
                 </DockPanel>
             </Border>
 

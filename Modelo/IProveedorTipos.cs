@@ -17,22 +17,3 @@ public interface IProveedorTipos
     IReadOnlyList<string> ListarTiposBarra();
     IReadOnlyList<string> ListarTiposGancho();
 }
-
-/// <summary>
-/// Nombres fijos para desarrollar y probar L2/L3 sin Revit — los mismos
-/// sufijos que ya usa <c>TipoBarra</c> ("#N COL") y ángulos de gancho de
-/// estribo que ya usa <c>TipoGancho</c>, para que se vea igual que en la
-/// ventana conectada de verdad.
-/// </summary>
-public sealed class ProveedorTiposFalso : IProveedorTipos
-{
-    public IReadOnlyList<string> ListarTiposBarra() => new[]
-    {
-        "#3 COL", "#4 COL", "#5 COL", "#6 COL", "#3 VIGA", "#4 VIGA",
-    };
-
-    public IReadOnlyList<string> ListarTiposGancho() => new[]
-    {
-        "Estribo 135°", "Estándar 135°", "Estándar 90°",
-    };
-}

@@ -8,9 +8,7 @@ using practicacq.Modelo;
 
 /// <summary>
 /// J2: implementación real de <see cref="IProveedorTipos"/>. Lee los tipos de
-/// barra y de gancho que de verdad existen en el documento, en vez de la
-/// lista fija que usa <see cref="ProveedorTiposFalso"/> para desarrollar sin
-/// Revit.
+/// barra y de gancho que de verdad existen en el documento.
 ///
 /// Orden alfabético porque el documento puede traer decenas de tipos (barras
 /// de viga, de losa, de muro, no solo de columna) y sin orden es una lista

@@ -41,8 +41,14 @@ public static class GeneradorConfinamiento
         if (algunaVigueta && op.TipoVigueta != null && !op.TipoVigueta.IsActive)
             op.TipoVigueta.Activate();
 
-        // Compartido entre todos los muros para no duplicar columnetas en las esquinas.
-        var puntosOcupados = new List<XYZ>();
+        // Compartido entre todos los muros para no duplicar columnetas en las
+        // esquinas -- rejilla espacial y no una lista lineal: en una maqueta
+        // grande (cientos/miles de columnetas) comparar cada candidato contra
+        // TODAS las ya puestas es O(n²) y se nota. Con celdas del tamaño de
+        // ToleranciaEsquina, cada consulta solo mira los puntos de su celda y
+        // las 26 vecinas -- suficiente para no perderse ningún punto a menos
+        // de ToleranciaEsquina (ver RejillaPuntos), y es O(1) amortizado.
+        var puntosOcupados = new RejillaPuntos(ToleranciaEsquina);
 
         foreach (Wall muro in op.Muros)
         {
@@ -160,7 +166,7 @@ public static class GeneradorConfinamiento
     private static int ColocarColumnetas(
         Document doc, OpcionesGeneracion op, Wall muro, Curve curva,
         Level nivelBase, double zBase, double zTope,
-        List<XYZ> puntosOcupados, ResultadoGeneracion res)
+        RejillaPuntos puntosOcupados, ResultadoGeneracion res)
     {
         double longitud = curva.Length;
         if (longitud < Tolerancia) return 0;
@@ -175,13 +181,13 @@ public static class GeneradorConfinamiento
             XYZ tangente = curva.ComputeDerivatives(t, true).BasisX;
             XYZ base_ = new XYZ(punto.X, punto.Y, zBase);
 
-            if (YaOcupado(puntosOcupados, base_))
+            if (puntosOcupados.EstaOcupado(base_))
             {
                 res.ColumnetasOmitidas++;
                 continue;
             }
 
-            puntosOcupados.Add(base_);
+            puntosOcupados.Agregar(base_);
 
             var columneta = doc.Create.NewFamilyInstance(
                 base_,
@@ -200,16 +206,59 @@ public static class GeneradorConfinamiento
     }
 
     /// <summary>
-    /// Compara en 3D, no solo en planta: dos muros en niveles distintos que se
-    /// crucen en planta sí deben tener cada uno su columneta.
+    /// Rejilla espacial (uniform grid) para el chequeo de "¿ya hay una
+    /// columneta acá?" -- compara en 3D, no solo en planta (dos muros en
+    /// niveles distintos que se crucen en planta sí deben tener cada uno la
+    /// suya).
+    ///
+    /// Con una lista lineal, cada candidato se compara contra TODOS los
+    /// puntos ya puestos (O(n²) en el total de columnetas del lote). Acá cada
+    /// punto se guarda en un balde de tamaño <c>tolerancia</c>; una consulta
+    /// solo mira el balde del candidato y sus 26 vecinos -- alcanza porque
+    /// nada a menos de <c>tolerancia</c> puede caer dos baldes más allá.
+    /// Cada operación es O(1) amortizado (según cuántos puntos comparten un
+    /// mismo balde, que en una maqueta real es un puñado), así que el lote
+    /// entero queda en O(n) en vez de O(n²) -- se nota en maquetas grandes,
+    /// de cientos o miles de columnetas.
     /// </summary>
-    private static bool YaOcupado(List<XYZ> puntos, XYZ candidato)
+    private sealed class RejillaPuntos
     {
-        foreach (XYZ p in puntos)
+        private readonly double _tolerancia;
+        private readonly Dictionary<(long X, long Y, long Z), List<XYZ>> _baldes = new();
+
+        public RejillaPuntos(double tolerancia) => _tolerancia = tolerancia;
+
+        private (long X, long Y, long Z) Balde(XYZ p) =>
+            ((long)Math.Floor(p.X / _tolerancia), (long)Math.Floor(p.Y / _tolerancia), (long)Math.Floor(p.Z / _tolerancia));
+
+        public bool EstaOcupado(XYZ candidato)
         {
-            if (p.DistanceTo(candidato) < ToleranciaEsquina) return true;
+            (long bx, long by, long bz) = Balde(candidato);
+
+            for (long dx = -1; dx <= 1; dx++)
+                for (long dy = -1; dy <= 1; dy++)
+                    for (long dz = -1; dz <= 1; dz++)
+                    {
+                        if (!_baldes.TryGetValue((bx + dx, by + dy, bz + dz), out List<XYZ>? puntos)) continue;
+
+                        foreach (XYZ p in puntos)
+                            if (p.DistanceTo(candidato) < _tolerancia) return true;
+                    }
+
+            return false;
         }
-        return false;
+
+        public void Agregar(XYZ punto)
+        {
+            (long X, long Y, long Z) clave = Balde(punto);
+            if (!_baldes.TryGetValue(clave, out List<XYZ>? puntos))
+            {
+                puntos = new List<XYZ>();
+                _baldes[clave] = puntos;
+            }
+
+            puntos.Add(punto);
+        }
     }
 
     private static void FijarAlturaColumneta(

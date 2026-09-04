@@ -17,8 +17,8 @@ using Autodesk.Revit.UI;
 ///
 /// Va por <see cref="IExternalEventHandler"/> porque la ventana es modeless
 /// y <c>Selection.SetElementIds</c> necesita contexto de API, igual que
-/// <see cref="ManejadorSeleccionColumnas"/> pero al revés: acá quien manda
-/// qué seleccionar es la ventana, no el usuario.
+/// <see cref="ManejadorSeleccion"/> pero al revés: acá quien manda qué
+/// seleccionar es la ventana, no el usuario.
 /// </summary>
 public sealed class ManejadorSeleccionElemento : IExternalEventHandler
 {

@@ -19,10 +19,9 @@ public enum ModoEstribo
 /// El tipo de barra y de gancho viajan por nombre (<see cref="TipoBarraNombre"/>,
 /// <see cref="TipoGanchoNombre"/>), no como <c>RebarBarType</c>/<c>RebarHookType</c>:
 /// esos son tipos de la API de Revit, y este POCO tiene que poder existir (y
-/// serializarse) sin Revit instalado. El nombre es la misma clave que ya usa
-/// <c>TipoBarra.Tipo.Name</c>/<c>TipoGancho.Tipo.Name</c> del lado de la ventana
-/// conectada a Revit, así que resolver de uno a otro es una búsqueda por nombre,
-/// no una conversión.
+/// serializarse) sin Revit instalado. El nombre es la misma clave que devuelve
+/// <see cref="IProveedorTipos"/> del lado de la ventana conectada a Revit, así
+/// que resolver de uno a otro es una búsqueda por nombre, no una conversión.
 /// </summary>
 public sealed class ConfigTramo
 {
@@ -51,7 +50,4 @@ public sealed class ConfigTramo
     /// y no una de solo lectura calculada.
     /// </summary>
     public double EspaciadoNoConfinado { get; set; }
-
-    /// <summary>El doble del espaciado confinado — el valor que L3 sugiere por defecto.</summary>
-    public double EspaciadoNoConfinadoSugerido => EspaciadoConfinado * 2;
 }

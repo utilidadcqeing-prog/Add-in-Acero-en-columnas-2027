@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Media.Imaging;
-using System.Windows.Media;
 
 namespace practicacq;
 public class App : IExternalApplication

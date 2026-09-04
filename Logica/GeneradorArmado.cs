@@ -306,17 +306,27 @@ public static class GeneradorArmado
             $"{etiquetaTramo} ({etiquetaGrupo}): {posiciones} estribos cada " +
             $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
 
-        RegistrarPosiciones(estribo, posiciones, claveTramo, res);
+        RegistrarPosiciones(posiciones, zInicio, separacionReal, claveTramo, res);
     }
 
     /// <summary>
-    /// Guarda la cota Z real de cada estribo de este grupo en
+    /// Guarda la cota Z de cada estribo de este grupo en
     /// <see cref="ResultadoArmado.PosicionesEstribosPorTramo"/> -- issue #32:
     /// GeneradorLongitudinal (J4) los lee de acá para poner los estribos
     /// menores exactamente ahí, en vez de calcular sus propias posiciones.
+    ///
+    /// Calculado a mano (zInicio + i * separacionReal, propagando en +Z como
+    /// dice el propio <c>SetLayoutAsMaximumSpacing(..., barsOnNormalSide: true,
+    /// includeFirstBar: true, ...)</c>) y NO leído de vuelta con
+    /// <c>Rebar.GetCenterlineCurves</c> -- probado sobre Revit real: esa
+    /// llamada tira <c>NullReferenceException</c> justo después de fijar el
+    /// layout, porque Revit todavía no recalculó la geometría del Rebar en
+    /// esta transacción (hace falta un <c>Document.Regenerate()</c> de por
+    /// medio). La cuenta a mano evita depender de eso.
     /// </summary>
     private static void RegistrarPosiciones(
-        Rebar estribo, int posiciones, (string IdElementoHost, int IndiceTramo) claveTramo, ResultadoArmado res)
+        int posiciones, double zInicio, double separacionReal,
+        (string IdElementoHost, int IndiceTramo) claveTramo, ResultadoArmado res)
     {
         if (!res.PosicionesEstribosPorTramo.TryGetValue(claveTramo, out List<double>? zetas))
         {
@@ -325,23 +335,7 @@ public static class GeneradorArmado
         }
 
         for (int i = 0; i < posiciones; i++)
-        {
-            // Sin nombres de parámetro a propósito: el nombre del segundo
-            // booleano cambió entre versiones de RevitAPI (se confirmó por
-            // reflexión contra el RevitAPI.dll real de 2027 -- ver #32), y
-            // esta app compila tanto contra 2026 como contra 2027 (mismo
-            // .csproj, ver RevitVersion). Posicional es más resistente a
-            // ese tipo de rename que un parámetro nombrado.
-            IList<Curve> curvas = estribo.GetCenterlineCurves(
-                false,   // adjustForSelfIntersection
-                false,   // suppressHooksAndCranks (o como se llame en esta versión)
-                false,   // suppressBendRadius
-                MultiplanarOption.IncludeOnlyPlanarCurves,
-                i);      // barPositionIndex
-
-            if (curvas.Count > 0)
-                zetas.Add(curvas[0].GetEndPoint(0).Z);
-        }
+            zetas.Add(zInicio + i * separacionReal);
     }
 
     /// <summary>
