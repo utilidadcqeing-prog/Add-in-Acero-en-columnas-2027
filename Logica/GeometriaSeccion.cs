@@ -203,6 +203,14 @@ internal static class GeometriaSeccion
             return "Revit rechazó la armadura sin dar motivo. Suele ser el gancho: " +
                    "prueba otro tipo de 135°, o una barra más delgada.";
 
-        return ex.Message;
+        // Diagnóstico temporal: un NullReferenceException (u otra excepción
+        // genérica de .NET) siempre da el mismo mensaje sin importar dónde
+        // ocurrió -- sin esto es imposible saber qué línea falló. Se agregan
+        // los primeros frames del stack trace (el .pdb ya viaja junto al
+        // .dll en deploy.ps1, así que trae archivo+línea). Sacar una vez que
+        // se identifique y corrija la causa real.
+        string[] frames = (ex.StackTrace ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string resumenStack = frames.Length > 0 ? " || " + string.Join(" <- ", frames.Take(3)) : "";
+        return ex.Message + resumenStack;
     }
 }

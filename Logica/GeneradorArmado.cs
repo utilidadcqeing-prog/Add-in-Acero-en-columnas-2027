@@ -276,7 +276,7 @@ public static class GeneradorArmado
         // atrapar la barra longitudinal de ese vértice.
         IList<Curve> curvas = GeometriaSeccion.ConEmpalmeEnMedioDeLado(curvasTrasladadas);
 
-        Rebar estribo = Rebar.CreateFromCurves(
+        Rebar? estribo = Rebar.CreateFromCurves(
             doc,
             RebarStyle.StirrupTie,
             barra,
@@ -286,6 +286,17 @@ public static class GeneradorArmado
             terminaciones,
             useExistingShapeIfPossible: true,
             createNewShape: true);
+
+        // Rebar.CreateFromCurves puede devolver null en vez de tirar
+        // excepción cuando Revit no logra armar la forma con estas curvas/
+        // gancho/barra (probado sobre Revit real -- sin este chequeo,
+        // GetShapeDrivenAccessor() de la línea siguiente revienta con un
+        // NullReferenceException que no dice nada útil).
+        if (estribo is null)
+            throw new InvalidOperationException(
+                $"Revit no pudo crear el estribo con esta geometría (Rebar.CreateFromCurves devolvió null) " +
+                $"con la barra «{barra.Name}». Probá otro tipo de gancho de 135° o una barra más delgada -- " +
+                "suele pasar cuando el gancho no entra en la sección.");
 
         estribo.GetShapeDrivenAccessor().SetLayoutAsMaximumSpacing(
             espaciado,

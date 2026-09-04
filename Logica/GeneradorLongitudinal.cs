@@ -624,7 +624,7 @@ public static class GeneradorLongitudinal
             // esto ya le pasa el segmento correcto con o sin solape.
             using var terminaciones = new BarTerminationsData(doc);
 
-            Rebar barraCreada = Rebar.CreateFromCurves(
+            Rebar? barraCreada = Rebar.CreateFromCurves(
                 doc,
                 RebarStyle.Standard,
                 barra,
@@ -634,6 +634,15 @@ public static class GeneradorLongitudinal
                 terminaciones,
                 useExistingShapeIfPossible: true,
                 createNewShape: true);
+
+            // Rebar.CreateFromCurves puede devolver null en vez de tirar
+            // excepción (probado sobre Revit real) -- sin este chequeo,
+            // MarcaEstribos.Marcar de la línea siguiente revienta con un
+            // NullReferenceException que no dice nada útil.
+            if (barraCreada is null)
+                throw new InvalidOperationException(
+                    $"Revit no pudo crear la barra con la línea pedida (Rebar.CreateFromCurves devolvió null) " +
+                    $"con la barra «{barra.Name}».");
 
             MarcaEstribos.Marcar(barraCreada, host.Id);
             creadas++;
@@ -660,7 +669,7 @@ public static class GeneradorLongitudinal
                 TerminationOrientationAtEnd = RebarTerminationOrientation.Left,
             };
 
-            Rebar grapa = Rebar.CreateFromCurves(
+            Rebar? grapa = Rebar.CreateFromCurves(
                 doc,
                 RebarStyle.StirrupTie,
                 barra,
@@ -670,6 +679,11 @@ public static class GeneradorLongitudinal
                 terminaciones,
                 useExistingShapeIfPossible: true,
                 createNewShape: true);
+
+            if (grapa is null)
+                throw new InvalidOperationException(
+                    $"Revit no pudo crear la grapa con esta geometría (Rebar.CreateFromCurves devolvió null) " +
+                    $"con la barra «{barra.Name}». Probá otro tipo de gancho de 135° o una barra más delgada.");
 
             MarcaEstribos.Marcar(grapa, host.Id);
             creadas++;
@@ -707,7 +721,7 @@ public static class GeneradorLongitudinal
                 TerminationOrientationAtEnd = RebarTerminationOrientation.Left,
             };
 
-            Rebar caja = Rebar.CreateFromCurves(
+            Rebar? caja = Rebar.CreateFromCurves(
                 doc,
                 RebarStyle.StirrupTie,
                 barra,
@@ -717,6 +731,11 @@ public static class GeneradorLongitudinal
                 terminaciones,
                 useExistingShapeIfPossible: true,
                 createNewShape: true);
+
+            if (caja is null)
+                throw new InvalidOperationException(
+                    $"Revit no pudo crear la caja con esta geometría (Rebar.CreateFromCurves devolvió null) " +
+                    $"con la barra «{barra.Name}». Probá otro tipo de gancho de 135° o una barra más delgada.");
 
             MarcaEstribos.Marcar(caja, host.Id);
             creadas++;
