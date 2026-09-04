@@ -75,7 +75,10 @@ public sealed class LectorContexto : IProveedorContexto
     /// </summary>
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
         AgruparPilas(LeerElementos())
-            .Select(pila => new ColumnaResumen(IdTexto(pila[0].Instancia.Id), Marca(pila[0].Instancia)))
+            .Select(pila => new ColumnaResumen(
+                IdTexto(pila[0].Instancia.Id),
+                Marca(pila[0].Instancia),
+                ColumnaResumen.CalcularEsColumneta(AMetros(LadoX(pila[0].Solido)), AMetros(LadoY(pila[0].Solido)))))
             .ToList();
 
     public ColumnaContexto Leer(string idColumna)

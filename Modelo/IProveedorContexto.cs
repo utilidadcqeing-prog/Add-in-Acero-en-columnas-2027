@@ -38,5 +38,24 @@ public interface IProveedorContexto
     IReadOnlyList<ColumnaResumen> ListarColumnas();
 }
 
-/// <summary>Fila de la lista de selección de L2, antes de leer el contexto completo.</summary>
-public sealed record ColumnaResumen(string Id, string Marca);
+/// <summary>
+/// Fila de la lista de selección de L2, antes de leer el contexto completo.
+///
+/// <see cref="EsColumneta"/> se calcula del lado del proveedor (real o
+/// falso) y viaja ya resuelta acá para que la ventana no necesite conocer
+/// las dimensiones -- solo agrupa por este booleano.
+/// </summary>
+public sealed record ColumnaResumen(string Id, string Marca, bool EsColumneta)
+{
+    /// <summary>
+    /// Umbral de "columneta", en metros -- issue #33: confirmado por William
+    /// en la reunión del 4-sep. Si la base O la altura de la sección es menor
+    /// a esto, es columneta. No cambia su comportamiento (sigue siendo
+    /// perfectamente armable): solo se agrupa aparte en la lista de L2 para
+    /// que no quede sobrecargada con columnas de muro delgadas.
+    /// </summary>
+    public const double UmbralMetros = 0.20;
+
+    public static bool CalcularEsColumneta(double baseX, double baseY) =>
+        baseX < UmbralMetros || baseY < UmbralMetros;
+}

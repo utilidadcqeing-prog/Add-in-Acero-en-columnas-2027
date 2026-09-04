@@ -36,7 +36,7 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
     }
 
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
-        _columnas.Values.Select(c => new ColumnaResumen(IdDe(c), c.Marca)).ToList();
+        _columnas.Values.Select(c => new ColumnaResumen(IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY))).ToList();
 
     public ColumnaContexto Leer(string idColumna) =>
         _columnas.TryGetValue(idColumna, out ColumnaContexto? c)

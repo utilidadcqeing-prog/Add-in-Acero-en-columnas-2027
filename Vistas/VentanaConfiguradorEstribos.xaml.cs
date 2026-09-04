@@ -155,32 +155,50 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         _nodos.Clear();
 
-        foreach (ColumnaResumen resumen in _contexto.ListarColumnas())
-        {
-            ColumnaContexto columna = _contexto.Leer(resumen.Id);
+        List<ColumnaResumen> resumenes = _contexto.ListarColumnas().ToList();
+        List<ColumnaResumen> principales = resumenes.Where(r => !r.EsColumneta).ToList();
+        List<ColumnaResumen> columnetas = resumenes.Where(r => r.EsColumneta).ToList();
 
+        // Issue #33: agrupar aparte solo cuando de verdad hay una columneta
+        // que mezclar -- si el modelo no tiene ninguna, la lista se ve igual
+        // que siempre (sin encabezados de más).
+        bool separarGrupos = principales.Count > 0 && columnetas.Count > 0;
+
+        if (separarGrupos) AgregarEncabezado("Columnas principales");
+        foreach (ColumnaResumen resumen in principales) AgregarColumnaYTramos(resumen);
+
+        if (separarGrupos) AgregarEncabezado("Columnetas (base o altura < 20 cm)");
+        foreach (ColumnaResumen resumen in columnetas) AgregarColumnaYTramos(resumen);
+
+        NodoLista? primerTramo = _nodos.FirstOrDefault(n => !n.EsColumna && !n.EsEncabezado);
+        if (primerTramo is not null) Activar(primerTramo);
+    }
+
+    private void AgregarEncabezado(string texto) =>
+        _nodos.Add(new NodoLista { EsEncabezado = true, Etiqueta = texto });
+
+    private void AgregarColumnaYTramos(ColumnaResumen resumen)
+    {
+        ColumnaContexto columna = _contexto.Leer(resumen.Id);
+
+        _nodos.Add(new NodoLista
+        {
+            EsColumna = true,
+            ColumnaId = resumen.Id,
+            Etiqueta = $"{resumen.Marca}  ({columna.Tramos.Count} tramos)",
+        });
+
+        foreach (Tramo tramo in columna.Tramos)
+        {
             _nodos.Add(new NodoLista
             {
-                EsColumna = true,
+                EsColumna = false,
                 ColumnaId = resumen.Id,
-                Etiqueta = $"{resumen.Marca}  ({columna.Tramos.Count} tramos)",
+                TramoIndice = tramo.Indice,
+                Etiqueta = $"     Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
+                IdElementoHost = tramo.IdElementoHost,
             });
-
-            foreach (Tramo tramo in columna.Tramos)
-            {
-                _nodos.Add(new NodoLista
-                {
-                    EsColumna = false,
-                    ColumnaId = resumen.Id,
-                    TramoIndice = tramo.Indice,
-                    Etiqueta = $"     Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
-                    IdElementoHost = tramo.IdElementoHost,
-                });
-            }
         }
-
-        NodoLista? primerTramo = _nodos.FirstOrDefault(n => !n.EsColumna);
-        if (primerTramo is not null) Activar(primerTramo);
     }
 
     private static string Rotulo(TipoTramo tipo) => tipo switch
@@ -193,7 +211,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void ListaSeleccion_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ListaSeleccion.SelectedItem is NodoLista nodo) Activar(nodo);
+        if (ListaSeleccion.SelectedItem is NodoLista { EsEncabezado: false } nodo) Activar(nodo);
     }
 
     /// <summary>
@@ -963,6 +981,13 @@ public partial class VentanaConfiguradorEstribos : Window
 public sealed class NodoLista : INotifyPropertyChanged
 {
     public bool EsColumna { get; init; }
+
+    /// <summary>
+    /// Fila separadora ("Columnas principales" / "Columnetas", issue #33) --
+    /// no representa una columna ni un tramo, no se puede tildar ni activar.
+    /// </summary>
+    public bool EsEncabezado { get; init; }
+
     public string ColumnaId { get; init; } = "";
     public int TramoIndice { get; init; }
     public string Etiqueta { get; init; } = "";
