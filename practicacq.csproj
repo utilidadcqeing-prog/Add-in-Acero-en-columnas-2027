@@ -6,12 +6,17 @@
       Para probar contra otra version instalada (por ejemplo, mientras no haya
       2026 a mano): dotnet build -p:RevitVersion=2027
 
-      Issue #14, resuelto a medias: Revit 2026 arranca en net8.0-windows,
-      pero desde el punto de actualizacion 2026.5 en adelante pasa a
-      net10.0-windows (mismo runtime que ya usa 2027), y las dos versiones
-      instalan en la MISMA carpeta "Revit 2026", asi que RevitVersion=2026
-      no alcanza para distinguirlas por si solo. Si tu Revit 2026 es 2026.5
-      o mas nuevo, forza el framework a mano:
+      Issue #14: Revit 2026 arranca en net8.0-windows, pero desde el punto de
+      actualizacion 2026.5 en adelante pasa a net10.0-windows (mismo runtime
+      que ya usa 2027), y las dos versiones instalan en la MISMA carpeta
+      "Revit 2026", asi que RevitVersion=2026 no alcanza para distinguirlas
+      por si solo.
+
+      tools/deploy.ps1 detecta esto solo (lee el TargetFrameworkAttribute real
+      de RevitAPI.dll) y pasa -p:TargetFramework explicito -- por eso el
+      default de aca abajo (net8.0-windows) solo importa si se compila este
+      .csproj directo con `dotnet build`/`msbuild` sin pasar por deploy.ps1.
+      En ese caso, si tu Revit 2026 es 2026.5+, forza el framework a mano:
       dotnet build -p:RevitVersion=2026 -p:TargetFramework=net10.0-windows
     -->
     <RevitVersion Condition="'$(RevitVersion)' == ''">2026</RevitVersion>

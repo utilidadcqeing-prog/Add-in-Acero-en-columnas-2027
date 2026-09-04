@@ -8,14 +8,14 @@
   .\tools\deploy.ps1
   .\tools\deploy.ps1 -Versions 2027
   .\tools\deploy.ps1 -Configuration Release
-  .\tools\deploy.ps1 -Versions 2026 -TargetFramework net10.0-windows   # Revit 2026.5+ (ver #14)
+  .\tools\deploy.ps1 -Versions 2026 -TargetFramework net10.0-windows   # forzar a mano, salta la deteccion
 #>
 param(
     [string[]]$Versions = @('2026', '2027'),
     [string]$Configuration = 'Debug',
-    # Revit 2026.0-2026.4 usa net8.0-windows; 2026.5+ pasa a net10.0-windows,
-    # y las dos instalan en la misma carpeta "Revit 2026" -- si tu 2026 es
-    # 2026.5 o mas nuevo, pasa esto explicito (ver el comentario del .csproj).
+    # Por defecto se detecta solo leyendo el RevitAPI.dll instalado (ver
+    # Get-RevitApiTargetFramework mas abajo, issue #14). Pasar esto fuerza el
+    # valor y salta la deteccion -- util si la deteccion no corre en tu maquina.
     [string]$TargetFramework
 )
 
@@ -23,6 +23,34 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $proj = Join-Path $root 'practicacq.csproj'
 $addinsRoot = Join-Path $env:APPDATA 'Autodesk\Revit\Addins'
+
+# Revit 2026.0-2026.4 trae un RevitAPI.dll compilado contra .NETCoreApp v8;
+# 2026.5+ pasa a v10 (mismo runtime que 2027) pero instala en la MISMA carpeta
+# "Revit 2026" -- el numero de version por si solo no alcanza para distinguirlos
+# (issue #14). Leemos el TargetFrameworkAttribute real del ensamblado con
+# ReflectionOnlyLoadFrom (no lo ejecuta ni lo carga contra el runtime actual,
+# asi que no importa si es mas nuevo que el de esta maquina).
+function Get-RevitApiTargetFramework([string]$revitDir) {
+    $dllPath = Join-Path $revitDir 'RevitAPI.dll'
+    if (-not (Test-Path $dllPath)) { return $null }
+
+    try {
+        $asm = [System.Reflection.Assembly]::ReflectionOnlyLoadFrom($dllPath)
+        $attr = $asm.GetCustomAttributesData() |
+            Where-Object { $_.AttributeType.Name -eq 'TargetFrameworkAttribute' } |
+            Select-Object -First 1
+        if (-not $attr) { return $null }
+
+        $moniker = [string]$attr.ConstructorArguments[0].Value  # p.ej. ".NETCoreApp,Version=v10.0"
+        if ($moniker -match 'Version=v(\d+)\.') {
+            return "net$($Matches[1]).0-windows"
+        }
+        return $null
+    } catch {
+        Write-Warning "No se pudo leer el TargetFramework de '$dllPath': $($_.Exception.Message)"
+        return $null
+    }
+}
 
 foreach ($year in $Versions) {
 
@@ -32,9 +60,20 @@ foreach ($year in $Versions) {
         continue
     }
 
+    $effectiveTargetFramework = $TargetFramework
+    if (-not $effectiveTargetFramework) {
+        $detected = Get-RevitApiTargetFramework $revitDir
+        if ($detected) {
+            $effectiveTargetFramework = $detected
+            Write-Host "   RevitAPI.dll de Revit $year detectado como $detected" -ForegroundColor DarkGray
+        } else {
+            Write-Warning "No se pudo detectar el TargetFramework de RevitAPI.dll para Revit $year -- se usa el default del .csproj (net8.0-windows para 2026). Si tu Revit 2026 es 2026.5+, pasa -TargetFramework net10.0-windows a mano."
+        }
+    }
+
     Write-Host "== Compilando practicacq para Revit $year ==" -ForegroundColor Cyan
-    if ($TargetFramework) {
-        dotnet build $proj -c $Configuration -p:RevitVersion=$year -p:TargetFramework=$TargetFramework
+    if ($effectiveTargetFramework) {
+        dotnet build $proj -c $Configuration -p:RevitVersion=$year -p:TargetFramework=$effectiveTargetFramework
     } else {
         dotnet build $proj -c $Configuration -p:RevitVersion=$year
     }
