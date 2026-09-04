@@ -39,11 +39,17 @@ using practicacq.Modelo;
 ///  - Grapas y cajas reutilizan el gancho del tramo (<see cref="ConfigTramo.TipoGanchoNombre"/>)
 ///    en el que se generan -- no hay un campo de gancho propio para
 ///    estribos menores todavía.
-///  - La geometría exacta de la "caja" (issue #26/#29-style: rectángulo más
-///    chico centrado, usando la columna tildada como alcance en X y la fila
-///    como alcance en Y, ver <see cref="Caja"/>) es una interpretación mía a
-///    partir de la referencia visual de Luciano -- no la confirmó nadie del
-///    equipo contra un plano real. Ver issue de seguimiento.
+///  - Geometría de la "caja" (issue #30, resuelto): rectángulo literal entre
+///    los bordes del rango de filas/columnas tildadas para caja -- YA NO
+///    centrado/espejado respecto al centro de la sección, esa era una
+///    interpretación anterior sin confirmar. Filas/columnas contiguas
+///    tildadas para caja se fusionan en un solo rango grande, confirmado por
+///    William (reunión 4-sep, 21:08-23:18: "tomaría el área más grande...
+///    porque están juntos"); ver <c>VentanaEstribosMenores.Rangos</c> (quien
+///    arma los rangos) y <see cref="Modelo.CajaMenor"/>. Cuando una
+///    fila/columna con grapa tildada también queda cubierta por una caja,
+///    gana la caja y la grapa no se genera ahí (prioridad confirmada por
+///    Luciano).
 /// </summary>
 public static class GeneradorLongitudinal
 {
@@ -283,6 +289,17 @@ public static class GeneradorLongitudinal
 
         int creadas = 0;
 
+        // Prioridad caja-sobre-gancho: si una fila/columna con grapa tildada
+        // también queda cubierta por una caja (rango fusionado), gana la
+        // caja y la grapa no se genera ahí -- confirmado por Luciano, mismo
+        // criterio que aplica VentanaEstribosMenores en la previsualización.
+        List<int> grapasFila = cfg.GrapasFila
+            .Where(f => f < filas && !cfg.Cajas.Any(c => f >= c.FilaDesde && f <= c.FilaHasta))
+            .ToList();
+        List<int> grapasColumna = cfg.GrapasColumna
+            .Where(c => c < columnas && !cfg.Cajas.Any(caja => c >= caja.ColumnaDesde && c <= caja.ColumnaHasta))
+            .ToList();
+
         for (int i = 0; i < contexto.Tramos.Count && i < columnaPlan.Tramos.Count; i++)
         {
             if (columnaPlan.Tramos[i] is not ConfigTramo cfgTramo) continue;
@@ -312,14 +329,14 @@ public static class GeneradorLongitudinal
             foreach (double z in posicionesZ)
             {
                 if (barraCaraY is not null)
-                    foreach (int fila in cfg.GrapasFila.Where(f => f < filas))
+                    foreach (int fila in grapasFila)
                     {
                         double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, fila);
                         CrearGrapa(doc, host, barraCaraY, gancho, new XYZ(xMin, y, z), new XYZ(xMax, y, z), contexto.Marca, res, ref creadas);
                     }
 
                 if (barraCaraX is not null)
-                    foreach (int columna in cfg.GrapasColumna.Where(c => c < columnas))
+                    foreach (int columna in grapasColumna)
                     {
                         double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, columna);
                         CrearGrapa(doc, host, barraCaraX, gancho, new XYZ(x, yMin, z), new XYZ(x, yMax, z), contexto.Marca, res, ref creadas);
@@ -327,18 +344,16 @@ public static class GeneradorLongitudinal
 
                 if (barraCaja is not null)
                 {
-                    double centroX = (xMin + xMax) / 2;
-                    double centroY = (yMin + yMax) / 2;
-
-                    foreach (CajaMenor caja in cfg.Cajas.Where(c => c.Fila < filas && c.Columna < columnas))
+                    // Rectángulo literal entre los bordes del rango fusionado
+                    // -- ya NO centrado/espejado respecto al centro de la
+                    // sección (issue #30: esa era una interpretación sin
+                    // confirmar de una versión anterior).
+                    foreach (CajaMenor caja in cfg.Cajas.Where(c => c.FilaHasta < filas && c.ColumnaHasta < columnas))
                     {
-                        double xColumna = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, caja.Columna);
-                        double yFila = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, caja.Fila);
-
-                        double x1 = centroX - Math.Abs(xColumna - centroX);
-                        double x2 = centroX + Math.Abs(xColumna - centroX);
-                        double y1 = centroY - Math.Abs(yFila - centroY);
-                        double y2 = centroY + Math.Abs(yFila - centroY);
+                        double x1 = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, caja.ColumnaDesde);
+                        double x2 = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, caja.ColumnaHasta);
+                        double y1 = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, caja.FilaDesde);
+                        double y2 = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, caja.FilaHasta);
 
                         CrearCaja(doc, host, barraCaja, gancho, x1, x2, y1, y2, z, contexto.Marca, res, ref creadas);
                     }
