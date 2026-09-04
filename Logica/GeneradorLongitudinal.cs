@@ -16,14 +16,26 @@ using practicacq.Modelo;
 /// Simplificaciones deliberadas de esta primera pasada (documentadas para no
 /// pasar por errores de cálculo):
 ///
-///  - Un Rebar no puede hostearse en más de un elemento de Revit, así que
-///    cada barra longitudinal se corta en un tramo por cada elemento host de
-///    la pila (#28) -- SIN traslapo/empalme entre ellos. Eso es Fase 5 (#7),
-///    todavía no arrancada.
-///  - Las barras longitudinales salen sin gancho (rectas): tampoco hay
-///    traslapo/anclaje resuelto (mismo motivo que el punto anterior), y
-///    <see cref="ConfigLongitudinal"/> no tiene hoy un tipo de gancho propio
-///    para longitudinal.
+///  - Fase 5 (#7, traslapos): implementada en <see cref="CrearBarraConTraslapos"/>.
+///    Un Rebar no puede hostearse en más de un elemento de Revit, así que
+///    cada límite entre elementos host de la pila (#28) es un corte
+///    OBLIGADO -- pero eso no consume barra de más: las dos piezas se tocan
+///    ahí sin solape, salvo que justo caiga un traslapo real ahí. Los
+///    traslapos reales (con el solape del cuadro de la empresa) solo se
+///    generan donde la longitud comercial de la barra (<see cref="ConfigLongitudinal.LongitudComercialBarra"/>,
+///    6 o 12 m) obliga a cortar, y solo a la mitad de un nivel, alternando
+///    niveles pares/impares entre las posiciones longitudinales de la
+///    sección (ver <see cref="GenerarColumna"/>, contador <c>posicion</c>).
+///    Dos cosas de esto NO están confirmadas por el equipo, ver issue de
+///    seguimiento de Fase 5: (a) qué criterio real separa las barras en el
+///    grupo par/impar -- acá es simplemente el orden en que ya se recorrían
+///    esquinas/cara X/cara Y; (b) qué pasa cuando un corte obligado por
+///    límite de host no coincide con ningún traslapo real de ese grupo --
+///    acá se resuelve como junta a tope, sin solape, simulando que la barra
+///    real es continua a través de esa junta de hormigonado y que es Revit
+///    (no la obra) quien exige partir el objeto ahí.
+///  - Las barras longitudinales salen sin gancho (rectas) -- no hay campo de
+///    gancho propio para longitudinal en <see cref="ConfigLongitudinal"/> hoy.
 ///  - Grapas y cajas reutilizan el gancho del tramo (<see cref="ConfigTramo.TipoGanchoNombre"/>)
 ///    en el que se generan -- no hay un campo de gancho propio para
 ///    estribos menores todavía.
@@ -36,6 +48,9 @@ using practicacq.Modelo;
 public static class GeneradorLongitudinal
 {
     private const double Tolerancia = 1e-6;
+
+    /// <summary>Footprint (huella) del host ya resuelto, para no repetir la geometría por cada posición longitudinal que lo cruza.</summary>
+    private readonly record struct FootprintHost(FamilyInstance Host, double XMin, double XMax, double YMin, double YMax);
 
     public static void Generar(Document doc, OpcionesArmado opciones, ResultadoArmado res)
     {
@@ -104,12 +119,15 @@ public static class GeneradorLongitudinal
         List<(string IdHost, double ZInf, double ZSup)> porHost = AgruparPorHost(contexto, columnaPlan);
         if (porHost.Count == 0) return;
 
-        int creadas = 0;
-
-        for (int h = 0; h < porHost.Count; h++)
+        // Footprint de cada host, resuelto una sola vez -- Fase 5 (#7) ya no
+        // crea una barra por host de forma independiente: una posición
+        // longitudinal (una esquina, una barra de cara) es UNA corrida que
+        // puede atravesar varios hosts, así que su footprint hace falta por
+        // adelantado para cada uno de ellos, no solo el que se está
+        // recorriendo en el momento.
+        var footprintPorHost = new Dictionary<string, FootprintHost>();
+        foreach ((string idHostTexto, double _, double _) in porHost)
         {
-            (string idHostTexto, double zInfMetros, double zSupMetros) = porHost[h];
-
             if (!long.TryParse(idHostTexto, out long idHostLong) ||
                 doc.GetElement(new ElementId(idHostLong)) is not FamilyInstance host)
             {
@@ -119,45 +137,98 @@ public static class GeneradorLongitudinal
 
             (CurveLoop contornoCrudo, double _) = GeometriaSeccion.ObtenerContornoHost(host, cacheHost);
             (double xMin, double xMax, double yMin, double yMax) = GeometriaSeccion.Huella(contornoCrudo);
+            footprintPorHost[idHostTexto] = new FootprintHost(host, xMin, xMax, yMin, yMax);
+        }
 
-            // Solo el host de más abajo de la pila puede tener zapata debajo
-            // -- el longitudinal entra a anclarse hasta 7.5cm de su cara
-            // inferior (#26), a diferencia del estribo.
-            double zInicio = h == 0
-                ? EstandarCQ.APies(contexto.ZInferiorLongitudinal)
-                : EstandarCQ.APies(zInfMetros);
-            double zFin = EstandarCQ.APies(zSupMetros);
+        // "Niveles" para Fase 5 (#7): un candidato de traslapo por tramo
+        // LIBRE/CONTRA ZAPATA de TODA la columna (no solo los tildados en
+        // esta corrida) -- el número de nivel (para el intercalado par/impar)
+        // es una propiedad estable de la columna real, no debería cambiar
+        // según qué tramos se tildaron hoy.
+        List<(int Ordinal, double ZInf, double ZSup)> niveles = contexto.Tramos
+            .Where(t => t.Tipo != TipoTramo.DentroDeViga)
+            .Select((t, idx) => (Ordinal: idx + 1, t.ZInferior, t.ZSuperior))
+            .ToList();
 
-            if (zFin - zInicio <= Tolerancia) continue;
+        // Solo el host de más abajo de la pila puede tener zapata debajo --
+        // el longitudinal entra a anclarse hasta 7.5cm de su cara inferior
+        // (#26), a diferencia del estribo.
+        double zInicioTotal = contexto.ZInferiorLongitudinal;
+        double zFinTotal = porHost[^1].ZSup;
 
-            foreach ((double x, double y) in PosicionesEsquinas(xMin, xMax, yMin, yMax, insetEsquinas))
-                CrearBarraVertical(doc, host, barraEsquinas, x, y, zInicio, zFin, contexto.Marca, res, ref creadas);
+        int creadas = 0;
 
-            if (barraCaraX is not null && columnas > 0)
+        // Un contador corrido de posición alrededor del perímetro decide el
+        // grupo par/impar del intercalado (issue #7 y #29-style: "mitad de
+        // las barras empalma en niveles impares, la mitad en pares") -- cada
+        // posición longitudinal (esquina, barra de cara X, barra de cara Y)
+        // suma uno, en el mismo orden en que ya se recorrían antes de esta
+        // fase. No es una convención confirmada por nadie del equipo, ver
+        // issue de seguimiento de Fase 5.
+        int posicion = 0;
+
+        Func<FootprintHost, (double X, double Y)>[] esquinas =
+        {
+            fp => (fp.XMin + insetEsquinas, fp.YMin + insetEsquinas),
+            fp => (fp.XMax - insetEsquinas, fp.YMin + insetEsquinas),
+            fp => (fp.XMin + insetEsquinas, fp.YMax - insetEsquinas),
+            fp => (fp.XMax - insetEsquinas, fp.YMax - insetEsquinas),
+        };
+
+        foreach (Func<FootprintHost, (double X, double Y)> esquinaFn in esquinas)
+        {
+            CrearBarraConTraslapos(
+                doc, porHost, footprintPorHost, barraEsquinas, esquinaFn, posicion++ % 2 == 0,
+                niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                contexto.Marca, res, ref creadas);
+        }
+
+        if (barraCaraX is not null && columnas > 0)
+        {
+            double insetX = recubrimientoPies + barraCaraX.BarNominalDiameter / 2;
+            for (int c = 0; c < columnas; c++)
             {
-                double insetX = recubrimientoPies + barraCaraX.BarNominalDiameter / 2;
-                for (int c = 0; c < columnas; c++)
-                {
-                    double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, c);
-                    CrearBarraVertical(doc, host, barraCaraX, x, yMin + insetX, zInicio, zFin, contexto.Marca, res, ref creadas);
-                    CrearBarraVertical(doc, host, barraCaraX, x, yMax - insetX, zInicio, zFin, contexto.Marca, res, ref creadas);
-                }
+                int cCapturado = c;
+                CrearBarraConTraslapos(
+                    doc, porHost, footprintPorHost, barraCaraX,
+                    fp => (PosicionIntermedia(fp.XMin + insetEsquinas, fp.XMax - insetEsquinas, columnas, cCapturado), fp.YMin + insetX),
+                    posicion++ % 2 == 0,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    contexto.Marca, res, ref creadas);
+
+                CrearBarraConTraslapos(
+                    doc, porHost, footprintPorHost, barraCaraX,
+                    fp => (PosicionIntermedia(fp.XMin + insetEsquinas, fp.XMax - insetEsquinas, columnas, cCapturado), fp.YMax - insetX),
+                    posicion++ % 2 == 0,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    contexto.Marca, res, ref creadas);
             }
+        }
 
-            if (barraCaraY is not null && filas > 0)
+        if (barraCaraY is not null && filas > 0)
+        {
+            double insetY = recubrimientoPies + barraCaraY.BarNominalDiameter / 2;
+            for (int f = 0; f < filas; f++)
             {
-                double insetY = recubrimientoPies + barraCaraY.BarNominalDiameter / 2;
-                for (int f = 0; f < filas; f++)
-                {
-                    double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, f);
-                    CrearBarraVertical(doc, host, barraCaraY, xMin + insetY, y, zInicio, zFin, contexto.Marca, res, ref creadas);
-                    CrearBarraVertical(doc, host, barraCaraY, xMax - insetY, y, zInicio, zFin, contexto.Marca, res, ref creadas);
-                }
+                int fCapturado = f;
+                CrearBarraConTraslapos(
+                    doc, porHost, footprintPorHost, barraCaraY,
+                    fp => (fp.XMin + insetY, PosicionIntermedia(fp.YMin + insetEsquinas, fp.YMax - insetEsquinas, filas, fCapturado)),
+                    posicion++ % 2 == 0,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    contexto.Marca, res, ref creadas);
+
+                CrearBarraConTraslapos(
+                    doc, porHost, footprintPorHost, barraCaraY,
+                    fp => (fp.XMax - insetY, PosicionIntermedia(fp.YMin + insetEsquinas, fp.YMax - insetEsquinas, filas, fCapturado)),
+                    posicion++ % 2 == 0,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra,
+                    contexto.Marca, res, ref creadas);
             }
         }
 
         if (creadas > 0)
-            res.Detalles.Add($"{contexto.Marca}: {creadas} barra(s) longitudinal(es) creada(s).");
+            res.Detalles.Add($"{contexto.Marca}: {creadas} barra(s) longitudinal(es) creada(s) (con traslapos, Fase 5).");
 
         GenerarMenores(
             doc, columnaPlan, contexto, cfg, barrasPorNombre, ganchosPorNombre, cacheHost,
@@ -318,14 +389,152 @@ public static class GeneradorLongitudinal
         return porHost;
     }
 
-    private static IEnumerable<(double X, double Y)> PosicionesEsquinas(
-        double xMin, double xMax, double yMin, double yMax, double inset)
+    /// <summary>
+    /// Fase 5 (#7): arma UNA posición longitudinal (una esquina o una barra
+    /// de cara) a lo largo de TODA la columna, resolviendo dos tipos de
+    /// corte muy distintos entre sí:
+    ///
+    ///  - Corte OBLIGADO por límite de host (ya existía desde #28: Revit no
+    ///    permite un mismo Rebar en dos FamilyInstance). Las dos piezas
+    ///    simplemente se tocan ahí, sin gastar barra de más -- en la
+    ///    realidad la barra es continua a través de esa junta de hormigonado,
+    ///    Revit es el que obliga a partir el objeto, no la obra.
+    ///  - Traslapo REAL (con el solape de <see cref="EstandarCQ.Varilla.Traslapo"/>):
+    ///    solo donde hace falta por la longitud comercial de la barra
+    ///    (<paramref name="longitudComercialMetros"/>), y solo a la mitad de
+    ///    un "nivel" (issue #7), alternando niveles pares/impares según
+    ///    <paramref name="esParGrupo"/> (issue #29-style, "traslapos
+    ///    intercalados").
+    ///
+    /// Cuando un corte obligado cae muy cerca de un traslapo real elegido
+    /// para este grupo, se resuelve como real (el solape ya cubre esa junta).
+    /// </summary>
+    private static void CrearBarraConTraslapos(
+        Document doc,
+        List<(string IdHost, double ZInf, double ZSup)> porHost,
+        Dictionary<string, FootprintHost> footprintPorHost,
+        RebarBarType barra,
+        Func<FootprintHost, (double X, double Y)> calcularXY,
+        bool esParGrupo,
+        List<(int Ordinal, double ZInf, double ZSup)> niveles,
+        double zInicioTotalMetros,
+        double zFinTotalMetros,
+        double longitudComercialMetros,
+        string marcaColumna,
+        ResultadoArmado res,
+        ref int creadas)
     {
-        yield return (xMin + inset, yMin + inset);
-        yield return (xMax - inset, yMin + inset);
-        yield return (xMin + inset, yMax - inset);
-        yield return (xMax - inset, yMax - inset);
+        if (zFinTotalMetros - zInicioTotalMetros <= Tolerancia) return;
+
+        EstandarCQ.Varilla? varilla = EstandarCQ.Buscar(barra);
+        double traslapoMetros = varilla?.Traslapo ?? 0;
+        if (varilla is null)
+            res.Avisos.Add(
+                $"{marcaColumna}: la barra «{barra.Name}» no está en el cuadro de la empresa; " +
+                "los traslapos de esa barra se resuelven sin solape (empalme a tope).");
+
+        List<double> candidatos = niveles
+            .Where(n => (n.Ordinal % 2 == 0) == esParGrupo)
+            .Select(n => RedondearArriba10Cm((n.ZInf + n.ZSup) / 2))
+            .Where(z => z > zInicioTotalMetros + Tolerancia && z < zFinTotalMetros - Tolerancia)
+            .OrderBy(z => z)
+            .ToList();
+
+        List<double> reales = PlanificarSplicesReales(
+            candidatos, zInicioTotalMetros, zFinTotalMetros, longitudComercialMetros, marcaColumna, res);
+
+        var cortes = reales.Select(z => (Z: z, EsReal: true)).ToList();
+        for (int i = 0; i < porHost.Count - 1; i++)
+        {
+            double zLimite = porHost[i].ZSup;
+            if (cortes.Any(c => Math.Abs(c.Z - zLimite) < 0.03)) continue; // ya cubierto por un traslapo real
+            cortes.Add((zLimite, false));
+        }
+        cortes.Sort((a, b) => a.Z.CompareTo(b.Z));
+
+        var limites = new List<double> { zInicioTotalMetros };
+        limites.AddRange(cortes.Select(c => c.Z));
+        limites.Add(zFinTotalMetros);
+
+        for (int s = 0; s < limites.Count - 1; s++)
+        {
+            bool iniEsReal = s >= 1 && cortes[s - 1].EsReal;
+            bool finEsReal = s < cortes.Count && cortes[s].EsReal;
+
+            double zIniSinSolape = limites[s];
+            double zFinSinSolape = limites[s + 1];
+            double zIni = iniEsReal ? zIniSinSolape - traslapoMetros / 2 : zIniSinSolape;
+            double zFin = finEsReal ? zFinSinSolape + traslapoMetros / 2 : zFinSinSolape;
+
+            if (zFin - zIni <= Tolerancia) continue;
+
+            double medio = (zIniSinSolape + zFinSinSolape) / 2;
+            var hostEntry = porHost.FirstOrDefault(h => medio >= h.ZInf - Tolerancia && medio <= h.ZSup + Tolerancia);
+            if (hostEntry.IdHost is null || !footprintPorHost.TryGetValue(hostEntry.IdHost, out FootprintHost fp))
+                continue; // host inexistente o borrado -- ya avisado al armar footprintPorHost
+
+            (double x, double y) = calcularXY(fp);
+            CrearBarraVertical(
+                doc, fp.Host, barra, x, y,
+                EstandarCQ.APies(zIni), EstandarCQ.APies(zFin),
+                marcaColumna, res, ref creadas);
+        }
     }
+
+    /// <summary>
+    /// De los candidatos de traslapo de UN grupo (par o impar), elige el
+    /// mínimo necesario para que ningún tramo entre dos traslapos reales
+    /// consecutivos (ni el primero desde el arranque, ni el último hasta el
+    /// remate) supere <paramref name="longitudComercialMetros"/> -- avanza
+    /// siempre al candidato más lejano todavía alcanzable (voraz: minimiza
+    /// la cantidad de traslapos).
+    /// </summary>
+    private static List<double> PlanificarSplicesReales(
+        List<double> candidatosOrdenados, double zInicio, double zFin,
+        double longitudComercialMetros, string marcaColumna, ResultadoArmado res)
+    {
+        var reales = new List<double>();
+        double ultimoCorte = zInicio;
+        int i = 0;
+
+        while (i < candidatosOrdenados.Count)
+        {
+            double? mejor = null;
+            while (i < candidatosOrdenados.Count && candidatosOrdenados[i] - ultimoCorte <= longitudComercialMetros)
+            {
+                mejor = candidatosOrdenados[i];
+                i++;
+            }
+
+            if (mejor is null)
+            {
+                // El próximo nivel disponible para este grupo ya se pasa de
+                // la barra comercial desde el último traslapo -- se usa
+                // igual (mejor eso que dejar un tramo sin ningún traslapo
+                // donde hacía falta), pero queda avisado.
+                res.Avisos.Add(
+                    $"{marcaColumna}: no hay un nivel disponible para el traslapo intercalado dentro de los " +
+                    $"{longitudComercialMetros:0.#} m de barra comercial (el siguiente queda a " +
+                    $"{candidatosOrdenados[i] - ultimoCorte:0.##} m); se traslapa igual ahí.");
+                mejor = candidatosOrdenados[i];
+                i++;
+            }
+
+            reales.Add(mejor.Value);
+            ultimoCorte = mejor.Value;
+        }
+
+        if (zFin - ultimoCorte > longitudComercialMetros + Tolerancia)
+            res.Avisos.Add(
+                $"{marcaColumna}: el tramo final ({zFin - ultimoCorte:0.#} m) supera la barra comercial de " +
+                $"{longitudComercialMetros:0.#} m y no queda ningún nivel disponible para traslaparlo intercalado.");
+
+        return reales;
+    }
+
+    /// <summary>El punto de traslape real se redondea hacia arriba a un múltiplo de 10 cm (issue #7).</summary>
+    private static double RedondearArriba10Cm(double metros) =>
+        Math.Ceiling(metros / 0.10 - Tolerancia) * 0.10;
 
     /// <summary>
     /// Reparte <paramref name="n"/> posiciones parejo entre los dos extremos,
@@ -345,8 +554,10 @@ public static class GeneradorLongitudinal
             Line linea = Line.CreateBound(new XYZ(x, y, zInicio), new XYZ(x, y, zFin));
 
             // BarTerminationsData "vacío" (sin fijar hooks): recta, sin
-            // gancho -- ver el porqué en el comentario del archivo (no hay
-            // traslapo/anclaje resuelto todavía, eso es Fase 5).
+            // gancho -- ConfigLongitudinal no tiene campo de gancho propio
+            // para longitudinal todavía (ver comentario del archivo). El
+            // traslapo en sí (Fase 5, #7) sí está resuelto: quien llama a
+            // esto ya le pasa el segmento correcto con o sin solape.
             using var terminaciones = new BarTerminationsData(doc);
 
             Rebar barraCreada = Rebar.CreateFromCurves(

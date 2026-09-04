@@ -41,4 +41,13 @@ public sealed class ConfigLongitudinal
 
     /// <summary>Las cajas que arma L4 cruzando filas y columnas tildadas.</summary>
     public List<CajaMenor> Cajas { get; set; } = new();
+
+    /// <summary>
+    /// Longitud de la barra comercial disponible, en metros -- Fase 5 (#7):
+    /// solo existen barras de 6 o 12 m de stock, no un largo arbitrario. Una
+    /// corrida de barra longitudinal más larga que esto necesita traslapo;
+    /// el tramo final de una corrida puede quedar más corto que esto (se
+    /// recorta), eso no requiere traslapo.
+    /// </summary>
+    public double LongitudComercialBarra { get; set; } = 12.0;
 }

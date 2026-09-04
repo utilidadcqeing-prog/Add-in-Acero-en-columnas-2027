@@ -219,6 +219,9 @@
                     <TextBlock Text="Tipo barra esquinas:" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboBarraEsquinas" Height="24" />
 
+                    <TextBlock Text="Longitud de barra comercial (traslapos, Fase 5):" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboLongitudBarra" Height="24" />
+
                     <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,4,0,0" />

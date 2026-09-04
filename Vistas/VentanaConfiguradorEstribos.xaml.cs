@@ -123,6 +123,13 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarrasX.SelectedItem = 2;
         ComboBarrasY.SelectedItem = 2;
 
+        // Fase 5 (#7): la barra comercial viene en 6 o 12 m -- no es un rango
+        // libre, son las dos longitudes de stock. El tramo final de una
+        // corrida puede quedar más corto (se recorta), pero eso no lo elige
+        // el usuario acá.
+        ComboLongitudBarra.ItemsSource = new[] { 6.0, 12.0 };
+        ComboLongitudBarra.SelectedItem = 12.0;
+
         RadioUniforme.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
         RadioConfinado.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
 
@@ -455,6 +462,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraXNombre = ComboBarraCaraX.SelectedItem as string,
         TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
         TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
+        LongitudComercialBarra = ComboLongitudBarra.SelectedItem as double? ?? 12.0,
         // Las posiciones de grapas/cajas no se leen del panel: se editan aparte
         // en L4 y viven en _longitudinalPorColumna hasta que este método las
         // pisa -- por eso Guardar... las vuelve a copiar explícitamente.
@@ -467,6 +475,7 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraX.SelectedItem = cfg.TipoBarraCaraXNombre;
         ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
         ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
+        ComboLongitudBarra.SelectedItem = cfg.LongitudComercialBarra;
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
     }
@@ -488,6 +497,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraXNombre = tipos.ListarTiposBarra().FirstOrDefault(),
         TipoBarraCaraYNombre = tipos.ListarTiposBarra().FirstOrDefault(),
         TipoBarraEsquinasNombre = tipos.ListarTiposBarra().FirstOrDefault(),
+        LongitudComercialBarra = 12.0,
     };
 
     private void GuardarLongitudinalDeColumnaActiva()
