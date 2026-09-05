@@ -158,56 +158,6 @@ internal static class GeometriaSeccion
 
     public static double Longitud(CurveLoop loop) => loop.Sum(c => c.Length);
 
-    /// <summary>
-    /// Parte la primera curva de un loop cerrado por su punto medio, así el
-    /// arranque/cierre del <c>IList&lt;Curve&gt;</c> que recibe
-    /// <c>Rebar.CreateFromCurves</c> cae en la mitad de un lado recto, no en
-    /// una esquina.
-    ///
-    /// Revit no arma el fillet de 90° en el vértice donde el loop se cierra
-    /// cuando ahí también van los ganchos de 135° -- el gancho se come el
-    /// doblez que debería atrapar la barra longitudinal de esa esquina,
-    /// dejándola sin amarrar (documentado en el informe técnico de
-    /// referencia de otro intento del mismo problema -- ver issue de
-    /// seguimiento). Partir un lado por la mitad deja los 4 vértices reales
-    /// con continuidad entre dos curvas normales, así que sí reciben el
-    /// fillet; los ganchos quedan sobre el tramo recto en su lugar, que es
-    /// justo la solución que Autodesk documenta para esto sin cambiar de API.
-    /// </summary>
-    public static IList<Curve> ConEmpalmeEnMedioDeLado(IList<Curve> curvas)
-    {
-        if (curvas.Count == 0) return curvas;
-
-        // Se parte el lado MÁS LARGO, no siempre el primero -- probado sobre
-        // Revit real: en una sección chica/cuadrada, partir un lado corto
-        // deja cada mitad más corta que la pata del gancho de 135°, y
-        // Rebar.CreateFromCurves devuelve null en vez de avisar. Partiendo el
-        // lado más largo se le da al gancho todo el margen posible.
-        int indiceMasLargo = 0;
-        double largoMax = curvas[0].Length;
-        for (int i = 1; i < curvas.Count; i++)
-        {
-            if (curvas[i].Length > largoMax)
-            {
-                largoMax = curvas[i].Length;
-                indiceMasLargo = i;
-            }
-        }
-
-        Curve masLarga = curvas[indiceMasLargo];
-        XYZ inicio = masLarga.GetEndPoint(0);
-        XYZ fin = masLarga.GetEndPoint(1);
-        XYZ medio = (inicio + fin) / 2;
-
-        // Reordena en ronda desde el lado partido, dando toda la vuelta, para
-        // que el loop siga cerrado y en el mismo sentido de recorrido.
-        var resultado = new List<Curve> { Line.CreateBound(inicio, medio), Line.CreateBound(medio, fin) };
-        for (int i = 1; i < curvas.Count; i++)
-            resultado.Add(curvas[(indiceMasLargo + i) % curvas.Count]);
-
-        return resultado;
-    }
-
     public static double Metros(double pies) =>
         UnitUtils.ConvertFromInternalUnits(pies, UnitTypeId.Meters);
 

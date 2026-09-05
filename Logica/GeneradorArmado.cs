@@ -190,12 +190,11 @@ public static class GeneradorArmado
                 $"la barra {barra.Name} es demasiado gruesa para esta sección: su doblez de estribo mide " +
                 $"{GeometriaSeccion.Metros(doblez) * 100:0.#} cm y el lado más corto del estribo queda en {GeometriaSeccion.Metros(ladoMenor) * 100:0.#} cm.");
 
-        // El lado más largo se parte al medio para el fillet de la esquina
-        // (ver GeometriaSeccion.ConEmpalmeEnMedioDeLado) -- si la mitad de
-        // ESE lado no alcanza para la pata del gancho de 135°, Revit no
-        // arma la forma y Rebar.CreateFromCurves devuelve null en vez de
-        // avisar (probado sobre Revit real, cascadea y tumba el resto de la
-        // corrida). Se corta acá con un mensaje claro en vez de eso.
+        // Si la pata del gancho de 135° no alcanza ni la mitad del lado más
+        // largo del estribo, Revit no arma la forma y Rebar.CreateFromCurves
+        // devuelve null en vez de avisar (probado sobre Revit real, cascadea
+        // y tumba el resto de la corrida). Se corta acá con un mensaje claro
+        // en vez de eso.
         double ladoMayor = contorno.Max(c => c.Length);
         double hookLength = barra.GetHookLength(gancho.Id);
         if (hookLength > ladoMayor / 2)
@@ -293,12 +292,17 @@ public static class GeneradorArmado
         if (longitud <= Tolerancia || espaciado <= Tolerancia) return;
 
         var mover = Transform.CreateTranslation(XYZ.BasisZ * (zInicio - zBaseContorno));
-        IList<Curve> curvasTrasladadas = contorno.Select(c => c.CreateTransformed(mover)).ToList();
+        IList<Curve> curvas = contorno.Select(c => c.CreateTransformed(mover)).ToList();
 
-        // Ver GeometriaSeccion.ConEmpalmeEnMedioDeLado: sin esto, la esquina
-        // donde el loop se cierra queda sin el fillet de 90° que debería
-        // atrapar la barra longitudinal de ese vértice.
-        IList<Curve> curvas = GeometriaSeccion.ConEmpalmeEnMedioDeLado(curvasTrasladadas);
+        // GeometriaSeccion.ConEmpalmeEnMedioDeLado partía el lado más largo
+        // en dos para que la esquina donde el loop se cierra recibiera el
+        // fillet de 90° (issue #11 original). Se saca: confirmado sobre
+        // Revit real que ese corte deja dos curvas colineales sin ningún
+        // ángulo real entre ellas, y Rebar.CreateFromCurves rechaza esa
+        // geometría (devuelve null) en secciones no cuadradas -- probado con
+        // aislamiento, mismas curvas sin el corte SÍ se crean bien. Prioriza
+        // no crashear sobre el detalle cosmético de esa esquina, que hay que
+        // revisar con otra solución (ver issue de seguimiento).
 
         Rebar? estribo = Rebar.CreateFromCurves(
             doc,
@@ -318,10 +322,6 @@ public static class GeneradorArmado
         // NullReferenceException que no dice nada útil).
         if (estribo is null)
         {
-            // Diagnóstico temporal: el mensaje anterior (gancho no entra) no
-            // alcanzó -- probado con el gancho correcto (Estribo/Tirante
-            // 135°) y siguió fallando igual. Se agregan las medidas reales
-            // para encontrar la causa de verdad.
             string ladosCm = string.Join(", ", curvas.Select(c => $"{GeometriaSeccion.Metros(c.Length) * 100:0.#}cm"));
             double hookLength = 0;
             try { hookLength = barra.GetHookLength(terminaciones.HookTypeIdAtStart); } catch { /* diagnóstico best-effort */ }

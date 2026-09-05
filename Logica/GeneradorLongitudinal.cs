@@ -799,17 +799,19 @@ public static class GeneradorLongitudinal
     {
         try
         {
-            var curvasRectangulo = new List<Curve>
+            // Rectángulo cerrado, sin cortar ningún lado a la mitad -- ver el
+            // comentario en GeneradorArmado.CrearGrupo: partir un lado deja
+            // dos curvas colineales sin ángulo real entre ellas, y
+            // Rebar.CreateFromCurves rechaza esa geometría (null) en cajas
+            // no cuadradas. Prioriza no crashear sobre el detalle cosmético
+            // de la esquina de cierre sin fillet.
+            IList<Curve> curvas = new List<Curve>
             {
                 Line.CreateBound(new XYZ(x1, y1, z), new XYZ(x2, y1, z)),
                 Line.CreateBound(new XYZ(x2, y1, z), new XYZ(x2, y2, z)),
                 Line.CreateBound(new XYZ(x2, y2, z), new XYZ(x1, y2, z)),
                 Line.CreateBound(new XYZ(x1, y2, z), new XYZ(x1, y1, z)),
             };
-
-            // Ver GeometriaSeccion.ConEmpalmeEnMedioDeLado: sin esto, la
-            // esquina donde el loop se cierra queda sin el fillet de 90°.
-            IList<Curve> curvas = GeometriaSeccion.ConEmpalmeEnMedioDeLado(curvasRectangulo);
 
             using var terminaciones = new BarTerminationsData(doc)
             {
