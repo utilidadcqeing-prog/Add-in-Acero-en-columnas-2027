@@ -66,6 +66,18 @@ public sealed class LectorContexto : IProveedorContexto
 
     public LectorContexto(Document doc) => _doc = doc;
 
+    /// <summary>
+    /// Descarta <see cref="_cacheElementos"/> -- hay que llamarlo después de
+    /// generar armado. Los <c>Solid</c> que guarda quedan atados a la
+    /// geometría de Revit de cuando se leyeron; en cuanto el documento se
+    /// modifica (creación/borrado de Rebar, <c>Document.Regenerate()</c>) esos
+    /// objetos dejan de ser válidos, y volver a usarlos (por ejemplo desde
+    /// "Aplicar a selección" o el panel de elevación, sin cerrar la ventana)
+    /// puede terminar en un crash nativo de Revit en vez de una excepción de
+    /// .NET -- probado sobre Revit real.
+    /// </summary>
+    public void InvalidarCache() => _cacheElementos = null;
+
     /// <summary>Un elemento de columna ya resuelto: su sólido y dónde cae en el espacio.</summary>
     private sealed record ElementoColumna(FamilyInstance Instancia, Solid Solido, XYZ Centro, double ZInf, double ZSup);
 

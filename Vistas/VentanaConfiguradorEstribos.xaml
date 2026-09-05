@@ -60,7 +60,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Tildá columnas o tramos sueltos en la lista y usá &quot;Aplicar a selección&quot; para cargarles la misma configuración. Solo lo tildado se exporta o se genera en Revit."
+            <TextBlock Grid.Column="0" Text="Tilda columnas o tramos sueltos en la lista y usa &quot;Aplicar a selección&quot; para cargarles la misma configuración. Solo lo tildado se exporta o se genera en Revit."
                        TextWrapping="Wrap" Foreground="#555555" VerticalAlignment="Center" />
             <Button Grid.Column="1" x:Name="BotonLimpiarSeleccion" Content="Limpiar selección"
                     Height="30" Padding="12,0" Background="#6B7280" Foreground="White"

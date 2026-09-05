@@ -16,7 +16,7 @@
                 <Run Text="Grapa" FontWeight="SemiBold" /><Run Text=": una casilla -- una por fila (conecta la barra intermedia izquierda con la derecha) o una por columna (conecta la de arriba con la de abajo)." />
             </TextBlock>
             <TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,8">
-                <Run Text="Caja" FontWeight="SemiBold" /><Run Text=": tildá filas y columnas a la derecha/abajo -- las contiguas se fusionan en un solo rectángulo grande, un salto arranca uno nuevo. Si una fila/columna tiene gancho Y queda cubierta por una caja, gana la caja." />
+                <Run Text="Caja" FontWeight="SemiBold" /><Run Text=": tilda filas y columnas a la derecha/abajo -- las contiguas se fusionan en un solo rectángulo grande, un salto arranca uno nuevo. Si una fila/columna tiene gancho Y queda cubierta por una caja, gana la caja." />
             </TextBlock>
             <StackPanel Orientation="Horizontal">
                 <Ellipse Width="12" Height="12" Fill="White" Stroke="#374151" StrokeThickness="1.5" Margin="0,0,4,0" />

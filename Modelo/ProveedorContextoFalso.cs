@@ -43,6 +43,9 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
             ? c
             : throw new KeyNotFoundException($"El proveedor falso no tiene ninguna columna con id «{idColumna}».");
 
+    // No hay geometría de Revit real acá -- nada que invalidar.
+    public void InvalidarCache() { }
+
     /// <summary>El id es la propia marca acá: no hay ElementId real detrás de esto.</summary>
     private static string IdDe(ColumnaContexto c) => c.Marca;
 

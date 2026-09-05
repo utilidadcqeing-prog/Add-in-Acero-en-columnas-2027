@@ -25,6 +25,17 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!--
+      Metadatos del ensamblado: identifican el .dll como de CQEING en las
+      propiedades de Windows (clic derecho > Propiedades > Detalles) y en el
+      Add-In Manager de Revit. No es una firma digital (Authenticode): eso
+      necesita un certificado de firma de código real, que no se puede
+      generar de la nada; esto es solo metadata declarativa.
+    -->
+    <Company>CQEING</Company>
+    <Product>CQEING - Armado de columnas</Product>
+    <Copyright>© CQEING</Copyright>
     <RevitInstallDir Condition="'$(RevitInstallDir)' == ''">C:\Program Files\Autodesk\Revit $(RevitVersion)\</RevitInstallDir>
 
     <!-- Salida predecible por versión, para que tools/deploy.ps1 sepa siempre dónde buscar. -->

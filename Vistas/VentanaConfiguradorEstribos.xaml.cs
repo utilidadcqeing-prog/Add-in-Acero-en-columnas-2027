@@ -361,9 +361,9 @@ public partial class VentanaConfiguradorEstribos : Window
         var errores = new List<string>();
 
         if (string.IsNullOrWhiteSpace(cfg.TipoBarraNombre))
-            errores.Add("Elegí un tipo de barra.");
+            errores.Add("Elige un tipo de barra.");
         if (string.IsNullOrWhiteSpace(cfg.TipoGanchoNombre))
-            errores.Add("Elegí un tipo de gancho.");
+            errores.Add("Elige un tipo de gancho.");
 
         if (cfg.Modo == ModoEstribo.Uniforme)
         {
@@ -561,7 +561,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         if (barrasX <= 0 || barrasY <= 0)
         {
-            TextoEstado.Text = "Elegí N. barras X y N. barras Y antes de editar los estribos menores.";
+            TextoEstado.Text = "Elige N. barras X y N. barras Y antes de editar los estribos menores.";
             return;
         }
 
@@ -603,7 +603,7 @@ public partial class VentanaConfiguradorEstribos : Window
         List<NodoLista> objetivo = _nodos.Where(n => !n.EsColumna && n.Marcado).ToList();
         if (objetivo.Count == 0)
         {
-            TextoEstado.Text = "No hay tramos tildados en la lista: tildá alguno (o una columna entera) para aplicarles esta configuración.";
+            TextoEstado.Text = "No hay tramos tildados en la lista: tilda alguno (o una columna entera) para aplicarles esta configuración.";
             return;
         }
 
@@ -643,7 +643,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TextoEstado.Text = conProblemaDeNorma.Count == 0
             ? $"Aplicado a {objetivo.Count} tramo(s)."
             : $"Aplicado a {objetivo.Count} tramo(s). Atención: en {string.Join(", ", conProblemaDeNorma)} " +
-              "L1 x2 ≥ la altura del tramo -- revisá esos, no queda zona central.";
+              "L1 x2 ≥ la altura del tramo -- revisa esos, no queda zona central.";
 
         // Si el tramo activo estaba entre los que se acaban de tocar, refleja
         // el resultado en el panel en vez de dejarlo desactualizado.
@@ -895,7 +895,7 @@ public partial class VentanaConfiguradorEstribos : Window
         PlanArmado plan = ConstruirPlanArmado();
         if (plan.Columnas.Count == 0)
         {
-            TextoEstado.Text = "Tildá al menos un tramo (o una columna entera) antes de exportar.";
+            TextoEstado.Text = "Tilda al menos un tramo (o una columna entera) antes de exportar.";
             return;
         }
 
@@ -913,7 +913,7 @@ public partial class VentanaConfiguradorEstribos : Window
         PlanArmado plan = ConstruirPlanArmado();
         if (plan.Columnas.Count == 0)
         {
-            TextoEstado.Text = "Tildá al menos un tramo (o una columna entera) antes de generar.";
+            TextoEstado.Text = "Tilda al menos un tramo (o una columna entera) antes de generar.";
             return;
         }
 
@@ -953,6 +953,13 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         BotonGenerar.IsEnabled = true;
 
+        // La generación modificó el documento (creó y/o borró Rebar) -- la
+        // geometría que _contexto tenía cacheada de antes ya no es válida.
+        // Ver el comentario de IProveedorContexto.InvalidarCache: sin esto,
+        // el próximo "Aplicar a selección" o click en la lista puede
+        // terminar en un crash nativo de Revit en vez de una excepción.
+        _contexto.InvalidarCache();
+
         TextoEstado.Text =
             $"Generado: {resultado.GruposCreados} estribo(s) creado(s)" +
             (resultado.Eliminados > 0 ? $", {resultado.Eliminados} anterior(es) borrado(s)" : "") +
@@ -968,6 +975,12 @@ public partial class VentanaConfiguradorEstribos : Window
     public void MostrarErrorGeneracion(string mensaje)
     {
         BotonGenerar.IsEnabled = true;
+
+        // Aunque haya fallado, la corrida ya modificó el documento antes de
+        // tirar la excepción (ver MostrarResultadoGeneracion) -- misma razón
+        // para invalidar el cache.
+        _contexto.InvalidarCache();
+
         TextoEstado.Text = "La generación falló.";
         MessageBox.Show(mensaje, "Error al generar", MessageBoxButton.OK, MessageBoxImage.Error);
     }

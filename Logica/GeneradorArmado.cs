@@ -82,7 +82,7 @@ public static class GeneradorArmado
         {
             res.Avisos.Add(
                 $"{contexto.Marca}: no tiene recubrimiento lateral asignado en el modelo. " +
-                "Asignale un recubrimiento en Revit y volvé a generar -- acá no se impone ninguno.");
+                "Asígnale un recubrimiento en Revit y vuelve a generar -- acá no se impone ninguno.");
             res.TramosOmitidos += columnaPlan.Tramos.Count(t => t is not null);
             return;
         }
@@ -108,7 +108,14 @@ public static class GeneradorArmado
             catch (Exception ex)
             {
                 res.TramosOmitidos++;
-                res.Avisos.Add($"{contexto.Marca} tramo {i + 1}: {GeometriaSeccion.Explicar(ex)}");
+                res.Avisos.Add($"{contexto.Marca} tramo {tramo.Indice}: {GeometriaSeccion.Explicar(ex)}");
+
+                // Probado sobre Revit real: después de que Rebar.CreateFromCurves
+                // falla una vez (devuelve null) en una transacción, las llamadas
+                // siguientes -- incluso para geometría sin ninguna relación con la
+                // que falló -- empiezan a fallar igual. Regenerar acá intenta
+                // "limpiar" ese estado antes de seguir con el próximo tramo/barra.
+                try { doc.Regenerate(); } catch { /* best-effort */ }
             }
         }
     }
@@ -136,7 +143,10 @@ public static class GeneradorArmado
         // no es un error, es el tramo haciendo exactamente lo que dice ser.
         if (tramo.Tipo == TipoTramo.DentroDeViga) return true;
 
-        string etiquetaTramo = $"{marcaColumna} tramo {tramo.Indice + 1}";
+        // tramo.Indice ya es el mismo número 0-indexado que muestra la
+        // ventana ("Tramo 0", "Tramo 1"...); sumarle 1 acá desalineaba el
+        // aviso con lo que el usuario tenía tildado en pantalla.
+        string etiquetaTramo = $"{marcaColumna} tramo {tramo.Indice}";
 
         if (tramo.IdElementoHost is null || !long.TryParse(tramo.IdElementoHost, out long idHost))
         {
@@ -179,6 +189,20 @@ public static class GeneradorArmado
             throw new InvalidOperationException(
                 $"la barra {barra.Name} es demasiado gruesa para esta sección: su doblez de estribo mide " +
                 $"{GeometriaSeccion.Metros(doblez) * 100:0.#} cm y el lado más corto del estribo queda en {GeometriaSeccion.Metros(ladoMenor) * 100:0.#} cm.");
+
+        // El lado más largo se parte al medio para el fillet de la esquina
+        // (ver GeometriaSeccion.ConEmpalmeEnMedioDeLado) -- si la mitad de
+        // ESE lado no alcanza para la pata del gancho de 135°, Revit no
+        // arma la forma y Rebar.CreateFromCurves devuelve null en vez de
+        // avisar (probado sobre Revit real, cascadea y tumba el resto de la
+        // corrida). Se corta acá con un mensaje claro en vez de eso.
+        double ladoMayor = contorno.Max(c => c.Length);
+        double hookLength = barra.GetHookLength(gancho.Id);
+        if (hookLength > ladoMayor / 2)
+            throw new InvalidOperationException(
+                $"esta sección es demasiado chica para el gancho de la barra {barra.Name}: el gancho mide " +
+                $"{GeometriaSeccion.Metros(hookLength) * 100:0.#} cm y ni la mitad del lado más largo del estribo " +
+                $"({GeometriaSeccion.Metros(ladoMayor) * 100:0.#} cm) alcanza. Prueba una barra más delgada.");
 
         AvisarSiGanchoNoCumpleNorma(barra, gancho, ganchosYaAvisados, res);
 
@@ -293,10 +317,22 @@ public static class GeneradorArmado
         // GetShapeDrivenAccessor() de la línea siguiente revienta con un
         // NullReferenceException que no dice nada útil).
         if (estribo is null)
+        {
+            // Diagnóstico temporal: el mensaje anterior (gancho no entra) no
+            // alcanzó -- probado con el gancho correcto (Estribo/Tirante
+            // 135°) y siguió fallando igual. Se agregan las medidas reales
+            // para encontrar la causa de verdad.
+            string ladosCm = string.Join(", ", curvas.Select(c => $"{GeometriaSeccion.Metros(c.Length) * 100:0.#}cm"));
+            double hookLength = 0;
+            try { hookLength = barra.GetHookLength(terminaciones.HookTypeIdAtStart); } catch { /* diagnóstico best-effort */ }
+
             throw new InvalidOperationException(
                 $"Revit no pudo crear el estribo con esta geometría (Rebar.CreateFromCurves devolvió null) " +
-                $"con la barra «{barra.Name}». Probá otro tipo de gancho de 135° o una barra más delgada -- " +
-                "suele pasar cuando el gancho no entra en la sección.");
+                $"con la barra «{barra.Name}». Diagnóstico: {curvas.Count} curvas [{ladosCm}], " +
+                $"diámetro barra {GeometriaSeccion.Metros(barra.BarNominalDiameter) * 1000:0.#}mm, " +
+                $"doblez estribo {GeometriaSeccion.Metros(barra.StirrupTieBendDiameter) * 100:0.#}cm, " +
+                $"gancho {GeometriaSeccion.Metros(hookLength) * 100:0.#}cm, recubrimiento+radio ya restado del contorno.");
+        }
 
         estribo.GetShapeDrivenAccessor().SetLayoutAsMaximumSpacing(
             espaciado,

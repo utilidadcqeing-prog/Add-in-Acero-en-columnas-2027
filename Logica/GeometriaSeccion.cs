@@ -178,13 +178,33 @@ internal static class GeometriaSeccion
     {
         if (curvas.Count == 0) return curvas;
 
-        Curve primera = curvas[0];
-        XYZ inicio = primera.GetEndPoint(0);
-        XYZ fin = primera.GetEndPoint(1);
+        // Se parte el lado MÁS LARGO, no siempre el primero -- probado sobre
+        // Revit real: en una sección chica/cuadrada, partir un lado corto
+        // deja cada mitad más corta que la pata del gancho de 135°, y
+        // Rebar.CreateFromCurves devuelve null en vez de avisar. Partiendo el
+        // lado más largo se le da al gancho todo el margen posible.
+        int indiceMasLargo = 0;
+        double largoMax = curvas[0].Length;
+        for (int i = 1; i < curvas.Count; i++)
+        {
+            if (curvas[i].Length > largoMax)
+            {
+                largoMax = curvas[i].Length;
+                indiceMasLargo = i;
+            }
+        }
+
+        Curve masLarga = curvas[indiceMasLargo];
+        XYZ inicio = masLarga.GetEndPoint(0);
+        XYZ fin = masLarga.GetEndPoint(1);
         XYZ medio = (inicio + fin) / 2;
 
+        // Reordena en ronda desde el lado partido, dando toda la vuelta, para
+        // que el loop siga cerrado y en el mismo sentido de recorrido.
         var resultado = new List<Curve> { Line.CreateBound(inicio, medio), Line.CreateBound(medio, fin) };
-        resultado.AddRange(curvas.Skip(1));
+        for (int i = 1; i < curvas.Count; i++)
+            resultado.Add(curvas[(indiceMasLargo + i) % curvas.Count]);
+
         return resultado;
     }
 

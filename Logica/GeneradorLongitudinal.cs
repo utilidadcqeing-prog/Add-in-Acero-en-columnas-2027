@@ -119,6 +119,9 @@ public static class GeneradorLongitudinal
         int columnas = Math.Max(0, cfg.BarrasPorCaraX / 2);
         int filas = Math.Max(0, cfg.BarrasPorCaraY / 2);
 
+        double insetX = barraCaraX is not null ? recubrimientoPies + barraCaraX.BarNominalDiameter / 2 : 0;
+        double insetY = barraCaraY is not null ? recubrimientoPies + barraCaraY.BarNominalDiameter / 2 : 0;
+
         // Un tramo de barra por elemento host de la pila (no se puede
         // hostear un solo Rebar en dos FamilyInstance), agrupando los
         // tramos TILDADOS que caen en cada uno.
@@ -141,8 +144,46 @@ public static class GeneradorLongitudinal
                 continue;
             }
 
+            // Mismo chequeo que ya hace GeneradorArmado antes de intentar
+            // CreateFromCurves para estribos -- acá nunca se hacía. Si el
+            // host no admite armadura, ninguna geometría por más que entre
+            // en la sección va a lograr crear un Rebar sobre él.
+            if (RebarHostData.GetRebarHostData(host) is null)
+            {
+                res.Avisos.Add($"{contexto.Marca}: el elemento {idHostTexto} no admite armadura (host no válido para rebar); se omite el longitudinal de ese tramo.");
+                continue;
+            }
+
             (CurveLoop contornoCrudo, double _) = GeometriaSeccion.ObtenerContornoHost(host, cacheHost);
             (double xMin, double xMax, double yMin, double yMax) = GeometriaSeccion.Huella(contornoCrudo);
+
+            // Probado sobre Revit real: si la sección es muy chica para la
+            // cantidad/grosor de barra pedida, el inset de esquina o de cara
+            // puede terminar cruzando el punto medio de la sección (posición
+            // negativa o invertida) -- Rebar.CreateFromCurves devuelve null
+            // sin avisar por qué. Se corta acá con un mensaje claro por host
+            // en vez de intentarlo igual.
+            double anchoDisponibleX = (xMax - xMin) - 2 * insetEsquinas;
+            double anchoDisponibleY = (yMax - yMin) - 2 * insetEsquinas;
+            if (anchoDisponibleX <= Tolerancia || anchoDisponibleY <= Tolerancia)
+            {
+                res.Avisos.Add(
+                    $"{contexto.Marca}: la sección de {idHostTexto} ({GeometriaSeccion.Metros(xMax - xMin) * 100:0.#}×" +
+                    $"{GeometriaSeccion.Metros(yMax - yMin) * 100:0.#} cm) es demasiado chica para el recubrimiento + " +
+                    $"la barra de esquina «{barraEsquinas.Name}»; se omite el longitudinal de ese tramo.");
+                continue;
+            }
+
+            if (barraCaraX is not null && (xMax - xMin) - 2 * insetX <= Tolerancia)
+                res.Avisos.Add(
+                    $"{contexto.Marca}: la sección de {idHostTexto} es demasiado chica para la barra de cara X " +
+                    $"«{barraCaraX.Name}»; sus posiciones pueden quedar mal.");
+
+            if (barraCaraY is not null && (yMax - yMin) - 2 * insetY <= Tolerancia)
+                res.Avisos.Add(
+                    $"{contexto.Marca}: la sección de {idHostTexto} es demasiado chica para la barra de cara Y " +
+                    $"«{barraCaraY.Name}»; sus posiciones pueden quedar mal.");
+
             footprintPorHost[idHostTexto] = new FootprintHost(host, xMin, xMax, yMin, yMax);
         }
 
@@ -201,7 +242,6 @@ public static class GeneradorLongitudinal
 
         if (barraCaraX is not null && columnas > 0)
         {
-            double insetX = recubrimientoPies + barraCaraX.BarNominalDiameter / 2;
             for (int c = 0; c < columnas; c++)
             {
                 int cCapturado = c;
@@ -223,7 +263,6 @@ public static class GeneradorLongitudinal
 
         if (barraCaraY is not null && filas > 0)
         {
-            double insetY = recubrimientoPies + barraCaraY.BarNominalDiameter / 2;
             for (int f = 0; f < filas; f++)
             {
                 int fCapturado = f;
@@ -472,9 +511,24 @@ public static class GeneradorLongitudinal
             if (hostEntry.IdHost is null || !footprintPorHost.TryGetValue(hostEntry.IdHost, out FootprintHost fp))
                 continue; // host inexistente o borrado -- ya avisado al armar footprintPorHost
 
+            // El medio solape que se suma en zIni/zFin es respecto al PUNTO DE
+            // EMPALME, no respecto al host -- si ese empalme cae cerca del
+            // límite real entre dos hosts (dos FamilyInstance distintos,
+            // columna con cambio de sección), el agregado puede empujar la
+            // línea más allá del sólido del host que se acaba de elegir.
+            // Revit no puede alojar un Rebar que se sale de su host
+            // (CreateFromCurves devuelve null sin decir por qué -- probado
+            // sobre Revit real). Se recorta acá a los límites reales de ese
+            // host: el resto del solape ya lo cubre la barra del host
+            // vecino, que arranca/termina desde el otro lado del mismo
+            // empalme.
+            zIni = Math.Max(zIni, hostEntry.ZInf);
+            zFin = Math.Min(zFin, hostEntry.ZSup);
+            if (zFin - zIni <= Tolerancia) continue;
+
             (double x, double y) = calcularXY(fp);
             CrearBarraVertical(
-                doc, fp.Host, barra, x, y,
+                doc, fp, barra, x, y,
                 EstandarCQ.APies(zIni), EstandarCQ.APies(zFin),
                 marcaColumna, res, ref creadas);
         }
@@ -609,10 +663,11 @@ public static class GeneradorLongitudinal
         desde + (indice + 1) * (hasta - desde) / (n + 1);
 
     private static void CrearBarraVertical(
-        Document doc, FamilyInstance host, RebarBarType barra,
+        Document doc, FootprintHost fp, RebarBarType barra,
         double x, double y, double zInicio, double zFin,
         string marcaColumna, ResultadoArmado res, ref int creadas)
     {
+        FamilyInstance host = fp.Host;
         try
         {
             Line linea = Line.CreateBound(new XYZ(x, y, zInicio), new XYZ(x, y, zFin));
@@ -624,12 +679,22 @@ public static class GeneradorLongitudinal
             // esto ya le pasa el segmento correcto con o sin solape.
             using var terminaciones = new BarTerminationsData(doc);
 
+            // La normal define el plano de la forma de la barra -- tiene que
+            // ser PERPENDICULAR a la curva, no paralela. Para los estribos y
+            // grapas (curvas horizontales) BasisZ es perpendicular y anda
+            // bien, pero acá la curva es vertical: usar BasisZ como normal
+            // deja el plano degenerado (normal paralela a la propia línea) y
+            // Rebar.CreateFromCurves devuelve null siempre, sin importar la
+            // posición ni el tamaño de la sección -- confirmado en Revit
+            // real: fallaba el 100% de las barras longitudinales aunque el
+            // footprint y el bounding box del host dieran bien. BasisX es
+            // perpendicular a cualquier barra vertical.
             Rebar? barraCreada = Rebar.CreateFromCurves(
                 doc,
                 RebarStyle.Standard,
                 barra,
                 host,
-                XYZ.BasisZ,
+                XYZ.BasisX,
                 new List<Curve> { linea },
                 terminaciones,
                 useExistingShapeIfPossible: true,
@@ -639,10 +704,37 @@ public static class GeneradorLongitudinal
             // excepción (probado sobre Revit real) -- sin este chequeo,
             // MarcaEstribos.Marcar de la línea siguiente revienta con un
             // NullReferenceException que no dice nada útil.
+            //
+            // Diagnóstico temporal (sacar junto con el resto de #7-crash):
+            // se agrega el footprint del host y si X/Y quedan dentro de él,
+            // para distinguir un problema de encaje geométrico de otra causa
+            // (familia de forma de armadura no cargada, etc.) sin adivinar.
             if (barraCreada is null)
+            {
+                bool xDentro = x >= fp.XMin - 1e-6 && x <= fp.XMax + 1e-6;
+                bool yDentro = y >= fp.YMin - 1e-6 && y <= fp.YMax + 1e-6;
+
+                // El bounding box REAL del elemento de Revit, para comparar
+                // contra el ZInf/ZSup que le calculamos nosotros desde los
+                // tramos -- si no coinciden, el límite que usamos para
+                // recortar el traslapo no es el límite real del sólido, y
+                // por eso la línea sigue quedando afuera aunque el recorte
+                // por tramo la dé "adentro".
+                BoundingBoxXYZ? bb = host.get_BoundingBox(null);
+                string bbTexto = bb is null
+                    ? "sin bounding box"
+                    : $"Z[{GeometriaSeccion.Metros(bb.Min.Z):0.###}, {GeometriaSeccion.Metros(bb.Max.Z):0.###}]";
+
                 throw new InvalidOperationException(
                     $"Revit no pudo crear la barra con la línea pedida (Rebar.CreateFromCurves devolvió null) " +
-                    $"con la barra «{barra.Name}».");
+                    $"con la barra «{barra.Name}». Diagnóstico: línea de {GeometriaSeccion.Metros(linea.Length) * 100:0.#}cm, " +
+                    $"X={GeometriaSeccion.Metros(x):0.###} Y={GeometriaSeccion.Metros(y):0.###} " +
+                    $"Z {GeometriaSeccion.Metros(zInicio):0.###}→{GeometriaSeccion.Metros(zFin):0.###} m. " +
+                    $"Footprint del host: X[{GeometriaSeccion.Metros(fp.XMin):0.###}, {GeometriaSeccion.Metros(fp.XMax):0.###}] " +
+                    $"Y[{GeometriaSeccion.Metros(fp.YMin):0.###}, {GeometriaSeccion.Metros(fp.YMax):0.###}] " +
+                    $"(X {(xDentro ? "adentro" : "AFUERA")}, Y {(yDentro ? "adentro" : "AFUERA")}), " +
+                    $"host {host.Id}, bounding box real del elemento: {bbTexto}.");
+            }
 
             MarcaEstribos.Marcar(barraCreada, host.Id);
             creadas++;
@@ -650,6 +742,11 @@ public static class GeneradorLongitudinal
         catch (Exception ex)
         {
             res.Avisos.Add($"{marcaColumna}: no se pudo crear una barra longitudinal ({GeometriaSeccion.Explicar(ex)}).");
+
+            // Ver el mismo comentario en GeneradorArmado.GenerarColumna: una
+            // creación fallida dentro de la transacción puede arrastrar a
+            // las siguientes aunque no tengan relación entre sí.
+            try { doc.Regenerate(); } catch { /* best-effort */ }
         }
     }
 
@@ -683,7 +780,7 @@ public static class GeneradorLongitudinal
             if (grapa is null)
                 throw new InvalidOperationException(
                     $"Revit no pudo crear la grapa con esta geometría (Rebar.CreateFromCurves devolvió null) " +
-                    $"con la barra «{barra.Name}». Probá otro tipo de gancho de 135° o una barra más delgada.");
+                    $"con la barra «{barra.Name}». Prueba otro tipo de gancho de 135° o una barra más delgada.");
 
             MarcaEstribos.Marcar(grapa, host.Id);
             creadas++;
@@ -691,6 +788,7 @@ public static class GeneradorLongitudinal
         catch (Exception ex)
         {
             res.Avisos.Add($"{marcaColumna}: no se pudo crear una grapa ({GeometriaSeccion.Explicar(ex)}).");
+            try { doc.Regenerate(); } catch { /* best-effort */ }
         }
     }
 
@@ -735,7 +833,7 @@ public static class GeneradorLongitudinal
             if (caja is null)
                 throw new InvalidOperationException(
                     $"Revit no pudo crear la caja con esta geometría (Rebar.CreateFromCurves devolvió null) " +
-                    $"con la barra «{barra.Name}». Probá otro tipo de gancho de 135° o una barra más delgada.");
+                    $"con la barra «{barra.Name}». Prueba otro tipo de gancho de 135° o una barra más delgada.");
 
             MarcaEstribos.Marcar(caja, host.Id);
             creadas++;
@@ -743,6 +841,7 @@ public static class GeneradorLongitudinal
         catch (Exception ex)
         {
             res.Avisos.Add($"{marcaColumna}: no se pudo crear una caja ({GeometriaSeccion.Explicar(ex)}).");
+            try { doc.Regenerate(); } catch { /* best-effort */ }
         }
     }
 }

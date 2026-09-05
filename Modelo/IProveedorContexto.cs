@@ -36,6 +36,18 @@ public interface IProveedorContexto
     /// id y marca.
     /// </summary>
     IReadOnlyList<ColumnaResumen> ListarColumnas();
+
+    /// <summary>
+    /// Descarta cualquier geometría de Revit (sólidos, contornos) leída y
+    /// guardada en corridas anteriores. Hay que llamarlo después de generar
+    /// armado: los objetos de geometría que devuelve la API de Revit dejan de
+    /// ser válidos en cuanto el documento se modifica (creación/borrado de
+    /// Rebar, <c>Document.Regenerate()</c>), y seguir usándolos después
+    /// -- por ejemplo al abrir "Aplicar a selección" o navegar el panel de
+    /// elevación -- puede terminar en un crash nativo de Revit en vez de una
+    /// excepción de .NET (probado sobre Revit real).
+    /// </summary>
+    void InvalidarCache();
 }
 
 /// <summary>
