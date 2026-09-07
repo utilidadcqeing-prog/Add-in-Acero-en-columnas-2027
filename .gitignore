@@ -3,6 +3,10 @@ bin/
 obj/
 *.user
 
+# Paquete de instalación generado por tools/publish.ps1
+Publicar/
+Publicar-practicacq.zip
+
 # Editor
 .vs/
 .vscode/
