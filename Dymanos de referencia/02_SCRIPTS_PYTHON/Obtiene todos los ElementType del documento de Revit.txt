@@ -1,0 +1,12 @@
+import clr
+clr.AddReference('RevitServices')
+from RevitServices.Persistence import DocumentManager
+doc = DocumentManager.Instance.CurrentDBDocument
+
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import FilteredElementCollector, ElementType
+
+# Obtener todos los ElementType del documento
+element_types = FilteredElementCollector(doc).OfClass(ElementType).ToElements()
+
+OUT = element_types

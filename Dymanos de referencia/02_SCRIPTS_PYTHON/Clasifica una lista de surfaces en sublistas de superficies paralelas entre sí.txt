@@ -1,0 +1,45 @@
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import Vector
+
+# Entradas
+superlistas = IN[0]
+# Ajusta la cantidad de decimales según la precisión que quieras (3 = tolerancia ~0.1°)
+decimales = 3
+
+def get_normal(surface):
+    try:
+        n = surface.NormalAtParameter(0.5, 0.5)
+        # Normalizamos
+        n = n.Normalized()
+        # Redondeamos cada componente
+        return [round(n.X, decimales), round(n.Y, decimales), round(n.Z, decimales)]
+    except:
+        return None
+
+def son_normales_equivalentes(n1, n2):
+    # Compara normal con su opuesta también (para paralelismo)
+    if n1 is None or n2 is None:
+        return False
+    return n1 == n2 or n1 == [-v for v in n2]
+
+resultado = []
+for sublista in superlistas:
+    grupos = []
+    normales = []
+    for surf in sublista:
+        n = get_normal(surf)
+        if n is None:
+            continue
+        agregado = False
+        for i, n_ref in enumerate(normales):
+            if son_normales_equivalentes(n, n_ref):
+                grupos[i].append(surf)
+                agregado = True
+                break
+        if not agregado:
+            grupos.append([surf])
+            normales.append(n)
+    resultado.append(grupos)
+
+OUT = resultado

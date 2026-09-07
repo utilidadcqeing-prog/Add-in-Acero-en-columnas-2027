@@ -1,0 +1,51 @@
+# -*- coding: utf-8 -*-
+# Dynamo CPython3
+# IN[0] = lista anidada de ELEMENTOS (OUT anterior)
+# IN[1] = lista anidada de TEXTOS paralelos (misma estructura y orden)
+# OUT   = IN[0] agrupado según los valores ÚNICOS de cada sublista de IN[1]
+#
+# Para cada sublista (hoja) de IN[1]:
+#   - Calcula los textos únicos en el orden de primera aparición (case-sensitive).
+#   - Crea en la sublista paralela de IN[0] una lista de grupos de elementos,
+#     uno por cada texto único.
+#
+# La estructura externa se conserva; solo cambian las hojas:
+#   [items]  -->  [[grupo_txt1], [grupo_txt2], ...]
+#
+from collections import OrderedDict
+
+def is_listlike(x):
+    return isinstance(x, (list, tuple))
+
+def uniq_preserve_order(seq):
+    """Valores únicos preservando el orden de primera aparición."""
+    seen = OrderedDict()
+    for v in seq:
+        if v not in seen:
+            seen[v] = True
+    return list(seen.keys())
+
+def group_leaf(elems, texts):
+    """Agrupa una sublista plana de elems por los textos (únicos en orden)."""
+    n = min(len(elems), len(texts))
+    elems = elems[:n]
+    texts = texts[:n]
+    keys  = uniq_preserve_order(texts)
+    # mantiene el orden original dentro de cada grupo
+    groups = [[e for e, t in zip(elems, texts) if t == k] for k in keys]
+    return groups
+
+def group_recursive(E, T):
+    """Recorre E/T y agrupa en las hojas, conservando la estructura exterior."""
+    # Si alguno no es lista, no se puede agrupar: devolver tal cual (caso atípico)
+    if not is_listlike(E) or not is_listlike(T):
+        return E
+    # ¿Hoja? (los hijos de T no son listas)
+    if not any(is_listlike(x) for x in T):
+        return group_leaf(list(E), list(T))
+    # Nivel intermedio: procesa sublistas en paralelo
+    m = min(len(E), len(T))
+    return [group_recursive(E[i], T[i]) for i in range(m)]
+
+# ---- Ejecuta ----
+OUT = group_recursive(IN[0], IN[1])

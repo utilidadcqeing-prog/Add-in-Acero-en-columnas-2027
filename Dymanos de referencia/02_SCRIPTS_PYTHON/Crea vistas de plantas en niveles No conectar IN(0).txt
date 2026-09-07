@@ -1,0 +1,255 @@
+# Dynamo CPython3 – Revit 2026
+# IN[1]: lista anidada -> Level por sublista
+# IN[2]: lista anidada -> Nombre de vista por sublista
+
+import clr
+clr.AddReference('RevitServices')
+from RevitServices.Persistence import DocumentManager
+from RevitServices.Transactions import TransactionManager
+
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import *
+
+clr.AddReference('System')
+from System import Enum
+from System.Collections.Generic import List
+
+doc = DocumentManager.Instance.CurrentDBDocument
+
+# ---------- helpers ----------
+def unwrap(x):
+    if x is None: return None
+    if hasattr(x, "InternalElement") and x.InternalElement is not None: return x.InternalElement
+    if hasattr(x, "InternalElementId") and x.InternalElementId is not None: return x.InternalElementId
+    return x
+
+def to_level(x):
+    while isinstance(x, list) and x: x = x[0]
+    x = unwrap(x)
+    if x is None: return None
+    if isinstance(x, Level): return x
+    if isinstance(x, ElementId):
+        el = doc.GetElement(x);  return el if isinstance(el, Level) else None
+    if isinstance(x, Element) and isinstance(x, Level): return x
+    return None
+
+def to_text(x):
+    while isinstance(x, list) and x: x = x[0]
+    return "" if x is None else str(x)
+
+def group_by_IN1_shape(A, B, C, acc):
+    if isinstance(B, list):
+        for i in range(len(B)):
+            a_i = A[i] if isinstance(A, list) and i < len(A) else A
+            b_i = B[i]
+            c_i = C[i] if isinstance(C, list) and i < len(C) else C
+            group_by_IN1_shape(a_i, b_i, c_i, acc)
+    else:
+        acc.append((A, B, C))
+
+def ordered_levels(document):
+    return sorted(FilteredElementCollector(document).OfClass(Level),
+                  key=lambda lv: lv.Elevation)
+
+def next_higher_level(document, level):
+    lvls = ordered_levels(document)
+    for i, lv in enumerate(lvls):
+        if lv.Id == level.Id and i+1 < len(lvls): return lvls[i+1]
+    return None
+
+def previous_lower_level(document, level):
+    lvls = ordered_levels(document)
+    for i, lv in enumerate(lvls):
+        if lv.Id == level.Id and i-1 >= 0: return lvls[i-1]
+    return None
+
+def get_floorplan_vft(document):
+    for vft in FilteredElementCollector(document).OfClass(ViewFamilyType):
+        if vft.ViewFamily == ViewFamily.FloorPlan: return vft
+    raise Exception("No se encontró ViewFamilyType para FloorPlan.")
+
+def _bic(name):
+    try: return Enum.Parse(BuiltInCategory, name)
+    except: return None
+
+def hide_categories(vp, names):
+    for nm in names:
+        bic = _bic(nm)
+        if not bic: continue
+        try:
+            cat = doc.Settings.Categories.get_Item(bic)
+            if cat and vp.CanCategoryBeHidden(cat.Id):
+                vp.SetCategoryHidden(cat.Id, True)
+        except: pass
+
+def find_view_by_name(name):
+    if not name: return None
+    for v in FilteredElementCollector(doc).OfClass(ViewPlan):
+        try:
+            if v.ViewType == ViewType.FloorPlan and v.Name == name:
+                return v
+        except: pass
+    return None
+
+def force_visuals(v):
+    # Colores coherentes + Detalle Alto (por propiedad y por parámetro)
+    try: v.DisplayStyle = DisplayStyle.ConsistentColors
+    except: pass
+    try: v.DetailLevel = ViewDetailLevel.Fine
+    except: pass
+    try:
+        p = v.get_Parameter(BuiltInParameter.MODEL_GRAPHICS_STYLE)
+        if p and not p.IsReadOnly: p.Set(int(DisplayStyle.ConsistentColors))
+    except: pass
+    try:
+        p2 = v.get_Parameter(BuiltInParameter.VIEW_DETAIL_LEVEL)
+        if p2 and not p2.IsReadOnly: p2.Set(int(ViewDetailLevel.Fine))
+    except: pass
+
+def hide_reference_planes_param(v):
+    try:
+        p = v.get_Parameter(BuiltInParameter.VIEWER_SHOW_REFERENCE_PLANES)
+        if p and not p.IsReadOnly: p.Set(0)
+    except: pass
+
+# Cache: ReferencePlanes para ocultarlos también por elemento
+ALL_REFPLANE_IDS = List[ElementId]()
+for rp in FilteredElementCollector(doc).OfClass(ReferencePlane):
+    ALL_REFPLANE_IDS.Add(rp.Id)
+
+# Conversiones de unidades (entradas en METROS)
+def m(val_m):
+    return UnitUtils.ConvertToInternalUnits(val_m, UnitTypeId.Meters)
+
+# ---- recortar a rejillas ----
+MARGIN_M = 0.05  # margen en metros alrededor de rejillas
+def crop_to_grids(vp):
+    """Ajusta el CropBox de la vista a los Grid visibles (con un margen). Si no hay, no cambia."""
+    grids = list(FilteredElementCollector(doc, vp.Id).OfClass(Grid))
+    if not grids:
+        return  # sin rejillas en la vista -> no tocar
+
+    # BoundingBox combinado en la vista
+    minX = minY = float('inf')
+    maxX = maxY = float('-inf')
+
+    for g in grids:
+        try:
+            bb = g.get_BoundingBox(vp)  # BB en coords del modelo recortadas por la vista
+            if bb is None: 
+                continue
+            minX = min(minX, bb.Min.X); minY = min(minY, bb.Min.Y)
+            maxX = max(maxX, bb.Max.X); maxY = max(maxY, bb.Max.Y)
+        except:
+            pass
+
+    if minX == float('inf') or minY == float('inf'):
+        return  # no se pudo calcular bb
+
+    # Usar Z del recorte actual para no cambiar altura
+    current_bb = vp.CropBox if vp.CropBox else BoundingBoxXYZ()
+    zmin = current_bb.Min.Z if current_bb and current_bb.Min else -10.0
+    zmax = current_bb.Max.Z if current_bb and current_bb.Max else  10.0
+
+    pad = m(MARGIN_M)
+    new_bb = BoundingBoxXYZ()
+    new_bb.Min = XYZ(minX - pad, minY - pad, zmin)
+    new_bb.Max = XYZ(maxX + pad, maxY + pad, zmax)
+    # Asegurar recorte activo/visible
+    try: vp.CropBoxActive = True
+    except: pass
+    try: vp.CropBoxVisible = True
+    except: pass
+    # Asignar
+    vp.CropBox = new_bb
+
+# ---------- entradas / agrupación ----------
+A, B, C = IN[0], IN[1], IN[2]
+raw = []
+group_by_IN1_shape(A, B, C, raw)
+
+by_view = {}  # name -> level
+for _, lvl_like, name_like in raw:
+    lvl = to_level(lvl_like)
+    name = to_text(name_like) or ("Planta_" + (str(lvl.Id.IntegerValue) if lvl else "SN"))
+    if name not in by_view or by_view[name] is None:
+        by_view[name] = lvl
+
+if len(by_view) > 400:
+    raise Exception("Se intentan crear/editar {} vistas (límite 400).".format(len(by_view)))
+
+# ---------- ejecutar ----------
+VFT_PLAN = get_floorplan_vft(doc)
+TransactionManager.Instance.EnsureInTransaction(doc)
+result_views = []
+
+for name, lvl in by_view.items():
+    vp = find_view_by_name(name)
+    if vp is None:
+        if lvl is None:  # sin Level no se puede crear
+            continue
+        vp = ViewPlan.Create(doc, VFT_PLAN.Id, lvl.Id)
+        try: vp.Name = name
+        except: pass
+
+    # ----- RANGO DE VISTA con regla "Ped" -----
+    if lvl is not None:
+        try:
+            vr = vp.GetViewRange()
+            is_ped = ("ped" in name.lower())
+
+            # Superior: Nivel superior
+            upper = next_higher_level(doc, lvl)
+            if upper:
+                vr.SetLevelId(PlanViewPlane.TopClipPlane, upper.Id)
+                vr.SetOffset(PlanViewPlane.TopClipPlane, m(1.00) if is_ped else m(0.00))
+            else:
+                vr.SetLevelId(PlanViewPlane.TopClipPlane, lvl.Id)
+                vr.SetOffset(PlanViewPlane.TopClipPlane, m(1000.0))  # emula ilimitado
+
+            # Corte: Asociado
+            vr.SetLevelId(PlanViewPlane.CutPlane, lvl.Id)
+            vr.SetOffset(PlanViewPlane.CutPlane, m(0.80) if is_ped else m(0.05))
+
+            # Inferior y Profundidad: Nivel inferior, 0.00 m
+            lower = previous_lower_level(doc, lvl)
+            if lower:
+                vr.SetLevelId(PlanViewPlane.BottomClipPlane, lower.Id); vr.SetOffset(PlanViewPlane.BottomClipPlane, m(0.00))
+                vr.SetLevelId(PlanViewPlane.ViewDepthPlane, lower.Id);  vr.SetOffset(PlanViewPlane.ViewDepthPlane,  m(0.00))
+            else:
+                vr.SetLevelId(PlanViewPlane.BottomClipPlane, lvl.Id);   vr.SetOffset(PlanViewPlane.BottomClipPlane, m(0.00))
+                vr.SetLevelId(PlanViewPlane.ViewDepthPlane, lvl.Id);    vr.SetOffset(PlanViewPlane.ViewDepthPlane,  m(0.00))
+
+            vp.SetViewRange(vr)
+        except: pass
+
+    # Estilo y detalle
+    force_visuals(vp)
+
+    # Ocultar categorías + referencia (parámetro + por elemento)
+    hide_categories(vp, [
+        "OST_Rebar","OST_FabricReinforcement","OST_AreaReinforcement",
+        "OST_PathReinforcement","OST_RebarCover","OST_RebarSet",
+        "OST_FabricAreas","OST_FabricationParts","OST_RebarShape",
+        "OST_RebarTags","OST_FabricReinforcementWire",
+        "OST_Lines","OST_DetailLines",
+        "OST_ReferencePlanes",
+        "OST_Stairs","OST_StairsRailing"
+    ])
+    hide_reference_planes_param(vp)
+    try:
+        if ALL_REFPLANE_IDS.Count > 0:
+            vp.HideElements(ALL_REFPLANE_IDS)
+    except: pass
+
+    # ---- Recorte pegado a rejillas (si hay) ----
+    try:
+        crop_to_grids(vp)
+    except:
+        pass
+
+    result_views.append(vp)
+
+TransactionManager.Instance.TransactionTaskDone()
+
+OUT = result_views

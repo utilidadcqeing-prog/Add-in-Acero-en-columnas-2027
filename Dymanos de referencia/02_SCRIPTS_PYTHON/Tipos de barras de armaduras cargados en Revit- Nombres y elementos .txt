@@ -1,0 +1,25 @@
+import clr
+
+clr.AddReference('RevitServices')
+from RevitServices.Persistence import DocumentManager
+doc = DocumentManager.Instance.CurrentDBDocument
+
+clr.AddReference('RevitAPI')
+from Autodesk.Revit.DB import FilteredElementCollector, ElementType, BuiltInParameter
+
+# Obtener todos los tipos de elemento
+types = FilteredElementCollector(doc).OfClass(ElementType).ToElements()
+
+# Filtrar solo tipos de barra de refuerzo usando nombre de clase
+bar_types = [t for t in types if t.GetType().Name == "RebarBarType"]
+
+# Leer nombre de tipo a través de parámetro 'SYMBOL_NAME_PARAM'
+names = []
+for bt in bar_types:
+    try:
+        name = bt.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString()
+    except:
+        name = "Sin nombre"
+    names.append(name)
+
+OUT = (names, bar_types)

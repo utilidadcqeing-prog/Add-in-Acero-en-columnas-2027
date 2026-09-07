@@ -1,0 +1,179 @@
+# Dynamo (CPython3) — Secuencia de arcos hasta repetir línea
+# IN[0]: lineas   -> Lista de Line (todas coplanares, en el mismo plano IN[3])
+# IN[1]: lineaRef -> Line (también está en IN[0])
+# IN[2]: radio    -> float
+# IN[3]: plano    -> Plane (se usa su XAxis/YAxis y normal; el círculo se ancla al centro correspondiente en cada paso)
+# IN[4]: sentido  -> int (1 = antihorario / CCW, -1 = horario / CW)
+#
+# OUT: [linea_inicial, lista_arcos, lista_lineas_intersectadas, lista_extremos_priorizados]
+#  - lista_arcos[i]               = arco i (Arc) en el sentido IN[4]
+#  - lista_lineas_intersectadas[i]= línea sobre la que termina el arco i (Line)
+#  - lista_extremos_priorizados[i]= extremo de esa línea, elegido:
+#       * inicialmente: el extremo MÁS LEJANO al punto final del arco i
+#       * PERO priorizando que NO quede "dentro" del arco i (distancia al centro del arco i >= radio - tol);
+#         si el más lejano queda dentro, se usa el otro extremo.
+#
+# La secuencia se DETIENE cuando un arco finaliza sobre una línea que ya apareció previamente
+# (incluida la línea inicial IN[1]).
+
+import clr, math
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+lineas   = IN[0]
+lineaRef = IN[1]
+radio    = float(IN[2])
+plano    = IN[3]
+sentido  = int(IN[4])
+
+TOL = 1e-6
+MAX_STEPS = max(1, len(lineas) * 2)  # límite de seguridad
+
+# ---------------------- Utilidades ---------------------- #
+def mismas_extremidades(l1, l2, tol=TOL):
+    a1, a2 = l1.StartPoint, l1.EndPoint
+    b1, b2 = l2.StartPoint, l2.EndPoint
+    return ((a1.DistanceTo(b1) <= tol and a2.DistanceTo(b2) <= tol) or
+            (a1.DistanceTo(b2) <= tol and a2.DistanceTo(b1) <= tol))
+
+def hallar_linea_en_lista(lst, ref):
+    try:
+        return lst[lst.index(ref)]  # misma instancia
+    except:
+        for l in lst:               # coincidencia geométrica
+            if mismas_extremidades(l, ref):
+                return l
+    return None
+
+def inters_circ_line(circ, ln):
+    pts = circ.Intersect(ln)
+    return [p for p in (pts or []) if isinstance(p, Point)]
+
+def angulo_en_plano(center, pt, xaxis, yaxis):
+    v = Vector.ByTwoPoints(center, pt)
+    x = v.Dot(xaxis); y = v.Dot(yaxis)
+    a = math.atan2(y, x)  # [-pi,pi]
+    return a if a >= 0 else (a + 2*math.pi)
+
+def delta_angular(a_from, a_to, dir_sign):
+    # Delta positivo siguiendo el sentido: 1=CCW, -1=CW
+    return ((a_to - a_from) % (2*math.pi)) if dir_sign >= 0 else ((a_from - a_to) % (2*math.pi))
+
+def punto_en_circulo(center, xaxis, yaxis, r, ang):
+    vx = xaxis.Normalized().Scale(r * math.cos(ang))
+    vy = yaxis.Normalized().Scale(r * math.sin(ang))
+    return center.Add(vx.Add(vy))
+
+def extremos_priorizado_fuera_circulo(ln, end_pt, centro_arco, r, tol=TOL):
+    """Devuelve (extremo_priorizado, extremo_restante) priorizando que NO esté dentro del círculo del arco."""
+    pA, pB = ln.StartPoint, ln.EndPoint
+    # Primero el más lejano respecto a end_pt
+    far, other = (pA, pB) if pA.DistanceTo(end_pt) >= pB.DistanceTo(end_pt) else (pB, pA)
+    # Prioriza que quede FUERA del círculo (distancia al centro >= r - tol)
+    if far.DistanceTo(centro_arco) >= (r - tol):
+        return far, other
+    else:
+        # si el "far" cae dentro, usa el otro
+        return other, far
+
+# ---------------------- Preparación ---------------------- #
+linea_inicial = hallar_linea_en_lista(lineas, lineaRef)
+if linea_inicial is None:
+    OUT = [None, [], [], []]
+else:
+    # Visitados por identidad de objeto (misma referencia en IN[0])
+    visitados = set([id(linea_inicial)])
+
+    arcos   = []
+    lns_end = []
+    extremos = []
+
+    # Paso 1: centro en StartPoint de la línea inicial
+    centro = linea_inicial.StartPoint
+    xax, yax = plano.XAxis, plano.YAxis
+
+    # Círculo 1
+    pln_c = Plane.ByOriginXAxisYAxis(centro, xax, yax)
+    circ  = Circle.ByPlaneRadius(pln_c, radio)
+
+    # Punto de inicio 1: intersección con linea_inicial, tomando el que avanza Start->End de la línea
+    pts0 = inters_circ_line(circ, linea_inicial)
+    if not pts0:
+        OUT = [linea_inicial, [], [], []]
+    else:
+        vdir = Vector.ByTwoPoints(linea_inicial.StartPoint, linea_inicial.EndPoint).Normalized()
+        start = None; best = -1e9
+        for p in pts0:
+            val = vdir.Dot(Vector.ByTwoPoints(centro, p))
+            if val > best + TOL:
+                best, start = val, p
+        if start is None:
+            OUT = [linea_inicial, [], [], []]
+        else:
+            prev_end = None  # para pasos siguientes
+
+            # ---------------------- Bucle principal ---------------------- #
+            steps = 0
+            while steps < MAX_STEPS:
+                # Ángulo de partida para este arco:
+                # - En paso 0 (primer arco), lo tomamos del propio "start"
+                # - En pasos siguientes, partimos mirando hacia el end del arco previo
+                if steps == 0:
+                    a0 = angulo_en_plano(centro, start, xax, yax)
+                    start_pt = start
+                else:
+                    a0 = angulo_en_plano(centro, prev_end, xax, yax)
+                    start_pt = punto_en_circulo(centro, xax, yax, radio, a0)
+
+                # Buscar la PRIMERA intersección (mínimo delta angular > 0) con cualquier línea
+                mejor_delta = None
+                end_pt = None
+                linea_hit = None
+
+                for l in lineas:
+                    pts = inters_circ_line(circ, l)
+                    if not pts:
+                        continue
+                    for p in pts:
+                        if p.DistanceTo(start_pt) <= TOL:
+                            continue  # evita arrancar y terminar en el mismo punto
+                        ai = angulo_en_plano(centro, p, xax, yax)
+                        d = delta_angular(a0, ai, sentido)
+                        if d <= TOL:
+                            continue
+                        if (mejor_delta is None) or (d < mejor_delta):
+                            mejor_delta, end_pt, linea_hit = d, p, l
+
+                if end_pt is None or linea_hit is None:
+                    break  # no hay más intersecciones válidas en este sentido
+
+                # Construir el arco del paso
+                amid = a0 + sentido * (mejor_delta / 2.0)
+                mid  = punto_en_circulo(centro, xax, yax, radio, amid)
+                arco = Arc.ByThreePoints(start_pt, mid, end_pt)
+
+                # Elegir extremo priorizado de la línea donde terminó el arco
+                extremo_ok, extremo_rest = extremos_priorizado_fuera_circulo(
+                    linea_hit, end_pt, centro, radio, TOL
+                )
+
+                # Guardar resultados del paso
+                arcos.append(arco)
+                lns_end.append(linea_hit)
+                extremos.append(extremo_ok)
+
+                # Condición de parada: si la línea_hit ya estaba en visitados, detenemos aquí
+                ya_vista = id(linea_hit) in visitados
+                visitados.add(id(linea_hit))
+                if ya_vista:
+                    break
+
+                # Preparar siguiente paso:
+                prev_end = end_pt
+                centro   = extremo_ok          # nuevo centro
+                pln_c    = Plane.ByOriginXAxisYAxis(centro, xax, yax)
+                circ     = Circle.ByPlaneRadius(pln_c, radio)
+
+                steps += 1
+
+            OUT = [linea_inicial, arcos, lns_end, extremos]

@@ -1,0 +1,352 @@
+{
+  "Uuid": "183e4c64-47eb-426a-b0c7-5d85c9cf98b4",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "Da los parametros para poder crear estribos",
+  "Name": "Datos_Entrada_Estribos_RebarByCurves",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "02_RebarHookType_Stirrup/Tie_135_deg.",
+      "Id": "4821758d151c4e0bb76ec7ee069e664c",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "aa8a191107a047ee859469a334d7b5c7",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "01_Rebar_Style_STirrupTie",
+      "Id": "a9ed0d9227984cb3bfa3331efdb80cc1",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "d63bf1474a844151906056eb7d2128eb",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "03_Rebar_Hooke_Orientation_Right",
+      "Id": "cc6637ad2406466fb55cb222740a0878",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "bdea8bb01a164744bcdd5f9eaa5a9836",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "04_Rebar_Hooke_Orientation_Left",
+      "Id": "5b0c38fe08914006a50f81f0b96de29f",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "817c6d999fda4cc5a2924d0cf96037b8",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "SerializedWidth": 0.0,
+      "SerializedHeight": 0.0,
+      "Id": "2bf06f16ce4044608eb5e6855c5b4199",
+      "NodeType": "StringInputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "054f24b73dba4252b5158f4ad70ffc8d",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Crea una cadena.",
+      "InputValue": "StirrupTie"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "SerializedWidth": 0.0,
+      "SerializedHeight": 0.0,
+      "Id": "d8cb1bd5db4b494f9ef0a4cd08a5a008",
+      "NodeType": "StringInputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "048f7a91b2f64853b48b2df7008820ff",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Crea una cadena.",
+      "InputValue": "Right"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Input.StringInput, CoreNodeModels",
+      "SerializedWidth": 0.0,
+      "SerializedHeight": 0.0,
+      "Id": "fc46288e4e5441e480fdc2797f8f75a3",
+      "NodeType": "StringInputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "17609a7d2ff64e9f8dcd8aafa46dc49b",
+          "Name": "",
+          "Description": "String",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Crea una cadena.",
+      "InputValue": "Left"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "ab87dee2-70d5-4026-b17a-d4858018604c",
+      "FunctionType": "Graph",
+      "Id": "9871395cd80149a98fdc6a951ffc4c1a",
+      "NodeType": "FunctionNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f1b2c6d6af5046c7a34d61cc0d970a51",
+          "Name": "Standard - 90 deg.",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "d212f215d7d34bb88cc15495e48477a6",
+          "Name": "Standard - 180 deg.",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2e167111771d440697fdf60fee846fb6",
+          "Name": "Stirrup/Tie Seismic - 135 deg.",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Obtiene las formas de gancho de armaduras"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "054f24b73dba4252b5158f4ad70ffc8d",
+      "End": "d63bf1474a844151906056eb7d2128eb",
+      "Id": "727b9795811749b1acd18bb591c06e8d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "048f7a91b2f64853b48b2df7008820ff",
+      "End": "bdea8bb01a164744bcdd5f9eaa5a9836",
+      "Id": "e30976786e4848369f1059b7954c9780",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "17609a7d2ff64e9f8dcd8aafa46dc49b",
+      "End": "817c6d999fda4cc5a2924d0cf96037b8",
+      "Id": "acd77cace646425da28eec5ec3f9ab30",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2e167111771d440697fdf60fee846fb6",
+      "End": "aa8a191107a047ee859469a334d7b5c7",
+      "Id": "ee04ca12613949cf9da6faa01b9018b9",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "ab87dee2-70d5-4026-b17a-d4858018604c"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Rebar_Hook_Type.dyf",
+      "ReferenceType": "DYFFile",
+      "Nodes": [
+        "9871395cd80149a98fdc6a951ffc4c1a"
+      ]
+    }
+  ],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.5.2.8914",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": -10.131853103637695,
+      "EyeY": 4.6522321701049805,
+      "EyeZ": -2.2671875953674316,
+      "LookX": 5.958455562591553,
+      "LookY": -3.9644980430603027,
+      "LookZ": -2.2646613121032715,
+      "UpX": 0.3120291531085968,
+      "UpY": 0.9426416158676147,
+      "UpZ": -0.11859475821256638
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "4821758d151c4e0bb76ec7ee069e664c",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1190.4592083931543,
+        "Y": 43.475161987041076
+      },
+      {
+        "Id": "a9ed0d9227984cb3bfa3331efdb80cc1",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1440.6579181377874,
+        "Y": -219.88490467786164
+      },
+      {
+        "Id": "cc6637ad2406466fb55cb222740a0878",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1079.7399859309517,
+        "Y": 225.3758099352051
+      },
+      {
+        "Id": "5b0c38fe08914006a50f81f0b96de29f",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1081.9817509472746,
+        "Y": 409.20054127367894
+      },
+      {
+        "Id": "2bf06f16ce4044608eb5e6855c5b4199",
+        "Name": "String",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 543.3452933486356,
+        "Y": -230.50640619388602
+      },
+      {
+        "Id": "d8cb1bd5db4b494f9ef0a4cd08a5a008",
+        "Name": "String",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 460.0398578931985,
+        "Y": 216.93825228325582
+      },
+      {
+        "Id": "fc46288e4e5441e480fdc2797f8f75a3",
+        "Name": "String",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 460.89867681541944,
+        "Y": 344.9022716941852
+      },
+      {
+        "Id": "9871395cd80149a98fdc6a951ffc4c1a",
+        "Name": "Rebar_Hook_Type",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 810.6613126148831,
+        "Y": -196.45793509860107
+      }
+    ],
+    "Annotations": [],
+    "X": 128.55398529970273,
+    "Y": 351.016593978438,
+    "Zoom": 0.905858507494123
+  }
+}

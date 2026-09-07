@@ -1,0 +1,603 @@
+{
+  "Uuid": "4ee8d3b5-e800-4b30-8cc3-54d187dec1a0",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "",
+  "Name": "Rebar_Estribos_135deg",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\n#//\r\nclr.AddReference('RevitAPI')\r\n#//\r\nfrom Autodesk.Revit.DB import *\r\n#//\r\nfrom Autodesk.Revit.DB.Structure import *\r\n#//\r\nclr.AddReference('RevitServices')\r\n#//\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n#//\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n#//\r\nimport System\r\nfrom System.Collections.Generic import List\r\n#//\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n#//\r\n\r\n\r\n#//\r\ndef flatten_and_get_revit_curves(curves):\r\n    \"\"\"Profundiza cualquier lista, ignora None, convierte PolyCurve y curvas simples.\"\"\"\r\n    result = []\r\n    if curves is None:\r\n        return result\r\n    if isinstance(curves, list):\r\n        for c in curves:\r\n            result.extend(flatten_and_get_revit_curves(c))\r\n    else:\r\n        try:\r\n            # PolyCurve\r\n            for sc in curves.Curves:\r\n                try:\r\n                    result.append(sc.ToRevitType())\r\n                except:\r\n                    continue\r\n        except:\r\n            try:\r\n                result.append(curves.ToRevitType())\r\n            except:\r\n                pass\r\n    return result\r\nOUT = flatten_and_get_revit_curves(IN[0])",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "9b297c959d084aa488f0af5d8faa39fa",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "51e4eae54e8e4209afcfc3e0a0ed2e28",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "28453c7b43fd4d5d988e7399410de29a",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "from Autodesk.Revit.DB import XYZ\r\n\r\nnorm_in = IN[0]  # <-- ¡No olvides esta línea!\r\nnorm = None\r\ntry:\r\n    # Si es un Vector de Dynamo\r\n    norm = norm_in.ToXyz()\r\nexcept:\r\n    try:\r\n        # Si ya es un XYZ de Revit\r\n        _ = norm_in.X\r\n        norm = norm_in\r\n    except:\r\n        try:\r\n            # Si es una lista/tupla de 3 números\r\n            if isinstance(norm_in, (list, tuple)) and len(norm_in) == 3:\r\n                norm = XYZ(*norm_in)\r\n        except:\r\n            norm = None\r\n\r\nOUT = norm\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "922ffaae92af4b0c9115b9530a8f0702",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "7109a28ea47942ab912c5c4607bad630",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "cee7dd85af88440fb4b602b98718d87c",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import Curve, XYZ, Line\r\n\r\n# IN[0]: Lista de Autodesk.Revit.DB.Curve (loop)\r\n# IN[1]: Vector normal deseado (Autodesk.Revit.DB.XYZ)\r\ncurves = IN[0]\r\ndesired_norm = IN[1]\r\nTOL = 1e-7\r\n\r\ndef points_equal(p1, p2, tol=TOL):\r\n    return (abs(p1.X - p2.X) < tol) and (abs(p1.Y - p2.Y) < tol) and (abs(p1.Z - p2.Z) < tol)\r\n\r\ndef reorder_curves(curves):\r\n    # Ordena las curvas para que cada final coincida con el inicio de la siguiente\r\n    if not curves: return []\r\n    ordered = [curves[0]]\r\n    curves_left = list(curves[1:])\r\n    while curves_left:\r\n        end_pt = ordered[-1].GetEndPoint(1)\r\n        found = False\r\n        for idx, c in enumerate(curves_left):\r\n            if points_equal(end_pt, c.GetEndPoint(0)):\r\n                ordered.append(c)\r\n                del curves_left[idx]\r\n                found = True\r\n                break\r\n            elif points_equal(end_pt, c.GetEndPoint(1)):\r\n                # Invierte la curva si está al revés\r\n                if hasattr(c, \"CreateReversed\"):\r\n                    c_rev = c.CreateReversed()\r\n                    ordered.append(c_rev)\r\n                else:\r\n                    c_rev = Line.CreateBound(c.GetEndPoint(1), c.GetEndPoint(0))\r\n                    ordered.append(c_rev)\r\n                del curves_left[idx]\r\n                found = True\r\n                break\r\n        if not found:\r\n            # No se pudo cerrar, aborta\r\n            break\r\n    return ordered\r\n\r\ndef adjust_curve_loop_points(curves, tol=TOL):\r\n    # Ajusta los finales de líneas para que coincidan con el inicio de la siguiente\r\n    n = len(curves)\r\n    fixed = []\r\n    for i in range(n):\r\n        c = curves[i]\r\n        p_start = c.GetEndPoint(0)\r\n        p_end = c.GetEndPoint(1)\r\n        p_next = curves[(i+1)%n].GetEndPoint(0)\r\n        # Solo para líneas, ajusta el punto final\r\n        if not points_equal(p_end, p_next, tol) and isinstance(c, Line):\r\n            fixed.append(Line.CreateBound(p_start, p_next))\r\n        else:\r\n            fixed.append(c)\r\n    return fixed\r\n\r\ndef force_close_loop(curves, tol=TOL):\r\n    # Si el último punto no coincide con el primero, corrige la última curva\r\n    n = len(curves)\r\n    if n < 2:\r\n        return curves\r\n    first_pt = curves[0].GetEndPoint(0)\r\n    last_curve = curves[-1]\r\n    last_pt_start = last_curve.GetEndPoint(0)\r\n    last_pt_end = last_curve.GetEndPoint(1)\r\n    if not points_equal(last_pt_end, first_pt, tol):\r\n        # Si la última curva es una línea, la recrea para que termine justo en el inicio\r\n        if isinstance(last_curve, Line):\r\n            curves[-1] = Line.CreateBound(last_pt_start, first_pt)\r\n    return curves\r\n\r\ndef get_loop_normal(curves):\r\n    # Usa los tres primeros puntos para calcular el plano\r\n    if len(curves) < 2:\r\n        return None\r\n    p0 = curves[0].GetEndPoint(0)\r\n    p1 = curves[0].GetEndPoint(1)\r\n    p2 = curves[1].GetEndPoint(1)\r\n    v1 = XYZ(p1.X - p0.X, p1.Y - p0.Y, p1.Z - p0.Z)\r\n    v2 = XYZ(p2.X - p1.X, p2.Y - p1.Y, p2.Z - p1.Z)\r\n    nx = v1.Y * v2.Z - v1.Z * v2.Y\r\n    ny = v1.Z * v2.X - v1.X * v2.Z\r\n    nz = v1.X * v2.Y - v1.Y * v2.X\r\n    mag = (nx**2 + ny**2 + nz**2)**0.5\r\n    if mag == 0:\r\n        return None\r\n    return XYZ(nx/mag, ny/mag, nz/mag)\r\n\r\ndef same_direction(vec1, vec2):\r\n    dot = vec1.X*vec2.X + vec1.Y*vec2.Y + vec1.Z*vec2.Z\r\n    return dot >= 0\r\n\r\n# 1. Reordena para cerrar el loop\r\ncurves_ordered = reorder_curves(curves)\r\n# 2. Ajusta puntos finales para cerrar perfectamente\r\ncurves_closed = adjust_curve_loop_points(curves_ordered, TOL)\r\n# 3. Fuerza cierre perfecto del loop\r\ncurves_closed = force_close_loop(curves_closed, TOL)\r\n# 4. Calcula la normal\r\nloop_norm = get_loop_normal(curves_closed)\r\n# 5. Orienta según la normal deseada\r\nif loop_norm and desired_norm:\r\n    if not same_direction(loop_norm, desired_norm):\r\n        curves_closed = curves_closed[::-1]\r\n        # Forzar de nuevo el cierre después de invertir\r\n        curves_closed = adjust_curve_loop_points(curves_closed, TOL)\r\n        curves_closed = force_close_loop(curves_closed, TOL)\r\n\r\n# Última validación\r\ndef is_curve_loop(curves, tol=TOL):\r\n    n = len(curves)\r\n    for i in range(n):\r\n        p_end = curves[i].GetEndPoint(1)\r\n        p_next = curves[(i+1)%n].GetEndPoint(0)\r\n        if not points_equal(p_end, p_next, tol):\r\n            return False\r\n    return True\r\n\r\nif is_curve_loop(curves_closed, TOL):\r\n    OUT = curves_closed\r\nelse:\r\n    OUT = \"Error: Las curvas aún NO forman un CurveLoop válido.\"\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "d413dccb72524ee98e4c0680180fac7d",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "8ae72fe8d841446ea227209570c7568f",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "23fe91efb50f49419c488c8a9f13fd3e",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "6f8e9a5f92eb4b859009f6e3e925e9a8",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "9ff5740d-4b04-4133-87bb-bbbfb80cf046",
+      "FunctionType": "Graph",
+      "Id": "7b1235cd252a4e07bf4069babe464ef8",
+      "NodeType": "FunctionNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "577448222c6f4e64b18b34b1640cde3b",
+          "Name": "Standard - 90 deg.",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "dfbeaef8ea8246019923f88471acc848",
+          "Name": "Standard - 180 deg.",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "7078f5583ce5469b88969b8cd38efa8b",
+          "Name": "Stirrup/Tie Seismic - 135 deg.",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Obtiene las formas de gancho de armaduras"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB.Structure import *\r\n\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.Elements)\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\n\r\nimport System\r\nfrom System.Collections.Generic import List\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\n# ENTRADAS\r\nrevit_curves = IN[0]                 # Lista de Autodesk.Revit.DB.Curve (ya lista y plana)\r\nhost = UnwrapElement(IN[1])          # Elemento host (viga, columna, etc.)\r\nrebar_type = UnwrapElement(IN[2])    # Tipo de barra (RebarBarType)\r\nhook_type = UnwrapElement(IN[3])     # Tipo de gancho 135° (RebarHookType)\r\nnorm_in = IN[4]                      # Vector normal (puede ser Vector de Dynamo o XYZ de Revit)\r\n\r\n# --- Conversión del vector normal ---\r\nif hasattr(norm_in, \"ToXyz\"):\r\n    norm = norm_in.ToXyz()  # Vector de Dynamo a XYZ de Revit\r\nelif isinstance(norm_in, XYZ):\r\n    norm = norm_in          # Ya es un XYZ\r\nelse:\r\n    norm = None\r\n\r\n# Validación rápida de la normal\r\nif not norm or not hasattr(norm, \"X\"):\r\n    OUT = \"Error: El vector normal (IN[4]) está vacío o no es Autodesk.Revit.DB.XYZ\"\r\nelse:\r\n    rebar_style = RebarStyle.StirrupTie\r\n    useExistingShapeIfPossible = False\r\n    createNewShape = True\r\n\r\n    bar_terminations = BarTerminationsData(doc)\r\n    bar_terminations.HookTypeIdAtStart = hook_type.Id\r\n    bar_terminations.HookTypeIdAtEnd = hook_type.Id\r\n\r\n    TransactionManager.Instance.EnsureInTransaction(doc)\r\n    try:\r\n        rebar = Rebar.CreateFromCurves(\r\n            doc,\r\n            rebar_style,\r\n            rebar_type,\r\n            host,\r\n            norm,\r\n            List[Curve](revit_curves),\r\n            bar_terminations,\r\n            useExistingShapeIfPossible,\r\n            createNewShape\r\n        )\r\n        OUT = rebar.ToDSType(False)\r\n    except Exception as e:\r\n        OUT = \"Error: {}\".format(e)\r\n    TransactionManager.Instance.TransactionTaskDone()\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "c930a0a48cf24e88b81a8757338ca5c5",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "f2c2161962f84c579aab3c12b54881ea",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "cb04002a09c74dbd975b67215d634c0a",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "98b5623e7fc84ee29534e63944ce4efa",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "bbf23fbff0ca4693899f052be9ab4e21",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "4af4b56429be4b47ad61cfa31867c3ea",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "49a6f88cb2ac4c989747b15367b46a50",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Curvas",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "09ac96056c234d55ba796dc24856d333",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "45d22a30f6b24868ae3e894a9fb6f42e",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "vector",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "daa9f93dbaaf4497ad9cbf39cb4d4f13",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "4b55adf02900471aa51e54ad74653056",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Host_Element",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "9fb8c98771ea42018be41a44ba0385e3",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "28b06f1e65af428cadbfaebfaf6b2f33",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Rebar_Bar_Type",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "30471ee5ac8d4770bb40672bbf2e2187",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "b142b11e35f046a7a40ffa6e1d353db1",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Rebar",
+      "Id": "cc71e1447dbf4738aa544a591b48b07f",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "84f1cd24ab074aceabf1cc6a9928213c",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Watch, CoreNodeModels",
+      "WatchWidth": 200.0,
+      "WatchHeight": 200.0,
+      "Id": "e80cb96f19ee4596af84d78eebe5a9e1",
+      "NodeType": "ExtensionNode",
+      "Inputs": [
+        {
+          "Id": "10dd88a38c834c748ffb8047132be216",
+          "Name": "",
+          "Description": "Nodo desde el que se mostrará la salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "bdb97a30025249d1af03a609b81c7b76",
+          "Name": "",
+          "Description": "Salida del nodo",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Muestra la salida de un nodo."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "28453c7b43fd4d5d988e7399410de29a",
+      "End": "8ae72fe8d841446ea227209570c7568f",
+      "Id": "6e481d2e538d43bfb970877d5f7f51ac",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cee7dd85af88440fb4b602b98718d87c",
+      "End": "4af4b56429be4b47ad61cfa31867c3ea",
+      "Id": "2e018c591ba34c368528c6e57136f0dc",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "6f8e9a5f92eb4b859009f6e3e925e9a8",
+      "End": "f2c2161962f84c579aab3c12b54881ea",
+      "Id": "52aae011b17245ebb4a41413e568ce9a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7078f5583ce5469b88969b8cd38efa8b",
+      "End": "bbf23fbff0ca4693899f052be9ab4e21",
+      "Id": "91efd66372ae433eb687e84b5c4fab1d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "49a6f88cb2ac4c989747b15367b46a50",
+      "End": "84f1cd24ab074aceabf1cc6a9928213c",
+      "Id": "a6928738127642fda22cbf44db622450",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "45d22a30f6b24868ae3e894a9fb6f42e",
+      "End": "51e4eae54e8e4209afcfc3e0a0ed2e28",
+      "Id": "2b5fc33046234ea0ae3de4d9d354a954",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4b55adf02900471aa51e54ad74653056",
+      "End": "23fe91efb50f49419c488c8a9f13fd3e",
+      "Id": "58e95dc82eda43e2b8266acb9409391e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4b55adf02900471aa51e54ad74653056",
+      "End": "7109a28ea47942ab912c5c4607bad630",
+      "Id": "a9174274b7b144fe9f62a8d5b7549d9e",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4b55adf02900471aa51e54ad74653056",
+      "End": "10dd88a38c834c748ffb8047132be216",
+      "Id": "709d2ad75b314d748b5e39f19bd34e49",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "28b06f1e65af428cadbfaebfaf6b2f33",
+      "End": "cb04002a09c74dbd975b67215d634c0a",
+      "Id": "3dae7e5701cd4908a988170badd7297b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "b142b11e35f046a7a40ffa6e1d353db1",
+      "End": "98b5623e7fc84ee29534e63944ce4efa",
+      "Id": "013cdab87c6146dfa75ad7ba3dce3fa8",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "9ff5740d-4b04-4133-87bb-bbbfb80cf046"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Rebar_Hook_Type.dyf",
+      "ReferenceType": "DYFFile",
+      "Nodes": [
+        "7b1235cd252a4e07bf4069babe464ef8"
+      ]
+    }
+  ],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.6.0.9395",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": 1.2798447608947754,
+      "EyeY": 5.899983882904053,
+      "EyeZ": -15.136310577392578,
+      "LookX": 6.152217864990234,
+      "LookY": -4.933286190032959,
+      "LookZ": 3.2281017303466797,
+      "UpX": 0.5126466751098633,
+      "UpY": 0.8153592944145203,
+      "UpZ": 0.26904046535491943
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "9b297c959d084aa488f0af5d8faa39fa",
+        "Name": "Aplana lista y transforma curvas de Dynamo a Revit",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 265.8687851034092,
+        "Y": 153.68617671633342
+      },
+      {
+        "Id": "922ffaae92af4b0c9115b9530a8f0702",
+        "Name": "Python Script",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1014.5315757568151,
+        "Y": 879.9175519103619
+      },
+      {
+        "Id": "d413dccb72524ee98e4c0680180fac7d",
+        "Name": "Python Script",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1005.7029626225333,
+        "Y": 297.0370671461701
+      },
+      {
+        "Id": "7b1235cd252a4e07bf4069babe464ef8",
+        "Name": "Rebar_Hook_Type",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1003.9242022618837,
+        "Y": 672.7563723550402
+      },
+      {
+        "Id": "c930a0a48cf24e88b81a8757338ca5c5",
+        "Name": "Python Script",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1546.12248119789,
+        "Y": 442.80375533159804
+      },
+      {
+        "Id": "09ac96056c234d55ba796dc24856d333",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -384.55981223298954,
+        "Y": 206.4596579387354
+      },
+      {
+        "Id": "daa9f93dbaaf4497ad9cbf39cb4d4f13",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -230.93842958714458,
+        "Y": 1105.6853613736705
+      },
+      {
+        "Id": "9fb8c98771ea42018be41a44ba0385e3",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -396.5897486672477,
+        "Y": 567.8603384819304
+      },
+      {
+        "Id": "30471ee5ac8d4770bb40672bbf2e2187",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -384.27595868946105,
+        "Y": 832.6068230043471
+      },
+      {
+        "Id": "cc71e1447dbf4738aa544a591b48b07f",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1879.052451901012,
+        "Y": 488.2349052467564
+      },
+      {
+        "Id": "e80cb96f19ee4596af84d78eebe5a9e1",
+        "Name": "Watch",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 508.2023101108176,
+        "Y": 1133.9638949470914
+      }
+    ],
+    "Annotations": [],
+    "X": -3135.71465835842,
+    "Y": -1142.4200320735172,
+    "Zoom": 2.6569916832225404
+  }
+}

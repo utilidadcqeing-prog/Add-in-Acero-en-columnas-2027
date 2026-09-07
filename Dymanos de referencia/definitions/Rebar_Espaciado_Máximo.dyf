@@ -1,0 +1,404 @@
+{
+  "Uuid": "508ca839-e1c8-407c-8ba7-7b97d1dcf6f6",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "",
+  "Name": "Rebar_Espaciado_Máximo",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\n\r\nclr.AddReference('RevitServices')\r\nimport RevitServices\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\nfrom Autodesk.Revit.DB.Structure import *\r\n\r\nclr.AddReference(\"System\")\r\nfrom System.Collections.Generic import List\r\n\r\nclr.AddReference('RevitNodes')\r\nimport Revit\r\nclr.ImportExtensions(Revit.GeometryConversion)\r\nclr.ImportExtensions(Revit.Elements)\r\n\r\ndef get_input(idx, default=None):\r\n    try:\r\n        val = IN[idx]\r\n        if val is None:\r\n            return default\r\n        return val\r\n    except IndexError:\r\n        return default\r\n\r\ndef ensure_list(x):\r\n    if isinstance(x, list):\r\n        return x\r\n    else:\r\n        return [x]\r\n\r\n# Entradas\r\nrebarElements = ensure_list(UnwrapElement(get_input(0)))\r\nspacing = get_input(1, 0)\r\narrayLengths = ensure_list(get_input(2, 0))  # Puede ser lista o escalar\r\nbarsOnNormalSide = get_input(3, True)\r\ninclFirstBar = bool(get_input(4, True))\r\ninclLastBar = bool(get_input(5, True))\r\nconvertUnits = get_input(6, False)\r\n\r\nif spacing == 0 or not rebarElements or not arrayLengths:\r\n    OUT = \"Error: Entrada(s) inválida(s).\"\r\nelse:\r\n    # Conversión de unidades si aplica\r\n    if convertUnits:\r\n        spacing /= 304.8\r\n        arrayLengths = [x/304.8 for x in arrayLengths]\r\n    else:\r\n        arrayLengths = [float(x) for x in arrayLengths]\r\n\r\n    # Si sólo hay un valor de longitud, repetir para todos\r\n    if len(arrayLengths) == 1 and len(rebarElements) > 1:\r\n        arrayLengths = arrayLengths * len(rebarElements)\r\n\r\n    # Si las longitudes y barras no coinciden, error\r\n    if len(arrayLengths) != len(rebarElements):\r\n        OUT = \"Error: El número de barras y longitudes no coincide.\"\r\n    else:\r\n        TransactionManager.Instance.EnsureInTransaction(doc)\r\n        outList = []\r\n        for i, rebarElement in enumerate(rebarElements):\r\n            if rebarElement is None:\r\n                outList.append(\"Elemento nulo\")\r\n                continue\r\n            sda = rebarElement.GetShapeDrivenAccessor()\r\n            RebarShapeDrivenAccessor.SetLayoutAsMaximumSpacing(\r\n                sda, spacing, arrayLengths[i], barsOnNormalSide, inclFirstBar, inclLastBar\r\n            )\r\n            outList.append(rebarElement)\r\n        TransactionManager.Instance.TransactionTaskDone()\r\n        doc.Regenerate()\r\n        uidoc = DocumentManager.Instance.CurrentUIApplication.ActiveUIDocument\r\n        uidoc.RefreshActiveView()\r\n        OUT = outList\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "18960f384dd14982bf198c0f61be7123",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "bd4c1749cf9546a8a1d5eb9ba99c0c36",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c15ca12f5a224482b68051b0802bd948",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "bed98a26093d474e9a0f39508fe179a9",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "bdd11d590566413fa54b1afbf85eb0df",
+          "Name": "IN[3]",
+          "Description": "Input #3",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9fae0cb8ec9b49f0a745a1ce89204695",
+          "Name": "IN[4]",
+          "Description": "Input #4",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "9f41938536ba4207b73e7870f64ab471",
+          "Name": "IN[5]",
+          "Description": "Input #5",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "654546b90eb14c9a9f3cbe54bfcd37ba",
+          "Name": "IN[6]",
+          "Description": "Input #6",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "dec39a6655c448cfbec24c630b04c949",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "UnitsUI.DynamoUnitConvert, UnitsNodeModels",
+      "MeasurementType": "autodesk.unit.quantity:length-1.0.5",
+      "FromConversion": "autodesk.unit.unit:meters-1.0.0",
+      "ToConversion": "autodesk.unit.unit:feet-1.0.1",
+      "Id": "1e3f96246f95462b8d88587ce3585b59",
+      "NodeType": "ExtensionNode",
+      "Inputs": [
+        {
+          "Id": "f05157d53f734c12b183a9bb03eb4210",
+          "Name": "",
+          "Description": "A value to convert",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "9d5e6a9ee3174d4aa912dfea3c9ac502",
+          "Name": "",
+          "Description": "Converted value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Converts a value between selected unit systems"
+    },
+    {
+      "ConcreteType": "UnitsUI.DynamoUnitConvert, UnitsNodeModels",
+      "MeasurementType": "autodesk.unit.quantity:length-1.0.5",
+      "FromConversion": "autodesk.unit.unit:meters-1.0.0",
+      "ToConversion": "autodesk.unit.unit:feet-1.0.1",
+      "Id": "9199e94a5c964127bd655471d171c2d8",
+      "NodeType": "ExtensionNode",
+      "Inputs": [
+        {
+          "Id": "359406035075419cbc3c26b70e75f256",
+          "Name": "",
+          "Description": "A value to convert",
+          "UsingDefaultValue": true,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "619d489ce15441b687bfbbf0f6856a60",
+          "Name": "",
+          "Description": "Converted value",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Converts a value between selected unit systems"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Rebar",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "9ce077a64f4c4c3aba82932c6f0b661d",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3fc8f7945c6e4bc595f1d71b1e0271e8",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Longitud_de_espaciado",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "dc8526c1143f4176a831e1795ffd9ce0",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "0ae0b914856741a7a9b6460f348f00a6",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Espaciado",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "72194bf8e39d441aaba3c449e3aaf042",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2aa140a18e2b40b48a346e781cfec7a1",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Rebar",
+      "Id": "25134ba49d7643f28c50744b01f58d16",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "8a66a182d81a456a935f9cd04ebae30b",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "dec39a6655c448cfbec24c630b04c949",
+      "End": "8a66a182d81a456a935f9cd04ebae30b",
+      "Id": "be503892c93a465682a2b0fc2c003a2d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "9d5e6a9ee3174d4aa912dfea3c9ac502",
+      "End": "bed98a26093d474e9a0f39508fe179a9",
+      "Id": "9777c9a046f84c2585d059d7403a6e2d",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "619d489ce15441b687bfbbf0f6856a60",
+      "End": "c15ca12f5a224482b68051b0802bd948",
+      "Id": "df98416160f341bfb7d99bb56f92df53",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "3fc8f7945c6e4bc595f1d71b1e0271e8",
+      "End": "bd4c1749cf9546a8a1d5eb9ba99c0c36",
+      "Id": "56b7435bba464e2b993c96827a1c23d4",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "0ae0b914856741a7a9b6460f348f00a6",
+      "End": "f05157d53f734c12b183a9bb03eb4210",
+      "Id": "4c7db3a0a6f94a5abb7c6c250d0ce96a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2aa140a18e2b40b48a346e781cfec7a1",
+      "End": "359406035075419cbc3c26b70e75f256",
+      "Id": "e69cd1355085423ba7750f2e8cb33cb6",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.5.2.8914",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": -10.131853103637695,
+      "EyeY": 4.6522321701049805,
+      "EyeZ": -2.2671875953674316,
+      "LookX": 5.958455562591553,
+      "LookY": -3.9644980430603027,
+      "LookZ": -2.2646613121032715,
+      "UpX": 0.3120291531085968,
+      "UpY": 0.9426416158676147,
+      "UpZ": -0.11859475821256638
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "18960f384dd14982bf198c0f61be7123",
+        "Name": "Python Script",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 922.1630585069579,
+        "Y": 213.08283643930713
+      },
+      {
+        "Id": "1e3f96246f95462b8d88587ce3585b59",
+        "Name": "Convert By Units",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 280.53753844731546,
+        "Y": 399.96165937259457
+      },
+      {
+        "Id": "9199e94a5c964127bd655471d171c2d8",
+        "Name": "Convert By Units",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 266.31755952219896,
+        "Y": 200.10480887749338
+      },
+      {
+        "Id": "9ce077a64f4c4c3aba82932c6f0b661d",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 513.1028308798926,
+        "Y": -64.15122803577471
+      },
+      {
+        "Id": "dc8526c1143f4176a831e1795ffd9ce0",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -175.55985758995257,
+        "Y": 435.2304696682425
+      },
+      {
+        "Id": "72194bf8e39d441aaba3c449e3aaf042",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -140.04189493113,
+        "Y": 191.57159845669764
+      },
+      {
+        "Id": "25134ba49d7643f28c50744b01f58d16",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1171.163058506958,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 269.2009415505454,
+    "Y": 83.1829266743335,
+    "Zoom": 0.8378016171076719
+  }
+}

@@ -1,0 +1,336 @@
+{
+  "Uuid": "f4be67b9-d0db-4feb-ba2b-983c490d5f01",
+  "IsCustomNode": true,
+  "Category": "Revit",
+  "Description": "Obtiene todos los elementos que intervienen en un pórtico",
+  "Name": "Elementos_Pórtico",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "List.Count": {
+        "Key": "List",
+        "Value": "BuiltIn.ds"
+      },
+      "Revit.Element": {
+        "Key": "Revit.Element",
+        "Value": "BimorphNodes.dll"
+      },
+      "Elements.Element": {
+        "Key": "Revit.Elements.Element",
+        "Value": "RevitNodes.dll"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "485de57ac198457ab51096bbc4c9e6d6",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "8f31ed05cbc64af1bc5c9001f9b01d4c",
+          "Name": "list",
+          "Description": "Lista cuyos duplicados se deben filtrar.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "0943079be67a42a5a0ccbe215e540006",
+          "Name": "list",
+          "Description": "Lista filtrada.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.UniqueItems@var[]..[]",
+      "Replication": "Auto",
+      "Description": "Crea una lista con todos los elementos únicos de la lista especificada.\n\nList.UniqueItems (list: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.CreateList, CoreNodeModels",
+      "VariableInputPorts": true,
+      "Id": "5c15c5c7b05a41fa801b31b7e7872fa2",
+      "NodeType": "ExtensionNode",
+      "Inputs": [
+        {
+          "Id": "b2c2105e3aa343a5aab95fd47bd1e469",
+          "Name": "item0",
+          "Description": "Índice de elemento núm.0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "6d47e47081924c6a94501a47c35c4247",
+          "Name": "item1",
+          "Description": "Índice de elemento núm.1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "bec343844eea41ea9eeb06c323137e2d",
+          "Name": "list",
+          "Description": "Una lista (tipo: var[]..[])",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Crea una nueva lista a partir de las entradas especificadas."
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\nclr.AddReference('RevitAPI')\r\nclr.AddReference('RevitServices')\r\nfrom Autodesk.Revit.DB import *\r\nfrom RevitServices.Persistence import DocumentManager\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nviga_sel = UnwrapElement(IN[0])\r\nvigas = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralFraming).WhereElementIsNotElementType().ToElements()\r\n\r\ndef get_id_val(obj):\r\n    # Si es int, devuelve directo\r\n    if type(obj) == int:\r\n        return obj\r\n    # Si es un ElementId (CPython3)\r\n    if obj.__class__.__name__ == \"ElementId\":\r\n        return int(str(obj))\r\n    # Si es un elemento Revit, accede a su Id\r\n    if hasattr(obj, 'Id'):\r\n        return get_id_val(obj.Id)\r\n    # Si es string, intenta convertir\r\n    try:\r\n        return int(obj)\r\n    except:\r\n        raise Exception(\"No se puede extraer IntegerValue del objeto (tipo {}): {}\".format(type(obj), obj))\r\n\r\ndef extremos_y_direccion(viga):\r\n    loc = viga.Location\r\n    if hasattr(loc, \"Curve\"):\r\n        curva = loc.Curve\r\n        p0 = curva.GetEndPoint(0)\r\n        p1 = curva.GetEndPoint(1)\r\n        vec = XYZ(p1.X - p0.X, p1.Y - p0.Y, p1.Z - p0.Z)\r\n        mag = vec.GetLength()\r\n        if mag == 0:\r\n            return [p0, p1], None\r\n        dir_norm = XYZ(vec.X/mag, vec.Y/mag, vec.Z/mag)\r\n        return [p0, p1], dir_norm\r\n    return [], None\r\n\r\ntolerancia = 0.001\r\numbral_direccion = 0.01\r\n\r\next_sel, dir_sel = extremos_y_direccion(viga_sel)\r\nvisitadas = set([get_id_val(viga_sel)])\r\ncola = [(viga_sel, ext_sel, dir_sel)]\r\nresultado = [viga_sel]\r\n\r\nwhile cola:\r\n    actual, extremos_act, dir_act = cola.pop(0)\r\n    for viga in vigas:\r\n        if get_id_val(viga) in visitadas:\r\n            continue\r\n        ext_viga, dir_viga = extremos_y_direccion(viga)\r\n        if dir_viga is None:\r\n            continue\r\n        dot = abs(dir_act.X * dir_viga.X + dir_act.Y * dir_viga.Y + dir_act.Z * dir_viga.Z)\r\n        paralelo = abs(dot - 1.0) < umbral_direccion\r\n        if paralelo:\r\n            conectado = False\r\n            for p1 in extremos_act:\r\n                for p2 in ext_viga:\r\n                    if p1.DistanceTo(p2) < tolerancia:\r\n                        conectado = True\r\n                        break\r\n                if conectado:\r\n                    break\r\n            if conectado:\r\n                visitadas.add(get_id_val(viga))\r\n                resultado.append(viga)\r\n                cola.append((viga, ext_viga, dir_viga))\r\n\r\nOUT = resultado\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "b4f2cabc50384d80a796f19e3172cbe6",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "54ad2691ec904241bece369125ad3c86",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "75ff06a19038451d8d88164c7a0ad84c",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "7e179b75a23c4f0c9a18f772de41a706",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "4fe3c8b586f04cb9b85ebf295b17519c",
+          "Name": "element",
+          "Description": "Revit.Elements.Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "7dc7d3ecf4e349be8c08221c8032ec33",
+          "Name": "Element[]",
+          "Description": "Todos los elementos cuya geometría está unida al elemento especificado.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "Revit.Elements.Element.GetJoinedElements",
+      "Replication": "Auto",
+      "Description": "Busca los elementos cuya geometría está unida al elemento especificado.\n\nElement.GetJoinedElements ( ): Element[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Viga",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "563f6d37053e48d2826684706174ed93",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "2d9d8ffffcbd4d9db4909b44189f75d7",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "list",
+      "Id": "95ba3edefc1b4b19bb5160880e7fb36a",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "03fa4794def74d179d5d601ffd9e6096",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "0943079be67a42a5a0ccbe215e540006",
+      "End": "03fa4794def74d179d5d601ffd9e6096",
+      "Id": "f5abefa4239c4086b73204865b5bb5a9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "bec343844eea41ea9eeb06c323137e2d",
+      "End": "8f31ed05cbc64af1bc5c9001f9b01d4c",
+      "Id": "3450bcde9ad74b5f8373a62b0c587847",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "75ff06a19038451d8d88164c7a0ad84c",
+      "End": "b2c2105e3aa343a5aab95fd47bd1e469",
+      "Id": "787b7792f53648b2a0d553f920204075",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "75ff06a19038451d8d88164c7a0ad84c",
+      "End": "4fe3c8b586f04cb9b85ebf295b17519c",
+      "Id": "6471298b618c4760af42f5f18c8b172b",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7dc7d3ecf4e349be8c08221c8032ec33",
+      "End": "6d47e47081924c6a94501a47c35c4247",
+      "Id": "9b472103785d4d04929000f706362df6",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2d9d8ffffcbd4d9db4909b44189f75d7",
+      "End": "54ad2691ec904241bece369125ad3c86",
+      "Id": "fefffd41885445f79e6b532b3a5b8556",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.5.2.8914",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": -9.836198806762695,
+      "EyeY": 7.907754421234131,
+      "EyeZ": 21.28569793701172,
+      "LookX": 6.4776201248168945,
+      "LookY": -7.528782367706299,
+      "LookZ": -26.59378433227539,
+      "UpX": 0.06276417523622513,
+      "UpY": 0.9641903042793274,
+      "UpZ": -0.2576773464679718
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "485de57ac198457ab51096bbc4c9e6d6",
+        "Name": "Todos los elementos que intervienen en el pórtico",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": false,
+        "X": 1649.063076143403,
+        "Y": 395.76042692415047
+      },
+      {
+        "Id": "5c15c5c7b05a41fa801b31b7e7872fa2",
+        "Name": "List Create",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": false,
+        "X": 1356.3860813334304,
+        "Y": 398.00677320538205
+      },
+      {
+        "Id": "b4f2cabc50384d80a796f19e3172cbe6",
+        "Name": "Obtiene todas las vigas continuas en la misma dirección",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": false,
+        "X": 118.64424931955796,
+        "Y": -182.50619748380126
+      },
+      {
+        "Id": "7e179b75a23c4f0c9a18f772de41a706",
+        "Name": "Elementos unidos",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": false,
+        "X": 986.1733311856697,
+        "Y": 610.792838734465
+      },
+      {
+        "Id": "563f6d37053e48d2826684706174ed93",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -392.2379512005378,
+        "Y": -228.42675165556398
+      },
+      {
+        "Id": "95ba3edefc1b4b19bb5160880e7fb36a",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2752.79242838388,
+        "Y": 0.0
+      }
+    ],
+    "Annotations": [],
+    "X": 144.3792926918121,
+    "Y": 398.4287258832245,
+    "Zoom": 1.0797499125840861
+  }
+}

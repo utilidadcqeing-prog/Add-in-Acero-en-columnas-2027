@@ -1,0 +1,272 @@
+{
+  "Uuid": "dc40f1a5-601c-4b3f-b83e-3dc4832faba5",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "Rota el gancho de la barra de armadura",
+  "Name": "Set_Hook_Rotation_Angle_Rebar",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "# ==== ENTRADAS DE DYNAMO ====\r\nrebars = IN[0]\r\nrot_inicio = IN[1]      # Grados (fuera del plano) en extremo inicial, o None\r\nrot_final = IN[2]       # Grados (fuera del plano) en extremo final, o None\r\n\r\nimport clr\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import *\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\nfrom RevitServices.Transactions import TransactionManager\r\n\r\nimport math\r\n\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\ndef tolist(x):\r\n    if isinstance(x, list): return x\r\n    else: return [x]\r\n\r\ndef rotar_gancho(rebar, ang_inicio, ang_final):\r\n    rvt_rebar = UnwrapElement(rebar)\r\n    cambios = False\r\n    # Rota gancho de inicio si aplica\r\n    if ang_inicio is not None and rvt_rebar.GetHookTypeId(0) != ElementId.InvalidElementId:\r\n        rvt_rebar.SetHookRotationAngle(math.radians(ang_inicio), 0)\r\n        cambios = True\r\n    # Rota gancho de final si aplica\r\n    if ang_final is not None and rvt_rebar.GetHookTypeId(1) != ElementId.InvalidElementId:\r\n        rvt_rebar.SetHookRotationAngle(math.radians(ang_final), 1)\r\n        cambios = True\r\n    return rebar if cambios else None\r\n\r\nrebars = tolist(rebars)\r\noutput = []\r\n\r\nTransactionManager.Instance.EnsureInTransaction(doc)\r\nfor rb in rebars:\r\n    resultado = rotar_gancho(rb, rot_inicio, rot_final)\r\n    output.append(resultado)\r\nTransactionManager.Instance.TransactionTaskDone()\r\n\r\nOUT = output if len(output) > 1 else output[0]\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "b83b0b4e67bc4eaca00f6b25afa8a314",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "a5ab428d91094d38a86f25be55096586",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "c97ec3542a094d6898f404aaf7a66576",
+          "Name": "IN[1]",
+          "Description": "Input #1",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "85b54d5054914f99af37e25fcd93a2d8",
+          "Name": "IN[2]",
+          "Description": "Input #2",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "e114afc4c6ab4e249766686f19beb48c",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Rebar",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "2934f717c833464fba73d3f3c08a44ca",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "29cfb9907c32461e9b12fe81169591d3",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Start",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "b2f6eb96438643e58d9c4a1ffcaffdcb",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a54b15e444224e72be51bc10a112d6c0",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "End",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "6186fb5b62494dd9a47e2c964677501b",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "f1cd571c38c24c32b13c3a4a64b07e9e",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Rebar",
+      "Id": "bd518cd763e74e57948c8557f59c16b9",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "015086fc42bd45acafdc4692d1acfd4b",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "e114afc4c6ab4e249766686f19beb48c",
+      "End": "015086fc42bd45acafdc4692d1acfd4b",
+      "Id": "090a4a02b40f4521825afa7e03d7f3d5",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "29cfb9907c32461e9b12fe81169591d3",
+      "End": "a5ab428d91094d38a86f25be55096586",
+      "Id": "113240435da24f87b36eed9f6aa21c2c",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "a54b15e444224e72be51bc10a112d6c0",
+      "End": "c97ec3542a094d6898f404aaf7a66576",
+      "Id": "59b202d6221a46ff9ec08615b70db7bb",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f1cd571c38c24c32b13c3a4a64b07e9e",
+      "End": "85b54d5054914f99af37e25fcd93a2d8",
+      "Id": "4e43f2c7707c41b495bde01623aad3a5",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.5.2.8914",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": 4.662607192993164,
+      "EyeY": 32.63098907470703,
+      "EyeZ": -9.279706954956055,
+      "LookX": -5.709081649780273,
+      "LookY": -5.727916717529297,
+      "LookZ": -7.226724624633789,
+      "UpX": -0.3274020552635193,
+      "UpY": 0.8491632342338562,
+      "UpZ": -0.41440263390541077
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "b83b0b4e67bc4eaca00f6b25afa8a314",
+        "Name": "Rota el ángulo del gancho de la barra",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 802.0,
+        "Y": 309.0
+      },
+      {
+        "Id": "2934f717c833464fba73d3f3c08a44ca",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 51.0,
+        "Y": 108.0
+      },
+      {
+        "Id": "b2f6eb96438643e58d9c4a1ffcaffdcb",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 55.0,
+        "Y": 311.0
+      },
+      {
+        "Id": "6186fb5b62494dd9a47e2c964677501b",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 72.0,
+        "Y": 511.0
+      },
+      {
+        "Id": "bd518cd763e74e57948c8557f59c16b9",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1325.0,
+        "Y": 277.0
+      }
+    ],
+    "Annotations": [],
+    "X": 381.88570114172126,
+    "Y": 114.90098900059186,
+    "Zoom": 0.8033215934625979
+  }
+}

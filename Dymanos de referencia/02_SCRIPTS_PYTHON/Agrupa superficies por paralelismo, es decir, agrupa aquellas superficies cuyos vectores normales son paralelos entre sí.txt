@@ -1,0 +1,41 @@
+import clr
+clr.AddReference('RevitServices')
+from RevitServices.Persistence import DocumentManager
+
+clr.AddReference('RevitAPI')
+from Autodesk.DesignScript.Geometry import Surface
+
+import math
+
+# Entrada
+surfaces = IN[0]
+tolerance_deg = 1.0  # Tolerancia angular en grados
+
+def get_normal(s):
+    try:
+        return s.NormalAtParameter(0.5, 0.5).Normalized()
+    except:
+        return None
+
+def are_parallel(v1, v2, tolerance):
+    dot = abs(v1.Dot(v2))
+    angle = math.acos(min(1.0, max(-1.0, dot))) * 180 / math.pi
+    return angle <= tolerance or abs(angle - 180) <= tolerance
+
+normals = [get_normal(s) for s in surfaces]
+
+grupos = []
+usadas = [False] * len(surfaces)
+
+for i, n1 in enumerate(normals):
+    if usadas[i] or n1 is None:
+        continue
+    grupo = [surfaces[i]]
+    usadas[i] = True
+    for j in range(i+1, len(normals)):
+        if not usadas[j] and normals[j] is not None and are_parallel(n1, normals[j], tolerance_deg):
+            grupo.append(surfaces[j])
+            usadas[j] = True
+    grupos.append(grupo)
+
+OUT = grupos

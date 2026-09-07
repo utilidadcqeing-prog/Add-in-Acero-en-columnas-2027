@@ -1,0 +1,564 @@
+{
+  "Uuid": "8efc4385-45c3-4a70-8575-091327a77f2a",
+  "IsCustomNode": true,
+  "Category": "Revit",
+  "Description": "Crea las lineas que representan el acero longitudinal de un tramo de vigas, sin traslapos.",
+  "Name": "00_Lineas_Rebar_Pórtico",
+  "ElementResolver": {
+    "ResolutionMap": {
+      "List.Count": {
+        "Key": "List",
+        "Value": "BuiltIn.ds"
+      }
+    }
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Viga",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "8f02d5004f6c43d0b2763ea23e90aa41",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "a040d67ea3994c269852ae81237d3c31",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "rebar",
+        "TypeName": "Revit.Elements.Element",
+        "TypeRank": 0,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "3de99d4968534e169f7eedaca631b810",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "7b91cc5d9e6f47f294cb86a817ca9fe6",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "rebar",
+        "TypeName": "Revit.Elements.Element",
+        "TypeRank": 0,
+        "DefaultValue": null,
+        "Description": ""
+      },
+      "Id": "76c573cdaaf34be588ed6e13fcb7a9ca",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "1ea540ba7fff4467872eff502ecf7124",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Linea Superior",
+      "Id": "4166915fbbfd47b3a83f1e93cf3b95c0",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "092662cdbccb47c9ae9da7900a73c5d9",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Linea Inferior",
+      "Id": "1d1f0a7d05de451a903c5ddbe6231d40",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "984a8a82a6884b4981314744ec9d2524",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Vector",
+      "Id": "d24c2dd8376c47f4949a52a598c331f4",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "ece0827f1b9748dd93100446e59f1b9a",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Function, DynamoCore",
+      "FunctionSignature": "be77d7cf-63ec-41cb-8ed3-345e3c934904",
+      "FunctionType": "Graph",
+      "Id": "52d71ae2b81a4e5b8f06b8bb3cdbcaa1",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "b9e9feb941d74fa79e1756f8936803db",
+          "Name": "element",
+          "Description": "Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "7efd887b1eb440938e12e8930dd786f9",
+          "Name": "rebar",
+          "Description": "Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a568555c7bca4b0bb0a3f35a704cd1f4",
+          "Name": "rebar",
+          "Description": "Element",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "cafa5fd9730447aabebcd2007b819f73",
+          "Name": "Sup ini",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "f8c5911c1db243bd91b0a61fc1f55ad8",
+          "Name": "Sup fin",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "a781724996f643b980e72ede9591f1d7",
+          "Name": "Inf ini",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "2b44ab96aa484b909201cd662e292638",
+          "Name": "Inf fin",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "1c6779c0ac7641e3b6cf40b41e482e5e",
+          "Name": "Vector",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "58c61bf85f454e93af5e64967c3e46bc",
+          "Name": "Distancia",
+          "Description": "valor de retorno",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Auto",
+      "Description": "Crea las lineas que representan el acero longitudinal de una viga horizontal"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "34394c00076946f3adff74fd72a82cfd",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "dba8452be41b427c9e982c48b3febea0",
+          "Name": "startPoint",
+          "Description": "Punto inicial de la línea\n\nPoint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "7855f7f694564e3a86b1046ee16cc26e",
+          "Name": "endPoint",
+          "Description": "Punto final de la línea\n\nPoint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "4d0439bcfb6b4e7c9a236f32fee31dde",
+          "Name": "Line",
+          "Description": "Línea desde punto inicial y final",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point",
+      "Replication": "Auto",
+      "Description": "Crea una línea recta entre dos puntos de entrada.\n\nLine.ByStartPointEndPoint (startPoint: Point, endPoint: Point): Line"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "ed61b25dfa27430187bdc765ca144d16",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "52fd8f6a6b064f38980e1dbbb6364ef4",
+          "Name": "startPoint",
+          "Description": "Punto inicial de la línea\n\nPoint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "db895a44d60a433a9a0632b53b615439",
+          "Name": "endPoint",
+          "Description": "Punto final de la línea\n\nPoint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "a58993e6e69c45138d005511b2434dc0",
+          "Name": "Line",
+          "Description": "Línea desde punto inicial y final",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "Autodesk.DesignScript.Geometry.Line.ByStartPointEndPoint@Autodesk.DesignScript.Geometry.Point,Autodesk.DesignScript.Geometry.Point",
+      "Replication": "Auto",
+      "Description": "Crea una línea recta entre dos puntos de entrada.\n\nLine.ByStartPointEndPoint (startPoint: Point, endPoint: Point): Line"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Distancia para Espaciado",
+      "Id": "9c15e467cddd44c682849fe67b2481ca",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "48ba39ee0b6845258746dcbe3c47b22e",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "a040d67ea3994c269852ae81237d3c31",
+      "End": "b9e9feb941d74fa79e1756f8936803db",
+      "Id": "8b406f603c564bb2a68d92fd037e1edd",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "7b91cc5d9e6f47f294cb86a817ca9fe6",
+      "End": "7efd887b1eb440938e12e8930dd786f9",
+      "Id": "048977dce8574899a055b84b785dbdf9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1ea540ba7fff4467872eff502ecf7124",
+      "End": "a568555c7bca4b0bb0a3f35a704cd1f4",
+      "Id": "55af01b2863f4522860a8046f21e00b0",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "cafa5fd9730447aabebcd2007b819f73",
+      "End": "dba8452be41b427c9e982c48b3febea0",
+      "Id": "21bcd19061744de9a543f73af01f1df6",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f8c5911c1db243bd91b0a61fc1f55ad8",
+      "End": "7855f7f694564e3a86b1046ee16cc26e",
+      "Id": "6743192894364354b439178ac06cde29",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "a781724996f643b980e72ede9591f1d7",
+      "End": "52fd8f6a6b064f38980e1dbbb6364ef4",
+      "Id": "77f3078cb7484e4482a3546f98db8300",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "2b44ab96aa484b909201cd662e292638",
+      "End": "db895a44d60a433a9a0632b53b615439",
+      "Id": "f2cb884b5c484921b709fe7a711717a4",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "1c6779c0ac7641e3b6cf40b41e482e5e",
+      "End": "ece0827f1b9748dd93100446e59f1b9a",
+      "Id": "c01661d284de40a282e1e5fcf04e6989",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "58c61bf85f454e93af5e64967c3e46bc",
+      "End": "48ba39ee0b6845258746dcbe3c47b22e",
+      "Id": "d0a58ddf113e455a96c2f8f60b136d8c",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "4d0439bcfb6b4e7c9a236f32fee31dde",
+      "End": "092662cdbccb47c9ae9da7900a73c5d9",
+      "Id": "440e11a9371245ae98b3c14e6d03ca84",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "a58993e6e69c45138d005511b2434dc0",
+      "End": "984a8a82a6884b4981314744ec9d2524",
+      "Id": "593f9ea6688a4421b0cbaccb7d81c629",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [
+    "be77d7cf-63ec-41cb-8ed3-345e3c934904"
+  ],
+  "NodeLibraryDependencies": [
+    {
+      "Name": "Lineas_Acero_Vigas.dyf",
+      "ReferenceType": "DYFFile",
+      "Nodes": [
+        "52d71ae2b81a4e5b8f06b8bb3cdbcaa1"
+      ]
+    }
+  ],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.5.2.8914",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": -9.836198806762695,
+      "EyeY": 7.907754421234131,
+      "EyeZ": 21.28569793701172,
+      "LookX": 6.4776201248168945,
+      "LookY": -7.528782367706299,
+      "LookZ": -26.59378433227539,
+      "UpX": 0.06276417523622513,
+      "UpY": 0.9641903042793274,
+      "UpZ": -0.2576773464679718
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "8f02d5004f6c43d0b2763ea23e90aa41",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -155.85623996611037,
+        "Y": -838.1734779124648
+      },
+      {
+        "Id": "3de99d4968534e169f7eedaca631b810",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -199.93273608723075,
+        "Y": -471.4256448557747
+      },
+      {
+        "Id": "76c573cdaaf34be588ed6e13fcb7a9ca",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": -177.49837144810238,
+        "Y": -623.7526995462852
+      },
+      {
+        "Id": "4166915fbbfd47b3a83f1e93cf3b95c0",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1812.7589611759217,
+        "Y": -599.1900014828908
+      },
+      {
+        "Id": "1d1f0a7d05de451a903c5ddbe6231d40",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1815.382555056638,
+        "Y": -798.3361078192489
+      },
+      {
+        "Id": "d24c2dd8376c47f4949a52a598c331f4",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1795.6725373088593,
+        "Y": -388.84934132691626
+      },
+      {
+        "Id": "52d71ae2b81a4e5b8f06b8bb3cdbcaa1",
+        "Name": "Lineas_Acero_Vigas",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 378.6072789729859,
+        "Y": -739.3316864236119
+      },
+      {
+        "Id": "34394c00076946f3adff74fd72a82cfd",
+        "Name": "Line.ByStartPointEndPoint",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1106.0731377324576,
+        "Y": -832.7552251929062
+      },
+      {
+        "Id": "ed61b25dfa27430187bdc765ca144d16",
+        "Name": "Line.ByStartPointEndPoint",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1114.5223716566168,
+        "Y": -629.9736110130867
+      },
+      {
+        "Id": "9c15e467cddd44c682849fe67b2481ca",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 730.13106983897,
+        "Y": -453.2158966098275
+      }
+    ],
+    "Annotations": [],
+    "X": 20.529294811802572,
+    "Y": 442.90993856902924,
+    "Zoom": 0.31690415623962
+  }
+}

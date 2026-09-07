@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>practicacq</Name>
+    <!-- Ruta relativa: Revit la resuelve contra la carpeta donde vive este .addin. -->
+    <Assembly>practicacq.dll</Assembly>
+    <FullClassName>practicacq.App</FullClassName>
+    <ClientId>2044e120-cc19-42a1-8018-a97f13adf192</ClientId>
+    <VendorId>CQEING</VendorId>
+    <VendorDescription>CQEING</VendorDescription>
+  </AddIn>
+</RevitAddIns>

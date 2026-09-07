@@ -1,0 +1,546 @@
+{
+  "Uuid": "e42c33b4-cc9b-4140-b00a-d37c669ef431",
+  "IsCustomNode": true,
+  "Category": "01_Nodos_CQING",
+  "Description": "Tipos de baras disponibles en el modelo de Revit",
+  "Name": "Rebar_Bar_Type",
+  "ElementResolver": {
+    "ResolutionMap": {}
+  },
+  "Inputs": [],
+  "Outputs": [],
+  "Nodes": [
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "fdf07af644ce406e988a4ad02b803a83",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "1b285cf63df646e5b5abb6b6f7c1fe6d",
+          "Name": "list",
+          "Description": "Lista de la cual se debe recuperar un elemento.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "fd93fa0b92c247308b5fb9f11480ca8d",
+          "Name": "index",
+          "Description": "El índice del elemento que se debe recuperar.\n\nint",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "a3be8de9f46743edac00d664360dc5d5",
+          "Name": "item",
+          "Description": "Elemento de la lista en el índice especificado.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.GetItemAtIndex@var[]..[],int",
+      "Replication": "Auto",
+      "Description": "Devuelve un elemento de la lista especificada que se encuentra en el índice indicado.\n\nList.GetItemAtIndex (list: var[]..[], index: int): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "fd13746c495747f098ee29d7d6d38dad",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "b412c4e3568e427b92b7519052868333",
+          "Name": "list",
+          "Description": "Lista de la que se debe obtener el primer elemento.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "498666225d3e428ab24afd210d0daed4",
+          "Name": "item",
+          "Description": "Primer elemento de la lista.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.FirstItem@var[]..[]",
+      "Replication": "Auto",
+      "Description": "Devuelve el primer elemento de una lista.\n\nList.FirstItem (list: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "def limpiar_nulls(input_data):\r\n    # Si es una lista, filtra los nulls (None en Python)\r\n    if isinstance(input_data, list):\r\n        return [x for x in input_data if x is not None]\r\n    else:\r\n        # Si no es lista, revisa si es null, si no lo es lo devuelve\r\n        return None if input_data is None else input_data\r\n\r\nOUT = limpiar_nulls(IN[0])\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "a58710ce6e814a43abd93666a67ee545",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [
+        {
+          "Id": "83f9eb32f03e4329acc1ffae6b6fd8b0",
+          "Name": "IN[0]",
+          "Description": "Input #0",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "3070ac342ee54fce89b50244bb4eb24f",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "6314163ee0544447a873c0d44c139311",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "dd8d46a54751402eb387de5ef5338192",
+          "Name": "list",
+          "Description": "Lista en la que buscar el elemento.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        },
+        {
+          "Id": "59ba386e838a488eac2e78d049348160",
+          "Name": "element",
+          "Description": "Elemento cuyo índice se debe devolver.\n\nvar",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "fd87de581b5140a4bd6039d6e81f9008",
+          "Name": "int",
+          "Description": "El índice del elemento en la lista. Se devolverá el índice no válido -1 si no se encuentra una coincidencia exacta.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.IndexOf@var[]..[],var",
+      "Replication": "Auto",
+      "Description": "Devuelve el índice del elemento de la lista especificada. La coincidencia entre la lista especificada y el elemento de destino debe ser exacta (es decir, de entero a entero, de doble a doble, de cadena a cadena, de objeto a objeto, etc.).\n\nList.IndexOf (list: var[]..[], element: var): int"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "0852222c4e4a468db418e476332ae4d3",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "6c84fad7ddce4a7aaeafcadcfe9e4c31",
+          "Name": "list",
+          "Description": "Lista de la que se debe obtener el primer elemento.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "da69c3f672614571bc8e581fb21c29d8",
+          "Name": "item",
+          "Description": "Primer elemento de la lista.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.FirstItem@var[]..[]",
+      "Replication": "Auto",
+      "Description": "Devuelve el primer elemento de una lista.\n\nList.FirstItem (list: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.ZeroTouch.DSFunction, DynamoCore",
+      "Id": "fc9aef04a37049fe835c3d3e261f73f8",
+      "NodeType": "FunctionNode",
+      "Inputs": [
+        {
+          "Id": "33db99c7618d4c5e91ef25c461dfa286",
+          "Name": "list",
+          "Description": "Lista de la que se obtendrá el último elemento.\n\nvar[]..[]",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "f82a8ca9847a4951a3f4e31183d7dcb9",
+          "Name": "item",
+          "Description": "Último elemento de la lista.",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "FunctionSignature": "DSCore.List.LastItem@var[]..[]",
+      "Replication": "Auto",
+      "Description": "Recupera el último elemento de una lista.\n\nList.LastItem (list: var[]..[]): var[]..[]"
+    },
+    {
+      "ConcreteType": "PythonNodeModels.PythonNode, PythonNodeModels",
+      "Code": "import clr\r\n\r\nclr.AddReference('RevitServices')\r\nfrom RevitServices.Persistence import DocumentManager\r\ndoc = DocumentManager.Instance.CurrentDBDocument\r\n\r\nclr.AddReference('RevitAPI')\r\nfrom Autodesk.Revit.DB import FilteredElementCollector, ElementType, BuiltInParameter\r\n\r\n# Obtener todos los tipos de elemento\r\ntypes = FilteredElementCollector(doc).OfClass(ElementType).ToElements()\r\n\r\n# Filtrar solo tipos de barra de refuerzo usando nombre de clase\r\nbar_types = [t for t in types if t.GetType().Name == \"RebarBarType\"]\r\n\r\n# Leer nombre de tipo a través de parámetro 'SYMBOL_NAME_PARAM'\r\nnames = []\r\nfor bt in bar_types:\r\n    try:\r\n        name = bt.get_Parameter(BuiltInParameter.SYMBOL_NAME_PARAM).AsString()\r\n    except:\r\n        name = \"Sin nombre\"\r\n    names.append(name)\r\n\r\nOUT = (names, bar_types)\r\n",
+      "Engine": "CPython3",
+      "VariableInputPorts": true,
+      "Id": "569b984a9b014bb3a2ae05ac992447fa",
+      "NodeType": "PythonScriptNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "792bdba9bc374ac8b3559f6dbe2c9a95",
+          "Name": "OUT",
+          "Description": "Resultado de la secuencia de comandos de Python",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Ejecuta una secuencia de comandos de Python incrustada."
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Symbol, DynamoCore",
+      "Parameter": {
+        "Name": "Tipo_de_barra",
+        "TypeName": "var",
+        "TypeRank": -1,
+        "DefaultValue": null,
+        "Description": "Nombre de entrada por defecto; cambie el nombre."
+      },
+      "Id": "83ed5c372f274e4f905f9e20f88dec24",
+      "NodeType": "InputNode",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Id": "3cf96978b47c49aaa1678c164dd432c4",
+          "Name": "",
+          "Description": "Datos de entrada",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Un parámetro de función, utilícelo con nodos personalizados.\r\n\r\nPuede especificar el tipo y el valor por defecto del parámetro. Por ejemplo,\r\n\r\ninput : var[]..[]\r\nvalue : bool = false"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Tipos de barras disponibles",
+      "Id": "ae858bb58a1f4b9bb1944b087e5abc1d",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "ad7a7310f956451dbff97a6805fb3909",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "Dynamo.Graph.Nodes.CustomNodes.Output, DynamoCore",
+      "ElementResolver": null,
+      "Symbol": "Rebar",
+      "Id": "7e8320d79154444cb697418fa68dc5cf",
+      "NodeType": "OutputNode",
+      "Inputs": [
+        {
+          "Id": "104de758c9d64ae2816afef002850dff",
+          "Name": "",
+          "Description": "Datos de salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [],
+      "Replication": "Disabled",
+      "Description": "Una función de salida, se debe utilizar con nodos personalizados"
+    },
+    {
+      "ConcreteType": "CoreNodeModels.Watch, CoreNodeModels",
+      "WatchWidth": 200.0,
+      "WatchHeight": 200.0,
+      "Id": "8aec46a4ec2242d684d54c8c73e77de8",
+      "NodeType": "ExtensionNode",
+      "Inputs": [
+        {
+          "Id": "b6ced688f02d45c99f5addca0c185345",
+          "Name": "",
+          "Description": "Nodo desde el que se mostrará la salida",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Outputs": [
+        {
+          "Id": "de70691c26124243b0e0cf2b2d8813cf",
+          "Name": "",
+          "Description": "Salida del nodo",
+          "UsingDefaultValue": false,
+          "Level": 2,
+          "UseLevels": false,
+          "KeepListStructure": false
+        }
+      ],
+      "Replication": "Disabled",
+      "Description": "Muestra la salida de un nodo."
+    }
+  ],
+  "Connectors": [
+    {
+      "Start": "a3be8de9f46743edac00d664360dc5d5",
+      "End": "104de758c9d64ae2816afef002850dff",
+      "Id": "cbfe2054361044fa95c67873b8246001",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "498666225d3e428ab24afd210d0daed4",
+      "End": "fd93fa0b92c247308b5fb9f11480ca8d",
+      "Id": "fb772e43c5fe4b508acf882a09c07455",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "3070ac342ee54fce89b50244bb4eb24f",
+      "End": "b412c4e3568e427b92b7519052868333",
+      "Id": "0a15e6c13f114cb1be54c7be789beeb9",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "fd87de581b5140a4bd6039d6e81f9008",
+      "End": "83f9eb32f03e4329acc1ffae6b6fd8b0",
+      "Id": "fae735355cc648ac8d55ce735dbe42c2",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "da69c3f672614571bc8e581fb21c29d8",
+      "End": "dd8d46a54751402eb387de5ef5338192",
+      "Id": "d7be575951c341999e281a5a2c1412a6",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "da69c3f672614571bc8e581fb21c29d8",
+      "End": "ad7a7310f956451dbff97a6805fb3909",
+      "Id": "c63a628041474a46aba4cc97d0babe6f",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "f82a8ca9847a4951a3f4e31183d7dcb9",
+      "End": "1b285cf63df646e5b5abb6b6f7c1fe6d",
+      "Id": "7fcd7011f55f43a69c182153c4b815db",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "792bdba9bc374ac8b3559f6dbe2c9a95",
+      "End": "6c84fad7ddce4a7aaeafcadcfe9e4c31",
+      "Id": "3e879d2cacf642dcba520ec42d71bc17",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "792bdba9bc374ac8b3559f6dbe2c9a95",
+      "End": "33db99c7618d4c5e91ef25c461dfa286",
+      "Id": "3cf3c86dfd8b43b4aa2dd7333d1056f2",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "792bdba9bc374ac8b3559f6dbe2c9a95",
+      "End": "b6ced688f02d45c99f5addca0c185345",
+      "Id": "7774a7cdb4bc41559f7d5d8cc47f108a",
+      "IsHidden": "False"
+    },
+    {
+      "Start": "3cf96978b47c49aaa1678c164dd432c4",
+      "End": "59ba386e838a488eac2e78d049348160",
+      "Id": "9539e72a510340d9ad7233806680a8a9",
+      "IsHidden": "False"
+    }
+  ],
+  "Dependencies": [],
+  "NodeLibraryDependencies": [],
+  "Author": "None provided",
+  "Bindings": [],
+  "View": {
+    "Dynamo": {
+      "ScaleFactor": 1.0,
+      "HasRunWithoutCrash": false,
+      "IsVisibleInDynamoLibrary": true,
+      "Version": "3.6.0.9395",
+      "RunType": "Manual",
+      "RunPeriod": "1000"
+    },
+    "Camera": {
+      "Name": "_Vista preliminar en segundo plano",
+      "EyeX": -25.077186584472656,
+      "EyeY": 13.02415657043457,
+      "EyeZ": 22.264930725097656,
+      "LookX": 26.43548583984375,
+      "LookY": -26.77071189880371,
+      "LookZ": -22.033536911010742,
+      "UpX": 0.3307032585144043,
+      "UpY": 0.9025852680206299,
+      "UpZ": -0.2756361663341522
+    },
+    "ConnectorPins": [],
+    "NodeViews": [
+      {
+        "Id": "fdf07af644ce406e988a4ad02b803a83",
+        "Name": "List.GetItemAtIndex",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2549.7508648211415,
+        "Y": 476.53973608391857
+      },
+      {
+        "Id": "fd13746c495747f098ee29d7d6d38dad",
+        "Name": "List.FirstItem",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2229.4764068134214,
+        "Y": 268.82177347834477
+      },
+      {
+        "Id": "a58710ce6e814a43abd93666a67ee545",
+        "Name": "Elimina todos los null de una lista",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1816.6363189848541,
+        "Y": 276.4495451195696
+      },
+      {
+        "Id": "6314163ee0544447a873c0d44c139311",
+        "Name": "List.IndexOf",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1550.2209429769675,
+        "Y": 281.1882813317984
+      },
+      {
+        "Id": "0852222c4e4a468db418e476332ae4d3",
+        "Name": "Nombre de Tipos de barras disponibles",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1105.5430125227292,
+        "Y": 410.0410479808779
+      },
+      {
+        "Id": "fc9aef04a37049fe835c3d3e261f73f8",
+        "Name": "Tipos de barras (ELementos)",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 1099.306315004712,
+        "Y": 582.8671003426609
+      },
+      {
+        "Id": "569b984a9b014bb3a2ae05ac992447fa",
+        "Name": "Tipos de barras de armaduras cargados en Revit- Nombres y elementos ",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 283.0,
+        "Y": 473.1491643076988
+      },
+      {
+        "Id": "83ed5c372f274e4f905f9e20f88dec24",
+        "Name": "Input",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 789.604154171129,
+        "Y": 149.4879639455641
+      },
+      {
+        "Id": "ae858bb58a1f4b9bb1944b087e5abc1d",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2517.4368636079002,
+        "Y": 680.9978606481137
+      },
+      {
+        "Id": "7e8320d79154444cb697418fa68dc5cf",
+        "Name": "Output",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 2878.541019959144,
+        "Y": 370.4810205943227
+      },
+      {
+        "Id": "8aec46a4ec2242d684d54c8c73e77de8",
+        "Name": "Watch",
+        "IsSetAsInput": false,
+        "IsSetAsOutput": false,
+        "Excluded": false,
+        "ShowGeometry": true,
+        "X": 859.3854502790487,
+        "Y": 855.9492154489042
+      }
+    ],
+    "Annotations": [],
+    "X": -81.52033561436701,
+    "Y": -318.3275016744203,
+    "Zoom": 0.8535625198372346
+  }
+}

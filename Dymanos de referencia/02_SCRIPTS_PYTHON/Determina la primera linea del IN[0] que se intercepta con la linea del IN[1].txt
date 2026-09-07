@@ -1,0 +1,37 @@
+import clr
+clr.AddReference('ProtoGeometry')
+from Autodesk.DesignScript.Geometry import *
+
+lineas = IN[0]  # Lista de líneas
+linea_objetivo = IN[1]  # Línea principal a recorrer
+
+# Asegurar que los inputs sean válidos
+if not isinstance(lineas, list):
+    lineas = [lineas]
+
+p0 = linea_objetivo.StartPoint
+p1 = linea_objetivo.EndPoint
+vector_dir = p1.AsVector().Subtract(p0.AsVector())
+
+# Guardar intersecciones
+intersecciones = []
+
+for l in lineas:
+    inter = linea_objetivo.Intersect(l)
+    if inter and len(inter) > 0:
+        # Si hay intersección, guardar punto y línea
+        for p in inter:
+            # Calcular distancia desde el inicio de la línea objetivo
+            dist = p.DistanceTo(p0)
+            intersecciones.append((dist, l, p))
+
+# Ordenar por distancia desde el inicio de la línea objetivo
+if intersecciones:
+    intersecciones.sort(key=lambda x: x[0])
+    primera_linea = intersecciones[0][1]
+    punto_interseccion = intersecciones[0][2]
+else:
+    primera_linea = None
+    punto_interseccion = None
+
+OUT = [primera_linea]
