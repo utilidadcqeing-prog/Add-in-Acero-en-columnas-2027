@@ -158,6 +158,76 @@ internal static class GeometriaSeccion
 
     public static double Longitud(CurveLoop loop) => loop.Sum(c => c.Length);
 
+    /// <summary>
+    /// Un centímetro y medio en pies -- el desvío que usa
+    /// <see cref="ConQuiebreEnMedioDeLado"/>, chico para la construcción real
+    /// pero muy por encima de la tolerancia geométrica de Revit.
+    /// </summary>
+    private static readonly double DesvioQuiebre = UnitUtils.ConvertToInternalUnits(0.015, UnitTypeId.Meters);
+
+    /// <summary>
+    /// Parte el lado más largo de un loop cerrado en dos, con un quiebre real
+    /// (no colineal) en el punto medio, así el arranque/cierre del
+    /// <c>IList&lt;Curve&gt;</c> que recibe <c>Rebar.CreateFromCurves</c> cae
+    /// en la mitad de un lado recto y no en una esquina -- los 4 vértices
+    /// reales quedan con continuidad entre dos curvas normales y sí reciben
+    /// el fillet de 90° que ata la barra longitudinal de esa esquina
+    /// (issue #11).
+    ///
+    /// El punto medio se corre un poco hacia el centro del loop en vez de
+    /// dejarlo justo en la línea: probado sobre Revit real, dos curvas
+    /// EXACTAMENTE colineales (el quiebre en el mismo punto, sin desviar) no
+    /// tienen ningún ángulo real entre ellas y Rebar.CreateFromCurves
+    /// devuelve null en secciones no cuadradas. El desvío es chico
+    /// (<see cref="DesvioQuiebre"/>) -- no cambia la posición real del
+    /// estribo de forma perceptible, solo le da a Revit un ángulo genuino
+    /// para reconocer ahí una esquina más de la forma.
+    /// </summary>
+    public static IList<Curve> ConQuiebreEnMedioDeLado(IList<Curve> curvas)
+    {
+        if (curvas.Count == 0) return curvas;
+
+        int indiceMasLargo = 0;
+        double largoMax = curvas[0].Length;
+        for (int i = 1; i < curvas.Count; i++)
+        {
+            if (curvas[i].Length > largoMax)
+            {
+                largoMax = curvas[i].Length;
+                indiceMasLargo = i;
+            }
+        }
+
+        Curve masLarga = curvas[indiceMasLargo];
+        XYZ inicio = masLarga.GetEndPoint(0);
+        XYZ fin = masLarga.GetEndPoint(1);
+        XYZ medio = (inicio + fin) / 2;
+
+        // Centro aproximado del loop (promedio de los puntos de inicio de
+        // cada curva) -- correr el quiebre hacia ahí garantiza que el
+        // desvío queda hacia ADENTRO de la sección, no hacia afuera del
+        // recubrimiento.
+        XYZ centro = XYZ.Zero;
+        foreach (Curve c in curvas) centro += c.GetEndPoint(0);
+        centro /= curvas.Count;
+
+        XYZ haciaElCentro = (centro - medio);
+        double distanciaAlCentro = haciaElCentro.GetLength();
+        XYZ medioDesviado = distanciaAlCentro > Tolerancia
+            ? medio + haciaElCentro.Normalize() * Math.Min(DesvioQuiebre, distanciaAlCentro / 2)
+            : medio;
+
+        var resultado = new List<Curve>
+        {
+            Line.CreateBound(inicio, medioDesviado),
+            Line.CreateBound(medioDesviado, fin)
+        };
+        for (int i = 1; i < curvas.Count; i++)
+            resultado.Add(curvas[(indiceMasLargo + i) % curvas.Count]);
+
+        return resultado;
+    }
+
     public static double Metros(double pies) =>
         UnitUtils.ConvertFromInternalUnits(pies, UnitTypeId.Meters);
 
