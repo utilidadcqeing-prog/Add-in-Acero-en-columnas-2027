@@ -16,8 +16,9 @@ la seccion.
 
 No hace falta saber nada de consola ni de programacion para instalar.
 
-1. Conseguir el paquete `Publicar-practicacq.zip` (te lo tiene que pasar
-   quien lo compilo -- no esta en este repositorio).
+1. Descargar `Publicar-practicacq.zip` de la
+   [ultima Release](../../releases/latest) de este repositorio (seccion
+   "Assets" de la pagina de la release).
 2. Descomprimir el `.zip` **completo** en cualquier carpeta.
 3. Cerrar Revit si esta abierto.
 4. Doble clic en **`Instalar.bat`** (el que esta DENTRO de la carpeta que
@@ -42,11 +43,27 @@ Estas mismas instrucciones quedan tambien en `LEEME.txt`, adentro del
 paquete que se entrega -- para que quien instala no tenga que venir a este
 repositorio.
 
-### Por que el paquete no esta en este repositorio
+### Por que el paquete no esta en el arbol del repositorio
 
 `Publicar-practicacq.zip` (y la carpeta `Publicar\` que lo arma) son
 binarios generados a partir del codigo fuente, no codigo fuente en si --
-por eso estan en `.gitignore`, igual que `bin\`/`obj\`. Se generan con
-`tools\publish.ps1` y se distribuyen aparte, para que el repo no acumule
-binarios pesados que ademas quedan desactualizados apenas cambia el
-codigo.
+por eso estan en `.gitignore`, igual que `bin\`/`obj\`. Un binario que
+cambia entero cada vez infla el historial de git para siempre (no se puede
+"actualizar" sin dejar todas las versiones viejas completas guardadas
+adentro). Por eso se sube como **asset de una
+[GitHub Release](../../releases)** en vez de comitearlo: queda versionado,
+descargable, y no pesa en el repo.
+
+### Como publicar una nueva version (para quien compila)
+
+Cada vez que se cambia el codigo y hace falta un paquete nuevo:
+
+```bash
+.\tools\publish.ps1 -Zip
+git tag -a vX.Y.Z -m "que cambio"
+git push origin vX.Y.Z
+gh release create vX.Y.Z Publicar-practicacq.zip --title "Add-in de Armado de Columnas vX.Y.Z" --notes "que cambio"
+```
+
+(`gh` es la [CLI de GitHub](https://cli.github.com/); necesita estar
+autenticada con `gh auth login` una sola vez por maquina.)
