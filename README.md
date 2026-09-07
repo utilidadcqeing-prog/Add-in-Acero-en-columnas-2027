@@ -45,8 +45,8 @@ tengas instalada en tu maquina (2026, 2027) y arma
 #### Si no tenés Revit 2026 instalado en tu maquina
 
 No hace falta instalar Revit 2026 entero para poder compilar contra esa
-version: alcanza con conseguir dos archivos de alguien que sí lo tenga
-instalado (por ejemplo, William) y pedirle que te los copie asi, tal cual:
+version: alcanza con conseguir dos archivos de alguien del equipo que sí lo
+tenga instalado, y pedirle que te los copie asi, tal cual:
 
 1. En su computadora, abrir el explorador de archivos y navegar a:
    `C:\Program Files\Autodesk\Revit 2026\`
