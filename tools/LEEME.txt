@@ -13,6 +13,12 @@ Como instalar:
 No hace falta saber nada de consola ni de programacion: el instalador
 detecta solo que version de Revit corresponde y copia todo donde va.
 
+No hace falta ejecutarlo como administrador (no toca nada del sistema, solo
+una carpeta del usuario). Si Windows no deja abrir "Instalar.bat" con doble
+clic normal (por venir de un .zip descargado), antes de descomprimir hace
+clic derecho en el .zip > Propiedades > tildar "Desbloquear" > Aceptar, y
+volve a descomprimir.
+
 Si Revit estaba abierto durante la instalacion y algo falla, cerralo y
 volve a correr "Instalar.bat".
 
