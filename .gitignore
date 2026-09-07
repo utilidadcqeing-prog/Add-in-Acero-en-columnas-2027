@@ -7,6 +7,12 @@ obj/
 Publicar/
 Publicar-practicacq.zip
 
+# Material de referencia (Dynamo, add-ins ajenos), no es parte del add-in
+Dymanos de referencia/
+Add-ins de referencia*/
+Add-in de Armado CQEING.html
+Add-in de Armado CQEING_files/
+
 # Editor
 .vs/
 .vscode/

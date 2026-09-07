@@ -114,13 +114,33 @@ public static class GeneradorLongitudinal
         RebarBarType? barraCaraY = ResolverBarraOpcional(cfg.BarrasPorCaraY, cfg.TipoBarraCaraYNombre, barrasPorNombre, "cara Y", contexto.Marca, res);
 
         double recubrimientoPies = EstandarCQ.APies(contexto.Recubrimiento);
-        double insetEsquinas = recubrimientoPies + barraEsquinas.BarNominalDiameter / 2;
+
+        // El recubrimiento se mide hasta la cara del ESTRIBO, no hasta la
+        // barra longitudinal -- la longitudinal va pegada por DENTRO del
+        // estribo (confirmado por William), así que su inset tiene que
+        // sumar también el diámetro del estribo entero (atravesarlo),
+        // no solo la mitad del diámetro de la barra longitudinal. Sin esto,
+        // con un estribo grueso la barra longitudinal queda calculada más
+        // cerca del borde de lo real y termina asomando por fuera del
+        // estribo o pisándolo -- probado sobre Revit real. Se toma el
+        // diámetro más grueso entre los tramos tildados de esta columna: si
+        // varía de tramo a tramo, más vale un poco más adentro de lo
+        // estrictamente necesario en algún tramo que afuera en otro.
+        double diametroEstribo = columnaPlan.Tramos
+            .OfType<ConfigTramo>()
+            .Select(t => !string.IsNullOrEmpty(t.TipoBarraNombre) && barrasPorNombre.TryGetValue(t.TipoBarraNombre, out RebarBarType? be)
+                ? be.BarNominalDiameter
+                : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        double insetEsquinas = recubrimientoPies + diametroEstribo + barraEsquinas.BarNominalDiameter / 2;
 
         int columnas = Math.Max(0, cfg.BarrasPorCaraX / 2);
         int filas = Math.Max(0, cfg.BarrasPorCaraY / 2);
 
-        double insetX = barraCaraX is not null ? recubrimientoPies + barraCaraX.BarNominalDiameter / 2 : 0;
-        double insetY = barraCaraY is not null ? recubrimientoPies + barraCaraY.BarNominalDiameter / 2 : 0;
+        double insetX = barraCaraX is not null ? recubrimientoPies + diametroEstribo + barraCaraX.BarNominalDiameter / 2 : 0;
+        double insetY = barraCaraY is not null ? recubrimientoPies + diametroEstribo + barraCaraY.BarNominalDiameter / 2 : 0;
 
         // Un tramo de barra por elemento host de la pila (no se puede
         // hostear un solo Rebar en dos FamilyInstance), agrupando los
@@ -799,19 +819,16 @@ public static class GeneradorLongitudinal
     {
         try
         {
-            // Rectángulo cerrado, sin cortar ningún lado a la mitad -- ver el
-            // comentario en GeneradorArmado.CrearGrupo: partir un lado deja
-            // dos curvas colineales sin ángulo real entre ellas, y
-            // Rebar.CreateFromCurves rechaza esa geometría (null) en cajas
-            // no cuadradas. Prioriza no crashear sobre el detalle cosmético
-            // de la esquina de cierre sin fillet.
-            IList<Curve> curvas = new List<Curve>
+            var curvasRectangulo = new List<Curve>
             {
                 Line.CreateBound(new XYZ(x1, y1, z), new XYZ(x2, y1, z)),
                 Line.CreateBound(new XYZ(x2, y1, z), new XYZ(x2, y2, z)),
                 Line.CreateBound(new XYZ(x2, y2, z), new XYZ(x1, y2, z)),
                 Line.CreateBound(new XYZ(x1, y2, z), new XYZ(x1, y1, z)),
             };
+
+            // Ver GeometriaSeccion.ConQuiebreEnMedioDeLado.
+            IList<Curve> curvas = GeometriaSeccion.ConQuiebreEnMedioDeLado(curvasRectangulo);
 
             using var terminaciones = new BarTerminationsData(doc)
             {
