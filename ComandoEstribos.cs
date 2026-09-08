@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Events;
 using practicacq.Logica;
 using practicacq.Vistas;
 
@@ -87,12 +88,41 @@ public class ComandoEstribos : IExternalCommand
             _eventoGenerar.Raise();
         };
 
+        // Reunión 9-sep: sincronización en el otro sentido -- si el usuario
+        // selecciona una columna directamente en el modelo (no en la
+        // ventana), la ventana debe reflejarlo también. UIApplication ya
+        // avisa cambios de selección nativos desde 2023, así que no hace
+        // falta un ExternalEvent propio para ESCUCHAR (a diferencia de
+        // ManejadorSeleccionElemento, que sí necesita uno para actuar/mandar
+        // la selección de vuelta a Revit) -- este handler corre ya en
+        // contexto de API válido, solo lee.
+        void AlCambiarSeleccionEnRevit(object? sender, SelectionChangedEventArgs e)
+        {
+            if (ManejadorSeleccionElemento.SincronizacionEnCurso) return;
+            if (_ventana is null || e.GetDocument().Equals(doc) == false) return;
+
+            List<string> ids = e.GetSelectedElements().Select(id => IdTexto(id)).ToList();
+            _ventana.SincronizarDesdeRevit(ids);
+        }
+
+        uiapp.SelectionChanged += AlCambiarSeleccionEnRevit;
+
         new WindowInteropHelper(_ventana).Owner = uiapp.MainWindowHandle;
-        _ventana.Closed += (_, _) => _ventana = null;
+        _ventana.Closed += (_, _) =>
+        {
+            uiapp.SelectionChanged -= AlCambiarSeleccionEnRevit;
+            _ventana = null;
+        };
         _ventana.Show();
 
         return Result.Succeeded;
     }
+
+    // Mismo formato que LectorContexto.IdTexto -- ElementId.Value (long), no
+    // .IntegerValue (deprecado). Los dos lados de la sincronización tienen
+    // que hablar el mismo formato de id para que la búsqueda en _nodos
+    // encuentre algo.
+    private static string IdTexto(ElementId id) => id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     // long? (no ElementId?) a propósito: ElementId ya tiene su propio .Value
     // (el long interno, ver LectorContexto), y mezclar los dos Nullable en la

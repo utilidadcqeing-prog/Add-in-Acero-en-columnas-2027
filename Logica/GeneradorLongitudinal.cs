@@ -113,6 +113,21 @@ public static class GeneradorLongitudinal
         RebarBarType? barraCaraX = ResolverBarraOpcional(cfg.BarrasPorCaraX, cfg.TipoBarraCaraXNombre, barrasPorNombre, "cara X", contexto.Marca, res);
         RebarBarType? barraCaraY = ResolverBarraOpcional(cfg.BarrasPorCaraY, cfg.TipoBarraCaraYNombre, barrasPorNombre, "cara Y", contexto.Marca, res);
 
+        // Gancho del anclaje en la zapata (issue #37) -- no bloquea el resto
+        // de la longitudinal si falta: se avisa y esa barra sale recta ahí,
+        // igual que hoy, en vez de tirar abajo toda la columna por un gancho.
+        RebarHookType? ganchoLongitudinal = null;
+        if (contexto.IdZapata is not null)
+        {
+            if (string.IsNullOrEmpty(cfg.TipoGanchoLongitudinalNombre) ||
+                !ganchosPorNombre.TryGetValue(cfg.TipoGanchoLongitudinalNombre, out ganchoLongitudinal))
+            {
+                res.Avisos.Add(
+                    $"{contexto.Marca}: sin tipo de gancho de anclaje válido para la longitudinal; " +
+                    "el anclaje en la zapata sale recto, sin gancho.");
+            }
+        }
+
         double recubrimientoPies = EstandarCQ.APies(contexto.Recubrimiento);
 
         // El recubrimiento se mide hasta la cara del ESTRIBO, no hasta la
@@ -143,9 +158,16 @@ public static class GeneradorLongitudinal
         double insetY = barraCaraY is not null ? recubrimientoPies + diametroEstribo + barraCaraY.BarNominalDiameter / 2 : 0;
 
         // Un tramo de barra por elemento host de la pila (no se puede
-        // hostear un solo Rebar en dos FamilyInstance), agrupando los
-        // tramos TILDADOS que caen en cada uno.
-        List<(string IdHost, double ZInf, double ZSup)> porHost = AgruparPorHost(contexto, columnaPlan);
+        // hostear un solo Rebar en dos FamilyInstance), agrupando TODOS los
+        // tramos físicos de la columna, tildados o no -- confirmado por
+        // William (reunión 9-sep): la longitudinal es de la columna física
+        // completa (nudos, tramo contra zapata incluido), no solo de los
+        // tramos que el usuario tildó para configurar estribos. Antes esta
+        // función solo agrupaba tramos tildados, así que si el tramo de
+        // arriba o el que toca la zapata no estaban tildados, la barra
+        // longitudinal se quedaba corta o no anclaba en la zapata -- sin
+        // ningún aviso.
+        List<(string IdHost, double ZInf, double ZSup)> porHost = AgruparPorHost(contexto);
         if (porHost.Count == 0) return;
 
         // Footprint de cada host, resuelto una sola vez -- Fase 5 (#7) ya no
@@ -207,6 +229,64 @@ public static class GeneradorLongitudinal
             footprintPorHost[idHostTexto] = new FootprintHost(host, xMin, xMax, yMin, yMax);
         }
 
+        // La "posición de referencia" (esquinas/caras) se calcula UNA sola
+        // vez con el footprint del host de MÁS ARRIBA de la pila, y esa
+        // misma X/Y se usa para toda la barra, en todos los hosts que
+        // atraviesa -- antes se recalculaba por cada host con SU PROPIO
+        // footprint, así que un elemento de sección distinta (el más común:
+        // un dado/pedestal más ancho que la columna típica, apoyado sobre la
+        // zapata) hacía que las barras de ESE tramo salieran corridas hacia
+        // los bordes de esa sección más ancha, en vez de seguir derechas en
+        // la misma posición que el resto de la barra -- probado sobre Revit
+        // real, columna con dado ensanchado en la base. Se toma el host de
+        // arriba (no el de abajo) porque en la práctica constructiva el
+        // ensanche, si lo hay, siempre está en la base -- la columna típica
+        // (arriba) es la sección de diseño real. Si por lo que sea ese host
+        // no tiene footprint resuelto (se saltó por error), se usa
+        // cualquiera de los que sí se pudieron leer.
+        FootprintHost? referenciaNullable = footprintPorHost.TryGetValue(porHost[^1].IdHost, out FootprintHost fpTope)
+            ? fpTope
+            : footprintPorHost.Values.Cast<FootprintHost?>().FirstOrDefault();
+        if (referenciaNullable is null)
+            return; // ningún host de esta columna tiene footprint válido -- ya avisado arriba por cada uno.
+        FootprintHost referencia = referenciaNullable.Value;
+
+        // Solo el host de más abajo de la pila puede tener zapata debajo --
+        // el longitudinal entra a anclarse hasta 7.5cm de su cara inferior
+        // (#26), a diferencia del estribo.
+        double zInicioTotal = contexto.ZInferiorLongitudinal;
+
+        // Tramo de anclaje del longitudinal dentro de la zapata (issue #26):
+        // vive DENTRO del sólido de la zapata, no del de la columna, así que
+        // necesita hostearse ahí -- Revit no aloja un Rebar cuya curva se
+        // sale del sólido de su host (probado sobre Revit real). Antes esto
+        // no existía como host en `porHost`, así que ese tramo de barra
+        // (justo el que debía anclar 7.5cm dentro de la zapata) nunca se
+        // creaba: `CrearBarraConTraslapos` no encontraba ningún host ahí y
+        // lo saltaba en silencio.
+        if (contexto.IdZapata is not null && zInicioTotal < porHost[0].ZInf - Tolerancia)
+        {
+            if (long.TryParse(contexto.IdZapata, out long idZapataLong) &&
+                doc.GetElement(new ElementId(idZapataLong)) is FamilyInstance zapataHost)
+            {
+                BoundingBoxXYZ? bbZapata = zapataHost.get_BoundingBox(null);
+                if (bbZapata is not null)
+                {
+                    porHost.Insert(0, (IdHost: contexto.IdZapata, ZInf: zInicioTotal, ZSup: porHost[0].ZInf));
+                    footprintPorHost[contexto.IdZapata] = new FootprintHost(
+                        zapataHost, bbZapata.Min.X, bbZapata.Max.X, bbZapata.Min.Y, bbZapata.Max.Y);
+                }
+                else
+                {
+                    res.Avisos.Add($"{contexto.Marca}: no se pudo leer la geometría de la zapata; el longitudinal no ancla ahí.");
+                }
+            }
+            else
+            {
+                res.Avisos.Add($"{contexto.Marca}: la zapata detectada ya no existe; el longitudinal no ancla ahí.");
+            }
+        }
+
         // "Niveles" para Fase 5 (#7): un candidato de traslapo por tramo
         // LIBRE/CONTRA ZAPATA de TODA la columna (no solo los tildados en
         // esta corrida) -- el número de nivel (para el intercalado par/impar)
@@ -217,10 +297,6 @@ public static class GeneradorLongitudinal
             .Select((t, idx) => (Ordinal: idx + 1, t.ZInferior, t.ZSuperior))
             .ToList();
 
-        // Solo el host de más abajo de la pila puede tener zapata debajo --
-        // el longitudinal entra a anclarse hasta 7.5cm de su cara inferior
-        // (#26), a diferencia del estribo.
-        double zInicioTotal = contexto.ZInferiorLongitudinal;
         double zFinTotal = porHost[^1].ZSup;
 
         int creadas = 0;
@@ -244,40 +320,65 @@ public static class GeneradorLongitudinal
         // hasta 20 veces por cara.
         var cortesPorBarraYGrupo = new Dictionary<(ElementId BarraId, bool EsPar), PlanDeCortes>();
 
-        Func<FootprintHost, (double X, double Y)>[] esquinas =
+        // Corrimiento lateral en cada traslapo REAL (no en los cortes
+        // obligados por límite de host que no coinciden con uno real): dos
+        // barras que se traslapan no pueden ir exactamente en la misma línea
+        // -- probado sobre el modelo de referencia de William (9-sep,
+        // "Diagnóstico Rebar"): dos barras de un mismo traslapo salieron con
+        // la MISMA X y la Y corrida ~1.9cm, que es casi exacto el diámetro de
+        // la barra (#6, 19.1mm) -- se corren su propio diámetro, no una
+        // distancia arbitraria. La barra medida era de cara X (Y es la
+        // coordenada fija de esa cara); para esquinas y barras de cara Y no
+        // hay una medición real todavía -- se aplica el mismo criterio (correr
+        // la coordenada "fija de cara" de esa posición, no la que varía por
+        // fila/columna) como supuesto razonable, a confirmar visualmente.
+        // El corrimiento alterna: cada traslapo real vuelve a la posición de
+        // diseño o la corre un diámetro hacia el centro de la sección,
+        // turnándose -- así no se va acumulando corrimiento tramo tras tramo.
+        (double Dx, double Dy) Corrimiento(RebarBarType barraDeEstaPosicion, bool ejeY, double coordenadaFija)
         {
-            fp => (fp.XMin + insetEsquinas, fp.YMin + insetEsquinas),
-            fp => (fp.XMax - insetEsquinas, fp.YMin + insetEsquinas),
-            fp => (fp.XMin + insetEsquinas, fp.YMax - insetEsquinas),
-            fp => (fp.XMax - insetEsquinas, fp.YMax - insetEsquinas),
+            double diametro = barraDeEstaPosicion.BarNominalDiameter;
+            double centro = ejeY ? (referencia.YMin + referencia.YMax) / 2 : (referencia.XMin + referencia.XMax) / 2;
+            double signo = centro >= coordenadaFija ? 1 : -1;
+            return ejeY ? (0, signo * diametro) : (signo * diametro, 0);
+        }
+
+        (double X, double Y)[] esquinas =
+        {
+            (referencia.XMin + insetEsquinas, referencia.YMin + insetEsquinas),
+            (referencia.XMax - insetEsquinas, referencia.YMin + insetEsquinas),
+            (referencia.XMin + insetEsquinas, referencia.YMax - insetEsquinas),
+            (referencia.XMax - insetEsquinas, referencia.YMax - insetEsquinas),
         };
 
-        foreach (Func<FootprintHost, (double X, double Y)> esquinaFn in esquinas)
+        foreach ((double x, double y) in esquinas)
         {
             CrearBarraConTraslapos(
-                doc, porHost, footprintPorHost, barraEsquinas, esquinaFn, posicion++ % 2 == 0,
+                doc, porHost, footprintPorHost, barraEsquinas, (x, y), Corrimiento(barraEsquinas, true, y),
+                posicion++ % 2 == 0,
                 niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                contexto.Marca, res, ref creadas);
+                contexto.IdZapata, ganchoLongitudinal, contexto.Marca, res, ref creadas);
         }
 
         if (barraCaraX is not null && columnas > 0)
         {
             for (int c = 0; c < columnas; c++)
             {
-                int cCapturado = c;
-                CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraX,
-                    fp => (PosicionIntermedia(fp.XMin + insetEsquinas, fp.XMax - insetEsquinas, columnas, cCapturado), fp.YMin + insetX),
-                    posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.Marca, res, ref creadas);
+                double x = PosicionIntermedia(referencia.XMin + insetEsquinas, referencia.XMax - insetEsquinas, columnas, c);
+                double yInf = referencia.YMin + insetX;
+                double ySup = referencia.YMax - insetX;
 
                 CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraX,
-                    fp => (PosicionIntermedia(fp.XMin + insetEsquinas, fp.XMax - insetEsquinas, columnas, cCapturado), fp.YMax - insetX),
+                    doc, porHost, footprintPorHost, barraCaraX, (x, yInf), Corrimiento(barraCaraX, true, yInf),
                     posicion++ % 2 == 0,
                     niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.Marca, res, ref creadas);
+                    contexto.IdZapata, ganchoLongitudinal, contexto.Marca, res, ref creadas);
+
+                CrearBarraConTraslapos(
+                    doc, porHost, footprintPorHost, barraCaraX, (x, ySup), Corrimiento(barraCaraX, true, ySup),
+                    posicion++ % 2 == 0,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
+                    contexto.IdZapata, ganchoLongitudinal, contexto.Marca, res, ref creadas);
             }
         }
 
@@ -285,20 +386,21 @@ public static class GeneradorLongitudinal
         {
             for (int f = 0; f < filas; f++)
             {
-                int fCapturado = f;
-                CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraY,
-                    fp => (fp.XMin + insetY, PosicionIntermedia(fp.YMin + insetEsquinas, fp.YMax - insetEsquinas, filas, fCapturado)),
-                    posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.Marca, res, ref creadas);
+                double y = PosicionIntermedia(referencia.YMin + insetEsquinas, referencia.YMax - insetEsquinas, filas, f);
+                double xInf = referencia.XMin + insetY;
+                double xSup = referencia.XMax - insetY;
 
                 CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraY,
-                    fp => (fp.XMax - insetY, PosicionIntermedia(fp.YMin + insetEsquinas, fp.YMax - insetEsquinas, filas, fCapturado)),
+                    doc, porHost, footprintPorHost, barraCaraY, (xInf, y), Corrimiento(barraCaraY, false, xInf),
                     posicion++ % 2 == 0,
                     niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.Marca, res, ref creadas);
+                    contexto.IdZapata, ganchoLongitudinal, contexto.Marca, res, ref creadas);
+
+                CrearBarraConTraslapos(
+                    doc, porHost, footprintPorHost, barraCaraY, (xSup, y), Corrimiento(barraCaraY, false, xSup),
+                    posicion++ % 2 == 0,
+                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
+                    contexto.IdZapata, ganchoLongitudinal, contexto.Marca, res, ref creadas);
             }
         }
 
@@ -440,21 +542,20 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Agrupa los tramos TILDADOS de la columna por elemento host, quedándose
-    /// con el rango Z que cubren dentro de cada uno -- un Rebar longitudinal
-    /// por host, no por tramo (corre continuo dentro de un mismo elemento
-    /// aunque tenga un nudo de viga en el medio).
+    /// Agrupa TODOS los tramos físicos de la columna (tildados o no) por
+    /// elemento host, quedándose con el rango Z que cubren dentro de cada
+    /// uno -- un Rebar longitudinal por host, no por tramo (corre continuo
+    /// dentro de un mismo elemento aunque tenga un nudo de viga en el medio).
+    /// La longitudinal siempre es de la columna física completa; el tildado
+    /// de tramos en la UI es solo para configurar estribos (ver comentario
+    /// en el llamador).
     /// </summary>
-    private static List<(string IdHost, double ZInf, double ZSup)> AgruparPorHost(
-        ColumnaContexto contexto, ColumnaPlan columnaPlan)
+    private static List<(string IdHost, double ZInf, double ZSup)> AgruparPorHost(ColumnaContexto contexto)
     {
         var porHost = new List<(string IdHost, double ZInf, double ZSup)>();
 
-        for (int i = 0; i < contexto.Tramos.Count && i < columnaPlan.Tramos.Count; i++)
+        foreach (Tramo tramo in contexto.Tramos)
         {
-            if (columnaPlan.Tramos[i] is null) continue;
-
-            Tramo tramo = contexto.Tramos[i];
             if (tramo.IdElementoHost is null) continue;
 
             int idx = porHost.FindIndex(h => h.IdHost == tramo.IdElementoHost);
@@ -487,13 +588,16 @@ public static class GeneradorLongitudinal
         List<(string IdHost, double ZInf, double ZSup)> porHost,
         Dictionary<string, FootprintHost> footprintPorHost,
         RebarBarType barra,
-        Func<FootprintHost, (double X, double Y)> calcularXY,
+        (double X, double Y) posicion,
+        (double Dx, double Dy) corrimiento,
         bool esParGrupo,
         List<(int Ordinal, double ZInf, double ZSup)> niveles,
         double zInicioTotalMetros,
         double zFinTotalMetros,
         double longitudComercialMetros,
         Dictionary<(ElementId BarraId, bool EsPar), PlanDeCortes> cortesPorBarraYGrupo,
+        string? idZapata,
+        RebarHookType? ganchoLongitudinal,
         string marcaColumna,
         ResultadoArmado res,
         ref int creadas)
@@ -546,11 +650,28 @@ public static class GeneradorLongitudinal
             zFin = Math.Min(zFin, hostEntry.ZSup);
             if (zFin - zIni <= Tolerancia) continue;
 
-            (double x, double y) = calcularXY(fp);
+            // Corrimiento lateral: alterna cada vez que se pasa un traslapo
+            // REAL (los cortes forzados sin solape no cuentan -- ahí no hay
+            // dos barras conviviendo, es la misma línea partida por Revit).
+            // Arranca sin correr (posición de diseño) y va y vuelve, así no
+            // se acumula tramo tras tramo -- ver comentario en GenerarColumna.
+            int traslaposRealesPrevios = cortes.Take(s).Count(c => c.EsReal);
+            bool corrido = traslaposRealesPrevios % 2 == 1;
+            double x = posicion.X + (corrido ? corrimiento.Dx : 0);
+            double y = posicion.Y + (corrido ? corrimiento.Dy : 0);
+
+            // El gancho de anclaje (issue #37) va SOLO en el segmento
+            // hosteado en la zapata -- se identifica por el host sintético
+            // que GenerarColumna insertó en porHost con IdHost = IdZapata
+            // (ver comentario ahí). El resto de los segmentos de esta misma
+            // barra (y siempre el extremo superior) siguen rectos, sin
+            // gancho, como hasta ahora.
+            RebarHookType? ganchoDeEsteSegmento = hostEntry.IdHost == idZapata ? ganchoLongitudinal : null;
+
             CrearBarraVertical(
                 doc, fp, barra, x, y,
                 EstandarCQ.APies(zIni), EstandarCQ.APies(zFin),
-                marcaColumna, res, ref creadas);
+                ganchoDeEsteSegmento, marcaColumna, res, ref creadas);
         }
     }
 
@@ -685,19 +806,37 @@ public static class GeneradorLongitudinal
     private static void CrearBarraVertical(
         Document doc, FootprintHost fp, RebarBarType barra,
         double x, double y, double zInicio, double zFin,
-        string marcaColumna, ResultadoArmado res, ref int creadas)
+        RebarHookType? ganchoDeAnclaje, string marcaColumna, ResultadoArmado res, ref int creadas)
     {
         FamilyInstance host = fp.Host;
         try
         {
+            // zInicio < zFin siempre (todo este archivo arma los segmentos de
+            // abajo hacia arriba) -- Start del Line es el extremo INFERIOR.
             Line linea = Line.CreateBound(new XYZ(x, y, zInicio), new XYZ(x, y, zFin));
 
-            // BarTerminationsData "vacío" (sin fijar hooks): recta, sin
-            // gancho -- ConfigLongitudinal no tiene campo de gancho propio
-            // para longitudinal todavía (ver comentario del archivo). El
-            // traslapo en sí (Fase 5, #7) sí está resuelto: quien llama a
-            // esto ya le pasa el segmento correcto con o sin solape.
+            // BarTerminationsData: recta en ambos extremos salvo que este
+            // segmento sea el que ancla en la zapata (issue #37), en cuyo
+            // caso el extremo INFERIOR (Start) lleva el gancho de anclaje --
+            // el superior (End) sigue sin gancho siempre, sea cual sea el
+            // segmento.
+            //
+            // Orientación (Left): SIN confirmar todavía contra Revit real.
+            // No hay ninguna convención ya probada en este código para
+            // "adentro/afuera" en una barra vertical -- los únicos usos que
+            // existen (estribos, grapas, cajas) son loops horizontales con
+            // normal BasisZ, geometría completamente distinta a esta curva
+            // vertical con normal BasisX. Se usa Left como primer intento
+            // porque es lo que ya funciona en el resto del código, pero hay
+            // que confirmarlo mirando el gancho en 3D (normativa colombiana:
+            // el gancho SIEMPRE va hacia adentro, nunca hacia afuera) y
+            // cambiar a Right acá si sale al revés.
             using var terminaciones = new BarTerminationsData(doc);
+            if (ganchoDeAnclaje is not null)
+            {
+                terminaciones.HookTypeIdAtStart = ganchoDeAnclaje.Id;
+                terminaciones.TerminationOrientationAtStart = RebarTerminationOrientation.Left;
+            }
 
             // La normal define el plano de la forma de la barra -- tiene que
             // ser PERPENDICULAR a la curva, no paralela. Para los estribos y

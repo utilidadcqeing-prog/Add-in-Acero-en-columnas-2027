@@ -38,6 +38,16 @@ public interface IProveedorContexto
     IReadOnlyList<ColumnaResumen> ListarColumnas();
 
     /// <summary>
+    /// Las rejillas (grids) del modelo, para el selector visual de planta
+    /// (reunión 9-sep: William pidió ver las columnas ubicadas como en un
+    /// plano de planta real, con las burbujas de rejilla si el modelo las
+    /// tiene). Lista vacía es un resultado válido y esperado -- un modelo sin
+    /// rejillas, o el proveedor falso -- el selector visual debe dibujar
+    /// igual, solo sin ellas.
+    /// </summary>
+    IReadOnlyList<Rejilla> ListarRejillas();
+
+    /// <summary>
     /// Descarta cualquier geometría de Revit (sólidos, contornos) leída y
     /// guardada en corridas anteriores. Hay que llamarlo después de generar
     /// armado: los objetos de geometría que devuelve la API de Revit dejan de
@@ -57,7 +67,7 @@ public interface IProveedorContexto
 /// falso) y viaja ya resuelta acá para que la ventana no necesite conocer
 /// las dimensiones -- solo agrupa por este booleano.
 /// </summary>
-public sealed record ColumnaResumen(string Id, string Marca, bool EsColumneta)
+public sealed record ColumnaResumen(string Id, string Marca, bool EsColumneta, double X, double Y)
 {
     /// <summary>
     /// Umbral de "columneta", en metros -- issue #33: confirmado por William
@@ -71,3 +81,13 @@ public sealed record ColumnaResumen(string Id, string Marca, bool EsColumneta)
     public static bool CalcularEsColumneta(double baseX, double baseY) =>
         baseX < UmbralMetros || baseY < UmbralMetros;
 }
+
+/// <summary>
+/// Una rejilla (grid) del modelo, para el selector visual de planta -- solo
+/// su nombre y los extremos de su recta, en metros (coordenadas de
+/// proyecto). Se asume recta: una rejilla curva no se puede representar así
+/// y se descarta del lado del proveedor real (ver <c>LectorContexto</c>),
+/// mismo criterio que ya usa <c>GeometriaSeccion.ValidarRectangular</c> para
+/// secciones no rectangulares -- no soportado por ahora, no un error fatal.
+/// </summary>
+public sealed record Rejilla(string Nombre, double X1, double Y1, double X2, double Y2);

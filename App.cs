@@ -45,6 +45,16 @@ public class App : IExternalApplication
             "Genera columnetas y viguetas de confinamiento en los muros seleccionados.",
             dllPath, folder, "iconoCQ"));
 
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoRebar.cs. Sacar
+        // este botón (y el comando) una vez confirmado el corrimiento lateral
+        // real del traslapo.
+        panelHerramientas.AddItem(CrearBoton(
+            "ComandoDiagnosticoRebar",
+            "Diagnóstico\nde Rebar",
+            "practicacq.ComandoDiagnosticoRebar",
+            "TEMPORAL: selecciona barras y muestra las coordenadas de su geometría, para medir el corrimiento real de un traslapo.",
+            dllPath, folder, "iconoCQ"));
+
         return Result.Succeeded;
     }
 

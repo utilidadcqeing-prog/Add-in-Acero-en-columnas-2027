@@ -75,6 +75,16 @@ public partial class VentanaConfiguradorEstribos : Window
     private bool _modoColumnaCompleta;
 
     /// <summary>
+    /// Mientras se está activando una fila porque el usuario seleccionó algo
+    /// en Revit directamente (no en la ventana), <see cref="NotificarElementosActivos"/>
+    /// no debe re-emitir <see cref="ElementosActivados"/> -- si lo hiciera,
+    /// <c>ComandoEstribos</c> le pediría a Revit que vuelva a seleccionar los
+    /// mismos elementos, lo que dispara de nuevo el cambio de selección de
+    /// Revit y entra en bucle. Ver <see cref="SincronizarDesdeRevit"/>.
+    /// </summary>
+    private bool _sincronizandoDesdeRevit;
+
+    /// <summary>
     /// Se dispara con los ids de los elementos de Revit a seleccionar: todos
     /// los de la pila si se activó la columna entera, o uno solo (el
     /// <see cref="Tramo.IdElementoHost"/> del tramo) si se activó un tramo
@@ -120,6 +130,7 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraX.ItemsSource = _tipos.ListarTiposBarra();
         ComboBarraCaraY.ItemsSource = _tipos.ListarTiposBarra();
         ComboBarraEsquinas.ItemsSource = _tipos.ListarTiposBarra();
+        ComboGanchoLongitudinal.ItemsSource = _tipos.ListarTiposGancho();
 
         // Pares del 2 al 20 -- "nada se teclea a mano" aplica también acá,
         // no solo a los tipos de barra.
@@ -146,6 +157,8 @@ public partial class VentanaConfiguradorEstribos : Window
         // pasó de verdad con CampoEspaciadoConfinado_TextChanged, ver commit.
         CampoEspaciadoConfinado.TextChanged += CampoEspaciadoConfinado_TextChanged;
         CampoEspaciadoConfinado.TextChanged += (_, _) => RevalidarPanel();
+
+        PanelPlanta.ColumnaClicked += ActivarYAlternarMarcadoDesdePlanta;
         CampoEspaciadoUniforme.TextChanged += (_, _) => RevalidarPanel();
         CampoL1.TextChanged += (_, _) => RevalidarPanel();
         CampoEspaciadoNoConfinado.TextChanged += (_, _) => RevalidarPanel();
@@ -271,6 +284,96 @@ public partial class VentanaConfiguradorEstribos : Window
         CargarLongitudinalDeColumnaActiva();
         MostrarAvisos();
         NotificarElementosActivos();
+
+        // Si el selector visual de planta está a la vista, resaltar en él la
+        // misma columna que acaba de activarse -- por cualquier camino:
+        // clic en la lista, clic en el propio panel, flechas de la
+        // elevación, o sincronización desde una selección hecha en Revit.
+        if (PanelPlanta.Visibility == Visibility.Visible) RedibujarPanelPlanta();
+    }
+
+    /// <summary>
+    /// Alterna, en el mismo espacio de la columna izquierda, entre la lista
+    /// de tramos y el selector visual de planta (reunión 9-sep, #39) --
+    /// pedido explícito: se mantiene la lista con checkboxes para configurar
+    /// tramos, el selector visual es solo una forma más fácil de identificar
+    /// y elegir QUÉ columna activar, no la reemplaza.
+    /// </summary>
+    private void BotonVerPlanta_Click(object sender, RoutedEventArgs e)
+    {
+        bool aPlanta = PanelPlanta.Visibility != Visibility.Visible;
+
+        PanelPlanta.Visibility = aPlanta ? Visibility.Visible : Visibility.Collapsed;
+        PestanasSeleccion.Visibility = aPlanta ? Visibility.Collapsed : Visibility.Visible;
+        BotonVerPlanta.Content = aPlanta ? "Ver lista" : "Ver en planta";
+
+        if (aPlanta) RedibujarPanelPlanta();
+    }
+
+    private void RedibujarPanelPlanta()
+    {
+        HashSet<string> marcadas = _nodos.Where(n => n.EsColumna && n.Marcado).Select(n => n.ColumnaId).ToHashSet();
+        PanelPlanta.Cargar(_contexto.ListarColumnas(), _contexto.ListarRejillas(), _columnaIdActiva, marcadas);
+    }
+
+    /// <summary>
+    /// Clic en una columna del selector visual de planta: activa Y tilda (o
+    /// destilda) la columna entera de un solo gesto -- pedido explícito del
+    /// usuario, mismo efecto combinado que activar la fila en negrita de la
+    /// lista y tildar su checkbox. Cascadea a todos sus tramos, igual que
+    /// <see cref="CheckBoxNodo_Changed"/>.
+    /// </summary>
+    private void ActivarYAlternarMarcadoDesdePlanta(string columnaId)
+    {
+        NodoLista? nodo = _nodos.FirstOrDefault(n => n.EsColumna && n.ColumnaId == columnaId);
+        if (nodo is null) return;
+
+        nodo.Marcado = !nodo.Marcado;
+        foreach (NodoLista tramo in _nodos.Where(n => !n.EsColumna && n.ColumnaId == nodo.ColumnaId))
+            tramo.Marcado = nodo.Marcado;
+        NotificarSeleccionMarcada();
+
+        Activar(nodo);
+    }
+
+    /// <summary>
+    /// Issue #24 (segundo sentido, reunión 9-sep): si el usuario selecciona
+    /// una columna directamente en Revit (no en esta ventana), activa la fila
+    /// correspondiente acá -- mismo camino que un clic en la lista
+    /// (<see cref="Activar"/>), sin volver a mandarle la selección a Revit
+    /// (ya la tiene, es de ahí que salió). <c>ComandoEstribos</c> llama esto
+    /// desde un listener del cambio de selección nativo de Revit.
+    ///
+    /// Busca primero por tramo (<see cref="NodoLista.IdElementoHost"/>, más
+    /// específico) y si no encuentra nada cae a buscar por columna completa
+    /// (<see cref="NodoLista.ColumnaId"/>) -- cubre el caso de seleccionar el
+    /// elemento de más abajo de la pila, que es el mismo id que la fila de
+    /// columna usa como <c>ColumnaId</c>. Si la selección de Revit no
+    /// corresponde a ninguna columna conocida (otro tipo de elemento, o
+    /// varios elementos sueltos), no hace nada -- no hay fila que activar.
+    /// </summary>
+    public void SincronizarDesdeRevit(IReadOnlyList<string> idsSeleccionados)
+    {
+        if (idsSeleccionados.Count == 0) return;
+
+        var idsSet = new HashSet<string>(idsSeleccionados);
+        NodoLista? nodo = _nodos.FirstOrDefault(n => !n.EsColumna && n.IdElementoHost is not null && idsSet.Contains(n.IdElementoHost))
+            ?? _nodos.FirstOrDefault(n => n.EsColumna && idsSet.Contains(n.ColumnaId));
+        if (nodo is null) return;
+
+        _sincronizandoDesdeRevit = true;
+        try
+        {
+            if (nodo.EsColumneta) PestanasSeleccion.SelectedIndex = 1;
+            ListBox lista = nodo.EsColumneta ? ListaColumnetas : ListaPrincipales;
+            if (!ReferenceEquals(lista.SelectedItem, nodo)) lista.SelectedItem = nodo;
+
+            Activar(nodo);
+        }
+        finally
+        {
+            _sincronizandoDesdeRevit = false;
+        }
     }
 
     private void IrA(int indice)
@@ -318,7 +421,10 @@ public partial class VentanaConfiguradorEstribos : Window
         // cae al id representativo de la columna en vez de no seleccionar nada.
         if (ids.Count == 0 && _columnaIdActiva is not null) ids.Add(_columnaIdActiva);
 
-        if (ids.Count > 0) ElementosActivados?.Invoke(ids);
+        // Ver _sincronizandoDesdeRevit: si esta activación vino de una
+        // selección hecha en Revit, no hay que devolverle la selección --
+        // ya la tiene, es de ahí que salió esta activación.
+        if (ids.Count > 0 && !_sincronizandoDesdeRevit) ElementosActivados?.Invoke(ids);
     }
 
     private void BotonAnterior_Click(object sender, RoutedEventArgs e) => IrA(_tramoActivoIndice - 1);
@@ -486,6 +592,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
         TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
         LongitudComercialBarra = ComboLongitudBarra.SelectedItem as double? ?? 12.0,
+        TipoGanchoLongitudinalNombre = ComboGanchoLongitudinal.SelectedItem as string,
         // Las posiciones de grapas/cajas no se leen del panel: se editan aparte
         // en L4 y viven en _longitudinalPorColumna hasta que este método las
         // pisa -- por eso Guardar... las vuelve a copiar explícitamente.
@@ -499,6 +606,7 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
         ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
         ComboLongitudBarra.SelectedItem = cfg.LongitudComercialBarra;
+        ComboGanchoLongitudinal.SelectedItem = cfg.TipoGanchoLongitudinalNombre;
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
     }
@@ -521,6 +629,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraYNombre = tipos.ListarTiposBarra().FirstOrDefault(),
         TipoBarraEsquinasNombre = tipos.ListarTiposBarra().FirstOrDefault(),
         LongitudComercialBarra = 12.0,
+        TipoGanchoLongitudinalNombre = tipos.ListarTiposGancho().FirstOrDefault(),
     };
 
     private void GuardarLongitudinalDeColumnaActiva()
