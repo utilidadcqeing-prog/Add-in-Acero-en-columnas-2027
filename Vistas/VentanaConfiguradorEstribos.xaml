@@ -269,7 +269,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" x:Name="TextoEstado" Foreground="Gray" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar estribos generados antes en estas columnas"
+            <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar TODO el armado existente en estas columnas (incluido el que no generó el addin)"
                       VerticalAlignment="Center" Margin="0,0,12,0" />
             <Button Grid.Column="2" x:Name="BotonExportar" Content="Exportar PlanArmado (JSON)"
                     Height="32" Padding="12,0" Background="#1E8449" Foreground="White"

@@ -32,11 +32,19 @@ Se le preguntó si TODO cambio de piso debía llevar un traslapo real con corrim
 - Nueva función local `Corrimiento(barra, ejeY, coordenadaFija)`: calcula un vector de corrimiento de magnitud = diámetro de la barra, a lo largo del eje "fijo" de esa posición (Y para esquinas y barras de cara X, X para barras de cara Y), con signo hacia el centro de la sección.
 - `CrearBarraConTraslapos` ahora recibe ese vector y lo aplica alternando: arranca en la posición de diseño, y cada vez que pasa un traslapo REAL (no un corte forzado sin traslapo) alterna entre la posición original y la corrida -- así no se acumula corrimiento tramo tras tramo, va y vuelve.
 
-**Supuesto sin confirmar todavía**: el criterio de qué eje corre (Y para esquinas/cara-X, X para cara-Y) solo está medido con un dato real (una barra de cara X). Para esquinas se aplicó el mismo criterio por analogía (correr en Y), no hay medición propia de una esquina o de una barra de cara Y todavía. Si al probar visualmente una esquina queda mal, hay que revisar ese supuesto específico.
+**Supuesto sin confirmar todavía (corregido el 9-sep, ver más abajo)**: el criterio de qué eje corre (Y para esquinas/cara-X, X para cara-Y) solo estaba medido con un dato real (una barra de cara X). Para esquinas se aplicó el mismo criterio por analogía (correr en Y); para cara Y se asumió que corría en X (la coordenada fija de esa cara), sin medición real.
+
+## Corrección (9-sep, más tarde en la misma sesión): el supuesto de cara Y estaba mal
+
+Se midió una barra de cara Y real contra el mismo modelo de referencia de la empresa (misma columna que la medición original, un piso más arriba: `Rebar 153393`/`153394`, hosts 152853/152865, huella de columna 0.50×0.50m). Resultado: **X idéntico, Y corrido 1.9cm** -- exactamente el mismo patrón que la barra de cara X, NO el eje contrario que se había supuesto.
+
+Con esta medición más la de cara X original, y coincidiendo además con lo que calcula automáticamente `RebarSpliceShiftOption.BarPlane` de la API de Revit en todas las pruebas hechas durante la investigación de migración a `RebarSpliceUtils` (ver `docs/planes/2026-09-09-empalmes-rebarspliceutils.md`), el criterio real confirmado es: **el corrimiento siempre va en Y, sin importar la cara** (esquina, cara X o cara Y) -- no alterna según la cara como se había asumido.
+
+`Logica/GeneradorLongitudinal.cs`: `Corrimiento` se simplificó -- ya no recibe un eje (`ejeY`), siempre corre en Y contra el centro Y de la sección. Los tres grupos de llamadas (esquinas, cara X, cara Y) se actualizaron para pasar la coordenada Y real de cada posición.
 
 ## Estado
 
-Compilado y desplegado. Pendiente: retest visual del usuario contra Revit real (generar una columna con traslapo esperado y confirmar que las dos barras del traslapo ya no coinciden en línea, se ven corridas, y compararlo visualmente contra el modelo de William).
+Compilado. Pendiente: desplegar y retest visual del usuario contra Revit real (generar una columna con traslapo esperado en una posición de cara Y y confirmar que el corrimiento ahora se ve, y en el eje correcto).
 
 ## Comando temporal de diagnóstico
 

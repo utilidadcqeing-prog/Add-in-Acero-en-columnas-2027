@@ -55,6 +55,16 @@ public class App : IExternalApplication
             "TEMPORAL: selecciona barras y muestra las coordenadas de su geometría, para medir el corrimiento real de un traslapo.",
             dllPath, folder, "iconoCQ"));
 
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoSplice en
+        // ComandoDiagnosticoRebar.cs. Sacar este botón (y el comando) una vez
+        // decidido si se migra a RebarSpliceUtils.
+        panelHerramientas.AddItem(CrearBoton(
+            "ComandoDiagnosticoSplice",
+            "Diagnóstico\nde Empalme",
+            "practicacq.ComandoDiagnosticoSplice",
+            "TEMPORAL: prueba la API real de empalmes de Revit (RebarSpliceUtils) sobre una barra seleccionada, sin dejar cambios permanentes.",
+            dllPath, folder, "iconoCQ"));
+
         return Result.Succeeded;
     }
 

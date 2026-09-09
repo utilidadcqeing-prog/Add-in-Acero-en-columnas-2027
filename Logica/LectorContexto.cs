@@ -649,12 +649,31 @@ public sealed class LectorContexto : IProveedorContexto
     /// se devuelve 0 para que el defecto se vea en la ventana en vez de colarse
     /// como un 4 cm inventado.
     /// </summary>
+    /// <summary>
+    /// El valor normal de recubrimiento para el equipo -- confirmado por
+    /// William (9-sep): no hay que imponerlo (se sigue usando lo que tenga la
+    /// columna en Revit), pero si el recubrimiento asignado es distinto de
+    /// este hay que avisar, porque suele ser un dato mal cargado en el
+    /// modelo, no una decisión real de diseño.
+    /// </summary>
+    private const double RecubrimientoNormalMetros = 0.04;
+
     private double Recubrimiento(FamilyInstance columna, List<string> avisos)
     {
         Parameter? p = columna.get_Parameter(BuiltInParameter.CLEAR_COVER_OTHER);
 
         if (p is not null && _doc.GetElement(p.AsElementId()) is RebarCoverType tipo)
-            return tipo.CoverDistance;
+        {
+            double recubrimientoPies = tipo.CoverDistance;
+            double recubrimientoMetros = AMetros(recubrimientoPies);
+
+            if (Math.Abs(recubrimientoMetros - RecubrimientoNormalMetros) > 0.001)
+                avisos.Add(
+                    $"Recubrimiento lateral de {recubrimientoMetros * 100:0.#} cm -- distinto del valor normal " +
+                    $"({RecubrimientoNormalMetros * 100:0} cm). Se usa igual, solo para que lo revisen.");
+
+            return recubrimientoPies;
+        }
 
         avisos.Add("No tiene recubrimiento lateral asignado. Se corregirá al generar.");
         return 0;

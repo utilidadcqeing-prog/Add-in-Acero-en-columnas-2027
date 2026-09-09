@@ -229,6 +229,15 @@ public partial class VentanaConfiguradorEstribos : Window
     /// <summary>Handler compartido por las dos pestañas (issue #33) -- cada una es un ListBox distinto.</summary>
     private void ListaSeleccion_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // Si esto lo disparó SincronizarDesdeRevit (al poner lista.SelectedItem
+        // = nodo, unas líneas más abajo de ahí), ese método ya llama a
+        // Activar(nodo) explícitamente después -- sin este corte se llama
+        // Activar dos veces reentrante, una desde acá en medio de la otra,
+        // pisando _columnaActiva/_tramoActivoIndice a mitad de camino. Eso
+        // dejaba el estado inconsistente y probablemente era la causa real
+        // del crash de Revit al cerrar la ventana (una excepción ahí se
+        // escapa por el lado nativo del evento de selección de Revit).
+        if (_sincronizandoDesdeRevit) return;
         if (sender is ListBox { SelectedItem: NodoLista nodo }) Activar(nodo);
     }
 

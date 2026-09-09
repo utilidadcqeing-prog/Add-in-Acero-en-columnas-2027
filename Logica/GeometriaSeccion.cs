@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Structure;
 
 /// <summary>
 /// Geometría de sección compartida entre los generadores de armado real:
@@ -70,6 +71,62 @@ internal static class GeometriaSeccion
         }
 
         return (xMin, xMax, yMin, yMax);
+    }
+
+    /// <summary>Mismo cálculo que <see cref="Huella(CurveLoop)"/>, para cuando lo que se tiene es una lista de curvas suelta (ya trasladada en Z) en vez de un <see cref="CurveLoop"/>.</summary>
+    public static (double XMin, double XMax, double YMin, double YMax) Huella(IList<Curve> curvas)
+    {
+        double xMin = double.MaxValue, xMax = double.MinValue;
+        double yMin = double.MaxValue, yMax = double.MinValue;
+
+        foreach (Curve c in curvas)
+        {
+            foreach (XYZ p in new[] { c.GetEndPoint(0), c.GetEndPoint(1) })
+            {
+                xMin = Math.Min(xMin, p.X);
+                xMax = Math.Max(xMax, p.X);
+                yMin = Math.Min(yMin, p.Y);
+                yMax = Math.Max(yMax, p.Y);
+            }
+        }
+
+        return (xMin, xMax, yMin, yMax);
+    }
+
+    /// <summary>
+    /// La forma de estribo cerrado (<see cref="RebarStyle.StirrupTie"/>) que haya
+    /// cargada en el documento, para crear estribos con <c>Rebar.CreateFromRebarShape</c>
+    /// en vez de armar curvas a mano -- evita de raíz el problema documentado en
+    /// <see cref="ConQuiebreEnMedioDeLado"/> (el gancho se come el fillet de 90°
+    /// en el vértice de cierre del lazo cuando se arma con <c>CreateFromCurves</c>):
+    /// acá la geometría de esquinas/ganchos la resuelve la propia definición de
+    /// la familia, no un cálculo nuestro. Mismo criterio de búsqueda por nombre
+    /// que ya usa el otro add-in de referencia del equipo
+    /// (<c>Addin_Acero_Columnas/Services/ShapeBasedStirrupService.cs</c>).
+    /// <c>null</c> si el documento no tiene ninguna forma así cargada -- quien
+    /// llama debe caer al camino de <c>CreateFromCurves</c> en ese caso, no fallar.
+    /// </summary>
+    public static RebarShape? BuscarFormaEstribo(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarShape))
+            .Cast<RebarShape>()
+            .FirstOrDefault(f => f.RebarStyle == RebarStyle.StirrupTie &&
+                (f.Name.Contains("T1") || f.Name == "51" || f.Name.Contains("M_T1") ||
+                 f.Name.Contains("Estribo") || f.Name.Contains("Stirrup")));
+
+    /// <summary>
+    /// Primer <see cref="RebarSpliceType"/> que tenga el documento (issue
+    /// empalmes reales, ver docs/planes/2026-09-09-empalmes-rebarspliceutils.md)
+    /// -- no hay ninguna convención de nombre conocida todavía (a diferencia
+    /// de <see cref="BuscarFormaEstribo"/>), así que se toma el primero que
+    /// haya. Null si el documento no tiene ninguno cargado -- el llamador
+    /// tiene que caer al método anterior (dos Rebar con corrimiento a mano)
+    /// en ese caso, no crear un tipo nuevo silenciosamente.
+    /// </summary>
+    public static ElementId? BuscarTipoEmpalme(Document doc)
+    {
+        ICollection<ElementId> existentes = RebarSpliceTypeUtils.GetAllRebarSpliceTypes(doc);
+        return existentes.Count > 0 ? existentes.First() : null;
     }
 
     public static Solid? ObtenerSolido(Element el)
