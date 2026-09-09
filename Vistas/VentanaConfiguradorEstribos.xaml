@@ -1,6 +1,7 @@
 <Window x:Class="practicacq.Vistas.VentanaConfiguradorEstribos"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:practicacq.Vistas"
         Title="Configurador de Estribos"
         Height="640" Width="1040"
         MinHeight="560" MinWidth="960"
@@ -83,12 +84,20 @@
             <!-- Selección: columnas y tramos -->
             <Border Grid.Column="0" Style="{StaticResource Panel}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Columnas y tramos" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Columnas y tramos" Style="{StaticResource Etiqueta}" Margin="0" />
+                        <Button Grid.Column="1" x:Name="BotonVerPlanta" Content="Ver en planta"
+                                Padding="8,2" FontSize="11" Click="BotonVerPlanta_Click" />
+                    </Grid>
 
                     <!-- Issue #33: dos pestañas en vez de una sola lista con
                          encabezados. La de Columnetas se oculta sola si el
                          modelo no tiene ninguna. -->
-                    <TabControl BorderThickness="0" Background="Transparent">
+                    <TabControl x:Name="PestanasSeleccion" BorderThickness="0" Background="Transparent">
                         <TabItem Header="Columnas principales">
                             <ListBox x:Name="ListaPrincipales" BorderThickness="0"
                                      ItemTemplate="{StaticResource PlantillaNodo}"
@@ -100,6 +109,11 @@
                                      SelectionChanged="ListaSeleccion_SelectionChanged" />
                         </TabItem>
                     </TabControl>
+
+                    <!-- Selector visual de planta (reunión 9-sep, #39): alterna
+                         con el TabControl de arriba en el mismo espacio (ver
+                         BotonVerPlanta_Click). Empieza oculto. -->
+                    <local:PanelPlantaColumnas x:Name="PanelPlanta" Visibility="Collapsed" />
                 </DockPanel>
             </Border>
 
@@ -235,6 +249,9 @@
                     <TextBlock Text="Longitud de barra comercial (traslapos, Fase 5):" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboLongitudBarra" Height="24" />
 
+                    <TextBlock Text="Gancho de anclaje en zapata (issue #37):" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboGanchoLongitudinal" Height="24" />
+
                     <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,4,0,0" />
@@ -252,7 +269,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" x:Name="TextoEstado" Foreground="Gray" VerticalAlignment="Center" TextWrapping="Wrap" />
-            <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar estribos generados antes en estas columnas"
+            <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar TODO el armado existente en estas columnas (incluido el que no generó el addin)"
                       VerticalAlignment="Center" Margin="0,0,12,0" />
             <Button Grid.Column="2" x:Name="BotonExportar" Content="Exportar PlanArmado (JSON)"
                     Height="32" Padding="12,0" Background="#1E8449" Foreground="White"

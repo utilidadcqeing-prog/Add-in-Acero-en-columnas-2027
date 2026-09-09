@@ -42,6 +42,19 @@ public sealed class ColumnaContexto
     /// </summary>
     public double ZInferiorLongitudinal { get; init; }
 
+    /// <summary>
+    /// Id del elemento de Revit de la zapata sobre la que arranca esta
+    /// columna, si la hay -- mismo formato que <see cref="Tramo.IdElementoHost"/>.
+    /// El tramo de anclaje del longitudinal (entre <see cref="ZInferiorLongitudinal"/>
+    /// y <see cref="ZInferior"/>) vive DENTRO del sólido de la zapata, no del
+    /// de la columna -- Revit no aloja un Rebar cuya curva se sale del
+    /// sólido de su host (probado sobre Revit real, ver <see cref="ZInferior"/>
+    /// y el generador de longitudinal), así que ese tramo necesita hostearse
+    /// en la zapata, no en el primer elemento de la columna. <c>null</c> si
+    /// no hay zapata (o del lado del proveedor falso, donde no aplica).
+    /// </summary>
+    public string? IdZapata { get; init; }
+
     /// <summary>Cota real del remate, sacada de la geometría y no de «Longitud del sistema».</summary>
     public double ZSuperior { get; init; }
 

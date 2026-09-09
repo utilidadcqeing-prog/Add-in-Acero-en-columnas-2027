@@ -37,6 +37,19 @@ public sealed class ManejadorSeleccionElemento : IExternalEventHandler
     /// </summary>
     public bool CentrarVista { get; set; } = true;
 
+    /// <summary>
+    /// True mientras este handler está cambiando la selección de Revit por
+    /// pedido del addin (no del usuario). <c>UIApplication.SelectionChanged</c>
+    /// se dispara igual sea cual sea el origen del cambio -- sin esto, la
+    /// sincronización Revit→addin (ver <c>ComandoEstribos</c>) tomaría esta
+    /// selección programática como si el usuario hubiera clickeado en Revit y
+    /// reactivaría la misma fila de nuevo (inofensivo, pero trabajo de más en
+    /// cada clic hecho desde la ventana). Estático porque hay dos instancias
+    /// de este handler (activar / marcar) y cualquiera de las dos puede estar
+    /// tocando la selección en un momento dado.
+    /// </summary>
+    public static bool SincronizacionEnCurso { get; private set; }
+
     public void Execute(UIApplication app)
     {
         UIDocument? uidoc = app.ActiveUIDocument;
@@ -48,10 +61,18 @@ public sealed class ManejadorSeleccionElemento : IExternalEventHandler
             .Where(id => uidoc.Document.GetElement(id) is not null)
             .ToList();
 
-        uidoc.Selection.SetElementIds(existentes);
+        SincronizacionEnCurso = true;
+        try
+        {
+            uidoc.Selection.SetElementIds(existentes);
 
-        if (CentrarVista && existentes.Count > 0)
-            uidoc.ShowElements(existentes);
+            if (CentrarVista && existentes.Count > 0)
+                uidoc.ShowElements(existentes);
+        }
+        finally
+        {
+            SincronizacionEnCurso = false;
+        }
     }
 
     public string GetName() => "Seleccionar elemento desde el addin";

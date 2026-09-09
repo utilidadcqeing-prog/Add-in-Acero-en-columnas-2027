@@ -90,7 +90,34 @@ public sealed class LectorContexto : IProveedorContexto
             .Select(pila => new ColumnaResumen(
                 IdTexto(pila[0].Instancia.Id),
                 Marca(pila[0].Instancia),
-                ColumnaResumen.CalcularEsColumneta(AMetros(LadoX(pila[0].Solido)), AMetros(LadoY(pila[0].Solido)))))
+                ColumnaResumen.CalcularEsColumneta(AMetros(LadoX(pila[0].Solido)), AMetros(LadoY(pila[0].Solido))),
+                // El centro en planta del elemento de más abajo de la pila --
+                // mismo criterio que ya usa AgruparPilas para agrupar (ver
+                // ElementoColumna.Centro): alcanza para ubicar la columna en
+                // el selector visual, aunque la sección esté rotada (ver
+                // GeometriaSeccion.ValidarRectangular, misma limitación que
+                // ya tiene el resto del generador para columnas rotadas).
+                AMetros(pila[0].Centro.X),
+                AMetros(pila[0].Centro.Y)))
+            .ToList();
+
+    /// <summary>
+    /// Rejillas (grids) del documento, para el selector visual de planta. Se
+    /// descartan las que no son rectas (Revit puede modelar una rejilla
+    /// curva/de arco) -- no hay forma de representarlas en el selector, mismo
+    /// criterio que <c>GeometriaSeccion.ValidarRectangular</c> aplica para
+    /// secciones no rectangulares: se omiten en vez de fallar todo el lote.
+    /// </summary>
+    public IReadOnlyList<Rejilla> ListarRejillas() =>
+        new FilteredElementCollector(_doc)
+            .OfClass(typeof(Grid))
+            .Cast<Grid>()
+            .Select(g => (Grid: g, Curva: g.Curve))
+            .Where(t => t.Curva is Line)
+            .Select(t => new Rejilla(
+                t.Grid.Name,
+                AMetros(t.Curva.GetEndPoint(0).X), AMetros(t.Curva.GetEndPoint(0).Y),
+                AMetros(t.Curva.GetEndPoint(1).X), AMetros(t.Curva.GetEndPoint(1).Y)))
             .ToList();
 
     public ColumnaContexto Leer(string idColumna)
@@ -125,6 +152,7 @@ public sealed class LectorContexto : IProveedorContexto
         // zapata, vale lo mismo que el arranque normal (no hay dónde
         // anclarse más abajo).
         double zInferiorLongitudinal = double.MinValue;
+        string? idZapata = null;
         const double AnclajeSobreElFondo = 0.075; // 7.5cm, issue #26.
 
         foreach (ElementoColumna el in pila)
@@ -136,7 +164,7 @@ public sealed class LectorContexto : IProveedorContexto
             // más arriba no hay nada contra qué arrancar.
             if (primero)
             {
-                (double zZapata, double fondoZapata) = TopeDeZapata(el.Solido);
+                (double zZapata, double fondoZapata, Element? zapata) = TopeDeZapata(el.Solido);
 
                 // Toca zapata en cuanto se encontró una -- no solo cuando el
                 // sólido de la columna se mete DENTRO de ella (zZapata bien
@@ -153,6 +181,7 @@ public sealed class LectorContexto : IProveedorContexto
                 {
                     zArranque = Math.Max(el.ZInf, zZapata);
                     zInferiorLongitudinal = fondoZapata + APies(AnclajeSobreElFondo);
+                    idZapata = zapata is not null ? IdTexto(zapata.Id) : null;
                     avisos.Add($"Arranca sobre cimentación: el acero empieza en {AMetros(zArranque):0.00} m.");
                 }
             }
@@ -209,6 +238,7 @@ public sealed class LectorContexto : IProveedorContexto
             Recubrimiento = AMetros(Recubrimiento(base_.Instancia, avisos)),
             ZInferior = AMetros(zInferiorGlobal),
             ZInferiorLongitudinal = AMetros(zInferiorLongitudinalGlobal),
+            IdZapata = idZapata,
             ZSuperior = AMetros(pila[^1].ZSup),
             Tramos = tramos,
             Niveles = Rotulos(zInferiorGlobal, pila[^1].ZSup),
@@ -369,9 +399,28 @@ public sealed class LectorContexto : IProveedorContexto
             Solid? solidoViga = SolidoMayor(
                 viga.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }));
 
-            if (solidoViga is null || !SeTocan(huellaColumna, HuellaPlanta(solidoViga))) continue;
+            if (solidoViga is null) continue;
+
+            Huella huellaViga = HuellaPlanta(solidoViga);
+            if (!SeTocan(huellaColumna, huellaViga)) continue;
 
             (double inf, double sup) = ExtensionZ(solidoViga);
+
+            // Una vigueta NO genera nudo -- criterio de William (reunión
+            // 8-sep, sobre el script de referencia): "cómo sabemos que es una
+            // vigueta? en su dimensión de base tiene menos de 20[cm], o la
+            // altura tiene 20 o menos". La altura sale directo del sólido
+            // (sup - inf, ya calculado arriba). El ancho de una viga
+            // horizontal no se lee tan directo como el de una columna
+            // vertical (acá el largo del tramo, no el ancho, es el lado
+            // grande de la huella en planta) -- se aproxima con el menor de
+            // los dos lados de su huella en planta, que en cualquier grilla
+            // ortogonal normal es el ancho de la sección, no su largo. Mismo
+            // umbral que ya usa `ColumnaResumen.UmbralMetros` para columnetas
+            // (issue #33) -- incluso el criterio "base O altura" es el mismo.
+            double anchoVigaAprox = Math.Min(huellaViga.XMax - huellaViga.XMin, huellaViga.YMax - huellaViga.YMin);
+            if (AMetros(sup - inf) < ColumnaResumen.UmbralMetros || AMetros(anchoVigaAprox) < ColumnaResumen.UmbralMetros)
+                continue;
 
             inf = Math.Max(inf, zArranque);
             sup = Math.Min(sup, zTope);
@@ -413,11 +462,18 @@ public sealed class LectorContexto : IProveedorContexto
     /// acero longitudinal SÍ entra en la zapata a anclarse -- a diferencia
     /// del estribo, que arranca en la cara superior -- y para eso hace falta
     /// saber dónde está el fondo (ver <see cref="ColumnaContexto.ZInferiorLongitudinal"/>).
+    ///
+    /// También devuelve el elemento de la zapata (la más profunda, si hay
+    /// más de una candidata) -- <see cref="ColumnaContexto.IdZapata"/> lo
+    /// necesita porque el tramo de anclaje del longitudinal se hostea en la
+    /// zapata, no en la columna (Revit no aloja un Rebar cuya curva se sale
+    /// del sólido de su host).
     /// </summary>
-    private (double Sup, double Inf) TopeDeZapata(Solid columna)
+    private (double Sup, double Inf, Element? Zapata) TopeDeZapata(Solid columna)
     {
         double tope = double.MinValue;
         double fondo = double.MinValue;
+        Element? elementoFondo = null;
         Huella huellaColumna = HuellaPlanta(columna);
 
         foreach (Element zapata in CandidatasPorCaja(huellaColumna, BuiltInCategory.OST_StructuralFoundation))
@@ -434,10 +490,14 @@ public sealed class LectorContexto : IProveedorContexto
             // el ZInferiorLongitudinal tiene que valer para cualquiera que
             // esté ahí tocando, no solo la que dio el tope más alto.
             if (sup > tope) tope = sup;
-            if (fondo == double.MinValue || inf < fondo) fondo = inf;
+            if (fondo == double.MinValue || inf < fondo)
+            {
+                fondo = inf;
+                elementoFondo = zapata;
+            }
         }
 
-        return (tope, fondo);
+        return (tope, fondo, elementoFondo);
     }
 
     /// <summary>Rectángulo en planta que envuelve al sólido: (xMin, xMax, yMin, yMax).</summary>
@@ -589,12 +649,31 @@ public sealed class LectorContexto : IProveedorContexto
     /// se devuelve 0 para que el defecto se vea en la ventana en vez de colarse
     /// como un 4 cm inventado.
     /// </summary>
+    /// <summary>
+    /// El valor normal de recubrimiento para el equipo -- confirmado por
+    /// William (9-sep): no hay que imponerlo (se sigue usando lo que tenga la
+    /// columna en Revit), pero si el recubrimiento asignado es distinto de
+    /// este hay que avisar, porque suele ser un dato mal cargado en el
+    /// modelo, no una decisión real de diseño.
+    /// </summary>
+    private const double RecubrimientoNormalMetros = 0.04;
+
     private double Recubrimiento(FamilyInstance columna, List<string> avisos)
     {
         Parameter? p = columna.get_Parameter(BuiltInParameter.CLEAR_COVER_OTHER);
 
         if (p is not null && _doc.GetElement(p.AsElementId()) is RebarCoverType tipo)
-            return tipo.CoverDistance;
+        {
+            double recubrimientoPies = tipo.CoverDistance;
+            double recubrimientoMetros = AMetros(recubrimientoPies);
+
+            if (Math.Abs(recubrimientoMetros - RecubrimientoNormalMetros) > 0.001)
+                avisos.Add(
+                    $"Recubrimiento lateral de {recubrimientoMetros * 100:0.#} cm -- distinto del valor normal " +
+                    $"({RecubrimientoNormalMetros * 100:0} cm). Se usa igual, solo para que lo revisen.");
+
+            return recubrimientoPies;
+        }
 
         avisos.Add("No tiene recubrimiento lateral asignado. Se corregirá al generar.");
         return 0;

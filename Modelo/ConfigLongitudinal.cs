@@ -26,6 +26,15 @@ public sealed class ConfigLongitudinal
     public string? TipoBarraCaraYNombre { get; set; }
 
     /// <summary>
+    /// Gancho del anclaje inferior, donde la longitudinal entra a la zapata
+    /// (issue #37, normativa colombiana confirmada por Carlos Quintero: ese
+    /// gancho SIEMPRE va hacia adentro de la sección, nunca hacia afuera).
+    /// Solo aplica al extremo que ancla en la zapata -- el resto de la barra
+    /// sigue recta, sin gancho (ver comentario de <see cref="Logica.GeneradorLongitudinal"/>).
+    /// </summary>
+    public string? TipoGanchoLongitudinalNombre { get; set; }
+
+    /// <summary>
     /// Filas (posiciones Y, 0-based) con una grapa horizontal de borde a
     /// borde -- conecta la barra intermedia de la cara izquierda con la de
     /// la cara derecha, a esa altura, con gancho a cada punta.

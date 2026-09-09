@@ -50,12 +50,19 @@ public static class GeneradorArmado
             .OfClass(typeof(RebarHookType)).Cast<RebarHookType>()
             .GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First());
 
+        // Ver GeometriaSeccion.BuscarFormaEstribo: si el documento tiene una
+        // forma de estribo cerrado cargada, se usa esa (evita de raíz la
+        // dobladura de ConQuiebreEnMedioDeLado); si no, cada CrearGrupo cae
+        // solo al camino de siempre (CreateFromCurves). Se resuelve una sola
+        // vez acá, no en cada llamada.
+        RebarShape? formaEstribo = GeometriaSeccion.BuscarFormaEstribo(doc);
+
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
         var ganchosYaAvisados = new HashSet<(ElementId Barra, ElementId Gancho)>();
 
         foreach (ColumnaPlan columnaPlan in plan.Columnas)
         {
-            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, cacheHost, ganchosYaAvisados, res);
+            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, res);
         }
 
         return res;
@@ -66,6 +73,7 @@ public static class GeneradorArmado
         ColumnaPlan columnaPlan,
         Dictionary<string, RebarBarType> barrasPorNombre,
         Dictionary<string, RebarHookType> ganchosPorNombre,
+        RebarShape? formaEstribo,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
         ResultadoArmado res)
@@ -99,7 +107,7 @@ public static class GeneradorArmado
             try
             {
                 if (!GenerarTramo(
-                        doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre,
+                        doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo,
                         recubrimientoPies, cacheHost, ganchosYaAvisados, res))
                 {
                     res.TramosOmitidos++;
@@ -134,6 +142,7 @@ public static class GeneradorArmado
         ConfigTramo cfg,
         Dictionary<string, RebarBarType> barrasPorNombre,
         Dictionary<string, RebarHookType> ganchosPorNombre,
+        RebarShape? formaEstribo,
         double recubrimientoPies,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
@@ -227,7 +236,7 @@ public static class GeneradorArmado
         if (cfg.Modo == ModoEstribo.Uniforme)
         {
             double espaciado = EstandarCQ.APies(cfg.EspaciadoUniforme);
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
             return true;
         }
 
@@ -245,19 +254,19 @@ public static class GeneradorArmado
             res.Avisos.Add(
                 $"{etiquetaTramo}: la longitud de confinamiento ×2 no deja zona central; " +
                 "se armó confinado de punta a punta.");
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
             return true;
         }
 
         double l2 = altura - 2 * l1;
 
-        CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, terminaciones, espaciadoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, formaEstribo, terminaciones, espaciadoConf,
             etiquetaTramo, "confinado inferior", res, claveTramo, incluirUltimo: false);
 
-        CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, terminaciones, espaciadoNoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, formaEstribo, terminaciones, espaciadoNoConf,
             etiquetaTramo, "zona central", res, claveTramo, incluirUltimo: false);
 
-        CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, terminaciones, espaciadoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, formaEstribo, terminaciones, espaciadoConf,
             etiquetaTramo, "confinado superior", res, claveTramo);
 
         return true;
@@ -278,6 +287,7 @@ public static class GeneradorArmado
         double zInicio,
         double longitud,
         RebarBarType barra,
+        RebarShape? formaEstribo,
         BarTerminationsData terminaciones,
         double espaciado,
         string etiquetaTramo,
@@ -291,22 +301,32 @@ public static class GeneradorArmado
         var mover = Transform.CreateTranslation(XYZ.BasisZ * (zInicio - zBaseContorno));
         IList<Curve> curvasTrasladadas = contorno.Select(c => c.CreateTransformed(mover)).ToList();
 
-        // Ver GeometriaSeccion.ConQuiebreEnMedioDeLado: sin esto, la esquina
-        // donde el loop se cierra queda sin el fillet de 90° que debería
-        // atrapar la barra longitudinal de ese vértice, y los ganchos (que
-        // van justo ahí) terminan cruzados o saliéndose de la sección.
-        IList<Curve> curvas = GeometriaSeccion.ConQuiebreEnMedioDeLado(curvasTrasladadas);
+        // Camino preferido (ver GeometriaSeccion.BuscarFormaEstribo): la
+        // familia RebarShape resuelve sus propias esquinas/ganchos, sin el
+        // quiebre a mitad de lado ni su dobladura visible.
+        Rebar? estribo = formaEstribo is not null
+            ? CrearDesdeForma(doc, host, curvasTrasladadas, barra, formaEstribo, terminaciones, res, etiquetaTramo)
+            : null;
 
-        Rebar? estribo = Rebar.CreateFromCurves(
-            doc,
-            RebarStyle.StirrupTie,
-            barra,
-            host,
-            XYZ.BasisZ,
-            curvas,
-            terminaciones,
-            useExistingShapeIfPossible: true,
-            createNewShape: true);
+        // Sin forma cargada en el documento, o si CrearDesdeForma no pudo
+        // (sección incompatible con esa forma, por ejemplo) -- camino de
+        // siempre, con el quiebre a mitad de lado (ver ConQuiebreEnMedioDeLado).
+        // Mejor un estribo con la dobladura conocida que ninguno.
+        IList<Curve>? curvasFallback = null;
+        if (estribo is null)
+        {
+            curvasFallback = GeometriaSeccion.ConQuiebreEnMedioDeLado(curvasTrasladadas);
+            estribo = Rebar.CreateFromCurves(
+                doc,
+                RebarStyle.StirrupTie,
+                barra,
+                host,
+                XYZ.BasisZ,
+                curvasFallback,
+                terminaciones,
+                useExistingShapeIfPossible: true,
+                createNewShape: true);
+        }
 
         // Rebar.CreateFromCurves puede devolver null en vez de tirar
         // excepción cuando Revit no logra armar la forma con estas curvas/
@@ -315,13 +335,14 @@ public static class GeneradorArmado
         // NullReferenceException que no dice nada útil).
         if (estribo is null)
         {
-            string ladosCm = string.Join(", ", curvas.Select(c => $"{GeometriaSeccion.Metros(c.Length) * 100:0.#}cm"));
+            IList<Curve> curvasDiagnostico = curvasFallback ?? curvasTrasladadas;
+            string ladosCm = string.Join(", ", curvasDiagnostico.Select(c => $"{GeometriaSeccion.Metros(c.Length) * 100:0.#}cm"));
             double hookLength = 0;
             try { hookLength = barra.GetHookLength(terminaciones.HookTypeIdAtStart); } catch { /* diagnóstico best-effort */ }
 
             throw new InvalidOperationException(
                 $"Revit no pudo crear el estribo con esta geometría (Rebar.CreateFromCurves devolvió null) " +
-                $"con la barra «{barra.Name}». Diagnóstico: {curvas.Count} curvas [{ladosCm}], " +
+                $"con la barra «{barra.Name}». Diagnóstico: {curvasDiagnostico.Count} curvas [{ladosCm}], " +
                 $"diámetro barra {GeometriaSeccion.Metros(barra.BarNominalDiameter) * 1000:0.#}mm, " +
                 $"doblez estribo {GeometriaSeccion.Metros(barra.StirrupTieBendDiameter) * 100:0.#}cm, " +
                 $"gancho {GeometriaSeccion.Metros(hookLength) * 100:0.#}cm, recubrimiento+radio ya restado del contorno.");
@@ -347,6 +368,59 @@ public static class GeneradorArmado
             $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
 
         RegistrarPosiciones(posiciones, zInicio, separacionReal, claveTramo, res);
+    }
+
+    /// <summary>
+    /// Crea el estribo a partir de la familia <see cref="RebarShape"/> del
+    /// documento (ver <see cref="GeometriaSeccion.BuscarFormaEstribo"/>) en
+    /// vez de curvas armadas a mano -- mismo patrón que
+    /// <c>ShapeBasedStirrupService.cs</c> del otro add-in de referencia del
+    /// equipo: <c>CreateFromRebarShape</c> + <c>ScaleToBox</c> para ajustarla
+    /// al tamaño real de la sección, y el gancho se fija DESPUÉS de crear
+    /// (<c>SetHookTypeId</c>/<c>SetHookOrientation</c> por posición, 0 y 1 --
+    /// esta sobrecarga no acepta <see cref="BarTerminationsData"/>).
+    /// Cualquier falla acá (forma incompatible con esta sección puntual,
+    /// etc.) devuelve <c>null</c> en vez de tirar excepción -- quien llama
+    /// cae al camino de <c>CreateFromCurves</c> de siempre, no vale la pena
+    /// tirar la columna abajo por esto cuando ya existe un camino que funciona.
+    /// </summary>
+    private static Rebar? CrearDesdeForma(
+        Document doc, FamilyInstance host, IList<Curve> curvasTrasladadas,
+        RebarBarType barra, RebarShape forma, BarTerminationsData terminaciones,
+        ResultadoArmado res, string etiquetaTramo)
+    {
+        try
+        {
+            (double xMin, double xMax, double yMin, double yMax) = GeometriaSeccion.Huella(curvasTrasladadas);
+            double z = curvasTrasladadas[0].GetEndPoint(0).Z;
+            XYZ origen = new(xMin, yMin, z);
+            XYZ vectorX = new(xMax - xMin, 0, 0);
+            XYZ vectorY = new(0, yMax - yMin, 0);
+
+            Rebar? estribo = Rebar.CreateFromRebarShape(doc, forma, barra, host, origen, XYZ.BasisX, XYZ.BasisY);
+            if (estribo is null) return null;
+
+            estribo.GetShapeDrivenAccessor().ScaleToBox(origen, vectorX, vectorY);
+
+            ElementId idGancho = terminaciones.HookTypeIdAtStart;
+            if (idGancho != ElementId.InvalidElementId)
+            {
+                try { estribo.SetHookTypeId(0, idGancho); estribo.SetHookTypeId(1, idGancho); }
+                catch { /* la forma puede no tener posiciones de gancho -- no bloquea */ }
+
+                try { estribo.SetTerminationOrientation(0, RebarTerminationOrientation.Left); estribo.SetTerminationOrientation(1, RebarTerminationOrientation.Left); }
+                catch { /* idem */ }
+            }
+
+            return estribo;
+        }
+        catch (Exception ex)
+        {
+            res.Avisos.Add(
+                $"{etiquetaTramo}: no se pudo usar la forma «{forma.Name}» para el estribo ({ex.Message}); " +
+                "se usa el camino de respaldo.");
+            return null;
+        }
     }
 
     /// <summary>
@@ -379,10 +453,18 @@ public static class GeneradorArmado
     }
 
     /// <summary>
-    /// Quita los estribos que ESTE add-in creó antes en los elementos que el
-    /// plan de hoy va a tocar. Solo alcanza a los host que aparecen como
-    /// <see cref="Tramo.IdElementoHost"/> en el plan -- no toca columnas fuera
-    /// de esta corrida ni armadura puesta a mano (issue #2).
+    /// Quita TODO el acero de refuerzo (<see cref="Rebar"/>) ya hosteado en
+    /// los elementos que el plan de hoy va a tocar -- sin importar si lo
+    /// generó este add-in o si lo modeló alguien a mano (pedido explícito
+    /// del usuario, 9-sep: antes solo se borraba lo marcado por el add-in
+    /// vía <see cref="MarcaEstribos"/>; con la casilla tildada ahora se borra
+    /// cualquier armado existente en esas columnas, para no dejar una barra
+    /// vieja convivendo con la nueva). Solo alcanza a los host que aparecen
+    /// como <see cref="Tramo.IdElementoHost"/> en el plan -- no toca columnas
+    /// fuera de esta corrida. Ver el checkbox en la ventana
+    /// ("Borrar TODO el armado existente en estas columnas") -- es una
+    /// operación destructiva a propósito, el usuario la tilda explícitamente
+    /// cada vez que la quiere.
     /// </summary>
     private static int BorrarAnteriores(Document doc, PlanArmado plan)
     {
@@ -399,8 +481,8 @@ public static class GeneradorArmado
 
         List<ElementId> viejos = new FilteredElementCollector(doc)
             .OfClass(typeof(Rebar))
-            .WherePasses(MarcaEstribos.Filtro())
-            .Where(r => MarcaEstribos.LeerColumna(r) is ElementId id && idsHost.Contains(id))
+            .Cast<Rebar>()
+            .Where(r => idsHost.Contains(r.GetHostId()))
             .Select(r => r.Id)
             .ToList();
 

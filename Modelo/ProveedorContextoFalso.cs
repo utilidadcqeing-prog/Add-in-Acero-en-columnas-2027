@@ -35,8 +35,29 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
         }.ToDictionary(c => IdDe(c), c => c);
     }
 
+    /// <summary>Posiciones en planta inventadas para las tres columnas fijas -- separadas para poder probar el selector visual sin Revit.</summary>
+    private static readonly Dictionary<string, (double X, double Y)> _posiciones = new()
+    {
+        ["C-12"] = (0.0, 0.0),
+        ["C-1"] = (5.0, 0.0),
+        ["C-7"] = (0.0, 5.0),
+    };
+
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
-        _columnas.Values.Select(c => new ColumnaResumen(IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY))).ToList();
+        _columnas.Values
+            .Select(c =>
+            {
+                (double x, double y) = _posiciones.TryGetValue(IdDe(c), out var pos) ? pos : (0.0, 0.0);
+                return new ColumnaResumen(IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY), x, y);
+            })
+            .ToList();
+
+    /// <summary>Dos rejillas inventadas ("A" vertical, "1" horizontal) para probar el dibujo del selector visual sin Revit.</summary>
+    public IReadOnlyList<Rejilla> ListarRejillas() => new List<Rejilla>
+    {
+        new("A", -1.0, -1.0, -1.0, 6.0),
+        new("1", -1.0, -1.0, 6.0, -1.0),
+    };
 
     public ColumnaContexto Leer(string idColumna) =>
         _columnas.TryGetValue(idColumna, out ColumnaContexto? c)
