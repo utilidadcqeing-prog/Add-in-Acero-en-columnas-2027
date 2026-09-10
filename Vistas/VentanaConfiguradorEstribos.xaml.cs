@@ -4,15 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using Microsoft.Win32;
 using practicacq.Modelo;
 
 /// <summary>
@@ -31,6 +28,13 @@ public partial class VentanaConfiguradorEstribos : Window
 {
     private readonly IProveedorContexto _contexto;
     private readonly IProveedorTipos _tipos;
+
+    /// <summary>
+    /// De dónde salen las configuraciones con nombre. La real las guarda dentro
+    /// del modelo de Revit; si nadie pasa una, se usa la de memoria, así la
+    /// ventana abre igual sin Revit (vista previa).
+    /// </summary>
+    private readonly IAlmacenConfiguraciones _almacen;
 
     /// <summary>
     /// Una copia de <see cref="ConfigTramo"/> por (columna, tramo). Es el
@@ -85,6 +89,35 @@ public partial class VentanaConfiguradorEstribos : Window
     private bool _sincronizandoDesdeRevit;
 
     /// <summary>
+    /// El espaciado no confinado se sugiere al doble del confinado, pero deja
+    /// de recalcularse en cuanto el usuario lo escribe a mano: antes se pisaba
+    /// en CADA pulsación de tecla del campo confinado, así que quien ajustaba
+    /// el no confinado lo perdía sin aviso (el comentario del método prometía
+    /// esto, pero no había ningún flag que lo implementara). Se resetea al
+    /// cargar otro tramo.
+    /// </summary>
+    /// <summary>
+    /// En alto mientras se resalta en la lista por código (desde la planta o
+    /// desde una selección hecha en Revit). Sin esto, cada elemento agregado a
+    /// <c>SelectedItems</c> volvería a entrar por
+    /// <see cref="ListaSeleccion_SelectionChanged"/> y activaría un tramo a
+    /// mitad de camino.
+    /// </summary>
+    private bool _resaltandoEnLista;
+
+    /// <summary>De qué columna es lo que hoy muestra el panel de tramos.</summary>
+    private string? _columnaDeTramosCargada;
+
+    private bool _noConfinadoEditadoAMano;
+
+    /// <summary>
+    /// En alto mientras el panel se llena por código (cargar un tramo, o la
+    /// propia sugerencia automática). Sin esto, esas escrituras se leerían como
+    /// si las hubiera tecleado el usuario.
+    /// </summary>
+    private bool _llenandoPanel;
+
+    /// <summary>
     /// Se dispara con los ids de los elementos de Revit a seleccionar: todos
     /// los de la pila si se activó la columna entera, o uno solo (el
     /// <see cref="Tramo.IdElementoHost"/> del tramo) si se activó un tramo
@@ -108,7 +141,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
     /// <summary>
     /// Issue #5 (J3): se dispara con el <see cref="OpcionesArmado"/> armado
-    /// (mismo <see cref="PlanArmado"/> que <see cref="BotonExportar_Click"/>,
+    /// (el <see cref="PlanArmado"/> que arma <see cref="ConstruirPlanArmado"/>,
     /// más el estado del checkbox de borrado) cuando se pide generar el
     /// armado real. Sin una sola línea de Autodesk.Revit acá adentro:
     /// <c>ComandoEstribos</c> es quien lo traduce a la API real y devuelve el
@@ -116,21 +149,33 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     public event Action<OpcionesArmado>? GenerarSolicitado;
 
-    public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
+    public VentanaConfiguradorEstribos(
+        IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false,
+        IAlmacenConfiguraciones? almacen = null)
     {
         InitializeComponent();
 
         _contexto = contexto;
         _tipos = tipos;
+        _almacen = almacen ?? new AlmacenConfiguracionesEnMemoria();
 
         BannerSimulado.Visibility = modoSimulado ? Visibility.Visible : Visibility.Collapsed;
 
         ComboTipoBarra.ItemsSource = _tipos.ListarTiposBarra();
-        ComboTipoGancho.ItemsSource = _tipos.ListarTiposGancho();
         ComboBarraCaraX.ItemsSource = _tipos.ListarTiposBarra();
         ComboBarraCaraY.ItemsSource = _tipos.ListarTiposBarra();
         ComboBarraEsquinas.ItemsSource = _tipos.ListarTiposBarra();
-        ComboGanchoLongitudinal.ItemsSource = _tipos.ListarTiposGancho();
+
+        // Cada combo de gancho ve SOLO los de su estilo: en Revit un gancho
+        // solo se puede aplicar a barras de su mismo estilo, así que ofrecer
+        // los dos mezclados es ofrecer ganchos que fallan recién al generar.
+        // Los dos combos están ocultos (el valor se fija por defecto, reunión
+        // del 10-sep) pero se llenan igual, porque de ahí los lee el panel.
+        IReadOnlyList<TipoGancho> ganchos = _tipos.ListarGanchos();
+        ComboTipoGancho.ItemsSource = ganchos.Where(g => g.Estilo == EstiloGancho.Estribo).Select(g => g.Nombre).ToList();
+        ComboGanchoLongitudinal.ItemsSource = ganchos.Where(g => g.Estilo == EstiloGancho.Estandar).Select(g => g.Nombre).ToList();
+
+        AvisarSiFaltaAlgunGanchoPorDefecto(ganchos);
 
         // Pares del 2 al 20 -- "nada se teclea a mano" aplica también acá,
         // no solo a los tipos de barra.
@@ -159,12 +204,15 @@ public partial class VentanaConfiguradorEstribos : Window
         CampoEspaciadoConfinado.TextChanged += (_, _) => RevalidarPanel();
 
         PanelPlanta.ColumnaClicked += ActivarYAlternarMarcadoDesdePlanta;
+        PanelPlanta.ColumnasEnRectangulo += ElegirColumnasDesdeRectangulo;
         CampoEspaciadoUniforme.TextChanged += (_, _) => RevalidarPanel();
         CampoL1.TextChanged += (_, _) => RevalidarPanel();
+        CampoEspaciadoNoConfinado.TextChanged += CampoEspaciadoNoConfinado_TextChanged;
         CampoEspaciadoNoConfinado.TextChanged += (_, _) => RevalidarPanel();
         ComboTipoBarra.SelectionChanged += (_, _) => RevalidarPanel();
         ComboTipoGancho.SelectionChanged += (_, _) => RevalidarPanel();
 
+        RefrescarConfiguracionesGuardadas();
         CargarColumnas();
     }
 
@@ -212,7 +260,7 @@ public partial class VentanaConfiguradorEstribos : Window
                 EsColumneta = resumen.EsColumneta,
                 ColumnaId = resumen.Id,
                 TramoIndice = tramo.Indice,
-                Etiqueta = $"     Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
+                Etiqueta = $"Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
                 IdElementoHost = tramo.IdElementoHost,
             });
         }
@@ -237,8 +285,14 @@ public partial class VentanaConfiguradorEstribos : Window
         // dejaba el estado inconsistente y probablemente era la causa real
         // del crash de Revit al cerrar la ventana (una excepción ahí se
         // escapa por el lado nativo del evento de selección de Revit).
-        if (_sincronizandoDesdeRevit) return;
-        if (sender is ListBox { SelectedItem: NodoLista nodo }) Activar(nodo);
+        if (_sincronizandoDesdeRevit || _resaltandoEnLista) return;
+        if (sender is not ListBox lista) return;
+
+        // Con varios resaltados NO se cambia el tramo activo: resaltar es
+        // elegir a quién le va a caer "Aplicar a selección", no navegar. Si
+        // se activara uno por cada Ctrl+clic, además, la vista de Revit se
+        // movería una vez por clic (ElementosActivados centra la cámara).
+        if (lista.SelectedItems.Count == 1 && lista.SelectedItem is NodoLista nodo) Activar(nodo);
     }
 
     /// <summary>
@@ -294,29 +348,146 @@ public partial class VentanaConfiguradorEstribos : Window
         MostrarAvisos();
         NotificarElementosActivos();
 
-        // Si el selector visual de planta está a la vista, resaltar en él la
-        // misma columna que acaba de activarse -- por cualquier camino:
-        // clic en la lista, clic en el propio panel, flechas de la
-        // elevación, o sincronización desde una selección hecha en Revit.
-        if (PanelPlanta.Visibility == Visibility.Visible) RedibujarPanelPlanta();
+        // Resaltar en la planta la misma columna que acaba de activarse -- por
+        // cualquier camino: clic en la lista, clic en el propio panel, flechas
+        // de la elevación, o sincronización desde una selección hecha en Revit.
+        // Si su pestaña no está a la vista el panel mide cero y no dibuja nada,
+        // así que no hace falta preguntarlo.
+        RedibujarPanelPlanta();
+        CargarPanelDeTramos();
     }
 
     /// <summary>
-    /// Alterna, en el mismo espacio de la columna izquierda, entre la lista
-    /// de tramos y el selector visual de planta (reunión 9-sep, #39) --
-    /// pedido explícito: se mantiene la lista con checkboxes para configurar
-    /// tramos, el selector visual es solo una forma más fácil de identificar
-    /// y elegir QUÉ columna activar, no la reemplaza.
+    /// La planta pasó de ser un MODO que tapaba la lista (había un botón para
+    /// alternar) a ser la primera pestaña, siempre a mano -- reunión del
+    /// 10-sep: en lista se perdía de vista cuál columna era cuál, y en planta
+    /// no se podía editar un tramo puntual. Ahora conviven, y los tramos
+    /// tienen su propio panel al lado.
     /// </summary>
-    private void BotonVerPlanta_Click(object sender, RoutedEventArgs e)
+    private void PestanasSeleccion_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        bool aPlanta = PanelPlanta.Visibility != Visibility.Visible;
+        if (!ReferenceEquals(e.OriginalSource, PestanasSeleccion)) return;
+        RedibujarPanelPlanta();
+    }
 
-        PanelPlanta.Visibility = aPlanta ? Visibility.Visible : Visibility.Collapsed;
-        PestanasSeleccion.Visibility = aPlanta ? Visibility.Collapsed : Visibility.Visible;
-        BotonVerPlanta.Content = aPlanta ? "Ver lista" : "Ver en planta";
+    // ------------------------------------------ configuraciones guardadas
 
-        if (aPlanta) RedibujarPanelPlanta();
+    /// <summary>
+    /// En alto mientras el combo se rellena por código: cambiar su
+    /// <c>ItemsSource</c> dispara <c>SelectionChanged</c>, y eso cargaría una
+    /// configuración que el usuario no eligió.
+    /// </summary>
+    private bool _refrescandoConfiguraciones;
+
+    private void RefrescarConfiguracionesGuardadas(string? seleccionar = null)
+    {
+        _refrescandoConfiguraciones = true;
+        try
+        {
+            List<string> nombres = _almacen.Listar().Select(g => g.Nombre).OrderBy(n => n).ToList();
+            ComboConfiguraciones.ItemsSource = nombres;
+            ComboConfiguraciones.SelectedItem = seleccionar is not null && nombres.Contains(seleccionar) ? seleccionar : null;
+        }
+        finally
+        {
+            _refrescandoConfiguraciones = false;
+        }
+    }
+
+    /// <summary>
+    /// Elegir una configuración solo CARGA el panel -- no toca ningún tramo.
+    /// Aplicarla a los tramos es el otro gesto ("Aplicar a selección"), a
+    /// propósito: así se puede mirar qué trae antes de pisar nada.
+    /// </summary>
+    private void ComboConfiguraciones_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_refrescandoConfiguraciones) return;
+        if (ComboConfiguraciones.SelectedItem is not string nombre) return;
+        if (_almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) is not { } guardada) return;
+
+        MostrarConfigEnPanel(guardada.Tramo);
+        MostrarLongitudinalEnPanel(guardada.Longitudinal);
+        CampoNombreConfiguracion.Text = nombre;
+        RevalidarPanel();
+
+        TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel. Para llevarla a los tramos, " +
+                           "resáltalos y usa \"Aplicar a selección\".";
+    }
+
+    private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
+    {
+        string nombre = CampoNombreConfiguracion.Text.Trim();
+        if (nombre.Length == 0)
+        {
+            TextoEstado.Text = "Escribe un nombre para la configuración antes de guardarla.";
+            return;
+        }
+
+        bool reemplaza = _almacen.Listar().Any(g => g.Nombre == nombre);
+
+        _almacen.Guardar(new ConfiguracionGuardada
+        {
+            Nombre = nombre,
+            Tramo = LeerConfigDelPanel(),
+            Longitudinal = LeerLongitudinalDelPanel(),
+        });
+
+        RefrescarConfiguracionesGuardadas(nombre);
+        TextoEstado.Text = reemplaza
+            ? $"Configuración «{nombre}» actualizada."
+            : $"Configuración «{nombre}» guardada.";
+    }
+
+    private void BotonBorrarConfiguracion_Click(object sender, RoutedEventArgs e)
+    {
+        if (ComboConfiguraciones.SelectedItem is not string nombre)
+        {
+            TextoEstado.Text = "Elige en la lista la configuración que quieras borrar.";
+            return;
+        }
+
+        _almacen.Borrar(nombre);
+        CampoNombreConfiguracion.Text = "";
+        RefrescarConfiguracionesGuardadas();
+        TextoEstado.Text = $"Configuración «{nombre}» borrada.";
+    }
+
+    /// <summary>
+    /// El panel del medio: los tramos de la columna activa, con su tilde.
+    /// Son los MISMOS <see cref="NodoLista"/> que ya están en la lista de la
+    /// izquierda (comparten instancia), así que tildar acá o allá es lo mismo.
+    /// </summary>
+    private void CargarPanelDeTramos()
+    {
+        if (_columnaIdActiva is not string idColumna)
+        {
+            ListaTramos.ItemsSource = null;
+            TextoColumnaDeTramos.Text = "Tramos";
+            return;
+        }
+
+        List<NodoLista> tramos = _nodos.Where(n => !n.EsColumna && n.ColumnaId == idColumna).ToList();
+
+        // Solo se rearma la lista cuando cambió de columna: rearmarla en cada
+        // clic perdería el resaltado múltiple que el usuario acaba de hacer
+        // acá adentro.
+        if (_columnaDeTramosCargada != idColumna)
+        {
+            ListaTramos.ItemsSource = tramos;
+            _columnaDeTramosCargada = idColumna;
+        }
+        TextoColumnaDeTramos.Text = _columnaActiva is null
+            ? "Tramos"
+            : $"Tramos de {_columnaActiva.Marca}";
+
+        // El tramo activo queda resaltado acá también, para que se vea dónde
+        // está parado el panel de la derecha.
+        if (tramos.FirstOrDefault(n => n.TramoIndice == _tramoActivoIndice) is { } activo)
+        {
+            _resaltandoEnLista = true;
+            try { ListaTramos.SelectedItem = activo; }
+            finally { _resaltandoEnLista = false; }
+        }
     }
 
     private void RedibujarPanelPlanta()
@@ -332,7 +503,7 @@ public partial class VentanaConfiguradorEstribos : Window
     /// lista y tildar su checkbox. Cascadea a todos sus tramos, igual que
     /// <see cref="CheckBoxNodo_Changed"/>.
     /// </summary>
-    private void ActivarYAlternarMarcadoDesdePlanta(string columnaId)
+    private void ActivarYAlternarMarcadoDesdePlanta(string columnaId, bool sumar)
     {
         NodoLista? nodo = _nodos.FirstOrDefault(n => n.EsColumna && n.ColumnaId == columnaId);
         if (nodo is null) return;
@@ -342,7 +513,60 @@ public partial class VentanaConfiguradorEstribos : Window
             tramo.Marcado = nodo.Marcado;
         NotificarSeleccionMarcada();
 
+        // Además del tilde, queda RESALTADA: es a lo resaltado que le cae
+        // "Aplicar a selección" (ver TramosResaltados). Con Ctrl se suma a lo
+        // que ya estaba elegido en vez de reemplazarlo.
+        ResaltarEnLista(new[] { nodo }, sumar);
+
         Activar(nodo);
+    }
+
+    /// <summary>
+    /// Arrastre sobre la planta (reunión 10-sep): tilda y resalta todas las
+    /// columnas alcanzadas. A diferencia del clic suelto no alterna -- las
+    /// deja elegidas, que es lo que uno espera de una selección por
+    /// rectángulo. Para destildar en masa está "Limpiar selección".
+    /// </summary>
+    private void ElegirColumnasDesdeRectangulo(IReadOnlyList<string> idsColumnas, bool sumar)
+    {
+        var alcanzadas = new HashSet<string>(idsColumnas);
+        List<NodoLista> columnas = _nodos.Where(n => n.EsColumna && alcanzadas.Contains(n.ColumnaId)).ToList();
+        if (columnas.Count == 0) return;
+
+        foreach (NodoLista n in _nodos.Where(n => alcanzadas.Contains(n.ColumnaId)))
+            n.Marcado = true;
+        NotificarSeleccionMarcada();
+
+        ResaltarEnLista(columnas, sumar);
+        Activar(columnas[0]);
+    }
+
+    /// <summary>
+    /// Resalta filas en la lista por código. Cada pestaña es un
+    /// <see cref="ListBox"/> distinto (issue #33), así que cada nodo va al
+    /// suyo. Con <paramref name="sumar"/> en falso se reemplaza lo que hubiera.
+    /// </summary>
+    private void ResaltarEnLista(IEnumerable<NodoLista> nodos, bool sumar)
+    {
+        _resaltandoEnLista = true;
+        try
+        {
+            if (!sumar)
+            {
+                ListaPrincipales.SelectedItems.Clear();
+                ListaColumnetas.SelectedItems.Clear();
+            }
+
+            foreach (NodoLista nodo in nodos)
+            {
+                ListBox destino = nodo.EsColumneta ? ListaColumnetas : ListaPrincipales;
+                if (!destino.SelectedItems.Contains(nodo)) destino.SelectedItems.Add(nodo);
+            }
+        }
+        finally
+        {
+            _resaltandoEnLista = false;
+        }
     }
 
     /// <summary>
@@ -366,18 +590,30 @@ public partial class VentanaConfiguradorEstribos : Window
         if (idsSeleccionados.Count == 0) return;
 
         var idsSet = new HashSet<string>(idsSeleccionados);
-        NodoLista? nodo = _nodos.FirstOrDefault(n => !n.EsColumna && n.IdElementoHost is not null && idsSet.Contains(n.IdElementoHost))
-            ?? _nodos.FirstOrDefault(n => n.EsColumna && idsSet.Contains(n.ColumnaId));
-        if (nodo is null) return;
+
+        // TODOS los que coincidan, no solo el primero: seleccionar cinco
+        // columnas en Revit y que acá se active una sola, arbitraria (la
+        // primera en el orden del modelo, ni siquiera en el orden de
+        // selección), era lo que se veía hasta la reunión del 10-sep.
+        List<NodoLista> coinciden = _nodos
+            .Where(n => !n.EsColumna && n.IdElementoHost is not null && idsSet.Contains(n.IdElementoHost))
+            .ToList();
+
+        // Si no cae en ningún tramo puede ser el elemento de más abajo de la
+        // pila, que es el mismo id que la fila de columna usa como ColumnaId.
+        if (coinciden.Count == 0)
+            coinciden = _nodos.Where(n => n.EsColumna && idsSet.Contains(n.ColumnaId)).ToList();
+
+        if (coinciden.Count == 0) return;
 
         _sincronizandoDesdeRevit = true;
         try
         {
-            if (nodo.EsColumneta) PestanasSeleccion.SelectedIndex = 1;
-            ListBox lista = nodo.EsColumneta ? ListaColumnetas : ListaPrincipales;
-            if (!ReferenceEquals(lista.SelectedItem, nodo)) lista.SelectedItem = nodo;
+            NodoLista primero = coinciden[0];
+            if (primero.EsColumneta) PestanaColumnetas.IsSelected = true;
 
-            Activar(nodo);
+            ResaltarEnLista(coinciden, sumar: false);
+            Activar(primero);
         }
         finally
         {
@@ -398,6 +634,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
+        CargarPanelDeTramos();
         NotificarElementosActivos();
     }
 
@@ -519,15 +756,30 @@ public partial class VentanaConfiguradorEstribos : Window
     }
 
     /// <summary>
-    /// Autocompleta el espaciado no confinado al doble del confinado. Queda
-    /// editable después: si el usuario lo toca, esto no lo vuelve a pisar en
-    /// esta misma edición (la máquina de estados completa que decide cuándo
-    /// re-sugerir es trabajo de L3).
+    /// Autocompleta el espaciado no confinado al doble del confinado -- pero
+    /// solo mientras el usuario no lo haya escrito a mano
+    /// (<see cref="_noConfinadoEditadoAMano"/>).
     /// </summary>
     private void CampoEspaciadoConfinado_TextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_llenandoPanel || _noConfinadoEditadoAMano) return;
+
         double confinado = LeerDouble(CampoEspaciadoConfinado.Text);
-        CampoEspaciadoNoConfinado.Text = (confinado * 2).ToString("0.###", CultureInfo.InvariantCulture);
+
+        _llenandoPanel = true;
+        try { CampoEspaciadoNoConfinado.Text = (confinado * 2).ToString("0.###", CultureInfo.InvariantCulture); }
+        finally { _llenandoPanel = false; }
+    }
+
+    /// <summary>
+    /// Si el texto lo escribió el usuario (y no la sugerencia automática ni la
+    /// carga de un tramo), a partir de ahí el campo es suyo y no se vuelve a
+    /// pisar.
+    /// </summary>
+    private void CampoEspaciadoNoConfinado_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_llenandoPanel) return;
+        _noConfinadoEditadoAMano = true;
     }
 
     private ConfigTramo LeerConfigDelPanel() => new()
@@ -543,23 +795,59 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void MostrarConfigEnPanel(ConfigTramo cfg)
     {
-        RadioUniforme.IsChecked = cfg.Modo == ModoEstribo.Uniforme;
-        RadioConfinado.IsChecked = cfg.Modo == ModoEstribo.Confinado;
-        ActualizarVisibilidadModo();
+        // Cargar otro tramo empieza de cero: lo que se muestra es lo guardado
+        // de ESE tramo, no una edición manual del anterior.
+        _noConfinadoEditadoAMano = false;
+        _llenandoPanel = true;
+        try
+        {
+            RadioUniforme.IsChecked = cfg.Modo == ModoEstribo.Uniforme;
+            RadioConfinado.IsChecked = cfg.Modo == ModoEstribo.Confinado;
+            ActualizarVisibilidadModo();
 
-        ComboTipoBarra.SelectedItem = cfg.TipoBarraNombre;
-        ComboTipoGancho.SelectedItem = cfg.TipoGanchoNombre;
+            ComboTipoBarra.SelectedItem = cfg.TipoBarraNombre;
+            ComboTipoGancho.SelectedItem = cfg.TipoGanchoNombre;
 
-        CampoEspaciadoUniforme.Text = Formato(cfg.EspaciadoUniforme);
-        CampoL1.Text = Formato(cfg.LongitudConfinamiento);
-        CampoEspaciadoConfinado.Text = Formato(cfg.EspaciadoConfinado);
-        CampoEspaciadoNoConfinado.Text = Formato(cfg.EspaciadoNoConfinado);
+            CampoEspaciadoUniforme.Text = Formato(cfg.EspaciadoUniforme);
+            CampoL1.Text = Formato(cfg.LongitudConfinamiento);
+            CampoEspaciadoConfinado.Text = Formato(cfg.EspaciadoConfinado);
+            CampoEspaciadoNoConfinado.Text = Formato(cfg.EspaciadoNoConfinado);
+        }
+        finally
+        {
+            _llenandoPanel = false;
+        }
+    }
+
+    /// <summary>
+    /// El add-in no crea tipos de gancho: si el documento no tiene uno del
+    /// estilo y ángulo esperados, se usa el que haya de ese estilo, y eso hay
+    /// que decirlo -- si no, el armado sale con un gancho que nadie eligió.
+    /// </summary>
+    private void AvisarSiFaltaAlgunGanchoPorDefecto(IReadOnlyList<TipoGancho> ganchos)
+    {
+        var faltan = new List<string>();
+
+        if (TipoGancho.PorDefecto(ganchos, EstiloGancho.Estribo, 135) is not { } estribo)
+            faltan.Add("no hay ningún gancho de estilo estribo/tirante");
+        else if (Math.Abs(estribo.AnguloGrados - 135) >= 1)
+            faltan.Add($"no hay gancho de estribo de 135°; se usa «{estribo.Nombre}» ({estribo.AnguloGrados:0}°)");
+
+        if (TipoGancho.PorDefecto(ganchos, EstiloGancho.Estandar, 90) is not { } zapata)
+            faltan.Add("no hay ningún gancho de estilo estándar para el anclaje en la zapata");
+        else if (Math.Abs(zapata.AnguloGrados - 90) >= 1)
+            faltan.Add($"no hay gancho estándar de 90° para la zapata; se usa «{zapata.Nombre}» ({zapata.AnguloGrados:0}°)");
+
+        if (faltan.Count > 0)
+            TextoEstado.Text = "Atención: " + string.Join("; ", faltan) + ".";
     }
 
     private static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
     {
         TipoBarraNombre = tipos.ListarTiposBarra().FirstOrDefault(),
-        TipoGanchoNombre = tipos.ListarTiposGancho().FirstOrDefault(),
+        // Estribo/tirante de 135°, confirmado por William el 10-sep. Antes era
+        // "el primero alfabéticamente", que no es un criterio.
+        TipoGanchoNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estribo, 135)?.Nombre,
         EspaciadoUniforme = 0.20,
         LongitudConfinamiento = 0.50,
         EspaciadoConfinado = 0.07,
@@ -638,7 +926,8 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraYNombre = tipos.ListarTiposBarra().FirstOrDefault(),
         TipoBarraEsquinasNombre = tipos.ListarTiposBarra().FirstOrDefault(),
         LongitudComercialBarra = 12.0,
-        TipoGanchoLongitudinalNombre = tipos.ListarTiposGancho().FirstOrDefault(),
+        // Anclaje en la zapata: estándar de 90°, también de la reunión del 10-sep.
+        TipoGanchoLongitudinalNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estandar, 90)?.Nombre,
     };
 
     private void GuardarLongitudinalDeColumnaActiva()
@@ -705,6 +994,34 @@ public partial class VentanaConfiguradorEstribos : Window
 
     // ----------------------------------------------------------- selección
 
+    /// <summary>
+    /// A qué tramos les cae "Aplicar a selección": a los RESALTADOS en la
+    /// lista, no a los tildados.
+    ///
+    /// Antes iba a los tildados, y eso hacía las dos cosas con el mismo gesto:
+    /// como para generar una columna entera hay que tildarla entera (ver
+    /// <see cref="ConstruirPlanArmado"/>), un "Aplicar" pisaba la configuración
+    /// individual de todos sus tramos. Le pasó a William en la reunión del
+    /// 10-sep: configuró tramo por tramo #4, #3, #2... y salió todo con el
+    /// mismo tipo de barra de punta a punta.
+    ///
+    /// Resaltar una columna (la fila en negrita) vale por todos sus tramos:
+    /// es lo que uno espera al seleccionarla entera.
+    /// </summary>
+    private List<NodoLista> TramosResaltados()
+    {
+        var resaltados = ListaPrincipales.SelectedItems.Cast<NodoLista>()
+            .Concat(ListaColumnetas.SelectedItems.Cast<NodoLista>())
+            .Concat(ListaTramos.SelectedItems.Cast<NodoLista>())
+            .ToList();
+
+        HashSet<string> columnasEnteras = resaltados.Where(n => n.EsColumna).Select(n => n.ColumnaId).ToHashSet();
+
+        return _nodos
+            .Where(n => !n.EsColumna && (columnasEnteras.Contains(n.ColumnaId) || resaltados.Contains(n)))
+            .ToList();
+    }
+
     private void BotonAplicarSeleccion_Click(object sender, RoutedEventArgs e)
     {
         ConfigTramo plantilla = LeerConfigDelPanel();
@@ -718,10 +1035,11 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
-        List<NodoLista> objetivo = _nodos.Where(n => !n.EsColumna && n.Marcado).ToList();
+        List<NodoLista> objetivo = TramosResaltados();
         if (objetivo.Count == 0)
         {
-            TextoEstado.Text = "No hay tramos tildados en la lista: tilda alguno (o una columna entera) para aplicarles esta configuración.";
+            TextoEstado.Text = "No hay nada resaltado: selecciona en la lista los tramos (o las columnas) a los que quieras " +
+                               "cargarles esta configuración -- con Ctrl o Shift para varios. El tilde es otra cosa: decide qué se genera.";
             return;
         }
 
@@ -956,15 +1274,10 @@ public partial class VentanaConfiguradorEstribos : Window
         };
     }
 
-    // ---------------------------------------------------------- exportar
+    // ------------------------------------------------------------ generar
 
     /// <summary>
-    /// Arma el PlanArmado completo a partir del estado en memoria -- separado
-    /// de <see cref="BotonExportar_Click"/> para poder probarlo sin disparar
-    /// el SaveFileDialog real (L5).
-    /// </summary>
-    /// <summary>
-    /// Solo con lo tildado en la lista -- exportar o generar sobre TODAS las
+    /// Solo con lo tildado en la lista -- generar sobre TODAS las
     /// columnas del modelo (rellenando con la config por defecto lo que
     /// nadie tocó) inundaba de avisos irrelevantes y armaba de más sin que
     /// nadie lo pidiera. Un tramo no tildado queda en <c>null</c> en
@@ -1006,24 +1319,6 @@ public partial class VentanaConfiguradorEstribos : Window
         }
 
         return plan;
-    }
-
-    private void BotonExportar_Click(object sender, RoutedEventArgs e)
-    {
-        PlanArmado plan = ConstruirPlanArmado();
-        if (plan.Columnas.Count == 0)
-        {
-            TextoEstado.Text = "Tilda al menos un tramo (o una columna entera) antes de exportar.";
-            return;
-        }
-
-        var dialogo = new SaveFileDialog { Filter = "JSON (*.json)|*.json", FileName = "PlanArmado.json" };
-        if (dialogo.ShowDialog() != true) return;
-
-        string json = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(dialogo.FileName, json);
-
-        TextoEstado.Text = $"Exportado: {dialogo.FileName}";
     }
 
     private void BotonGenerar_Click(object sender, RoutedEventArgs e)

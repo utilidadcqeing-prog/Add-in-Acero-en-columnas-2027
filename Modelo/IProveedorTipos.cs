@@ -15,5 +15,12 @@ namespace practicacq.Modelo;
 public interface IProveedorTipos
 {
     IReadOnlyList<string> ListarTiposBarra();
-    IReadOnlyList<string> ListarTiposGancho();
+
+    /// <summary>
+    /// Los ganchos con su estilo y su ángulo, no solo el nombre: la ventana
+    /// necesita esos dos datos para no ofrecer ganchos de estribo donde va una
+    /// barra longitudinal (y al revés), y para elegir el que corresponde por
+    /// defecto. Ver <see cref="TipoGancho"/>.
+    /// </summary>
+    IReadOnlyList<TipoGancho> ListarGanchos();
 }

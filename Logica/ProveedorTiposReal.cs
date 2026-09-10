@@ -28,11 +28,22 @@ public sealed class ProveedorTiposReal : IProveedorTipos
             .OrderBy(n => n)
             .ToList();
 
-    public IReadOnlyList<string> ListarTiposGancho() =>
+    /// <summary>
+    /// Acá se traduce el estilo de Revit al <see cref="EstiloGancho"/> de
+    /// <c>Modelo/</c>, que es lo único que ve la ventana. Un gancho de otro
+    /// estilo (no hay más en la práctica, pero la API no lo garantiza) se
+    /// descarta en vez de ofrecerse: aplicarlo terminaría en un
+    /// <c>CreateFromCurves</c> devolviendo null al generar.
+    /// </summary>
+    public IReadOnlyList<TipoGancho> ListarGanchos() =>
         new FilteredElementCollector(_doc)
             .OfClass(typeof(RebarHookType))
             .Cast<RebarHookType>()
-            .Select(t => t.Name)
-            .OrderBy(n => n)
+            .Where(t => t.Style is RebarStyle.StirrupTie or RebarStyle.Standard)
+            .Select(t => new TipoGancho(
+                t.Name,
+                t.Style == RebarStyle.StirrupTie ? EstiloGancho.Estribo : EstiloGancho.Estandar,
+                t.HookAngle * 180 / System.Math.PI))
+            .OrderBy(g => g.Nombre)
             .ToList();
 }

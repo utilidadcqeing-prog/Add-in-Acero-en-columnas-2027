@@ -49,7 +49,7 @@
       acá; si no, el build de este proyecto choca con los .g.cs generados de
       CQEING/obj.
     -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);CQEING/**;Dymanos de referencia/**;Dymanos de referencia\**;Add-ins de referencia*/**;Add-in de Armado CQEING_files/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);CQEING/**;Dymanos de referencia/**;Dymanos de referencia\**;Add-ins de referencia*/**;Add-in de Armado CQEING_files/**;tools/PreviewUI/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

@@ -32,6 +32,11 @@ public class ComandoEstribos : IExternalCommand
     private static readonly ManejadorGeneracionArmado _manejadorGenerar = new();
     private static readonly ExternalEvent _eventoGenerar = ExternalEvent.Create(_manejadorGenerar);
 
+    // Configuraciones guardadas (10-sep): escribir en el documento tambien
+    // necesita transaccion, mismo patron.
+    private static readonly ManejadorPersistirConfiguraciones _manejadorConfiguraciones = new();
+    private static readonly ExternalEvent _eventoConfiguraciones = ExternalEvent.Create(_manejadorConfiguraciones);
+
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
         UIApplication uiapp = commandData.Application;
@@ -52,10 +57,19 @@ public class ComandoEstribos : IExternalCommand
         // una línea -- ver L1, este era exactamente el punto de la interfaz.
         Document doc = uiapp.ActiveUIDocument.Document;
 
+        // Las configuraciones con nombre viven DENTRO del modelo (Extensible
+        // Storage), asi que viajan con el proyecto.
+        var almacen = new AlmacenConfiguracionesRevit(doc);
+        _manejadorConfiguraciones.Almacen = almacen;
+        _manejadorConfiguraciones.AlFallar = motivo =>
+            TaskDialog.Show("CQEING", $"No se pudieron guardar las configuraciones en el modelo: {motivo}");
+        almacen.CambiosPendientes += () => _eventoConfiguraciones.Raise();
+
         _ventana = new VentanaConfiguradorEstribos(
             new LectorContexto(doc),
             new ProveedorTiposReal(doc),
-            modoSimulado: false);
+            modoSimulado: false,
+            almacen);
 
         _ventana.ElementosActivados += ids =>
         {
