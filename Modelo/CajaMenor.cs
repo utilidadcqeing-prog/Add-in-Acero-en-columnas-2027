@@ -1,40 +1,43 @@
 namespace practicacq.Modelo;
 
+/// <summary>Sobre qué lado de la sección se tildaron las casillas que arman una <see cref="CajaMenor"/>.</summary>
+public enum EjeCaja
+{
+    /// <summary>Casillas de fila (posición Y): la caja cruza de borde a borde en X.</summary>
+    Fila,
+
+    /// <summary>Casillas de columna (posición X): la caja cruza de borde a borde en Y.</summary>
+    Columna,
+}
+
 /// <summary>
 /// Un estribo menor tipo "caja": un rectángulo nested adentro del estribo
-/// principal, que arma la ventana de estribos menores (L4) cruzando un RANGO
-/// de filas tildadas (posición Y) con un RANGO de columnas tildadas (posición
-/// X) contiguas entre sí -- confirmado por William en la reunión del 4-sep
-/// (21:08-23:18): filas/columnas tildadas para caja que quedan pegadas
-/// (índices consecutivos) se fusionan en un solo rectángulo grande ("toma el
-/// área más grande"), no una caja por cada una. Un salto entre tildadas corta
-/// la fusión y arma un rango separado. Ver
-/// <c>VentanaEstribosMenores.Rangos</c> (quien arma esta lista) y
-/// <c>GeneradorLongitudinal.GenerarMenores</c> (quien la geometriza).
+/// principal. Cada lado de la sección arma las suyas por separado y se
+/// superponen entre sí -- ya NO es el cruce de una fila con una columna
+/// (producto cruzado), que era la interpretación anterior (imágenes del
+/// usuario, 10-sep): tildar solo de un lado ya alcanza para que salga una caja.
 ///
-/// El rectángulo final va literalmente de <see cref="ColumnaDesde"/> a
-/// <see cref="ColumnaHasta"/> y de <see cref="FilaDesde"/> a
-/// <see cref="FilaHasta"/> -- ya NO centrado/espejado respecto al centro de
-/// la sección (esa era una interpretación sin confirmar de una versión
-/// anterior, issue #30).
+/// La caja abarca de <see cref="Desde"/> a <see cref="Hasta"/> sobre su propio
+/// <see cref="Eje"/>, y en el eje perpendicular va siempre de extremo a
+/// extremo de la sección -- por eso no hay nada que guardar de ese otro eje.
 ///
-/// Reemplaza al viejo <c>EstriboMenor</c> con un <c>Tipo</c> compartido entre
-/// grapa y caja: las grapas ya no viven acá, son
+/// Cómo se agrupan las casillas tildadas en cajas es responsabilidad de
+/// <c>VentanaEstribosMenores.RangosDeCaja</c>; acá solo viaja el resultado.
+/// <c>GeneradorLongitudinal.GenerarMenores</c> es quien lo geometriza.
+///
+/// Las grapas no viven acá: son
 /// <see cref="ConfigLongitudinal.GrapasFila"/>/<see cref="ConfigLongitudinal.GrapasColumna"/>
-/// -- una grapa cruza de borde a borde en una sola fila o columna entera, no
-/// es una posición de grilla como la caja.
+/// -- una grapa cruza de borde a borde en una sola fila o columna, no abarca
+/// un rango.
 /// </summary>
 public sealed class CajaMenor
 {
-    /// <summary>Índice de columna (posición X, 0-based) donde arranca el rango fusionado, inclusive.</summary>
-    public int ColumnaDesde { get; set; }
+    /// <summary>Sobre qué lado se tildaron las casillas de esta caja.</summary>
+    public EjeCaja Eje { get; set; }
 
-    /// <summary>Índice de columna (posición X, 0-based) donde termina el rango fusionado, inclusive.</summary>
-    public int ColumnaHasta { get; set; }
+    /// <summary>Índice (0-based) sobre <see cref="Eje"/> donde arranca la caja, inclusive.</summary>
+    public int Desde { get; set; }
 
-    /// <summary>Índice de fila (posición Y, 0-based) donde arranca el rango fusionado, inclusive.</summary>
-    public int FilaDesde { get; set; }
-
-    /// <summary>Índice de fila (posición Y, 0-based) donde termina el rango fusionado, inclusive.</summary>
-    public int FilaHasta { get; set; }
+    /// <summary>Índice (0-based) sobre <see cref="Eje"/> donde termina la caja, inclusive.</summary>
+    public int Hasta { get; set; }
 }

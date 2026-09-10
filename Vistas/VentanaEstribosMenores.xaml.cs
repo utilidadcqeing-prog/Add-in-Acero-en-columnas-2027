@@ -23,10 +23,10 @@ using practicacq.Modelo;
 ///  - Grapa: UNA casilla la define -- una por fila (a la izquierda, conecta
 ///    la barra intermedia izquierda con la derecha de borde a borde) o una
 ///    por columna (arriba, conecta la de arriba con la de abajo).
-///  - Caja: DOS casillas -- fila (a la derecha) y columna (abajo). El cruce
-///    entre TODAS las filas y columnas tildadas para caja es una caja cada
-///    una (producto cruzado): no hace falta emparejarlas a mano, tildar 2
-///    filas y 3 columnas da 6 cajas.
+///  - Caja: casillas de fila (a la derecha) y de columna (abajo), pero cada
+///    lado arma las suyas por SEPARADO y se superponen -- tildar solo de un
+///    lado ya alcanza. Cada caja cruza de extremo a extremo en el eje
+///    perpendicular. Ver <see cref="RangosDeCaja"/> para cómo se agrupan.
 /// </summary>
 public partial class VentanaEstribosMenores : Window
 {
@@ -66,14 +66,18 @@ public partial class VentanaEstribosMenores : Window
         foreach (int c in grapasColumna)
             if (c >= 0 && c < _columnas) _grapaColumna[c] = true;
 
-        // Reconstruye el tildado a partir de los rangos fusionados guardados
-        // -- marca ocupado cada índice que el rango cubre, no solo sus puntas.
+        // Reconstruye el tildado marcando solo las DOS puntas de cada caja, que
+        // son las que la definen. Rellenar el rango entero cambiaría el
+        // resultado: una caja guardada de la 1ª a la 4ª volvería con cuatro
+        // tildadas, y cuatro tildadas son dos cajas, no una (ver RangosDeCaja).
+        // Con las puntas, reabrir y aceptar sin tocar nada deja exactamente la
+        // misma geometría -- lo que se pierde es cuáles casillas del medio
+        // había tildado el usuario, que ya no cambian el resultado.
         foreach (CajaMenor caja in cajas)
         {
-            for (int f = Math.Max(0, caja.FilaDesde); f <= caja.FilaHasta && f < _filas; f++)
-                _cajaFila[f] = true;
-            for (int c = Math.Max(0, caja.ColumnaDesde); c <= caja.ColumnaHasta && c < _columnas; c++)
-                _cajaColumna[c] = true;
+            bool[] destino = caja.Eje == EjeCaja.Fila ? _cajaFila : _cajaColumna;
+            foreach (int i in new[] { caja.Desde, caja.Hasta })
+                if (i >= 0 && i < destino.Length) destino[i] = true;
         }
 
         TextoEncabezado.Text = $"X = {barrasPorCaraX} · Y = {barrasPorCaraY} (+ 4 esquinas, aparte)";
@@ -108,16 +112,16 @@ public partial class VentanaEstribosMenores : Window
             StrokeThickness = 1.5,
         }, Izquierda, Arriba);
 
-        // 2) Cajas: filas y columnas tildadas para caja, fusionadas por
-        // contigüidad -- William confirmó (reunión 4-sep, 21:08-23:18) que
-        // tildar varias pegadas da UN rectángulo grande ("toma el área más
-        // grande"), no una caja por cada una; un salto corta la fusión.
-        List<(int Desde, int Hasta)> rangosFilaCaja = Rangos(_cajaFila);
-        List<(int Desde, int Hasta)> rangosColumnaCaja = Rangos(_cajaColumna);
+        // 2) Cajas: cada lado arma las suyas por separado y se superponen --
+        // tildar solo de un lado ya alcanza. Ver RangosDeCaja para la regla.
+        List<(int Desde, int Hasta)> rangosFilaCaja = RangosDeCaja(_cajaFila);
+        List<(int Desde, int Hasta)> rangosColumnaCaja = RangosDeCaja(_cajaColumna);
 
-        foreach ((int filaDesde, int filaHasta) in rangosFilaCaja)
-            foreach ((int columnaDesde, int columnaHasta) in rangosColumnaCaja)
-                DibujarCaja(filaDesde, filaHasta, columnaDesde, columnaHasta);
+        foreach ((int desde, int hasta) in rangosFilaCaja)
+            DibujarCaja(EjeCaja.Fila, desde, hasta);
+
+        foreach ((int desde, int hasta) in rangosColumnaCaja)
+            DibujarCaja(EjeCaja.Columna, desde, hasta);
 
         // 3) Grapas tildadas: línea verde de borde a borde -- salvo que esa
         // fila/columna ya quede cubierta por una caja: ahí gana la caja, la
@@ -216,13 +220,16 @@ public partial class VentanaEstribosMenores : Window
         });
     }
 
-    /// <summary>Rectángulo real de <paramref name="filaDesde"/>/<paramref name="filaHasta"/> x <paramref name="columnaDesde"/>/<paramref name="columnaHasta"/> -- ya no un marcador puntual.</summary>
-    private void DibujarCaja(int filaDesde, int filaHasta, int columnaDesde, int columnaHasta)
+    /// <summary>
+    /// La caja abarca de <paramref name="desde"/> a <paramref name="hasta"/>
+    /// sobre su propio eje, y cruza de extremo a extremo en el perpendicular.
+    /// </summary>
+    private void DibujarCaja(EjeCaja eje, int desde, int hasta)
     {
-        double x1 = X(columnaDesde);
-        double x2 = X(columnaHasta);
-        double y1 = Y(filaDesde);
-        double y2 = Y(filaHasta);
+        double x1 = eje == EjeCaja.Fila ? Izquierda : X(desde);
+        double x2 = eje == EjeCaja.Fila ? Derecha : X(hasta);
+        double y1 = eje == EjeCaja.Fila ? Y(desde) : Arriba;
+        double y2 = eje == EjeCaja.Fila ? Y(hasta) : Abajo;
 
         var rect = new Rectangle
         {
@@ -237,31 +244,31 @@ public partial class VentanaEstribosMenores : Window
     }
 
     /// <summary>
-    /// Fusiona índices tildados consecutivos en rangos -- confirmado por
-    /// William (reunión 4-sep, 21:08: "tomaría el área más grande"; 22:44-23:18:
-    /// tres tildadas pegadas dan un solo rectángulo grande, "porque están
-    /// juntos... no se pueden crear dos rectángulos pegaditos"). Un índice sin
-    /// tildar en el medio corta la fusión y arranca un rango nuevo.
+    /// Agrupa en cajas las casillas tildadas de UN lado. Los huecos no cortan
+    /// nada: solo cuenta el orden en que aparecen (confirmado con el usuario
+    /// el 10-sep, con casos concretos).
+    ///  - cantidad par: se emparejan de a dos consecutivas -- (1ª,2ª), (3ª,4ª)...
+    ///    y cada par arma una caja (4 tildadas dan 2 cajas, 6 dan 3);
+    ///  - cantidad impar: UNA sola caja, de la primera a la última ("da
+    ///    prioridad a la más grande");
+    ///  - una sola tildada: ninguna caja -- para eso están las casillas de grapa.
     /// </summary>
-    private static List<(int Desde, int Hasta)> Rangos(bool[] tildado)
+    private static List<(int Desde, int Hasta)> RangosDeCaja(bool[] tildado)
     {
+        List<int> marcadas = Enumerable.Range(0, tildado.Length).Where(i => tildado[i]).ToList();
         var rangos = new List<(int Desde, int Hasta)>();
-        int? inicio = null;
 
-        for (int i = 0; i < tildado.Length; i++)
+        if (marcadas.Count < 2) return rangos;
+
+        if (marcadas.Count % 2 == 1)
         {
-            if (tildado[i])
-            {
-                inicio ??= i;
-            }
-            else if (inicio is not null)
-            {
-                rangos.Add((inicio.Value, i - 1));
-                inicio = null;
-            }
+            rangos.Add((marcadas[0], marcadas[^1]));
+            return rangos;
         }
 
-        if (inicio is not null) rangos.Add((inicio.Value, tildado.Length - 1));
+        for (int i = 0; i < marcadas.Count; i += 2)
+            rangos.Add((marcadas[i], marcadas[i + 1]));
+
         return rangos;
     }
 
@@ -270,13 +277,13 @@ public partial class VentanaEstribosMenores : Window
 
     private void ActualizarResumen()
     {
-        List<(int Desde, int Hasta)> rangosFilaCaja = Rangos(_cajaFila);
-        List<(int Desde, int Hasta)> rangosColumnaCaja = Rangos(_cajaColumna);
+        List<(int Desde, int Hasta)> rangosFilaCaja = RangosDeCaja(_cajaFila);
+        List<(int Desde, int Hasta)> rangosColumnaCaja = RangosDeCaja(_cajaColumna);
 
         int grapas =
             Enumerable.Range(0, _filas).Count(f => _grapaFila[f] && !EnAlgunRango(rangosFilaCaja, f)) +
             Enumerable.Range(0, _columnas).Count(c => _grapaColumna[c] && !EnAlgunRango(rangosColumnaCaja, c));
-        int cajas = rangosFilaCaja.Count * rangosColumnaCaja.Count;
+        int cajas = rangosFilaCaja.Count + rangosColumnaCaja.Count;
 
         TextoResumen.Text = $"{grapas} grapa(s), {cajas} caja(s).";
     }
@@ -291,19 +298,12 @@ public partial class VentanaEstribosMenores : Window
         GrapasFila = Enumerable.Range(0, _filas).Where(f => _grapaFila[f]).ToList();
         GrapasColumna = Enumerable.Range(0, _columnas).Where(c => _grapaColumna[c]).ToList();
 
-        List<(int Desde, int Hasta)> rangosFila = Rangos(_cajaFila);
-        List<(int Desde, int Hasta)> rangosColumna = Rangos(_cajaColumna);
-
         Cajas = new List<CajaMenor>();
-        foreach ((int filaDesde, int filaHasta) in rangosFila)
-            foreach ((int columnaDesde, int columnaHasta) in rangosColumna)
-                Cajas.Add(new CajaMenor
-                {
-                    FilaDesde = filaDesde,
-                    FilaHasta = filaHasta,
-                    ColumnaDesde = columnaDesde,
-                    ColumnaHasta = columnaHasta,
-                });
+        foreach ((int desde, int hasta) in RangosDeCaja(_cajaFila))
+            Cajas.Add(new CajaMenor { Eje = EjeCaja.Fila, Desde = desde, Hasta = hasta });
+
+        foreach ((int desde, int hasta) in RangosDeCaja(_cajaColumna))
+            Cajas.Add(new CajaMenor { Eje = EjeCaja.Columna, Desde = desde, Hasta = hasta });
 
         DialogResult = true;
     }

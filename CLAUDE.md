@@ -29,6 +29,19 @@ Precedentes que motivaron esta regla:
   del modelo de referencia con un comando de diagnostico temporal, no
   asumiendo (`docs/planes/2026-09-09-diagnostico-corrimiento-traslapo.md`).
 
+## Regla de proceso: no usar API interna de Revit
+
+Antes de usar un metodo o propiedad de la API de Revit, verificar en la
+documentacion oficial que sea publico y soportado. Revit expone
+miembros marcados como internos/obsoletos ("for internal use only",
+"not intended to be used in your code") que **compilan sin error** y
+recien fallan en tiempo de ejecucion, dentro de Revit -- o sea que el
+build en verde no alcanza como comprobacion.
+
+Que compile no es garantia. Si la documentacion no aclara si el
+miembro es publico, buscar una alternativa documentada antes que
+arriesgar un fallo que solo aparece al correrlo.
+
 ## Flujo de trabajo con el usuario
 
 - Nunca hacer `git commit` ni `git push` sin pedido explicito del

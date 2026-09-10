@@ -115,6 +115,60 @@ internal static class GeometriaSeccion
                  f.Name.Contains("Estribo") || f.Name.Contains("Stirrup")));
 
     /// <summary>
+    /// La forma nativa de GRAPA: un solo segmento recto con estilo
+    /// <see cref="RebarStyle.Standard"/>.
+    ///
+    /// El estilo salió de MEDIR una grapa del modelo de referencia de la
+    /// empresa con el comando de diagnóstico (10-sep): usa el gancho
+    /// "Standard - 180 deg." (180°, Style=Standard), y como un
+    /// <c>RebarHookType</c> solo se puede aplicar a barras de su mismo estilo,
+    /// esa grapa es una barra Standard -- NO un estribo. En ese documento,
+    /// además, todas las formas de un solo segmento son Standard.
+    ///
+    /// Antes la grapa se armaba pasándole a <c>Rebar.CreateFromCurves</c> una
+    /// línea suelta con estilo <c>StirrupTie</c> (un "estribo" de un solo lado,
+    /// que no es una forma real) y ganchos de tirante de 135°: Revit tenía que
+    /// sintetizar la forma y sacaba ganchos enormes y deformes, también en
+    /// columnas de 40x40 -- no era cuestión del tamaño de la sección.
+    ///
+    /// Se busca por ESTRUCTURA (estilo + un segmento), no por nombre.
+    /// <c>null</c> si el documento no tiene ninguna: quien llama debe caer al
+    /// camino anterior, no fallar.
+    /// </summary>
+    public static RebarShape? BuscarFormaGrapa(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarShape))
+            .Cast<RebarShape>()
+            .FirstOrDefault(f => f.RebarStyle == RebarStyle.Standard && UnSoloSegmento(f));
+
+    /// <summary>
+    /// El gancho de las grapas: 180° con estilo <see cref="RebarStyle.Standard"/>,
+    /// que es el que usa el modelo de referencia de la empresa (medido con el
+    /// diagnóstico, 10-sep). Los 180° dan la vuelta completa alrededor de la
+    /// barra longitudinal -- por eso la grapa la agarra "por detrás", cosa que
+    /// un gancho de 135° no hace.
+    /// </summary>
+    public static RebarHookType? BuscarGanchoGrapa(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarHookType))
+            .Cast<RebarHookType>()
+            .FirstOrDefault(h => h.Style == RebarStyle.Standard &&
+                                 Math.Abs(h.HookAngle - Math.PI) < 1e-3);
+
+    private static bool UnSoloSegmento(RebarShape forma)
+    {
+        try
+        {
+            return forma.GetRebarShapeDefinition() is RebarShapeDefinitionBySegments porSegmentos &&
+                   porSegmentos.NumberOfSegments == 1;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Primer <see cref="RebarSpliceType"/> que tenga el documento (issue
     /// empalmes reales, ver docs/planes/2026-09-09-empalmes-rebarspliceutils.md)
     /// -- no hay ninguna convención de nombre conocida todavía (a diferencia

@@ -5,6 +5,7 @@ obj/
 
 # Paquete de instalación generado por tools/publish.ps1
 Publicar/
+Publicar-practicacq/
 Publicar-practicacq.zip
 
 # Material de referencia (Dynamo, add-ins ajenos), no es parte del add-in
