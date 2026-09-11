@@ -1,6 +1,7 @@
 namespace practicacq.Modelo;
 
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Lo que arma la ventana de L4 ("Configurador de Estribos Menores") para el
@@ -59,4 +60,25 @@ public sealed class ConfigLongitudinal
     /// recorta), eso no requiere traslapo.
     /// </summary>
     public double LongitudComercialBarra { get; set; } = 12.0;
+
+    /// <summary>
+    /// Copia independiente, listas incluidas. Hace falta para las
+    /// configuraciones guardadas (<see cref="ConfiguracionGuardada"/>): si la
+    /// configuración compartiera las listas de grapas/cajas con la columna de
+    /// la que salió, seguir editando los estribos menores de esa columna
+    /// cambiaría también la configuración guardada, sin que nadie lo pida.
+    /// </summary>
+    public ConfigLongitudinal Copiar() => new()
+    {
+        BarrasPorCaraX = BarrasPorCaraX,
+        BarrasPorCaraY = BarrasPorCaraY,
+        TipoBarraEsquinasNombre = TipoBarraEsquinasNombre,
+        TipoBarraCaraXNombre = TipoBarraCaraXNombre,
+        TipoBarraCaraYNombre = TipoBarraCaraYNombre,
+        TipoGanchoLongitudinalNombre = TipoGanchoLongitudinalNombre,
+        LongitudComercialBarra = LongitudComercialBarra,
+        GrapasFila = new List<int>(GrapasFila),
+        GrapasColumna = new List<int>(GrapasColumna),
+        Cajas = Cajas.Select(c => new CajaMenor { Eje = c.Eje, Desde = c.Desde, Hasta = c.Hasta }).ToList(),
+    };
 }

@@ -137,8 +137,20 @@
                  editar un tramo puntual. -->
             <Border Grid.Column="2" Style="{StaticResource Panel}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" x:Name="TextoColumnaDeTramos" Text="Tramos"
-                               Style="{StaticResource Etiqueta}" Margin="0,0,0,4" TextWrapping="Wrap" />
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" x:Name="TextoColumnaDeTramos" Text="Tramos"
+                                   Style="{StaticResource Etiqueta}" Margin="0" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" x:Name="BotonTildarTodosLosTramos" Content="Todos"
+                                Padding="8,1" FontSize="11" Margin="4,0,0,0" Click="BotonTildarTodosLosTramos_Click" />
+                        <Button Grid.Column="2" x:Name="BotonDestildarTodosLosTramos" Content="Ninguno"
+                                Padding="8,1" FontSize="11" Margin="4,0,0,0" Click="BotonDestildarTodosLosTramos_Click" />
+                    </Grid>
                     <TextBlock DockPanel.Dock="Bottom" Text="Tilda los que se generan. Resalta (Ctrl o Shift) los que reciben &quot;Aplicar a selección&quot;."
                                TextWrapping="Wrap" Foreground="Gray" FontSize="10" Margin="0,6,0,0" />
                     <ListBox x:Name="ListaTramos" BorderThickness="0"
@@ -171,6 +183,8 @@
                         <TextBlock Text="contra zapata" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
                         <Rectangle Width="12" Height="12" Fill="#DCFCE7" Stroke="#22C55E" StrokeThickness="2" Margin="0,0,4,0" />
                         <TextBlock Text="tramo activo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                        <Rectangle Width="12" Height="12" Fill="#0B63CE" Margin="0,0,4,0" />
+                        <TextBlock Text="resaltado" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
                         <Rectangle Width="12" Height="12" Margin="0,0,4,0">
                             <Rectangle.Fill>
                                 <VisualBrush TileMode="Tile" Viewport="0,0,6,6" ViewportUnits="Absolute">

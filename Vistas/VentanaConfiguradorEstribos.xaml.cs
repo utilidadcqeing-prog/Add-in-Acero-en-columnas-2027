@@ -288,11 +288,16 @@ public partial class VentanaConfiguradorEstribos : Window
         if (_sincronizandoDesdeRevit || _resaltandoEnLista) return;
         if (sender is not ListBox lista) return;
 
+        // El resaltado es uno solo, se vea desde donde se vea: la lista de
+        // afuera, el panel de tramos y la elevación muestran lo mismo.
+        ReflejarResaltadoEnLasOtrasListas(lista);
+
         // Con varios resaltados NO se cambia el tramo activo: resaltar es
         // elegir a quién le va a caer "Aplicar a selección", no navegar. Si
         // se activara uno por cada Ctrl+clic, además, la vista de Revit se
         // movería una vez por clic (ElementosActivados centra la cámara).
         if (lista.SelectedItems.Count == 1 && lista.SelectedItem is NodoLista nodo) Activar(nodo);
+        else RedibujarElevacion();
     }
 
     /// <summary>
@@ -406,12 +411,20 @@ public partial class VentanaConfiguradorEstribos : Window
         if (_almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) is not { } guardada) return;
 
         MostrarConfigEnPanel(guardada.Tramo);
-        MostrarLongitudinalEnPanel(guardada.Longitudinal);
+
+        // Los estribos menores (grapas y cajas) no están en el panel: se editan
+        // aparte y viven por columna. Cargar la configuración los lleva a la
+        // columna activa, si no el resumen que se muestra sería mentira.
+        ConfigLongitudinal longitudinal = guardada.Longitudinal.Copiar();
+        if (_columnaIdActiva is string idColumna) _longitudinalPorColumna[idColumna] = longitudinal;
+        MostrarLongitudinalEnPanel(longitudinal);
+
         CampoNombreConfiguracion.Text = nombre;
         RevalidarPanel();
 
-        TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel. Para llevarla a los tramos, " +
-                           "resáltalos y usa \"Aplicar a selección\".";
+        string menores = ResumenEstribosMenores(longitudinal);
+        TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel ({menores.ToLowerInvariant().TrimEnd('.')}). " +
+                           "Para llevarla a los tramos, resáltalos y usa \"Aplicar a selección\".";
     }
 
     private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
@@ -425,11 +438,14 @@ public partial class VentanaConfiguradorEstribos : Window
 
         bool reemplaza = _almacen.Listar().Any(g => g.Nombre == nombre);
 
+        // Copia: si la configuración compartiera las listas de grapas/cajas con
+        // la columna de la que salió, seguir editando los estribos menores de
+        // esa columna cambiaría también lo guardado.
         _almacen.Guardar(new ConfiguracionGuardada
         {
             Nombre = nombre,
             Tramo = LeerConfigDelPanel(),
-            Longitudinal = LeerLongitudinalDelPanel(),
+            Longitudinal = LeerLongitudinalConEstribosMenores().Copiar(),
         });
 
         RefrescarConfiguracionesGuardadas(nombre);
@@ -450,6 +466,38 @@ public partial class VentanaConfiguradorEstribos : Window
         CampoNombreConfiguracion.Text = "";
         RefrescarConfiguracionesGuardadas();
         TextoEstado.Text = $"Configuración «{nombre}» borrada.";
+    }
+
+    private void BotonTildarTodosLosTramos_Click(object sender, RoutedEventArgs e) => TildarTodosLosTramos(true);
+
+    private void BotonDestildarTodosLosTramos_Click(object sender, RoutedEventArgs e) => TildarTodosLosTramos(false);
+
+    /// <summary>
+    /// Tilda (o destilda) de una todos los tramos de la columna activa --
+    /// generar la columna entera es el caso más común y hacerlo tramo por
+    /// tramo era un clic por piso. Toca también la fila de la columna, para
+    /// que su casilla no quede contando otra cosa.
+    ///
+    /// Solo el TILDE, que es lo que decide qué se genera. Para elegir a quién
+    /// le cae "Aplicar a selección" está el resaltado (y ahí vale Ctrl+A, que
+    /// es de la lista).
+    /// </summary>
+    private void TildarTodosLosTramos(bool marcado)
+    {
+        if (_columnaIdActiva is not string idColumna) return;
+
+        List<NodoLista> deLaColumna = _nodos.Where(n => n.ColumnaId == idColumna).ToList();
+        foreach (NodoLista nodo in deLaColumna) nodo.Marcado = marcado;
+
+        NotificarSeleccionMarcada();
+        RedibujarPanelPlanta();
+        RedibujarElevacion();
+
+        int tramos = deLaColumna.Count(n => !n.EsColumna);
+        string marca = _columnaActiva?.Marca ?? idColumna;
+        TextoEstado.Text = marcado
+            ? $"Tildados los {tramos} tramos de {marca}."
+            : $"Destildados los {tramos} tramos de {marca}.";
     }
 
     /// <summary>
@@ -481,8 +529,10 @@ public partial class VentanaConfiguradorEstribos : Window
             : $"Tramos de {_columnaActiva.Marca}";
 
         // El tramo activo queda resaltado acá también, para que se vea dónde
-        // está parado el panel de la derecha.
-        if (tramos.FirstOrDefault(n => n.TramoIndice == _tramoActivoIndice) is { } activo)
+        // está parado el panel de la derecha -- salvo que ya forme parte de un
+        // resaltado múltiple, que en ese caso no hay que deshacer.
+        if (tramos.FirstOrDefault(n => n.TramoIndice == _tramoActivoIndice) is { } activo &&
+            !ListaTramos.SelectedItems.Contains(activo))
         {
             _resaltandoEnLista = true;
             try { ListaTramos.SelectedItem = activo; }
@@ -542,9 +592,10 @@ public partial class VentanaConfiguradorEstribos : Window
     }
 
     /// <summary>
-    /// Resalta filas en la lista por código. Cada pestaña es un
-    /// <see cref="ListBox"/> distinto (issue #33), así que cada nodo va al
-    /// suyo. Con <paramref name="sumar"/> en falso se reemplaza lo que hubiera.
+    /// Resalta filas por código. Hay tres <see cref="ListBox"/> mostrando los
+    /// mismos nodos (las dos pestañas de columnas, issue #33, y el panel de
+    /// tramos), así que cada nodo se resalta en todos los que lo tengan. Con
+    /// <paramref name="sumar"/> en falso se reemplaza lo que hubiera.
     /// </summary>
     private void ResaltarEnLista(IEnumerable<NodoLista> nodos, bool sumar)
     {
@@ -555,18 +606,66 @@ public partial class VentanaConfiguradorEstribos : Window
             {
                 ListaPrincipales.SelectedItems.Clear();
                 ListaColumnetas.SelectedItems.Clear();
+                ListaTramos.SelectedItems.Clear();
             }
 
             foreach (NodoLista nodo in nodos)
             {
                 ListBox destino = nodo.EsColumneta ? ListaColumnetas : ListaPrincipales;
                 if (!destino.SelectedItems.Contains(nodo)) destino.SelectedItems.Add(nodo);
+
+                if (ListaTramos.Items.Contains(nodo) && !ListaTramos.SelectedItems.Contains(nodo))
+                    ListaTramos.SelectedItems.Add(nodo);
             }
         }
         finally
         {
             _resaltandoEnLista = false;
         }
+
+        RedibujarElevacion();
+    }
+
+    /// <summary>
+    /// Lo resaltado en una lista se refleja en las otras dos: son vistas de los
+    /// mismos nodos, así que resaltar un tramo en el panel del medio también lo
+    /// resalta en la lista de afuera, y al revés.
+    /// </summary>
+    private void ReflejarResaltadoEnLasOtrasListas(ListBox origen)
+    {
+        var seleccionados = origen.SelectedItems.Cast<NodoLista>().ToHashSet();
+
+        _resaltandoEnLista = true;
+        try
+        {
+            foreach (ListBox otra in new[] { ListaPrincipales, ListaColumnetas, ListaTramos })
+            {
+                if (ReferenceEquals(otra, origen)) continue;
+
+                otra.SelectedItems.Clear();
+                foreach (NodoLista nodo in otra.Items.OfType<NodoLista>().Where(seleccionados.Contains))
+                    otra.SelectedItems.Add(nodo);
+            }
+        }
+        finally
+        {
+            _resaltandoEnLista = false;
+        }
+    }
+
+    /// <summary>
+    /// Los índices de tramo resaltados de la columna que se está mirando --
+    /// para pintarlos en la elevación. Resaltar la fila de la columna entera
+    /// vale por todos sus tramos, igual que para "Aplicar a selección".
+    /// </summary>
+    private HashSet<int> IndicesResaltadosDeLaColumnaActiva()
+    {
+        if (_columnaIdActiva is not string idColumna) return new HashSet<int>();
+
+        return TramosResaltados()
+            .Where(n => n.ColumnaId == idColumna)
+            .Select(n => n.TramoIndice)
+            .ToHashSet();
     }
 
     /// <summary>
@@ -930,22 +1029,33 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoGanchoLongitudinalNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estandar, 90)?.Nombre,
     };
 
-    private void GuardarLongitudinalDeColumnaActiva()
+    /// <summary>
+    /// Lo del panel MÁS los estribos menores de la columna activa. Las
+    /// posiciones de grapas y cajas no se editan en este panel (se editan
+    /// aparte, en L4) y viven en <see cref="_longitudinalPorColumna"/>, así que
+    /// leer solo el panel las perdería. Lo usan tanto el guardado por columna
+    /// como las configuraciones con nombre.
+    /// </summary>
+    private ConfigLongitudinal LeerLongitudinalConEstribosMenores()
     {
-        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
-
-        // Las grapas/cajas ya editadas en L4 (si las hay) se preservan --
-        // este panel no las toca, solo cantidad/tipo de barra.
         ConfigLongitudinal nuevo = LeerLongitudinalDelPanel();
 
-        if (_longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo))
+        if (_columnaIdActiva is string idColumna &&
+            _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo))
         {
             nuevo.GrapasFila = previo.GrapasFila;
             nuevo.GrapasColumna = previo.GrapasColumna;
             nuevo.Cajas = previo.Cajas;
         }
 
-        _longitudinalPorColumna[idColumna] = nuevo;
+        return nuevo;
+    }
+
+    private void GuardarLongitudinalDeColumnaActiva()
+    {
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
+
+        _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores();
     }
 
     private void CargarLongitudinalDeColumnaActiva()
@@ -1176,12 +1286,15 @@ public partial class VentanaConfiguradorEstribos : Window
         }
 
         // 3) Bandas por tramo, superpuestas al contorno.
+        HashSet<int> resaltados = IndicesResaltadosDeLaColumnaActiva();
+
         for (int i = 0; i < _columnaActiva.Tramos.Count; i++)
         {
             Tramo tramo = _columnaActiva.Tramos[i];
             double yTop = Y(tramo.ZSuperior);
             double alto = Math.Max(1, Y(tramo.ZInferior) - yTop);
             bool activo = i == _tramoActivoIndice;
+            bool resaltado = resaltados.Contains(i);
             bool configurado = _columnaIdActiva is not null && _configPorTramo.ContainsKey((_columnaIdActiva, i));
 
             if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
@@ -1213,6 +1326,35 @@ public partial class VentanaConfiguradorEstribos : Window
                 Canvas.SetLeft(relleno, xColumna);
                 Canvas.SetTop(relleno, yTop);
                 CanvasElevacion.Children.Add(relleno);
+            }
+
+            // Lo resaltado se pinta como una barra al costado, por fuera del
+            // contorno: adentro ya conviven el nudo, la trama de configurado y
+            // el verde del tramo activo, y un tramo puede ser las cuatro cosas
+            // a la vez.
+            if (resaltado)
+            {
+                var barra = new Rectangle
+                {
+                    Width = 6,
+                    Height = alto,
+                    Fill = new SolidColorBrush(Color.FromRgb(0x0B, 0x63, 0xCE)),
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(barra, xColumna - sobresaleNudo - 10);
+                Canvas.SetTop(barra, yTop);
+                CanvasElevacion.Children.Add(barra);
+
+                var tinte = new Rectangle
+                {
+                    Width = anchoColumna,
+                    Height = alto,
+                    Fill = new SolidColorBrush(Color.FromArgb(38, 0x0B, 0x63, 0xCE)),
+                    IsHitTestVisible = false,
+                };
+                Canvas.SetLeft(tinte, xColumna);
+                Canvas.SetTop(tinte, yTop);
+                CanvasElevacion.Children.Add(tinte);
             }
 
             if (activo)
