@@ -20,3 +20,6 @@ Add-in de Armado CQEING_files/
 
 # Claude Code local
 .claude/settings.local.json
+
+# API Revit 2026
+Rev2026/
