@@ -1,6 +1,7 @@
 namespace practicacq.Modelo;
 
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Mismo papel que <see cref="ProveedorContextoFalso"/> pero para los tipos de
@@ -12,16 +13,18 @@ using System.Collections.Generic;
 /// </summary>
 public sealed class ProveedorTiposFalso : IProveedorTipos
 {
-    public IReadOnlyList<string> ListarTiposBarra() => new List<string>
-    {
-        "#2 COL",
-        "#3 COL",
-        "#4 COL",
-        "#5 COL",
-        "#6 COL",
-        "#7 COL",
-        "#8 COL",
-    };
+    /// <summary>
+    /// Los diámetros salen del cuadro de la empresa (<see cref="CuadroVarillas"/>),
+    /// no inventados: así la vista previa ejercita de verdad la elección del
+    /// tipo por defecto por diámetro (#3 para el estribo, #4 para la
+    /// longitudinal), que es lo que hace la ventana contra el documento real.
+    /// El orden es alfabético a propósito, igual que en el proveedor real --
+    /// si el default se eligiera por "el primero de la lista" saldría el #2.
+    /// </summary>
+    public IReadOnlyList<TipoBarra> ListarBarras() => CuadroVarillas.Cuadro
+        .Select(v => new TipoBarra($"#{v.Numero} COL", v.DiametroMm))
+        .OrderBy(b => b.Nombre)
+        .ToList();
 
     public IReadOnlyList<TipoGancho> ListarGanchos() => new List<TipoGancho>
     {

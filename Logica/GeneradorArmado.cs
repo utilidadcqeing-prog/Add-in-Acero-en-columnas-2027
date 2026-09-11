@@ -98,7 +98,7 @@ public static class GeneradorArmado
         int n = Math.Min(contexto.Tramos.Count, columnaPlan.Tramos.Count);
         for (int i = 0; i < n; i++)
         {
-            // null: este tramo no estaba tildado en la ventana -- no es un
+            // null: este tramo no estaba aceptado en la ventana -- no es un
             // problema que reportar, es simplemente "no pedido en esta corrida".
             if (columnaPlan.Tramos[i] is not ConfigTramo cfg) continue;
 
@@ -130,8 +130,8 @@ public static class GeneradorArmado
 
     /// <summary>
     /// Un tramo, un <see cref="ConfigTramo"/>. Devuelve false (con aviso, sin
-    /// tirar excepción) para los motivos "esperables" -- viga, host borrado,
-    /// tipo de barra/gancho que ya no existe -- y deja que una excepción real
+    /// tirar excepción) para los motivos "esperables" -- host borrado, tipo de
+    /// barra/gancho que ya no existe -- y deja que una excepción real
     /// de geometría se propague para que <see cref="GenerarColumna"/> la
     /// registre con <see cref="GeometriaSeccion.Explicar"/> sin tumbar el resto del lote.
     /// </summary>
@@ -148,13 +148,20 @@ public static class GeneradorArmado
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
         ResultadoArmado res)
     {
-        // Dentro del canto de una viga no hay confinamiento (ver TipoTramo):
-        // no es un error, es el tramo haciendo exactamente lo que dice ser.
-        if (tramo.Tipo == TipoTramo.DentroDeViga) return true;
+        // Un tramo dentro del canto de la viga (nudo) genera estribos como
+        // cualquier otro: hasta el 11-sep se salteaba con un "return true" sin
+        // avisar, y quedaba un hueco de armadura justo en el nudo. William lo
+        // cerró en la reunión de ese día -- "obliga que en los nudos sea
+        // uniforme, no se permita meter confinamiento en el nudo" (issue #58,
+        // que contesta el #55). La parte de "uniforme" la garantiza la ventana,
+        // que deshabilita el modo confinado con un nudo activo.
+        //
+        // Las grapas y cajas (estribos menores, J4) siguen yendo solo en los
+        // tramos libres: eso no cambia acá.
 
         // tramo.Indice ya es el mismo número 0-indexado que muestra la
         // ventana ("Tramo 0", "Tramo 1"...); sumarle 1 acá desalineaba el
-        // aviso con lo que el usuario tenía tildado en pantalla.
+        // aviso con lo que el usuario tenía aceptado en pantalla.
         string etiquetaTramo = $"{marcaColumna} tramo {tramo.Indice}";
 
         if (tramo.IdElementoHost is null || !long.TryParse(tramo.IdElementoHost, out long idHost))
@@ -503,7 +510,7 @@ public static class GeneradorArmado
     {
         if (!yaAvisados.Add((barra.Id, gancho.Id))) return;
 
-        EstandarCQ.Varilla? varilla = EstandarCQ.Buscar(barra);
+        CuadroVarillas.Varilla? varilla = EstandarCQ.Buscar(barra);
         if (varilla is null)
         {
             res.Avisos.Add(

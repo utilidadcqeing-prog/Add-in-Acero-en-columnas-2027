@@ -35,7 +35,7 @@ public sealed class ColumnaPlan
 
     /// <summary>
     /// Uno por tramo de <see cref="Contexto"/>, mismo índice -- pero solo para
-    /// los tramos que estaban tildados en la lista al exportar/generar; los
+    /// los tramos que estaban aceptados en la ventana al generar; los
     /// demás índices quedan en <c>null</c> (no "sin tildar" descartado del
     /// array, porque eso correría los índices y los desalinearía de
     /// <c>Contexto.Tramos</c>). Un tramo en <c>null</c> significa "no pedido

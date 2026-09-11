@@ -43,12 +43,29 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
         ["C-7"] = (0.0, 5.0),
     };
 
+    /// <summary>
+    /// Marcas de ubicación inventadas, del cruce de las dos rejillas falsas de
+    /// abajo -- en el modelo real las calcula Revit solo
+    /// (<c>COLUMN_LOCATION_MARK</c>). C-7 lleva desfase entre paréntesis, que
+    /// es como las escribe Revit cuando la columna no cae justo en el cruce:
+    /// sirve para ver en la vista previa que una etiqueta larga no rompe el
+    /// dibujo de la planta.
+    /// </summary>
+    private static readonly Dictionary<string, string> _marcasDeUbicacion = new()
+    {
+        ["C-12"] = "A-1",
+        ["C-1"] = "B-1",
+        ["C-7"] = "A-2 (150, 0)",
+    };
+
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
         _columnas.Values
             .Select(c =>
             {
                 (double x, double y) = _posiciones.TryGetValue(IdDe(c), out var pos) ? pos : (0.0, 0.0);
-                return new ColumnaResumen(IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY), x, y);
+                string ubicacion = _marcasDeUbicacion.TryGetValue(IdDe(c), out string? u) ? u : "";
+                return new ColumnaResumen(
+                    IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY), x, y, ubicacion);
             })
             .ToList();
 

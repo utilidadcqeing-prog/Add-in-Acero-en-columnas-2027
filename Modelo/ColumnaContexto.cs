@@ -78,7 +78,11 @@ public enum TipoTramo
     /// <summary>Entre dos vigas, o entre el arranque y la primera viga.</summary>
     Libre,
 
-    /// <summary>Dentro del canto de una viga. Aquí no hay confinamiento.</summary>
+    /// <summary>
+    /// Dentro del canto de una viga (el nudo). Lleva estribos UNIFORMES, nunca
+    /// confinados (issue #58, William 11-sep): la ventana deshabilita ahí el
+    /// modo confinado.
+    /// </summary>
     DentroDeViga,
 
     /// <summary>El de más abajo cuando arranca sobre una zapata: el acero no entra en ella.</summary>

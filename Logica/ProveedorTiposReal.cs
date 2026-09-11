@@ -20,12 +20,18 @@ public sealed class ProveedorTiposReal : IProveedorTipos
 
     public ProveedorTiposReal(Document doc) => _doc = doc;
 
-    public IReadOnlyList<string> ListarTiposBarra() =>
+    /// <summary>
+    /// El diámetro viaja junto al nombre porque el valor por defecto de los
+    /// combos se elige por diámetro contra el cuadro de la empresa -- por
+    /// nombre no se puede, cada modelo los escribe distinto. Ver
+    /// <see cref="TipoBarra.PorDefecto"/>.
+    /// </summary>
+    public IReadOnlyList<TipoBarra> ListarBarras() =>
         new FilteredElementCollector(_doc)
             .OfClass(typeof(RebarBarType))
             .Cast<RebarBarType>()
-            .Select(t => t.Name)
-            .OrderBy(n => n)
+            .Select(t => new TipoBarra(t.Name, EstandarCQ.DiametroMm(t)))
+            .OrderBy(b => b.Nombre)
             .ToList();
 
     /// <summary>

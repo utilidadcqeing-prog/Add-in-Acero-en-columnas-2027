@@ -113,6 +113,97 @@ public class ComandoDiagnosticoRebar : IExternalCommand
     /// el multiplicador no cambia nada. Sin este dato no se puede saber por qué
     /// un gancho sigue saliendo grande.
     /// </summary>
+    /// <summary>
+    /// Para una barra VERTICAL (longitudinal de columna): hacia qué lado dobla
+    /// el gancho de cada extremo, y si eso es hacia el centro de la sección o
+    /// hacia afuera.
+    ///
+    /// Es la medición que pedía la regla del CLAUDE.md para los issues #43 y
+    /// #59: <c>RebarTerminationOrientation.Left/Right</c> no dice en qué
+    /// dirección del espacio queda la pata, y eso no se deduce de la
+    /// documentación. Acá se lee de la geometría REAL que devolvió Revit, no de
+    /// lo que se le pidió.
+    ///
+    /// Si el veredicto dice AFUERA, hay que invertir OrientacionPositiva /
+    /// OrientacionNegativa en <c>Logica/GeneradorLongitudinal</c> -- están las
+    /// dos juntas y es el único lugar donde se decide.
+    /// </summary>
+    private static void DiagnosticarOrientacionDeGanchos(Rebar rebar, StringBuilder sb)
+    {
+        IList<Curve> curvas;
+        try { curvas = rebar.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeAllMultiplanarCurves, 0); }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"  Orientación de ganchos: no se pudieron leer las curvas ({ex.Message})");
+            return;
+        }
+
+        if (curvas.Count == 0) return;
+
+        // El eje de la barra: la recta más larga que va en Z. Si no hay
+        // ninguna, esto no es una longitudinal de columna y no hay nada que
+        // medir acá (los estribos son lazos horizontales).
+        Line? eje = curvas
+            .OfType<Line>()
+            .Where(l => Math.Abs(l.Direction.Z) > 0.9)
+            .OrderByDescending(l => l.Length)
+            .FirstOrDefault();
+
+        if (eje is null)
+        {
+            sb.AppendLine("  Orientación de ganchos: la barra no es vertical, no aplica (esto es para longitudinales de columna).");
+            return;
+        }
+
+        XYZ ejeXY = eje.GetEndPoint(0);
+
+        // El centro de la sección del host, para saber qué es "adentro".
+        BoundingBoxXYZ? caja = null;
+        try { caja = rebar.Document.GetElement(rebar.GetHostId())?.get_BoundingBox(null); }
+        catch { /* se reporta abajo */ }
+
+        if (caja is null)
+        {
+            sb.AppendLine("  Orientación de ganchos: no se pudo leer el sólido del host, no hay contra qué comparar.");
+            return;
+        }
+
+        double cx = (caja.Min.X + caja.Max.X) / 2;
+        double cy = (caja.Min.Y + caja.Max.Y) / 2;
+        double haciaElCentroX = cx - ejeXY.X;
+        double haciaElCentroY = cy - ejeXY.Y;
+
+        sb.AppendLine(
+            $"  Orientación de ganchos: barra en (X {Metros(ejeXY.X):0.000}, Y {Metros(ejeXY.Y):0.000}), " +
+            $"centro del host en (X {Metros(cx):0.000}, Y {Metros(cy):0.000})");
+
+        void Reportar(string queExtremo, XYZ punta)
+        {
+            double dx = punta.X - ejeXY.X;
+            double dy = punta.Y - ejeXY.Y;
+            double desvio = Math.Sqrt(dx * dx + dy * dy);
+
+            if (desvio < 1e-6)
+            {
+                sb.AppendLine($"    {queExtremo}: recto (la punta no se sale del eje), sin gancho que medir.");
+                return;
+            }
+
+            double proyeccion = dx * haciaElCentroX + dy * haciaElCentroY;
+            string veredicto = proyeccion > 0 ? "ADENTRO (correcto)" : "AFUERA (hay que invertir la polaridad)";
+
+            sb.AppendLine(
+                $"    {queExtremo}: la punta se corre {Metros(desvio) * 100:0.#} cm " +
+                $"(ΔX {Metros(dx) * 100:+0.#;-0.#;0} cm, ΔY {Metros(dy) * 100:+0.#;-0.#;0} cm) -> {veredicto}");
+        }
+
+        // Las curvas vienen de principio a fin de la barra, y este archivo las
+        // crea siempre de abajo hacia arriba: la primera es el gancho inferior
+        // y la última el superior.
+        Reportar("Extremo 0 (abajo, anclaje en zapata)", curvas[0].GetEndPoint(0));
+        Reportar("Extremo 1 (arriba, remate)", curvas[^1].GetEndPoint(1));
+    }
+
     private static void DiagnosticarGanchosDe(Rebar rebar, StringBuilder sb)
     {
         Document doc = rebar.Document;
@@ -205,6 +296,7 @@ public class ComandoDiagnosticoRebar : IExternalCommand
         sb.AppendLine($"--- Rebar {rebar.Id.Value} (host {rebar.GetHostId().Value}) ---");
 
         DiagnosticarGanchosDe(rebar, sb);
+        DiagnosticarOrientacionDeGanchos(rebar, sb);
 
         int posiciones;
         try { posiciones = rebar.NumberOfBarPositions; }

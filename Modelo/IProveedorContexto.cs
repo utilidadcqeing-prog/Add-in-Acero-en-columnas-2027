@@ -53,7 +53,7 @@ public interface IProveedorContexto
     /// armado: los objetos de geometría que devuelve la API de Revit dejan de
     /// ser válidos en cuanto el documento se modifica (creación/borrado de
     /// Rebar, <c>Document.Regenerate()</c>), y seguir usándolos después
-    /// -- por ejemplo al abrir "Aplicar a selección" o navegar el panel de
+    /// -- por ejemplo al aceptar un tramo o navegar el panel de
     /// elevación -- puede terminar en un crash nativo de Revit en vez de una
     /// excepción de .NET (probado sobre Revit real).
     /// </summary>
@@ -66,8 +66,18 @@ public interface IProveedorContexto
 /// <see cref="EsColumneta"/> se calcula del lado del proveedor (real o
 /// falso) y viaja ya resuelta acá para que la ventana no necesite conocer
 /// las dimensiones -- solo agrupa por este booleano.
+///
+/// <see cref="MarcaUbicacion"/> es la "marca de ubicación del pilar" que Revit
+/// arma sola del cruce de rejillas ("A-1", o "A-1 (150, 0)" si la columna no
+/// cae justo en el cruce) -- es lo que se dibuja como etiqueta en la planta
+/// (reunión 11-sep: "eso existe, no hay que ponerse a calcular, sino dejarlo,
+/// solamente obtenerlo"). Es OTRA COSA que <see cref="Marca"/>, que es la marca
+/// de instancia que el usuario escribe ("C-12") y la que se lee en la elevación
+/// y en los avisos del generador. Puede venir vacía: un modelo sin rejillas no
+/// tiene coordenada, y entonces no se dibuja etiqueta.
 /// </summary>
-public sealed record ColumnaResumen(string Id, string Marca, bool EsColumneta, double X, double Y)
+public sealed record ColumnaResumen(
+    string Id, string Marca, bool EsColumneta, double X, double Y, string MarcaUbicacion = "")
 {
     /// <summary>
     /// Umbral de "columneta", en metros -- issue #33: confirmado por William

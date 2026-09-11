@@ -36,8 +36,11 @@ using practicacq.Modelo;
 ///    acá se resuelve como junta a tope, sin solape, simulando que la barra
 ///    real es continua a través de esa junta de hormigonado y que es Revit
 ///    (no la obra) quien exige partir el objeto ahí.
-///  - Las barras longitudinales salen sin gancho (rectas) -- no hay campo de
-///    gancho propio para longitudinal en <see cref="ConfigLongitudinal"/> hoy.
+///  - Las barras longitudinales llevan el gancho de
+///    <see cref="ConfigLongitudinal.TipoGanchoLongitudinalNombre"/> (90°
+///    estándar) en las DOS puntas de la columna -- abajo el anclaje en la
+///    zapata (issue #37) y arriba el remate (issue #59) -- y en ninguna junta
+///    intermedia. Los dos miran hacia el centro de la sección (issue #43).
 ///  - Grapas y cajas reutilizan el gancho del tramo (<see cref="ConfigTramo.TipoGanchoNombre"/>)
 ///    en el que se generan -- no hay un campo de gancho propio para
 ///    estribos menores todavía.
@@ -157,7 +160,7 @@ public static class GeneradorLongitudinal
         // con un estribo grueso la barra longitudinal queda calculada más
         // cerca del borde de lo real y termina asomando por fuera del
         // estribo o pisándolo -- probado sobre Revit real. Se toma el
-        // diámetro más grueso entre los tramos tildados de esta columna: si
+        // diámetro más grueso entre los tramos aceptados de esta columna: si
         // varía de tramo a tramo, más vale un poco más adentro de lo
         // estrictamente necesario en algún tramo que afuera en otro.
         double diametroEstribo = columnaPlan.Tramos
@@ -178,12 +181,12 @@ public static class GeneradorLongitudinal
 
         // Un tramo de barra por elemento host de la pila (no se puede
         // hostear un solo Rebar en dos FamilyInstance), agrupando TODOS los
-        // tramos físicos de la columna, tildados o no -- confirmado por
+        // tramos físicos de la columna, aceptados o no -- confirmado por
         // William (reunión 9-sep): la longitudinal es de la columna física
         // completa (nudos, tramo contra zapata incluido), no solo de los
         // tramos que el usuario tildó para configurar estribos. Antes esta
-        // función solo agrupaba tramos tildados, así que si el tramo de
-        // arriba o el que toca la zapata no estaban tildados, la barra
+        // función solo agrupaba tramos aceptados, así que si el tramo de
+        // arriba o el que toca la zapata no estaban aceptados, la barra
         // longitudinal se quedaba corta o no anclaba en la zapata -- sin
         // ningún aviso.
         List<(string IdHost, double ZInf, double ZSup)> porHost = AgruparPorHost(contexto);
@@ -307,7 +310,7 @@ public static class GeneradorLongitudinal
         }
 
         // "Niveles" para Fase 5 (#7): un candidato de traslapo por tramo
-        // LIBRE/CONTRA ZAPATA de TODA la columna (no solo los tildados en
+        // LIBRE/CONTRA ZAPATA de TODA la columna (no solo los aceptados en
         // esta corrida) -- el número de nivel (para el intercalado par/impar)
         // es una propiedad estable de la columna real, no debería cambiar
         // según qué tramos se tildaron hoy.
@@ -456,7 +459,7 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Grapas y cajas en cada tramo LIBRE tildado (no dentro de una viga), en
+    /// Grapas y cajas en cada tramo LIBRE aceptado (no dentro de una viga), en
     /// las mismas posiciones Z que los estribos principales de ese tramo --
     /// issue #32: William confirmó en la reunión del 4-sep que van "en la
     /// misma parte donde van los estribos normales", no solo en los extremos
@@ -726,11 +729,11 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Agrupa TODOS los tramos físicos de la columna (tildados o no) por
+    /// Agrupa TODOS los tramos físicos de la columna (aceptados o no) por
     /// elemento host, quedándose con el rango Z que cubren dentro de cada
     /// uno -- un Rebar longitudinal por host, no por tramo (corre continuo
     /// dentro de un mismo elemento aunque tenga un nudo de viga en el medio).
-    /// La longitudinal siempre es de la columna física completa; el tildado
+    /// La longitudinal siempre es de la columna física completa; lo aceptado
     /// de tramos en la UI es solo para configurar estribos (ver comentario
     /// en el llamador).
     /// </summary>
@@ -866,12 +869,20 @@ public static class GeneradorLongitudinal
                 double x = posicion.X + (corrido ? corrimiento.Dx : 0);
                 double y = posicion.Y + (corrido ? corrimiento.Dy : 0);
 
-                RebarHookType? ganchoDeEsteSegmento = idHost == idZapata ? ganchoLongitudinal : null;
+                // El gancho va en las PUNTAS de la columna, no en cualquier
+                // segmento del host que las contiene: si el host de la zapata
+                // quedó partido por un traslapo, solo la pieza de más abajo
+                // ancla. Antes alcanzaba con estar en el host de la zapata.
+                bool esElMasBajo = Math.Abs(zIni - zInicioTotalMetros) < Tolerancia;
+                bool esElMasAlto = Math.Abs(zFin - zFinTotalMetros) < Tolerancia;
+
+                RebarHookType? ganchoAbajo = esElMasBajo && idHost == idZapata ? ganchoLongitudinal : null;
+                RebarHookType? ganchoArriba = esElMasAlto ? ganchoLongitudinal : null;
 
                 CrearBarraVertical(
                     doc, fp, barra, x, y, normal,
                     EstandarCQ.APies(zIni), EstandarCQ.APies(zFin),
-                    ganchoDeEsteSegmento, marcaColumna, res, ref creadasLocal);
+                    ganchoAbajo, ganchoArriba, marcaColumna, res, ref creadasLocal);
             }
         }
 
@@ -940,12 +951,16 @@ public static class GeneradorLongitudinal
             double xGrupo = posicion.X + (corridoInicial ? corrimiento.Dx : 0);
             double yGrupo = posicion.Y + (corridoInicial ? corrimiento.Dy : 0);
 
-            RebarHookType? ganchoGrupo = idHost == idZapata ? ganchoLongitudinal : null;
+            bool grupoEsElMasBajo = Math.Abs(zIniGrupo - zInicioTotalMetros) < Tolerancia;
+            bool grupoEsElMasAlto = Math.Abs(zFinGrupo - zFinTotalMetros) < Tolerancia;
+
+            RebarHookType? ganchoAbajoGrupo = grupoEsElMasBajo && idHost == idZapata ? ganchoLongitudinal : null;
+            RebarHookType? ganchoArribaGrupo = grupoEsElMasAlto ? ganchoLongitudinal : null;
 
             Rebar? barraCompleta = CrearBarraVertical(
                 doc, fpGrupo, barra, xGrupo, yGrupo, normal,
                 EstandarCQ.APies(zIniGrupo), EstandarCQ.APies(zFinGrupo),
-                ganchoGrupo, marcaColumna, res, ref creadasLocal);
+                ganchoAbajoGrupo, ganchoArribaGrupo, marcaColumna, res, ref creadasLocal);
 
             if (barraCompleta is null)
             {
@@ -968,6 +983,20 @@ public static class GeneradorLongitudinal
                 // piezas, hay que volver a marcarlas.
                 MarcaEstribos.Marcar(piezaInferior, fpGrupo.Host.Id);
                 MarcaEstribos.Marcar(piezaSuperior, fpGrupo.Host.Id);
+
+                // SpliceRebar devuelve elementos NUEVOS: igual que con la marca,
+                // no está confirmado que conserven las terminaciones de la barra
+                // original. Se reponen sobre la pieza que corresponde (extremo 0
+                // = inferior, 1 = superior, las curvas se arman de abajo hacia
+                // arriba). Si ya venían puestas, volver a ponerlas no cambia
+                // nada; si no venían, esto es lo que salva el gancho. Queda
+                // igual en la lista de retest.
+                (RebarTerminationOrientation orientacionInf, RebarTerminationOrientation orientacionSup) =
+                    OrientacionesHaciaAdentro(fpGrupo, xGrupo, yGrupo, normal);
+
+                ReponerGancho(piezaInferior, 0, ganchoAbajoGrupo, orientacionInf);
+                ReponerGancho(piezaSuperior, 1, ganchoArribaGrupo, orientacionSup);
+
                 creadasLocal++; // la barra original ya contaba 1 -- ahora son 2 piezas reales
             }
             else
@@ -1065,7 +1094,7 @@ public static class GeneradorLongitudinal
     ///    simplemente se tocan ahí, sin gastar barra de más -- en la
     ///    realidad la barra es continua a través de esa junta de hormigonado,
     ///    Revit es el que obliga a partir el objeto, no la obra.
-    ///  - Traslapo REAL (con el solape de <see cref="EstandarCQ.Varilla.Traslapo"/>):
+    ///  - Traslapo REAL (con el solape de <see cref="CuadroVarillas.Varilla.Traslapo"/>):
     ///    solo donde hace falta por la longitud comercial de la barra
     ///    (<paramref name="longitudComercialMetros"/>), y solo a la mitad de
     ///    un "nivel" (issue #7), alternando niveles pares/impares según
@@ -1091,7 +1120,7 @@ public static class GeneradorLongitudinal
         string marcaColumna,
         ResultadoArmado res)
     {
-        EstandarCQ.Varilla? varilla = EstandarCQ.Buscar(barra);
+        CuadroVarillas.Varilla? varilla = EstandarCQ.Buscar(barra);
         double traslapoMetros = varilla?.Traslapo ?? 0;
         if (varilla is null)
             res.Avisos.Add(
@@ -1183,10 +1212,71 @@ public static class GeneradorLongitudinal
     private static double PosicionIntermedia(double desde, double hasta, int n, int indice) =>
         desde + (indice + 1) * (hasta - desde) / (n + 1);
 
+    /// <summary>
+    /// Hacia dónde tiene que doblar el gancho para que mire al CENTRO de la
+    /// sección, no siempre al mismo lado (issues #43 y #59; normativa
+    /// colombiana: el gancho siempre va hacia adentro).
+    ///
+    /// El gancho dobla dentro del plano de la barra, que define la normal:
+    /// perpendicular a la barra y a la normal, o sea a lo largo de
+    /// <c>tangente × normal</c>. Con la barra vertical (tangente = Z):
+    /// normal X → el gancho va en ±Y; normal Y → va en ∓X. Left/Right elige
+    /// cuál de los dos signos.
+    ///
+    /// <b>Pendiente de confirmar contra Revit real</b> (regla del CLAUDE.md): la
+    /// correspondencia entre "el centro está del lado positivo" y Left/Right es
+    /// lo único que no se puede deducir de la documentación. Se mide con
+    /// ComandoDiagnosticoRebar, que reporta para cada extremo si el gancho
+    /// quedó hacia adentro o hacia afuera; si sale al revés se invierte acá, y
+    /// solo acá.
+    /// </summary>
+    private static (RebarTerminationOrientation Inferior, RebarTerminationOrientation Superior)
+        OrientacionesHaciaAdentro(FootprintHost fp, double x, double y, XYZ normal)
+    {
+        XYZ haciaDondeDobla = XYZ.BasisZ.CrossProduct(normal);
+
+        double dxAlCentro = (fp.XMin + fp.XMax) / 2 - x;
+        double dyAlCentro = (fp.YMin + fp.YMax) / 2 - y;
+
+        // > 0: el centro de la sección cae del lado positivo de haciaDondeDobla.
+        double proyeccion = dxAlCentro * haciaDondeDobla.X + dyAlCentro * haciaDondeDobla.Y;
+
+        // Una barra que cae justo en el eje (por ejemplo la intermedia central
+        // de una cara) no tiene "adentro" en esa dirección: cualquiera de los
+        // dos lados es igual de bueno, se deja el de siempre.
+        if (Math.Abs(proyeccion) < 1e-9) return (OrientacionPositiva, OrientacionPositiva);
+
+        return proyeccion > 0
+            ? (OrientacionPositiva, OrientacionPositiva)
+            : (OrientacionNegativa, OrientacionNegativa);
+    }
+
+    /// <summary>Gancho hacia el lado positivo de <c>tangente × normal</c>. Ver <see cref="OrientacionesHaciaAdentro"/>: falta confirmarlo contra Revit real.</summary>
+    private const RebarTerminationOrientation OrientacionPositiva = RebarTerminationOrientation.Left;
+
+    /// <summary>El opuesto de <see cref="OrientacionPositiva"/>.</summary>
+    private const RebarTerminationOrientation OrientacionNegativa = RebarTerminationOrientation.Right;
+
+    /// <summary>
+    /// Vuelve a poner un gancho sobre una pieza salida de
+    /// <c>RebarSpliceUtils.SpliceRebar</c>. Best-effort: si la barra no admite
+    /// gancho en esa posición no se bloquea la generación por esto -- mismo
+    /// criterio que <c>GeneradorArmado.CrearDesdeForma</c>.
+    /// </summary>
+    private static void ReponerGancho(
+        Rebar pieza, int extremo, RebarHookType? gancho, RebarTerminationOrientation orientacion)
+    {
+        if (gancho is null) return;
+
+        try { pieza.SetHookTypeId(extremo, gancho.Id); } catch { /* best-effort */ }
+        try { pieza.SetTerminationOrientation(extremo, orientacion); } catch { /* best-effort */ }
+    }
+
     private static Rebar? CrearBarraVertical(
         Document doc, FootprintHost fp, RebarBarType barra,
         double x, double y, XYZ normal, double zInicio, double zFin,
-        RebarHookType? ganchoDeAnclaje, string marcaColumna, ResultadoArmado res, ref int creadas)
+        RebarHookType? ganchoDeAnclaje, RebarHookType? ganchoSuperior,
+        string marcaColumna, ResultadoArmado res, ref int creadas)
     {
         FamilyInstance host = fp.Host;
         try
@@ -1195,13 +1285,16 @@ public static class GeneradorLongitudinal
             // abajo hacia arriba) -- Start del Line es el extremo INFERIOR.
             Line linea = Line.CreateBound(new XYZ(x, y, zInicio), new XYZ(x, y, zFin));
 
-            // BarTerminationsData: recta en ambos extremos salvo que este
-            // segmento sea el que ancla en la zapata (issue #37), en cuyo
-            // caso el extremo INFERIOR (Start) lleva el gancho de anclaje --
-            // el superior (End) sigue sin gancho siempre, sea cual sea el
-            // segmento.
+            // BarTerminationsData: el extremo INFERIOR (Start) lleva el gancho
+            // de anclaje si este segmento es el que ancla en la zapata (issue
+            // #37), y el SUPERIOR (End) lo lleva si es el que remata la columna
+            // (issue #59: "¿y el de arriba también sería para adentro?" -- "para
+            // adentro, sí claro", William 11-sep). Quien llama decide cuál es
+            // cuál; acá solo se arma lo que le pasan.
             //
-            // Orientación (Left): SIN confirmar todavía contra Revit real.
+            // La orientación ya no es fija: sale de OrientacionesHaciaAdentro,
+            // que la calcula contra el centro de la sección. Lo que falta
+            // confirmar contra Revit real es solo la polaridad Left/Right.
             // No hay ninguna convención ya probada en este código para
             // "adentro/afuera" en una barra vertical -- los únicos usos que
             // existen (estribos, grapas, cajas) son loops horizontales con
@@ -1211,11 +1304,20 @@ public static class GeneradorLongitudinal
             // que confirmarlo mirando el gancho en 3D (normativa colombiana:
             // el gancho SIEMPRE va hacia adentro, nunca hacia afuera) y
             // cambiar a Right acá si sale al revés.
+            (RebarTerminationOrientation orientacionInferior, RebarTerminationOrientation orientacionSuperior) =
+                OrientacionesHaciaAdentro(fp, x, y, normal);
+
             using var terminaciones = new BarTerminationsData(doc);
             if (ganchoDeAnclaje is not null)
             {
                 terminaciones.HookTypeIdAtStart = ganchoDeAnclaje.Id;
-                terminaciones.TerminationOrientationAtStart = RebarTerminationOrientation.Left;
+                terminaciones.TerminationOrientationAtStart = orientacionInferior;
+            }
+
+            if (ganchoSuperior is not null)
+            {
+                terminaciones.HookTypeIdAtEnd = ganchoSuperior.Id;
+                terminaciones.TerminationOrientationAtEnd = orientacionSuperior;
             }
 
             // La normal define el plano de la forma de la barra -- tiene que

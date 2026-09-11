@@ -31,7 +31,7 @@ public partial class App : Application
                 Detalles =
                 {
                     "Vista previa: acá el add-in real generaría el armado en Revit.",
-                    $"Se habrían armado {columnas} columna(s) y {tramos} tramo(s) tildado(s).",
+                    $"Se habrían armado {columnas} columna(s) y {tramos} tramo(s) aceptado(s).",
                     opciones.BorrarAnteriores
                         ? "Con borrado previo de TODO el armado existente en esas columnas."
                         : "Sin borrar el armado existente.",

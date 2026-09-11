@@ -9,7 +9,7 @@ using System.Collections.Generic;
 /// longitudinal de la columna.
 ///
 /// Elegir una configuración solo CARGA el panel: de ahí sale hacia los tramos
-/// con "Aplicar a selección", o se genera. Cargar y aplicar son dos gestos
+/// cuando se aprieta Aceptar. Cargar y aceptar son dos gestos
 /// distintos a propósito -- ver <c>TramosResaltados</c> en
 /// <c>VentanaConfiguradorEstribos</c>.
 /// </summary>

@@ -15,17 +15,17 @@ public class ComandoEstribos : IExternalCommand
 {
     private static VentanaConfiguradorEstribos? _ventana;
 
-    // Issue #24 (sincronizar selección): viven a nivel de comando, no de
+    // Issue #24 (sincronizar selección): vive a nivel de comando, no de
     // ventana, porque VentanaConfiguradorEstribos no puede referenciar
     // Autodesk.Revit -- es la misma regla de L1 que la mantiene corriendo
-    // sin Revit abierto. Dos pares separados y no uno compartido: activar
-    // una fila mueve la cámara, tildar en la lista no debe hacerlo, y son
-    // dos eventos de la ventana que pueden dispararse en cualquier orden.
+    // sin Revit abierto.
+    //
+    // Antes había un segundo par (sin centrar la vista) para reflejar en Revit
+    // lo que estaba TILDADO en la lista. El tilde desapareció con el issue #56
+    // y no se recableó a lo "aceptado" a propósito: cada Aceptar le mandaría
+    // una selección nueva a Revit y movería lo que el usuario esté mirando.
     private static readonly ManejadorSeleccionElemento _manejadorActivar = new() { CentrarVista = true };
     private static readonly ExternalEvent _eventoActivar = ExternalEvent.Create(_manejadorActivar);
-
-    private static readonly ManejadorSeleccionElemento _manejadorMarcado = new() { CentrarVista = false };
-    private static readonly ExternalEvent _eventoMarcado = ExternalEvent.Create(_manejadorMarcado);
 
     // J3 (#5): generar el armado real necesita transacción, por eso pasa por
     // el mismo patrón ExternalEvent que la selección de arriba.
@@ -78,15 +78,6 @@ public class ComandoEstribos : IExternalCommand
 
             _manejadorActivar.Objetivos = objetivos;
             _eventoActivar.Raise();
-        };
-
-        // Tildar puede vaciar el conjunto (destildar todo) -- a diferencia de
-        // ElementosActivados, acá sí hay que avisarle a Revit para que
-        // deseleccione, no cortar antes.
-        _ventana.SeleccionMarcadaCambio += ids =>
-        {
-            _manejadorMarcado.Objetivos = ParsearIds(ids);
-            _eventoMarcado.Raise();
         };
 
         // La ventana que dispara esto puede haberse cerrado (y reabierto) para

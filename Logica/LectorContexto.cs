@@ -72,7 +72,7 @@ public sealed class LectorContexto : IProveedorContexto
     /// geometría de Revit de cuando se leyeron; en cuanto el documento se
     /// modifica (creación/borrado de Rebar, <c>Document.Regenerate()</c>) esos
     /// objetos dejan de ser válidos, y volver a usarlos (por ejemplo desde
-    /// "Aplicar a selección" o el panel de elevación, sin cerrar la ventana)
+    /// aceptar un tramo o el panel de elevación, sin cerrar la ventana)
     /// puede terminar en un crash nativo de Revit en vez de una excepción de
     /// .NET -- probado sobre Revit real.
     /// </summary>
@@ -98,7 +98,8 @@ public sealed class LectorContexto : IProveedorContexto
                 // GeometriaSeccion.ValidarRectangular, misma limitación que
                 // ya tiene el resto del generador para columnas rotadas).
                 AMetros(pila[0].Centro.X),
-                AMetros(pila[0].Centro.Y)))
+                AMetros(pila[0].Centro.Y),
+                MarcaUbicacion(pila[0].Instancia)))
             .ToList();
 
     /// <summary>
@@ -710,6 +711,25 @@ public sealed class LectorContexto : IProveedorContexto
         columna.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } marca
             ? marca
             : $"[{columna.Id}]";
+
+    /// <summary>
+    /// La "marca de ubicación del pilar": la coordenada de rejilla que Revit ya
+    /// calcula solo ("A-1", más el desfase entre paréntesis cuando la columna no
+    /// cae justo en el cruce). No se calcula acá a propósito -- reunión del
+    /// 11-sep, William: "eso existe, no hay que ponerse a calcular, sino
+    /// dejarlo, solamente obtenerlo".
+    ///
+    /// <c>BuiltInParameter.COLUMN_LOCATION_MARK</c>, público y documentado
+    /// (equivale a <c>ParameterTypeId.ColumnLocationMark</c>, la forma moderna;
+    /// se usa el BuiltInParameter por consistencia con el resto del archivo).
+    /// Devuelve vacío si el modelo no tiene rejillas o si el elemento no es una
+    /// columna estructural -- ahí simplemente no se dibuja etiqueta en la
+    /// planta, no es un error.
+    /// </summary>
+    private static string MarcaUbicacion(FamilyInstance columna) =>
+        columna.get_Parameter(BuiltInParameter.COLUMN_LOCATION_MARK)?.AsString() is { Length: > 0 } ubicacion
+            ? ubicacion
+            : "";
 
     /// <summary>Simétrico de <c>new ElementId(long.Parse(id))</c> del lado de lectura.</summary>
     private static string IdTexto(ElementId id) =>

@@ -65,13 +65,16 @@ public partial class PanelPlantaColumnas : UserControl
     private static readonly Brush ColorColumnaActiva = new SolidColorBrush(Color.FromArgb(120, 0x22, 0xC5, 0x5E));
     private static readonly Brush ColorBordeActiva = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
 
-    // Mismo azul que BotonAplicarSeleccion (VentanaConfiguradorEstribos.xaml)
-    // -- una columna tildada (incluida en "Aplicar a selección") se marca con
-    // este color, independiente de si además está activa (verde).
+    // Azul de "columna elegida": a las elegidas les cae lo que se acepte en el
+    // panel del tramo (issue #56). Independiente de si además está activa
+    // (verde) o de si ya tiene tramos aceptados (✓).
     private static readonly Brush ColorColumnaMarcada = new SolidColorBrush(Color.FromArgb(140, 0x0B, 0x63, 0xCE));
     private static readonly Brush ColorBordeMarcada = new SolidColorBrush(Color.FromRgb(0x0B, 0x63, 0xCE));
 
     private static readonly Brush ColorRejilla = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0));
+
+    /// <summary>Mismo verde que el chulito de la elevación (VentanaConfiguradorEstribos).</summary>
+    private static readonly Brush ColorChulito = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A));
 
     // Rectángulo de arrastre: azul para "ventana" (izq -> der, solo lo que
     // entra entero) y verde para "cruce" (der -> izq, todo lo que toca),
@@ -86,7 +89,11 @@ public partial class PanelPlantaColumnas : UserControl
     private readonly List<(string Id, Rect Caja)> _marcadores = new();
 
     /// <summary>Lo último que se dibujó, para poder repetirlo cuando cambia el tamaño del panel.</summary>
-    private (IReadOnlyList<ColumnaResumen> Columnas, IReadOnlyList<Rejilla> Rejillas, string? IdActiva, IReadOnlySet<string> Marcadas)? _ultimo;
+    private (IReadOnlyList<ColumnaResumen> Columnas,
+             IReadOnlyList<Rejilla> Rejillas,
+             string? IdActiva,
+             IReadOnlySet<string> Elegidas,
+             IReadOnlySet<string> Configuradas)? _ultimo;
 
     private Point _inicioArrastre;
     private Rectangle? _rectanguloArrastre;
@@ -105,18 +112,20 @@ public partial class PanelPlantaColumnas : UserControl
     }
 
     /// <summary>
-    /// Redibuja todo el panel. <paramref name="idActiva"/> es el
-    /// <see cref="ColumnaResumen.Id"/> de la columna activa (para resaltarla
-    /// en verde), o <c>null</c> si ninguna lo está todavía.
-    /// <paramref name="idsMarcadas"/> son las columnas tildadas (incluidas en
-    /// "Aplicar a selección" -- se resaltan en azul, ver
-    /// <see cref="ColumnaClicked"/>).
+    /// Redibuja todo el panel.
+    ///
+    /// Son tres estados distintos y se ven distinto, porque desde el issue #56
+    /// ya no son la misma cosa: <paramref name="idActiva"/> es la columna que
+    /// muestra la elevación (verde); <paramref name="idsElegidas"/> son las que
+    /// están seleccionadas, o sea a las que les cae lo que se acepte (azul); y
+    /// <paramref name="idsConfiguradas"/> son las que tienen al menos un tramo
+    /// aceptado, o sea las que se van a generar (✓ verde en la esquina).
     /// </summary>
     public void Cargar(
         IReadOnlyList<ColumnaResumen> columnas, IReadOnlyList<Rejilla> rejillas,
-        string? idActiva, IReadOnlySet<string> idsMarcadas)
+        string? idActiva, IReadOnlySet<string> idsElegidas, IReadOnlySet<string> idsConfiguradas)
     {
-        _ultimo = (columnas, rejillas, idActiva, idsMarcadas);
+        _ultimo = (columnas, rejillas, idActiva, idsElegidas, idsConfiguradas);
         Redibujar();
     }
 
@@ -127,7 +136,11 @@ public partial class PanelPlantaColumnas : UserControl
         _rectanguloArrastre = null;
 
         if (_ultimo is not { } estado) return;
-        (IReadOnlyList<ColumnaResumen> columnas, IReadOnlyList<Rejilla> rejillas, string? idActiva, IReadOnlySet<string> idsMarcadas) = estado;
+        (IReadOnlyList<ColumnaResumen> columnas,
+         IReadOnlyList<Rejilla> rejillas,
+         string? idActiva,
+         IReadOnlySet<string> idsElegidas,
+         IReadOnlySet<string> idsConfiguradas) = estado;
         if (columnas.Count == 0 && rejillas.Count == 0) return;
 
         const double margen = 22;
@@ -175,7 +188,69 @@ public partial class PanelPlantaColumnas : UserControl
             DibujarRejilla(r, Cx, Cy);
 
         foreach (ColumnaResumen c in columnas)
-            DibujarColumna(c, Cx(c.X), Cy(c.Y), c.Id == idActiva, idsMarcadas.Contains(c.Id));
+            DibujarColumna(c, Cx(c.X), Cy(c.Y), c.Id == idActiva, idsElegidas.Contains(c.Id), idsConfiguradas.Contains(c.Id));
+
+        // Las etiquetas SIEMPRE después de todos los cuadraditos: así ninguna
+        // queda tapada por una columna dibujada más tarde, y el chequeo de
+        // encimado (ver el método) ya tiene la lista completa de cuadraditos.
+        DibujarEtiquetasDeUbicacion(columnas, Cx, Cy);
+    }
+
+    /// <summary>
+    /// La marca de ubicación del pilar ("A-1") al lado de cada columna --
+    /// reunión del 11-sep: es la coordenada que Revit ya calcula del cruce de
+    /// rejillas, no hay que inventar nada, solo dibujarla.
+    ///
+    /// El 10-sep se habían sacado las etiquetas de la planta justamente porque
+    /// con las columnas juntas se encimaban entre sí y tapaban el dibujo. "A-1"
+    /// es corto, pero el problema no desaparece solo, así que acá se resuelve
+    /// explícito: cada etiqueta se dibuja únicamente si su caja no se pisa con
+    /// nada ya dibujado (cuadraditos y etiquetas anteriores). Se prueban dos
+    /// posiciones -- debajo y a la derecha -- antes de rendirse. Una columna
+    /// sin etiqueta no pierde nada: el nombre sigue en el tooltip y en la
+    /// elevación.
+    /// </summary>
+    private void DibujarEtiquetasDeUbicacion(
+        IReadOnlyList<ColumnaResumen> columnas, Func<double, double> cx, Func<double, double> cy)
+    {
+        const double tam = 12;
+        const double aire = 2;
+
+        // Arranca ocupado por todos los cuadraditos, que ya están dibujados.
+        List<Rect> ocupado = _marcadores.Select(m => m.Caja).ToList();
+
+        foreach (ColumnaResumen c in columnas)
+        {
+            if (c.MarcaUbicacion.Length == 0) continue;
+
+            var texto = new TextBlock
+            {
+                Text = c.MarcaUbicacion,
+                FontSize = 9,
+                Foreground = Brushes.DimGray,
+                IsHitTestVisible = false,
+            };
+            texto.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+            double ancho = texto.DesiredSize.Width;
+            double alto = texto.DesiredSize.Height;
+            double x = cx(c.X);
+            double y = cy(c.Y);
+
+            Rect[] candidatas =
+            {
+                new(x - ancho / 2, y + tam / 2 + aire, ancho, alto),   // debajo, centrada
+                new(x + tam / 2 + aire, y - alto / 2, ancho, alto),    // a la derecha
+            };
+
+            if (candidatas.FirstOrDefault(r => !ocupado.Any(o => o.IntersectsWith(r))) is not { Width: > 0 } libre)
+                continue;
+
+            Canvas.SetLeft(texto, libre.X);
+            Canvas.SetTop(texto, libre.Y);
+            Lienzo.Children.Add(texto);
+            ocupado.Add(libre);
+        }
     }
 
     private void DibujarIndicadorNorte()
@@ -239,12 +314,13 @@ public partial class PanelPlantaColumnas : UserControl
     }
 
     /// <summary>
-    /// El nombre de la columna ya no se dibuja al lado del cuadradito: con las
-    /// columnas juntas las etiquetas se encimaban entre sí y tapaban el dibujo
-    /// (William, reunión del 10-sep). Ahora va en el tooltip, y el nombre de la
-    /// columna elegida se lee en el panel de tramos y en la elevación.
+    /// El cuadradito solo. La etiqueta la pone aparte
+    /// <see cref="DibujarEtiquetasDeUbicacion"/>, después de que estén todos
+    /// dibujados: el NOMBRE de la columna ("C-12") sigue sin dibujarse -- con
+    /// las columnas juntas se encimaba (William, 10-sep) -- y lo que se
+    /// etiqueta es la marca de ubicación, que es corta.
     /// </summary>
-    private void DibujarColumna(ColumnaResumen c, double x, double y, bool activa, bool marcada)
+    private void DibujarColumna(ColumnaResumen c, double x, double y, bool activa, bool elegida, bool configurada)
     {
         const double tam = 12;
 
@@ -252,11 +328,11 @@ public partial class PanelPlantaColumnas : UserControl
         {
             Width = tam,
             Height = tam,
-            Fill = marcada ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
-            Stroke = activa ? ColorBordeActiva : (marcada ? ColorBordeMarcada : ColorBordeColumna),
-            StrokeThickness = activa || marcada ? 2 : 1,
+            Fill = elegida ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
+            Stroke = activa ? ColorBordeActiva : (elegida ? ColorBordeMarcada : ColorBordeColumna),
+            StrokeThickness = activa || elegida ? 2 : 1,
             Cursor = Cursors.Hand,
-            ToolTip = c.Marca,
+            ToolTip = c.MarcaUbicacion.Length > 0 ? $"{c.Marca}  ·  {c.MarcaUbicacion}" : c.Marca,
             // Los clics los resuelve el lienzo contra _marcadores: si cada
             // cuadradito se los quedara, un arrastre que empieza encima de uno
             // no llegaría nunca a ser arrastre.
@@ -265,6 +341,24 @@ public partial class PanelPlantaColumnas : UserControl
         Canvas.SetLeft(marcador, x - tam / 2);
         Canvas.SetTop(marcador, y - tam / 2);
         Lienzo.Children.Add(marcador);
+
+        // El ✓ de "esta columna tiene tramos aceptados, se va a generar" --
+        // mismo símbolo y mismo verde que en la elevación (issue #56), para que
+        // sea el mismo concepto y no dos marcas distintas que hay que aprender.
+        if (configurada)
+        {
+            var chulito = new TextBlock
+            {
+                Text = "✓",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = ColorChulito,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(chulito, x + tam / 2 - 1);
+            Canvas.SetTop(chulito, y - tam / 2 - 11);
+            Lienzo.Children.Add(chulito);
+        }
 
         _marcadores.Add((c.Id, new Rect(x - tam / 2, y - tam / 2, tam, tam)));
     }
