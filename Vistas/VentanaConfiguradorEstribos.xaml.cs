@@ -1134,6 +1134,100 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void BotonAplicarSeleccion_Click(object sender, RoutedEventArgs e)
     {
+        List<NodoLista> objetivo = TramosResaltados();
+        if (objetivo.Count == 0)
+        {
+            TextoEstado.Text = "No hay nada resaltado: selecciona en la lista los tramos (o las columnas) a los que quieras " +
+                               "cargarles esta configuración -- con Ctrl o Shift para varios. El tilde es otra cosa: decide qué se genera. " +
+                               "También puedes usar la flechita del botón para aplicar por tipo de tramo.";
+            return;
+        }
+
+        AplicarPlantillaA(objetivo);
+    }
+
+    /// <summary>
+    /// La flechita del botón: atajos para aplicar la configuración a todos los
+    /// tramos de un tipo sin tener que resaltarlos de a uno. Siempre acotado a
+    /// la columna activa (pedido de Luciano) -- por eso el menú se arma en cada
+    /// apertura y no en el XAML: los conteos dependen de qué columna se esté
+    /// mirando.
+    /// </summary>
+    private void BotonAplicarOpciones_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnaActiva is null || _columnaIdActiva is null)
+        {
+            TextoEstado.Text = "Elige primero una columna: estas opciones se aplican a los tramos de la columna activa.";
+            return;
+        }
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = BotonAplicarOpciones,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        menu.Items.Add(new MenuItem
+        {
+            Header = $"Columna {_columnaActiva.Marca}",
+            IsEnabled = false,
+            FontWeight = FontWeights.Bold,
+        });
+        menu.Items.Add(new Separator());
+
+        AgregarOpcion(menu, "Aplicar a los tramos libres", TramosDeLaColumnaActiva(t => t.Tipo == TipoTramo.Libre));
+        AgregarOpcion(menu, "Aplicar a los nudos", TramosDeLaColumnaActiva(t => t.Tipo == TipoTramo.DentroDeViga));
+        AgregarOpcion(menu, "Aplicar al tramo contra zapata", TramosDeLaColumnaActiva(t => t.Tipo == TipoTramo.ContraZapata));
+        AgregarOpcion(menu, "Aplicar a toda la columna", TramosDeLaColumnaActiva(null));
+
+        menu.Items.Add(new Separator());
+        AgregarOpcion(menu, "Aplicar a los tramos tildados", TramosDeLaColumnaActiva(null).Where(n => n.Marcado).ToList());
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Cada opción lleva su conteo y se deshabilita si no le toca ningún tramo:
+    /// así no se aplica a ciegas, y una columna sin zapata no ofrece "contra
+    /// zapata" como si hiciera algo.
+    /// </summary>
+    private void AgregarOpcion(ContextMenu menu, string texto, List<NodoLista> objetivo)
+    {
+        var item = new MenuItem
+        {
+            Header = $"{texto} ({objetivo.Count})",
+            IsEnabled = objetivo.Count > 0,
+        };
+
+        item.Click += (_, _) => AplicarPlantillaA(objetivo);
+        menu.Items.Add(item);
+    }
+
+    /// <summary>
+    /// Los tramos de la columna activa que pasan el filtro (o todos, con
+    /// <paramref name="filtro"/> en <c>null</c>). El contexto de la columna se
+    /// lee UNA vez: los conteos del menú y lo que después se aplica salen de
+    /// acá, así que no pueden discrepar.
+    /// </summary>
+    private List<NodoLista> TramosDeLaColumnaActiva(Func<Tramo, bool>? filtro)
+    {
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return new List<NodoLista>();
+
+        return _nodos
+            .Where(n => !n.EsColumna && n.ColumnaId == idColumna)
+            .Where(n => n.TramoIndice >= 0 && n.TramoIndice < _columnaActiva.Tramos.Count)
+            .Where(n => filtro is null || filtro(_columnaActiva.Tramos[n.TramoIndice]))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Copia la configuración del panel a cada tramo del objetivo. Es el único
+    /// lugar donde se aplica: lo usan tanto el botón (lo resaltado) como cada
+    /// opción de la flechita, así que las dos vías validan, avisan y refrescan
+    /// igual.
+    /// </summary>
+    private void AplicarPlantillaA(IReadOnlyList<NodoLista> objetivo)
+    {
         ConfigTramo plantilla = LeerConfigDelPanel();
 
         // Validación de campos (sin altura -- eso depende de a qué tramo se
@@ -1145,15 +1239,10 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
-        List<NodoLista> objetivo = TramosResaltados();
-        if (objetivo.Count == 0)
-        {
-            TextoEstado.Text = "No hay nada resaltado: selecciona en la lista los tramos (o las columnas) a los que quieras " +
-                               "cargarles esta configuración -- con Ctrl o Shift para varios. El tilde es otra cosa: decide qué se genera.";
-            return;
-        }
+        if (objetivo.Count == 0) return;
 
         var conProblemaDeNorma = new List<string>();
+        int nudos = 0;
 
         foreach (NodoLista nodo in objetivo)
         {
@@ -1178,6 +1267,9 @@ public partial class VentanaConfiguradorEstribos : Window
             // ataja el generador (J3), esto es una alerta temprana en la UI.
             ColumnaContexto contexto = _contexto.Leer(nodo.ColumnaId);
             Tramo tramoReal = contexto.Tramos[nodo.TramoIndice];
+
+            if (tramoReal.Tipo == TipoTramo.DentroDeViga) nudos++;
+
             if (plantilla.Modo == ModoEstribo.Confinado
                 && tramoReal.Altura > 0
                 && plantilla.LongitudConfinamiento * 2 >= tramoReal.Altura)
@@ -1186,10 +1278,25 @@ public partial class VentanaConfiguradorEstribos : Window
             }
         }
 
-        TextoEstado.Text = conProblemaDeNorma.Count == 0
-            ? $"Aplicado a {objetivo.Count} tramo(s)."
-            : $"Aplicado a {objetivo.Count} tramo(s). Atención: en {string.Join(", ", conProblemaDeNorma)} " +
-              "L1 x2 ≥ la altura del tramo -- revisa esos, no queda zona central.";
+        var mensaje = new List<string> { $"Aplicado a {objetivo.Count} tramo(s)." };
+
+        if (conProblemaDeNorma.Count > 0)
+            mensaje.Add($"Atención: en {string.Join(", ", conProblemaDeNorma)} L1 x2 ≥ la altura del tramo -- " +
+                        "revisa esos, no queda zona central.");
+
+        // Un tramo dentro del canto de una viga hoy NO genera estribos: el
+        // generador lo saltea a propósito. La configuración queda cargada
+        // igual, pero decirlo evita que alguien crea que armó algo ahí.
+        if (nudos > 0)
+            mensaje.Add($"Ojo: {nudos} de esos son nudos, y hoy los nudos no generan estribos " +
+                        "(el generador los saltea); la configuración queda cargada igual.");
+
+        TextoEstado.Text = string.Join(" ", mensaje);
+
+        // Quedan resaltados: así se ve exactamente a qué le cayó la
+        // configuración (en las tres listas y en la elevación), sin tener que
+        // confiar en el número del mensaje.
+        ResaltarEnLista(objetivo, sumar: false);
 
         // Si el tramo activo estaba entre los que se acaban de tocar, refleja
         // el resultado en el panel en vez de dejarlo desactualizado.

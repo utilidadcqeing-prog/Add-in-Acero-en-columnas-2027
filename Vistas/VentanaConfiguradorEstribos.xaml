@@ -81,9 +81,20 @@
             <Button Grid.Column="1" x:Name="BotonLimpiarSeleccion" Content="Limpiar selección"
                     Height="30" Padding="12,0" Background="#6B7280" Foreground="White"
                     BorderThickness="0" Margin="0,0,8,0" Click="BotonLimpiarSeleccion_Click" />
-            <Button Grid.Column="2" x:Name="BotonAplicarSeleccion" Content="Aplicar a selección"
-                    Height="30" Padding="12,0" Background="#0B63CE" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0" Click="BotonAplicarSeleccion_Click" />
+            <!-- Botón partido: el de siempre (aplica a lo resaltado) más una
+                 flechita con los atajos por tipo de tramo, siempre acotados a
+                 la columna activa. Los dos pegados y del mismo color para que
+                 se lean como un solo control. -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="BotonAplicarSeleccion" Content="Aplicar a selección"
+                        Height="30" Padding="12,0" Background="#0B63CE" Foreground="White"
+                        FontWeight="Bold" BorderThickness="0" Margin="0,0,1,0"
+                        Click="BotonAplicarSeleccion_Click" />
+                <Button x:Name="BotonAplicarOpciones" Content="▾" ToolTip="Aplicar por tipo de tramo"
+                        Height="30" Width="26" Padding="0" Background="#0B63CE" Foreground="White"
+                        FontWeight="Bold" BorderThickness="0"
+                        Click="BotonAplicarOpciones_Click" />
+            </StackPanel>
         </Grid>
 
         <!-- Cuerpo: planta/lista | tramos | elevación | configuración -->
@@ -175,8 +186,9 @@
                         <TextBlock x:Name="TextoAvisos" TextWrapping="Wrap" FontSize="11" Foreground="#92400E" />
                     </Border>
 
-                    <!-- Leyenda -->
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                    <!-- Leyenda. WrapPanel y no StackPanel: con "resaltado"
+                         ya son cinco entradas y en una sola fila no entran. -->
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Rectangle Width="12" Height="12" Fill="#3B82F6" Margin="0,0,4,0" />
                         <TextBlock Text="nudo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
                         <Rectangle Width="12" Height="12" Fill="#B45309" Margin="0,0,4,0" />
@@ -197,7 +209,7 @@
                             </Rectangle.Fill>
                         </Rectangle>
                         <TextBlock Text="configurado" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
-                    </StackPanel>
+                    </WrapPanel>
 
                     <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
                          del texto: la elevación de abajo también es vertical (de piso a
