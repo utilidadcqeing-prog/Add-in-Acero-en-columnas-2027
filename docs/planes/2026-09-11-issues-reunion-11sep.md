@@ -50,21 +50,36 @@ la columna en la planta, se configura, y **"Generar armado en Revit"** genera.
 
 **El tilde no desaparece: deja de ser algo que se clickea** (idea de Luciano). Un
 tramo queda marcado con un **chulito verde** —un icono, no una casilla— cuando
-**está configurado**, sea a mano o como efecto de un "aplicar al resto de los
-nudos". Y **lo marcado es lo que se genera**. Así se cumple lo de "la menor
-cantidad de clics posible" sin perder el control de qué se arma: el estado sale
-de lo que ya se hizo, no de un clic aparte.
+**está configurado**, y **lo marcado es lo que se genera**. Así se cumple lo de
+"la menor cantidad de clics posible" sin perder el control de qué se arma: el
+estado sale de lo que ya se hizo, no de un clic aparte.
 
 Dónde se ve: en la **elevación**, que ya distingue con una trama los tramos que
 tienen configuración propia. Ese concepto pasa a ser el criterio de generación y
 se muestra como el chulito.
 
-**Cuidado con un detalle que haría que se marque todo**: hoy
-`GuardarPanelEnTramoActivo` escribe en `_configPorTramo` **cada vez que se activa
-un tramo**, así que "tiene configuración" significa en realidad "fue visitado".
-Usado tal cual como criterio, navegar con las flechitas dejaría todo marcado. Hay
-que distinguir **configurado a propósito** (el usuario cambió algo, o le cayó un
-"aplicar al resto") de **solamente visitado**.
+### Qué cuenta como "configurado"
+
+Un tramo queda marcado cuando pasó **una** de estas dos cosas:
+
+1. se apretó **"Aceptar"** en el panel de configuración de ese tramo;
+2. le cayó un **"aplicar al resto de los tramos libres"** / **"al resto de los
+   nudos"** (el issue siguiente).
+
+Lo que **no** cuenta: haber navegado hasta el tramo con las flechitas, ni haber
+tocado un campo sin aceptar.
+
+**Cuidado, porque hoy no existe ese "Aceptar" y "tiene configuración" significa
+"fue visitado"**: `GuardarPanelEnTramoActivo` escribe en `_configPorTramo` cada
+vez que se activa un tramo — es lo que hace que no se pierda lo tecleado al
+navegar. Usado tal cual como criterio, recorrer la columna con las flechitas
+dejaría **todo** marcado.
+
+Hacen falta **dos estados separados**: *lo que el panel tiene cargado* para ese
+tramo (que se sigue guardando solo, para no perder nada) y *el tramo está
+aceptado* (lo que decide el chulito y la generación). Más el botón "Aceptar" en
+el panel, que hoy no existe — William lo nombró como parte del flujo: *"lo
+configuras y te dice 'aplicar al resto de nudo', pan, aceptar"* (38:26).
 
 Toca `ConstruirPlanArmado` (hoy genera solo los tramos tildados; pasa a generar
 los configurados), `RedibujarElevacion` y buena parte de
