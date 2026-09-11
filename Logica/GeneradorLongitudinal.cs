@@ -25,11 +25,13 @@ using practicacq.Modelo;
 ///    generan donde la longitud comercial de la barra (<see cref="ConfigLongitudinal.LongitudComercialBarra"/>,
 ///    6 o 12 m) obliga a cortar, y solo a la mitad de un nivel, alternando
 ///    niveles pares/impares entre las posiciones longitudinales de la
-///    sección (ver <see cref="GenerarColumna"/>, contador <c>posicion</c>).
-///    Dos cosas de esto NO están confirmadas por el equipo, ver issue de
-///    seguimiento de Fase 5: (a) qué criterio real separa las barras en el
-///    grupo par/impar -- acá es simplemente el orden en que ya se recorrían
-///    esquinas/cara X/cara Y; (b) qué pasa cuando un corte obligado por
+///    sección. Qué barra cae en cada grupo lo decide su lugar en el ANILLO
+///    del perímetro (ver <see cref="GenerarColumna"/>, lista <c>anillo</c>):
+///    "uno sí, uno no" dando la vuelta, de modo que dos barras VECINAS nunca
+///    traslapan a la misma altura -- regla del equipo, confirmada por Luciano
+///    el 11-sep con un dibujo (ver
+///    docs/planes/2026-09-11-alternancia-de-traslapos-por-anillo.md).
+///    Sigue SIN confirmar, en cambio, qué pasa cuando un corte obligado por
 ///    límite de host no coincide con ningún traslapo real de ese grupo --
 ///    acá se resuelve como junta a tope, sin solape, simulando que la barra
 ///    real es continua a través de esa junta de hormigonado y que es Revit
@@ -318,14 +320,11 @@ public static class GeneradorLongitudinal
 
         int creadas = 0;
 
-        // Un contador corrido de posición alrededor del perímetro decide el
-        // grupo par/impar del intercalado (issue #7 y #29-style: "mitad de
-        // las barras empalma en niveles impares, la mitad en pares") -- cada
-        // posición longitudinal (esquina, barra de cara X, barra de cara Y)
-        // suma uno, en el mismo orden en que ya se recorrían antes de esta
-        // fase. No es una convención confirmada por nadie del equipo, ver
-        // issue de seguimiento de Fase 5.
-        int posicion = 0;
+        // El grupo par/impar del traslapo intercalado sale de la posición de
+        // cada barra EN EL ANILLO del perímetro (ver más abajo, "anillo"): la
+        // regla del equipo, confirmada por Luciano el 11-sep con un dibujo, es
+        // "uno sí, uno no" dando la vuelta -- dos barras VECINAS nunca
+        // traslapan a la misma altura.
 
         // El plan de cortes (traslapos reales + límites de host) es el mismo
         // para todas las barras que comparten tipo de barra Y grupo par/impar
@@ -377,65 +376,75 @@ public static class GeneradorLongitudinal
             return correrEnY ? (0, signo * diametro) : (signo * diametro, 0);
         }
 
-        (double X, double Y)[] esquinas =
-        {
-            (referencia.XMin + insetEsquinas, referencia.YMin + insetEsquinas),
-            (referencia.XMax - insetEsquinas, referencia.YMin + insetEsquinas),
-            (referencia.XMin + insetEsquinas, referencia.YMax - insetEsquinas),
-            (referencia.XMax - insetEsquinas, referencia.YMax - insetEsquinas),
-        };
+        // Las posiciones longitudinales EN ORDEN DE ANILLO, dando una vuelta
+        // completa al perímetro: esquina inferior izquierda, cara inferior de
+        // izquierda a derecha, esquina inferior derecha, cara derecha de abajo
+        // hacia arriba, esquina superior derecha, cara superior de derecha a
+        // izquierda, esquina superior izquierda, y cara izquierda de arriba
+        // hacia abajo.
+        //
+        // El ORDEN es lo que importa: de acá sale el grupo par/impar del
+        // traslapo intercalado. Antes salía del orden en que se creaban las
+        // barras (las 4 esquinas, después los pares de cara X, después los de
+        // cara Y), que no recorre el perímetro -- dejaba barras vecinas en el
+        // mismo grupo, incluso en el caso más simple de solo 4 esquinas
+        // (quedaban juntas las dos de la derecha).
+        var anillo = new List<(RebarBarType Barra, double X, double Y, (double Dx, double Dy) Corrimiento, XYZ Normal)>();
 
-        foreach ((double x, double y) in esquinas)
+        double xEsqIzq = referencia.XMin + insetEsquinas;
+        double xEsqDer = referencia.XMax - insetEsquinas;
+        double yEsqAbajo = referencia.YMin + insetEsquinas;
+        double yEsqArriba = referencia.YMax - insetEsquinas;
+
+        void AgregarEsquina(double x, double y) =>
+            anillo.Add((barraEsquinas, x, y, Corrimiento(barraEsquinas, true, y), XYZ.BasisX));
+
+        // Intermedias de las caras inferior/superior: varían en X, así que su
+        // corrimiento va en X (a lo largo de su cara).
+        void AgregarDeCaraX(int c, double y)
         {
+            if (barraCaraX is null) return;
+            double x = PosicionIntermedia(xEsqIzq, xEsqDer, columnas, c);
+            anillo.Add((barraCaraX, x, y, Corrimiento(barraCaraX, false, x), XYZ.BasisX));
+        }
+
+        // Intermedias de las caras izquierda/derecha: varían en Y.
+        void AgregarDeCaraY(int f, double x)
+        {
+            if (barraCaraY is null) return;
+            double y = PosicionIntermedia(yEsqAbajo, yEsqArriba, filas, f);
+            anillo.Add((barraCaraY, x, y, Corrimiento(barraCaraY, true, y), XYZ.BasisY));
+        }
+
+        AgregarEsquina(xEsqIzq, yEsqAbajo);
+        for (int c = 0; c < columnas; c++) AgregarDeCaraX(c, referencia.YMin + insetX);
+        AgregarEsquina(xEsqDer, yEsqAbajo);
+        for (int f = 0; f < filas; f++) AgregarDeCaraY(f, referencia.XMax - insetY);
+        AgregarEsquina(xEsqDer, yEsqArriba);
+        for (int c = columnas - 1; c >= 0; c--) AgregarDeCaraX(c, referencia.YMax - insetX);
+        AgregarEsquina(xEsqIzq, yEsqArriba);
+        for (int f = filas - 1; f >= 0; f--) AgregarDeCaraY(f, referencia.XMin + insetY);
+
+        // En un anillo CERRADO la alternancia estricta solo existe si la
+        // cantidad de posiciones es par. Con el modelo de hoy siempre lo es
+        // (4 + 2*columnas + 2*filas), pero no se deja implícito: si alguna vez
+        // saliera impar queda exactamente un par de vecinas en el mismo grupo,
+        // y eso se avisa acá en vez de descubrirse en obra.
+        if (anillo.Count % 2 != 0)
+            res.Avisos.Add(
+                $"{contexto.Marca}: la sección tiene {anillo.Count} barras longitudinales (cantidad impar), " +
+                "así que dos barras vecinas van a traslapar a la misma altura -- con un número impar " +
+                "alrededor del perímetro no hay forma de alternarlas todas.");
+
+        for (int i = 0; i < anillo.Count; i++)
+        {
+            (RebarBarType barraDeLaPosicion, double x, double y, (double Dx, double Dy) corrimiento, XYZ normal) = anillo[i];
+
             CrearBarraConTraslapos(
-                doc, porHost, footprintPorHost, barraEsquinas, (x, y), Corrimiento(barraEsquinas, true, y), XYZ.BasisX,
-                posicion++ % 2 == 0,
+                doc, porHost, footprintPorHost, barraDeLaPosicion, (x, y), corrimiento, normal,
+                i % 2 == 0,
                 niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
                 contexto.IdZapata, ganchoLongitudinal, tipoEmpalme, contexto.Marca, res, ref creadas);
-        }
-
-        if (barraCaraX is not null && columnas > 0)
-        {
-            for (int c = 0; c < columnas; c++)
-            {
-                double x = PosicionIntermedia(referencia.XMin + insetEsquinas, referencia.XMax - insetEsquinas, columnas, c);
-                double yInf = referencia.YMin + insetX;
-                double ySup = referencia.YMax - insetX;
-
-                CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraX, (x, yInf), Corrimiento(barraCaraX, false, x), XYZ.BasisX,
-                    posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.IdZapata, ganchoLongitudinal, tipoEmpalme, contexto.Marca, res, ref creadas);
-
-                CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraX, (x, ySup), Corrimiento(barraCaraX, false, x), XYZ.BasisX,
-                    posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.IdZapata, ganchoLongitudinal, tipoEmpalme, contexto.Marca, res, ref creadas);
-            }
-        }
-
-        if (barraCaraY is not null && filas > 0)
-        {
-            for (int f = 0; f < filas; f++)
-            {
-                double y = PosicionIntermedia(referencia.YMin + insetEsquinas, referencia.YMax - insetEsquinas, filas, f);
-                double xInf = referencia.XMin + insetY;
-                double xSup = referencia.XMax - insetY;
-
-                CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraY, (xInf, y), Corrimiento(barraCaraY, true, y), XYZ.BasisY,
-                    posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.IdZapata, ganchoLongitudinal, tipoEmpalme, contexto.Marca, res, ref creadas);
-
-                CrearBarraConTraslapos(
-                    doc, porHost, footprintPorHost, barraCaraY, (xSup, y), Corrimiento(barraCaraY, true, y), XYZ.BasisY,
-                    posicion++ % 2 == 0,
-                    niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, cortesPorBarraYGrupo,
-                    contexto.IdZapata, ganchoLongitudinal, tipoEmpalme, contexto.Marca, res, ref creadas);
-            }
         }
 
         if (creadas > 0)
