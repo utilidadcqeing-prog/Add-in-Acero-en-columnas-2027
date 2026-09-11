@@ -118,10 +118,47 @@ No se tocó `BuscarFormaEstribo` en sí -- la validación geométrica decide si
 el resultado sirve, sin importar cuál nombre lo produjo, así que el fix
 protege igual a cualquier documento futuro con otra forma "T1"-like.
 
+## Hallazgo 3 (infraestructura) — `Rev2026/` sin excluir contaminaba el build de 2027
+
+Al verificar el deploy contra Revit 2027, medí (no asumí) la versión de
+ensamblado que `practicacq.dll` referencia de verdad
+(`[Reflection.Assembly]::ReflectionOnlyLoadFrom(...).GetReferencedAssemblies()`)
+y encontré `RevitAPI, Version=26.3.0.0` -- la de **Revit 2026**, no la
+27.2.0.0 real de `C:\Program Files\Autodesk\Revit 2027\`, a pesar de que
+`dotnet build -p:RevitVersion=2027` **compilaba sin ningún error**. Un build
+en verde no era garantía (mismo espíritu que la regla del `CLAUDE.md` sobre
+la API de Revit, aplicada acá a la infraestructura del build).
+
+Causa, confirmada con `--getItem:None`: `Rev2026/` (agregado a este repo
+para poder compilar contra Revit 2026 sin tenerlo instalado, ver
+`.gitignore`) no estaba en `DefaultItemExcludes` de `practicacq.csproj`, así
+que el SDK lo barría como `<None>` del proyecto. Eso contaminaba la
+resolución de referencias del paso interno "wpftmp" del compilador de WPF
+(que resuelve referencias por su cuenta, sin necesariamente respetar el
+`HintPath` explícito del `.csproj`), y terminaba enlazando el ensamblado
+final contra `Rev2026\RevitAPI.dll` sin importar qué `RevitVersion` se
+pidiera.
+
+**Fix**: se agregó `Rev2026/**;Rev2026\**` a `DefaultItemExcludes`, mismo
+patrón que las demás carpetas ajenas al proyecto (`CQEING/**`, `Dymanos de
+referencia/**`, etc.). Verificado con un rebuild completamente limpio
+(`obj`/`bin` borrados, `dotnet build-server shutdown` antes de cada intento
+para descartar reutilización de procesos) que:
+- `-p:RevitVersion=2027` (sin `RevitInstallDir` explícito) referencia
+  27.2.0.0.
+- `-p:RevitVersion=2026 -p:RevitInstallDir=Rev2026\` referencia 26.3.0.0
+  (la correcta para esa carpeta).
+
+El `.dll` desplegado en
+`%APPDATA%\Autodesk\Revit\Addins\2027\practicacq.dll` se volvió a verificar
+de la misma forma después del deploy final: 27.2.0.0, correcto.
+
 ## Estado
 
-Compilado sin errores contra Revit 2027, contra Revit 2026 (con
-`Rev2026/RevitAPI.dll` local) y contra `tools/PreviewUI`.
+Compilado sin errores contra Revit 2027 (verificado además que referencia
+la versión de ensamblado correcta, 27.2.0.0, no solo que compile), contra
+Revit 2026 (con `Rev2026/RevitAPI.dll` local, referencia 26.3.0.0) y contra
+`tools/PreviewUI`. Desplegado a Revit 2027.
 
 ## Pendiente de retest en Revit real
 

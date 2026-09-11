@@ -48,8 +48,20 @@
       referencia). El glob implícito del SDK las barre igual si no se excluyen
       acá; si no, el build de este proyecto choca con los .g.cs generados de
       CQEING/obj.
+
+      Rev2026/ (los RevitAPI.dll/RevitAPIUI.dll de Revit 2026 que se usan para
+      compilar contra esa versión sin tenerla instalada, ver .gitignore)
+      tiene que estar en esta lista también: sin excluirla, el SDK la agarra
+      como None del proyecto, y eso contaminaba la resolución de referencias
+      del compilador de WPF (el paso "wpftmp" interno) para TODAS las
+      versiones. Un build con -p:RevitVersion=2027 terminaba enlazado contra
+      el RevitAPI.dll de 2026, sin ningún error ni aviso: medido comparando
+      la versión del ensamblado embebida en el .dll compilado (26.3.0.0)
+      contra la del RevitAPI.dll real de la carpeta de Revit 2027 (27.2.0.0),
+      un desajuste invisible hasta que se lo mide, no algo que "compile en
+      verde" garantice (regla del CLAUDE.md sobre la API de Revit).
     -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);CQEING/**;Dymanos de referencia/**;Dymanos de referencia\**;Add-ins de referencia*/**;Add-in de Armado CQEING_files/**;tools/PreviewUI/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);CQEING/**;Dymanos de referencia/**;Dymanos de referencia\**;Add-ins de referencia*/**;Add-in de Armado CQEING_files/**;tools/PreviewUI/**;Rev2026/**;Rev2026\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
