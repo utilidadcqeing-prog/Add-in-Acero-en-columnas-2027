@@ -169,6 +169,57 @@ internal static class GeometriaSeccion
     }
 
     /// <summary>
+    /// Tolerancia para distinguir una diagonal real (decenas de cm) del
+    /// ruido de punto flotante de <c>ScaleToBox</c> (una transformación
+    /// afín de un rectángulo debería quedar exactamente alineada a los
+    /// ejes) -- 1 mm en pies.
+    /// </summary>
+    private static readonly double ToleranciaDiagonalPies = UnitUtils.ConvertToInternalUnits(0.001, UnitTypeId.Meters);
+
+    /// <summary>
+    /// Si algún lado recto del lazo (sin ganchos ni radios) se mueve en X Y EN
+    /// Y a la vez, es una diagonal -- un estribo o una caja rectangular en
+    /// planta nunca debería tener una.
+    ///
+    /// Hace falta porque <see cref="BuscarFormaEstribo"/> elige por NOMBRE, no
+    /// por geometría (a diferencia de <see cref="BuscarFormaGrapa"/>, que sí
+    /// valida estructura): una forma cuyo nombre hace match pero que en
+    /// realidad trae una cruceta de confinamiento incorporada (patas
+    /// diagonales adicionales, catálogos de detallado sísmico con nombres
+    /// tipo "T1".."T9") se aceptaría sin darse cuenta. Medido contra Revit
+    /// real el 11-sep: la forma "T1" del modelo de William generó exactamente
+    /// esto -- un rectángulo bien formado con dos diagonales cruzando por
+    /// dentro.
+    ///
+    /// Se mide la geometría REAL que Revit ya creó (no la definición
+    /// abstracta de la forma): <c>ScaleToBox</c> es un escalado afín, no
+    /// puede fabricar una diagonal que la forma original no tuviera, así que
+    /// si aparece acá viene heredada de la propia forma elegida.
+    /// </summary>
+    public static bool TieneLadoDiagonal(Rebar rebar)
+    {
+        try
+        {
+            foreach (Curve c in rebar.GetCenterlineCurves(
+                         false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, 0))
+            {
+                if (c is not Line linea) continue;
+
+                XYZ d = linea.GetEndPoint(1) - linea.GetEndPoint(0);
+                if (Math.Abs(d.X) > ToleranciaDiagonalPies && Math.Abs(d.Y) > ToleranciaDiagonalPies)
+                    return true;
+            }
+        }
+        catch
+        {
+            // Si no se puede leer la geometría, no se bloquea por esto -- el
+            // resto de la creación (ScaleToBox, ganchos) ya validó lo suyo.
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Primer <see cref="RebarSpliceType"/> que tenga el documento (issue
     /// empalmes reales, ver docs/planes/2026-09-09-empalmes-rebarspliceutils.md)
     /// -- no hay ninguna convención de nombre conocida todavía (a diferencia

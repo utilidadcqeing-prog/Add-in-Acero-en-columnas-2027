@@ -60,9 +60,16 @@ public static class GeneradorArmado
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
         var ganchosYaAvisados = new HashSet<(ElementId Barra, ElementId Gancho)>();
 
+        // Qué formas de estribo (RebarShape) ya se comprobó que generan un
+        // lado diagonal (ver GeometriaSeccion.TieneLadoDiagonal) -- una sola
+        // vez por corrida: si "formaEstribo" resulta mala, no tiene sentido
+        // crear+escalar+medir+borrar en cada uno de los estribos de todas las
+        // columnas, ni repetir el mismo aviso decenas de veces.
+        var formasRechazadas = new HashSet<ElementId>();
+
         foreach (ColumnaPlan columnaPlan in plan.Columnas)
         {
-            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, res);
+            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, formasRechazadas, res);
         }
 
         return res;
@@ -76,6 +83,7 @@ public static class GeneradorArmado
         RebarShape? formaEstribo,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
+        HashSet<ElementId> formasRechazadas,
         ResultadoArmado res)
     {
         ColumnaContexto? contexto = columnaPlan.Contexto;
@@ -108,7 +116,7 @@ public static class GeneradorArmado
             {
                 if (!GenerarTramo(
                         doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo,
-                        recubrimientoPies, cacheHost, ganchosYaAvisados, res))
+                        recubrimientoPies, cacheHost, ganchosYaAvisados, formasRechazadas, res))
                 {
                     res.TramosOmitidos++;
                 }
@@ -146,6 +154,7 @@ public static class GeneradorArmado
         double recubrimientoPies,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
+        HashSet<ElementId> formasRechazadas,
         ResultadoArmado res)
     {
         // Un tramo dentro del canto de la viga (nudo) genera estribos como
@@ -243,7 +252,7 @@ public static class GeneradorArmado
         if (cfg.Modo == ModoEstribo.Uniforme)
         {
             double espaciado = EstandarCQ.APies(cfg.EspaciadoUniforme);
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, formasRechazadas, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
             return true;
         }
 
@@ -261,19 +270,19 @@ public static class GeneradorArmado
             res.Avisos.Add(
                 $"{etiquetaTramo}: la longitud de confinamiento ×2 no deja zona central; " +
                 "se armó confinado de punta a punta.");
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
             return true;
         }
 
         double l2 = altura - 2 * l1;
 
-        CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, formaEstribo, terminaciones, espaciadoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoConf,
             etiquetaTramo, "confinado inferior", res, claveTramo, incluirUltimo: false);
 
-        CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, formaEstribo, terminaciones, espaciadoNoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoNoConf,
             etiquetaTramo, "zona central", res, claveTramo, incluirUltimo: false);
 
-        CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, formaEstribo, terminaciones, espaciadoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoConf,
             etiquetaTramo, "confinado superior", res, claveTramo);
 
         return true;
@@ -295,6 +304,7 @@ public static class GeneradorArmado
         double longitud,
         RebarBarType barra,
         RebarShape? formaEstribo,
+        HashSet<ElementId> formasRechazadas,
         BarTerminationsData terminaciones,
         double espaciado,
         string etiquetaTramo,
@@ -312,7 +322,7 @@ public static class GeneradorArmado
         // familia RebarShape resuelve sus propias esquinas/ganchos, sin el
         // quiebre a mitad de lado ni su dobladura visible.
         Rebar? estribo = formaEstribo is not null
-            ? CrearDesdeForma(doc, host, curvasTrasladadas, barra, formaEstribo, terminaciones, res, etiquetaTramo)
+            ? CrearDesdeForma(doc, host, curvasTrasladadas, barra, formaEstribo, formasRechazadas, terminaciones, res, etiquetaTramo)
             : null;
 
         // Sin forma cargada en el documento, o si CrearDesdeForma no pudo
@@ -393,9 +403,15 @@ public static class GeneradorArmado
     /// </summary>
     private static Rebar? CrearDesdeForma(
         Document doc, FamilyInstance host, IList<Curve> curvasTrasladadas,
-        RebarBarType barra, RebarShape forma, BarTerminationsData terminaciones,
-        ResultadoArmado res, string etiquetaTramo)
+        RebarBarType barra, RebarShape forma, HashSet<ElementId> formasRechazadas,
+        BarTerminationsData terminaciones, ResultadoArmado res, string etiquetaTramo)
     {
+        // Ya se comprobó en esta corrida que esta forma trae un lado
+        // diagonal (ver GeometriaSeccion.TieneLadoDiagonal) -- no vale la
+        // pena repetir crear+escalar+medir+borrar para cada estribo, cae
+        // directo al camino de respaldo.
+        if (formasRechazadas.Contains(forma.Id)) return null;
+
         try
         {
             (double xMin, double xMax, double yMin, double yMax) = GeometriaSeccion.Huella(curvasTrasladadas);
@@ -417,6 +433,24 @@ public static class GeneradorArmado
 
                 try { estribo.SetTerminationOrientation(0, RebarTerminationOrientation.Left); estribo.SetTerminationOrientation(1, RebarTerminationOrientation.Left); }
                 catch { /* idem */ }
+            }
+
+            // BuscarFormaEstribo elige por NOMBRE, no por geometría -- una
+            // forma cuyo nombre hace match pero en realidad trae una cruceta
+            // de confinamiento incorporada (patas diagonales) se aceptaría
+            // sin darse cuenta. Medido contra Revit real el 11-sep: la forma
+            // "T1" del modelo de William generó justo esto.
+            if (GeometriaSeccion.TieneLadoDiagonal(estribo))
+            {
+                try { doc.Delete(estribo.Id); } catch { /* best-effort */ }
+
+                if (formasRechazadas.Add(forma.Id))
+                    res.Avisos.Add(
+                        $"{etiquetaTramo}: la forma «{forma.Name}» generó un lado diagonal en vez de un " +
+                        "rectángulo simple (¿tiene una cruceta de confinamiento incorporada?); se usa el " +
+                        "camino de respaldo para el resto de esta corrida.");
+
+                return null;
             }
 
             return estribo;

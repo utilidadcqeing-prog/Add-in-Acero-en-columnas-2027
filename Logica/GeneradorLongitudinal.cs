@@ -79,6 +79,10 @@ public static class GeneradorLongitudinal
         // problema de dobladura por ser también un lazo StirrupTie cerrado.
         RebarShape? formaEstribo = GeometriaSeccion.BuscarFormaEstribo(doc);
 
+        // Mismo criterio que GeneradorArmado.Generar: una sola vez por
+        // corrida, no por cada caja -- ver GeometriaSeccion.TieneLadoDiagonal.
+        var formasRechazadas = new HashSet<ElementId>();
+
         // Empalmes reales (issue empalmes reales, ver
         // docs/planes/2026-09-09-empalmes-rebarspliceutils.md): si el
         // documento tiene un RebarSpliceType cargado, los traslapos que caen
@@ -94,7 +98,7 @@ public static class GeneradorLongitudinal
         {
             try
             {
-                GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, tipoEmpalme, cacheHost, res);
+                GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, tipoEmpalme, cacheHost, res);
             }
             catch (Exception ex)
             {
@@ -110,6 +114,7 @@ public static class GeneradorLongitudinal
         Dictionary<string, RebarBarType> barrasPorNombre,
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
+        HashSet<ElementId> formasRechazadas,
         ElementId? tipoEmpalme,
         Dictionary<ElementId, (CurveLoop, double)> cacheHost,
         ResultadoArmado res)
@@ -454,7 +459,7 @@ public static class GeneradorLongitudinal
             res.Detalles.Add($"{contexto.Marca}: {creadas} barra(s) longitudinal(es) creada(s) (con traslapos, Fase 5).");
 
         GenerarMenores(
-            doc, columnaPlan, contexto, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost,
+            doc, columnaPlan, contexto, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, cacheHost,
             columnas, filas, insetEsquinas, insetX, insetY, res);
     }
 
@@ -476,6 +481,7 @@ public static class GeneradorLongitudinal
         Dictionary<string, RebarBarType> barrasPorNombre,
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
+        HashSet<ElementId> formasRechazadas,
         Dictionary<ElementId, (CurveLoop, double)> cacheHost,
         int columnas,
         int filas,
@@ -703,7 +709,7 @@ public static class GeneradorLongitudinal
                 {
                     (double x1, double x2, double y1, double y2, RebarHookType? ganchoCaja) = cajas[ic];
                     int antes = creadas;
-                    CrearCaja(doc, host, barraCaja!, ganchoCaja, formaEstribo, x1, x2, y1, y2, z, contexto.Marca, res, ref creadas);
+                    CrearCaja(doc, host, barraCaja!, ganchoCaja, formaEstribo, formasRechazadas, x1, x2, y1, y2, z, contexto.Marca, res, ref creadas);
                     if (creadas == antes) cajas.RemoveAt(ic);
                 }
             }
@@ -1223,12 +1229,15 @@ public static class GeneradorLongitudinal
     /// normal X → el gancho va en ±Y; normal Y → va en ∓X. Left/Right elige
     /// cuál de los dos signos.
     ///
-    /// <b>Pendiente de confirmar contra Revit real</b> (regla del CLAUDE.md): la
-    /// correspondencia entre "el centro está del lado positivo" y Left/Right es
-    /// lo único que no se puede deducir de la documentación. Se mide con
-    /// ComandoDiagnosticoRebar, que reporta para cada extremo si el gancho
-    /// quedó hacia adentro o hacia afuera; si sale al revés se invierte acá, y
-    /// solo acá.
+    /// <b>Confirmado contra Revit real</b> (regla del CLAUDE.md), 11-sep: con
+    /// dos barras medidas por <c>ComandoDiagnosticoRebar</c> -- una de cara X
+    /// (normal=BasisX, haciaDondeDobla=+Y) y otra de cara Y (normal=BasisY,
+    /// haciaDondeDobla=-X) -- las dos pedían el MISMO swap (lo que tenía
+    /// asignado <c>Left</c> dobla hacia -haciaDondeDobla, y lo que tenía
+    /// <c>Right</c> dobla hacia +haciaDondeDobla; es al revés de lo que se
+    /// había asumido al escribir esto). No depende de si la normal es X o Y:
+    /// <c>Left</c>/<c>Right</c> de Revit son relativos al par (tangente,
+    /// normal) local de cada barra, no a los ejes globales.
     /// </summary>
     private static (RebarTerminationOrientation Inferior, RebarTerminationOrientation Superior)
         OrientacionesHaciaAdentro(FootprintHost fp, double x, double y, XYZ normal)
@@ -1251,11 +1260,15 @@ public static class GeneradorLongitudinal
             : (OrientacionNegativa, OrientacionNegativa);
     }
 
-    /// <summary>Gancho hacia el lado positivo de <c>tangente × normal</c>. Ver <see cref="OrientacionesHaciaAdentro"/>: falta confirmarlo contra Revit real.</summary>
-    private const RebarTerminationOrientation OrientacionPositiva = RebarTerminationOrientation.Left;
+    /// <summary>
+    /// Gancho hacia el lado positivo de <c>tangente × normal</c>. Confirmado
+    /// contra Revit real el 11-sep (ver <see cref="OrientacionesHaciaAdentro"/>):
+    /// es <c>Right</c>, no <c>Left</c> como se había asumido al escribir esto.
+    /// </summary>
+    private const RebarTerminationOrientation OrientacionPositiva = RebarTerminationOrientation.Right;
 
     /// <summary>El opuesto de <see cref="OrientacionPositiva"/>.</summary>
-    private const RebarTerminationOrientation OrientacionNegativa = RebarTerminationOrientation.Right;
+    private const RebarTerminationOrientation OrientacionNegativa = RebarTerminationOrientation.Left;
 
     /// <summary>
     /// Vuelve a poner un gancho sobre una pieza salida de
@@ -1663,6 +1676,7 @@ public static class GeneradorLongitudinal
     /// </summary>
     private static void CrearCaja(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType? gancho, RebarShape? formaEstribo,
+        HashSet<ElementId> formasRechazadas,
         double x1, double x2, double y1, double y2, double z,
         string marcaColumna, ResultadoArmado res, ref int creadas)
     {
@@ -1674,7 +1688,7 @@ public static class GeneradorLongitudinal
             return;
         }
 
-        Rebar? caja = CrearCajaDesdeForma(doc, host, barra, formaEstribo, gancho, x1, x2, y1, y2, z, marcaColumna, res, out bool falloElGancho);
+        Rebar? caja = CrearCajaDesdeForma(doc, host, barra, formaEstribo, formasRechazadas, gancho, x1, x2, y1, y2, z, marcaColumna, res, out bool falloElGancho);
 
         // Segundo intento sin gancho -- lo que eligió el usuario para cuando no
         // entra ninguno (10-sep): que la caja exista igual, cerrada pero sin
@@ -1682,7 +1696,7 @@ public static class GeneradorLongitudinal
         // justamente el gancho: si la forma no se pudo ni ajustar al rectángulo,
         // sacarle el gancho no cambia nada y solo duplica el aviso.
         if (caja is null && falloElGancho)
-            caja = CrearCajaDesdeForma(doc, host, barra, formaEstribo, null, x1, x2, y1, y2, z, marcaColumna, res, out _);
+            caja = CrearCajaDesdeForma(doc, host, barra, formaEstribo, formasRechazadas, null, x1, x2, y1, y2, z, marcaColumna, res, out _);
 
         if (caja is null) return; // ya avisado, con el paso que falló y las medidas
 
@@ -1699,11 +1713,17 @@ public static class GeneradorLongitudinal
     /// distintos. El aviso nombra el paso y las medidas reales.
     /// </summary>
     private static Rebar? CrearCajaDesdeForma(
-        Document doc, FamilyInstance host, RebarBarType barra, RebarShape forma, RebarHookType? gancho,
-        double x1, double x2, double y1, double y2, double z,
+        Document doc, FamilyInstance host, RebarBarType barra, RebarShape forma, HashSet<ElementId> formasRechazadas,
+        RebarHookType? gancho, double x1, double x2, double y1, double y2, double z,
         string marcaColumna, ResultadoArmado res, out bool falloElGancho)
     {
         falloElGancho = false;
+
+        // Ya se comprobó en esta corrida que esta forma trae un lado
+        // diagonal (ver GeometriaSeccion.TieneLadoDiagonal) -- mismo criterio
+        // que el estribo principal, no vale la pena repetir el intento.
+        if (formasRechazadas.Contains(forma.Id)) return null;
+
         double ancho = Math.Abs(x2 - x1);
         double alto = Math.Abs(y2 - y1);
         XYZ origen = new(Math.Min(x1, x2), Math.Min(y1, y2), z);
@@ -1748,27 +1768,44 @@ public static class GeneradorLongitudinal
             return null;
         }
 
-        if (gancho is null) return caja;
+        if (gancho is not null)
+        {
+            try
+            {
+                caja.SetHookTypeId(0, gancho.Id);
+                caja.SetHookTypeId(1, gancho.Id);
+            }
+            catch (Exception ex)
+            {
+                falloElGancho = true;
+                Descartar(doc, caja);
+                res.Avisos.Add($"{marcaColumna}: el gancho no entra en la {Medidas()}: {ex.Message}");
+                return null;
+            }
 
-        try
-        {
-            caja.SetHookTypeId(0, gancho.Id);
-            caja.SetHookTypeId(1, gancho.Id);
+            try
+            {
+                caja.SetTerminationOrientation(0, RebarTerminationOrientation.Left);
+                caja.SetTerminationOrientation(1, RebarTerminationOrientation.Left);
+            }
+            catch { /* la forma puede no tener posiciones de gancho orientables -- no bloquea */ }
         }
-        catch (Exception ex)
+
+        // Mismo chequeo que el estribo principal (GeneradorArmado.CrearDesdeForma):
+        // BuscarFormaEstribo elige por NOMBRE, no por geometría, y una forma con
+        // una cruceta de confinamiento incorporada generaría acá el mismo
+        // problema -- medido contra Revit real el 11-sep.
+        if (GeometriaSeccion.TieneLadoDiagonal(caja))
         {
-            falloElGancho = true;
             Descartar(doc, caja);
-            res.Avisos.Add($"{marcaColumna}: el gancho no entra en la {Medidas()}: {ex.Message}");
+
+            if (formasRechazadas.Add(forma.Id))
+                res.Avisos.Add(
+                    $"{marcaColumna}: la forma «{forma.Name}» generó un lado diagonal en la {Medidas()} " +
+                    "(¿tiene una cruceta de confinamiento incorporada?); no se genera esta caja.");
+
             return null;
         }
-
-        try
-        {
-            caja.SetTerminationOrientation(0, RebarTerminationOrientation.Left);
-            caja.SetTerminationOrientation(1, RebarTerminationOrientation.Left);
-        }
-        catch { /* la forma puede no tener posiciones de gancho orientables -- no bloquea */ }
 
         return caja;
     }
