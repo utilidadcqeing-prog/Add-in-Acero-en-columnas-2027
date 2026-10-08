@@ -267,6 +267,16 @@
 
                     <Border Height="1" Background="#E5E5E5" Margin="0,16,0,12" />
 
+                    <!-- Un solo recubrimiento para toda la columna, aunque sus piezas
+                         tengan valores distintos en Revit: estribos y longitudinal
+                         salen alineados de abajo a arriba. -->
+                    <TextBlock Text="Recubrimiento (toda la columna):" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
+                    <ComboBox x:Name="ComboRecubrimiento" Height="24" SelectionChanged="ComboRecubrimiento_SelectionChanged" />
+                    <TextBlock Text="Se usa solo para dibujar el acero; no cambia el recubrimiento de las columnas en Revit."
+                               TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
+
+                    <Border Height="1" Background="#E5E5E5" Margin="0,16,0,12" />
+
                     <!-- L4: acero longitudinal, es por columna entera; no cambia con el tramo activo -->
                     <TextBlock Text="Acero longitudinal (toda la columna)" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
 
@@ -297,6 +307,9 @@
 
                     <TextBlock Text="Longitud de barra comercial (traslapos, Fase 5):" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboLongitudBarra" Height="24" />
+
+                    <TextBlock Text="Tipo de empalme (solape de los traslapos):" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboTipoEmpalme" Height="24" />
 
                     <!-- Igual que el del estribo: el anclaje en la zapata es
                          siempre el de 90° de estilo estándar. -->

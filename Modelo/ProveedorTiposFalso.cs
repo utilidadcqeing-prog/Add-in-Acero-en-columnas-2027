@@ -34,4 +34,10 @@ public sealed class ProveedorTiposFalso : IProveedorTipos
         new("Stirrup/Tie - 90 deg.", EstiloGancho.Estribo, 90),
         new("Stirrup/Tie Seismic - 135 deg.", EstiloGancho.Estribo, 135),
     };
+
+    public IReadOnlyList<string> ListarEmpalmes() => new List<string>
+    {
+        "Empalme solapado 40D",
+        "Empalme solapado 60D",
+    };
 }

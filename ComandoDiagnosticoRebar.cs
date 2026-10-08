@@ -376,9 +376,44 @@ public class ComandoDiagnosticoRebar : IExternalCommand
     /// extensión en Z, para comparar contra lo que el add-in ve realmente de
     /// una viga/vigueta/columna.
     /// </summary>
+    /// <summary>
+    /// LectorContexto.Recubrimiento hoy solo lee CLEAR_COVER_OTHER, asumiendo
+    /// que es el único parámetro de cobertura relevante para una columna
+    /// (Exterior/Interior serían "solo para muros", según lo que se encontró
+    /// buscando -- sin confirmar contra la API real). Esto imprime los TRES
+    /// parámetros (Exterior/Interior/Other) del elemento seleccionado para
+    /// ver cuál existe de verdad en un host que no es un muro, y si tienen
+    /// valores distintos entre sí -- lo que explicaría un recubrimiento
+    /// distinto al esperado sin que sea un error de carga del modelo.
+    /// </summary>
+    private static void DiagnosticarCoberturas(Element el, StringBuilder sb)
+    {
+        foreach ((BuiltInParameter bip, string nombre) in new[]
+                 {
+                     (BuiltInParameter.CLEAR_COVER_EXTERIOR, "Exterior"),
+                     (BuiltInParameter.CLEAR_COVER_INTERIOR, "Interior"),
+                     (BuiltInParameter.CLEAR_COVER_OTHER, "Other"),
+                 })
+        {
+            Parameter? p = el.get_Parameter(bip);
+            if (p is null)
+            {
+                sb.AppendLine($"  Cobertura [{nombre}]: el parámetro no existe en este elemento.");
+                continue;
+            }
+
+            if (el.Document.GetElement(p.AsElementId()) is RebarCoverType tipo)
+                sb.AppendLine($"  Cobertura [{nombre}]: «{tipo.Name}» = {Metros(tipo.CoverDistance) * 100:0.#} cm");
+            else
+                sb.AppendLine($"  Cobertura [{nombre}]: existe el parámetro pero sin RebarCoverType asignado (AsElementId={p.AsElementId().Value}).");
+        }
+    }
+
     private static void DiagnosticarSolido(Element el, StringBuilder sb)
     {
         sb.AppendLine($"--- {el.Category?.Name ?? "Elemento"} {el.Id.Value} ({el.Name}) ---");
+
+        DiagnosticarCoberturas(el, sb);
 
         Solid? solido = SolidoMayor(el.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }));
         if (solido is null)

@@ -109,7 +109,14 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
 
         void Agregar(double alto, TipoTramo tipo)
         {
-            tramos.Add(new Tramo { Indice = indice++, ZInferior = z, ZSuperior = z + alto, Tipo = tipo });
+            // El arranque contra la zapata con otro recubrimiento que el resto,
+            // como el dado de cimentación del modelo real: así la vista previa
+            // ejercita el combo "Recubrimiento" con dos valores.
+            tramos.Add(new Tramo
+            {
+                Indice = indice++, ZInferior = z, ZSuperior = z + alto, Tipo = tipo,
+                Recubrimiento = tipo == TipoTramo.ContraZapata ? 0.075 : 0.04,
+            });
             z += alto;
         }
 

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using practicacq.Modelo;
 using Autodesk.Revit.DB.Structure;
 
 /// <summary>
@@ -48,6 +49,51 @@ internal static class GeometriaSeccion
         var resultado = (contorno, caraInferior.Origin.Z);
         cache[host.Id] = resultado;
         return resultado;
+    }
+
+    /// <summary>Un rectángulo horizontal a la cota <paramref name="z"/>, como contorno.</summary>
+    public static CurveLoop Rectangulo(double xMin, double xMax, double yMin, double yMax, double z)
+    {
+        XYZ a = new(xMin, yMin, z), b = new(xMax, yMin, z), c = new(xMax, yMax, z), d = new(xMin, yMax, z);
+        return CurveLoop.Create(new List<Curve>
+        {
+            Line.CreateBound(a, b), Line.CreateBound(b, c), Line.CreateBound(c, d), Line.CreateBound(d, a),
+        });
+    }
+
+    /// <summary>
+    /// La zona común en planta de todas las piezas de la columna: la
+    /// intersección de sus huellas, o sea la sección más chica, esté donde
+    /// esté. Es la sección con la que se arma TODA la columna -- estribos,
+    /// longitudinal y estribos menores -- para que el acero salga igual y
+    /// alineado de abajo a arriba aunque una pieza (típico: el dado de
+    /// cimentación) sea más ancha (issue #42 y pedido de Luciano del 8-oct).
+    /// <c>null</c> si ninguna pieza se pudo leer o no comparten zona.
+    /// </summary>
+    public static (double XMin, double XMax, double YMin, double YMax)? ZonaComun(
+        Document doc, ColumnaContexto contexto, Dictionary<ElementId, (CurveLoop, double)> cache)
+    {
+        double xMin = double.MinValue, xMax = double.MaxValue, yMin = double.MinValue, yMax = double.MaxValue;
+        bool alguna = false;
+
+        foreach (string idTexto in contexto.Tramos.Select(t => t.IdElementoHost).OfType<string>().Distinct())
+        {
+            if (!long.TryParse(idTexto, out long id) || doc.GetElement(new ElementId(id)) is not FamilyInstance host)
+                continue;
+
+            CurveLoop contorno;
+            try { (contorno, _) = ObtenerContornoHost(host, cache); }
+            catch (InvalidOperationException) { continue; }
+
+            (double hXMin, double hXMax, double hYMin, double hYMax) = Huella(contorno);
+            xMin = Math.Max(xMin, hXMin);
+            xMax = Math.Min(xMax, hXMax);
+            yMin = Math.Max(yMin, hYMin);
+            yMax = Math.Min(yMax, hYMax);
+            alguna = true;
+        }
+
+        return alguna && xMax > xMin && yMax > yMin ? (xMin, xMax, yMin, yMax) : null;
     }
 
     /// <summary>
@@ -217,21 +263,6 @@ internal static class GeometriaSeccion
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Primer <see cref="RebarSpliceType"/> que tenga el documento (issue
-    /// empalmes reales, ver docs/planes/2026-09-09-empalmes-rebarspliceutils.md)
-    /// -- no hay ninguna convención de nombre conocida todavía (a diferencia
-    /// de <see cref="BuscarFormaEstribo"/>), así que se toma el primero que
-    /// haya. Null si el documento no tiene ninguno cargado -- el llamador
-    /// tiene que caer al método anterior (dos Rebar con corrimiento a mano)
-    /// en ese caso, no crear un tipo nuevo silenciosamente.
-    /// </summary>
-    public static ElementId? BuscarTipoEmpalme(Document doc)
-    {
-        ICollection<ElementId> existentes = RebarSpliceTypeUtils.GetAllRebarSpliceTypes(doc);
-        return existentes.Count > 0 ? existentes.First() : null;
     }
 
     public static Solid? ObtenerSolido(Element el)

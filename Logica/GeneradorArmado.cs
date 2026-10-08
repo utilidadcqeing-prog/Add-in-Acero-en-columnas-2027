@@ -29,10 +29,24 @@ public static class GeneradorArmado
     /// <summary>
     /// 5 cm de norma entre el arranque/remate del estribo y la cara del
     /// tramo -- issue #5: "se respetan en los cuatro bordes de cada tramo".
+    /// Se miden al BORDE del estribo, no a su eje (Luciano, 8-oct) -- mismo
+    /// criterio que el recubrimiento, que va a la cara exterior de la barra
+    /// (#1): quien arma el tramo le suma medio diámetro.
     /// No es un dato que la ventana pida hoy, así que va fijo acá, igual que
     /// el cuadro de <see cref="EstandarCQ"/>.
     /// </summary>
     private const double SeparacionExtremosMetros = 0.05;
+
+    /// <summary>
+    /// TEMPORAL -- traza de diagnóstico (8-oct): deja en un archivo de texto
+    /// las cotas reales, medidas sobre el Rebar ya creado, del primer y el
+    /// último estribo de cada grupo, para comprobar contra Revit los 5 cm de
+    /// los extremos sin depender de una cota puesta a mano. Sacar una vez
+    /// comprobado.
+    /// </summary>
+#pragma warning disable CS0649 // en Release nadie lo asigna: el registro es solo de Debug
+    private static System.Text.StringBuilder? _traza;
+#pragma warning restore CS0649
 
     public static ResultadoArmado Generar(Document doc, OpcionesArmado opciones)
     {
@@ -41,6 +55,11 @@ public static class GeneradorArmado
 
         if (opciones.BorrarAnteriores)
             res.Eliminados = BorrarAnteriores(doc, plan);
+
+#if DEBUG
+        // Solo en Debug: el paquete publicado (Release) no deja registros.
+        _traza = new System.Text.StringBuilder();
+#endif
 
         Dictionary<string, RebarBarType> barrasPorNombre = new FilteredElementCollector(doc)
             .OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
@@ -72,6 +91,16 @@ public static class GeneradorArmado
             GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, formasRechazadas, res);
         }
 
+#if DEBUG
+        try
+        {
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "practicacq-estribos.log"), _traza?.ToString() ?? "");
+        }
+        catch { /* best-effort */ }
+        _traza = null;
+#endif
+
         return res;
     }
 
@@ -93,7 +122,7 @@ public static class GeneradorArmado
             return;
         }
 
-        double recubrimientoPies = EstandarCQ.APies(contexto.Recubrimiento);
+        double recubrimientoPies = EstandarCQ.APies(columnaPlan.Recubrimiento ?? contexto.Recubrimiento);
         if (recubrimientoPies <= Tolerancia)
         {
             res.Avisos.Add(
@@ -102,6 +131,15 @@ public static class GeneradorArmado
             res.TramosOmitidos += columnaPlan.Tramos.Count(t => t is not null);
             return;
         }
+
+        // Todos los estribos de la columna salen con la misma sección: la zona
+        // común de la pila. Sin esto, en una pieza más ancha (el dado de
+        // cimentación) el estribo salía más grande que en el resto y dejaba
+        // las barras longitudinales -- que ya van con la zona común -- sueltas
+        // adentro (visto por Luciano el 8-oct).
+        (double XMin, double XMax, double YMin, double YMax)? zonaComun =
+            GeometriaSeccion.ZonaComun(doc, contexto, cacheHost);
+        var tramosConSeccionMayor = new List<int>();
 
         int n = Math.Min(contexto.Tramos.Count, columnaPlan.Tramos.Count);
         for (int i = 0; i < n; i++)
@@ -116,7 +154,7 @@ public static class GeneradorArmado
             {
                 if (!GenerarTramo(
                         doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo,
-                        recubrimientoPies, cacheHost, ganchosYaAvisados, formasRechazadas, res))
+                        recubrimientoPies, zonaComun, tramosConSeccionMayor, cacheHost, ganchosYaAvisados, formasRechazadas, res))
                 {
                     res.TramosOmitidos++;
                 }
@@ -134,6 +172,13 @@ public static class GeneradorArmado
                 try { doc.Regenerate(); } catch { /* best-effort */ }
             }
         }
+
+        if (tramosConSeccionMayor.Count > 0 && zonaComun is { } zona)
+            res.Avisos.Add(
+                $"{contexto.Marca}: {tramosConSeccionMayor.Count} tramo(s) están en una pieza más ancha que el resto de la " +
+                $"columna; sus estribos se armaron con la sección común " +
+                $"({GeometriaSeccion.Metros(zona.XMax - zona.XMin) * 100:0.#}×{GeometriaSeccion.Metros(zona.YMax - zona.YMin) * 100:0.#} cm) " +
+                "para que todos queden iguales y alineados.");
     }
 
     /// <summary>
@@ -152,6 +197,8 @@ public static class GeneradorArmado
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
         double recubrimientoPies,
+        (double XMin, double XMax, double YMin, double YMax)? zonaComun,
+        List<int> tramosConSeccionMayor,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
         HashSet<ElementId> formasRechazadas,
@@ -202,6 +249,22 @@ public static class GeneradorArmado
 
         (CurveLoop contornoCrudo, double zBase) = GeometriaSeccion.ObtenerContornoHost(host, cacheHost);
 
+        // Si esta pieza es más ancha que la zona común de la columna, el
+        // estribo se arma con la zona común y no con el contorno propio. Si
+        // coincide (lo normal, y siempre en una columna de una sola sección)
+        // se deja el contorno real del elemento, sin tocar nada.
+        if (zonaComun is { } zona)
+        {
+            const double margen = 0.003; // ~1 mm, en pies
+            (double hXMin, double hXMax, double hYMin, double hYMax) = GeometriaSeccion.Huella(contornoCrudo);
+            if (hXMin < zona.XMin - margen || hXMax > zona.XMax + margen ||
+                hYMin < zona.YMin - margen || hYMax > zona.YMax + margen)
+            {
+                contornoCrudo = GeometriaSeccion.Rectangulo(zona.XMin, zona.XMax, zona.YMin, zona.YMax, zBase);
+                tramosConSeccionMayor.Add(tramo.Indice);
+            }
+        }
+
         // Recubrimiento a la cara EXTERIOR de la barra, no a su centro (#1):
         // la curva que le pasamos a Rebar.CreateFromCurves es el eje de la
         // barra, así que hay que meter el contorno medio diámetro más que el
@@ -227,7 +290,11 @@ public static class GeneradorArmado
 
         AvisarSiGanchoNoCumpleNorma(barra, gancho, ganchosYaAvisados, res);
 
-        double separacionExtremos = EstandarCQ.APies(SeparacionExtremosMetros);
+        // Los 5 cm van al BORDE del estribo: el eje queda medio diámetro más adentro.
+        double separacionExtremos = EstandarCQ.APies(SeparacionExtremosMetros) + barra.BarNominalDiameter / 2;
+        _traza?.AppendLine(
+            $"{etiquetaTramo} ({tramo.Tipo}): Z {tramo.ZInferior:0.####} -> {tramo.ZSuperior:0.####} m; barra «{barra.Name}» " +
+            $"Ø {GeometriaSeccion.Metros(barra.BarNominalDiameter) * 1000:0.#} mm");
         double zInf = EstandarCQ.APies(tramo.ZInferior) + separacionExtremos;
         double zSup = EstandarCQ.APies(tramo.ZSuperior) - separacionExtremos;
         double altura = zSup - zInf;
@@ -374,6 +441,14 @@ public static class GeneradorArmado
 
         MarcaEstribos.Marcar(estribo, host.Id);
 
+        // Sin regenerar, NumberOfBarPositions todavía devuelve la cuenta de
+        // ANTES de aplicar el reparto: uno menos de los que quedan de verdad.
+        // Medido contra Revit real el 8-oct (17 estribos reales, 16 leídos).
+        // Con la cuenta corta salía mal el detalle que se le muestra al
+        // usuario y, peor, las posiciones que se le pasan a los estribos
+        // menores (RegistrarPosiciones): 16 a 20,3 cm en vez de 17 a 19 cm.
+        doc.Regenerate();
+
         RebarShapeDrivenAccessor acceso = estribo.GetShapeDrivenAccessor();
         int posiciones = estribo.NumberOfBarPositions;
         double reparto = acceso.ArrayLength;
@@ -385,6 +460,49 @@ public static class GeneradorArmado
             $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
 
         RegistrarPosiciones(posiciones, zInicio, separacionReal, claveTramo, res);
+
+        if (_traza is not null)
+        {
+            try
+            {
+                doc.Regenerate();
+
+                // Extensión real en Z de un estribo del grupo: el eje (sin
+                // ganchos) y el estribo completo (con ganchos y radios, que no
+                // siempre es plano -- el solape del cierre lo desplaza).
+                (double Min, double Max) RangoZ(int indice, bool completo)
+                {
+                    Transform lugar = acceso.GetBarPositionTransform(indice);
+                    List<double> zs = estribo
+                        .GetCenterlineCurves(false, !completo, !completo, MultiplanarOption.IncludeAllMultiplanarCurves, indice)
+                        .SelectMany(c => c.Tessellate())
+                        .Select(q => lugar.OfPoint(q).Z)
+                        .ToList();
+                    return (zs.Min(), zs.Max());
+                }
+
+                _traza.AppendLine(
+                    $"    {etiquetaGrupo}: posiciones {estribo.NumberOfBarPositions}, cantidad {estribo.Quantity}, " +
+                    $"largo del reparto {GeometriaSeccion.Metros(acceso.ArrayLength):0.####} m, espaciado máximo " +
+                    $"{GeometriaSeccion.Metros(estribo.MaxSpacing) * 100:0.##} cm, incluye primero: {estribo.IncludeFirstBar}, " +
+                    $"último: {estribo.IncludeLastBar}; pedido: arranque Z {GeometriaSeccion.Metros(zInicio):0.####}, " +
+                    $"largo {GeometriaSeccion.Metros(longitud):0.####} m, espaciado {GeometriaSeccion.Metros(espaciado) * 100:0.##} cm");
+
+                foreach (int indice in new[] { 0, posiciones - 2, posiciones - 1 }.Where(i => i >= 0).Distinct())
+                {
+                    (double ejeMin, double ejeMax) = RangoZ(indice, completo: false);
+                    (double todoMin, double todoMax) = RangoZ(indice, completo: true);
+                    _traza.AppendLine(
+                        $"    {etiquetaGrupo}, estribo {indice + 1} de {posiciones} (existe: {estribo.DoesBarExistAtPosition(indice)}): eje Z {GeometriaSeccion.Metros(ejeMin):0.####} a " +
+                        $"{GeometriaSeccion.Metros(ejeMax):0.####}; con ganchos Z {GeometriaSeccion.Metros(todoMin):0.####} a " +
+                        $"{GeometriaSeccion.Metros(todoMax):0.####} m");
+                }
+            }
+            catch (Exception ex)
+            {
+                _traza.AppendLine($"    {etiquetaGrupo}: no se pudo medir ({ex.GetType().Name}: {ex.Message})");
+            }
+        }
     }
 
     /// <summary>

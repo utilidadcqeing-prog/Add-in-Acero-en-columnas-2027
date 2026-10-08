@@ -62,6 +62,14 @@ public sealed class ConfigLongitudinal
     public double LongitudComercialBarra { get; set; } = 12.0;
 
     /// <summary>
+    /// Tipo de empalme de Revit (<c>RebarSpliceType</c>, por nombre) con el que
+    /// se parten las barras longitudinales en sus traslapos -- issue #41. Vacío
+    /// = el por defecto del add-in: un tipo propio por varilla, con el solape
+    /// del cuadro de la empresa (<see cref="CuadroVarillas.Varilla.Traslapo"/>).
+    /// </summary>
+    public string? TipoEmpalmeNombre { get; set; }
+
+    /// <summary>
     /// Copia independiente, listas incluidas. Hace falta para las
     /// configuraciones guardadas (<see cref="ConfiguracionGuardada"/>): si la
     /// configuración compartiera las listas de grapas/cajas con la columna de
@@ -77,6 +85,7 @@ public sealed class ConfigLongitudinal
         TipoBarraCaraYNombre = TipoBarraCaraYNombre,
         TipoGanchoLongitudinalNombre = TipoGanchoLongitudinalNombre,
         LongitudComercialBarra = LongitudComercialBarra,
+        TipoEmpalmeNombre = TipoEmpalmeNombre,
         GrapasFila = new List<int>(GrapasFila),
         GrapasColumna = new List<int>(GrapasColumna),
         Cajas = Cajas.Select(c => new CajaMenor { Eje = c.Eje, Desde = c.Desde, Hasta = c.Hasta }).ToList(),

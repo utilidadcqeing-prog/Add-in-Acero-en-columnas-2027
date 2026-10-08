@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!--
@@ -63,6 +63,19 @@
     -->
     <DefaultItemExcludes>$(DefaultItemExcludes);CQEING/**;Dymanos de referencia/**;Dymanos de referencia\**;Add-ins de referencia*/**;Add-in de Armado CQEING_files/**;tools/PreviewUI/**;Rev2026/**;Rev2026\**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <!--
+    Los comandos de diagnóstico (ComandoDiagnostico*.cs) son herramientas de
+    desarrollo: sirven para medir contra Revit real y se conservan en el
+    repo, pero no forman parte de lo que se publica. tools/publish.ps1
+    compila en Release, así que ahí quedan afuera; tools/deploy.ps1 compila
+    en Debug por defecto y los incluye. Sus botones del ribbon (App.cs) y
+    los registros de diagnóstico de los generadores van con #if DEBUG por el
+    mismo motivo.
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <Compile Remove="ComandoDiagnostico*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="RevitAPI">

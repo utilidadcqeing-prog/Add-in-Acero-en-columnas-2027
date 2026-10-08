@@ -19,13 +19,29 @@ using System.Linq;
 /// </summary>
 public static class CuadroVarillas
 {
+    /// <param name="GanchoEstribo">
+    /// Longitud del gancho de estribo de 135° (la "B" del cuadro "Dimensiones
+    /// mínimas para ganchos estándar"). Para los estribos manda ESE cuadro y
+    /// no la columna ESTRIBOS del cuadro de ganchos y traslapos, que para la
+    /// #2 y la #3 dice otra cosa (0,113 y 0,131) -- confirmado por Luciano el
+    /// 8-oct, issue #65. El cuadro de dimensiones mínimas solo llega hasta la
+    /// #5; de la #6 a la #8 se conserva el valor del otro cuadro.
+    /// </param>
+    /// <param name="Traslapo">
+    /// El de la columna "VIGAS" del cuadro, que aplica también a columnas
+    /// (confirmado por Luciano con el cuadro nuevo, 8-oct). <c>null</c> = el
+    /// cuadro no da traslapo para esa barra en vigas y columnas: es el caso de
+    /// la #2, que solo lo tiene en muros (0,40 m). El cuadro trae además
+    /// columnas "LOSAS" y "MUROS", hoy con los mismos valores que "VIGAS" para
+    /// las barras #3 a #8; no se cargan porque nada las usa todavía.
+    /// </param>
     public record Varilla(
         int Numero,
         double DiametroMm,
         double GanchoEstribo,
         double Gancho90,
         double Gancho180,
-        double Traslapo);
+        double? Traslapo);
 
     /// <summary>
     /// Dos barras del cuadro que se lleven menos que esto son la misma: los
@@ -36,8 +52,8 @@ public static class CuadroVarillas
 
     public static readonly IReadOnlyList<Varilla> Cuadro = new[]
     {
-        new Varilla(2,  6.4, 0.113, 0.112, 0.096, 0.40),
-        new Varilla(3,  9.5, 0.131, 0.166, 0.142, 0.55),
+        new Varilla(2,  6.4, 0.076, 0.112, 0.096, null),
+        new Varilla(3,  9.5, 0.113, 0.166, 0.142, 0.55),
         new Varilla(4, 12.7, 0.151, 0.222, 0.190, 0.75),
         new Varilla(5, 15.9, 0.189, 0.278, 0.238, 0.90),
         new Varilla(6, 19.1, 0.272, 0.334, 0.286, 1.10),

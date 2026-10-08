@@ -55,6 +55,32 @@ public partial class VentanaConfiguradorEstribos : Window
     private readonly Dictionary<string, ConfigLongitudinal> _longitudinalPorColumna = new();
 
     /// <summary>
+    /// El recubrimiento elegido para cada columna, en metros -- uno solo para
+    /// toda la pila (ver <see cref="ColumnaPlan.Recubrimiento"/>). Entra acá la
+    /// primera vez que la columna se activa, con el del tramo que quedó activo
+    /// en ese momento: "el que esté seleccionado; si son varios, el primero"
+    /// (Luciano, 8-oct). Después solo lo cambia el combo.
+    /// </summary>
+    private readonly Dictionary<string, double> _recubrimientoPorColumna = new();
+
+    /// <summary>Corta el eco de <c>ComboRecubrimiento_SelectionChanged</c> cuando el combo se llena por código.</summary>
+    private bool _cargandoRecubrimiento;
+
+    /// <summary>El valor normal del equipo (William, 9-sep): siempre se ofrece, lo tenga o no alguna pieza.</summary>
+    private const double RecubrimientoNormal = 0.04;
+
+    /// <summary>
+    /// Una opción del combo de recubrimiento. Se muestra el VALOR y nada más:
+    /// identificar de qué pieza sale obligaría a mostrar los ids de Revit, que
+    /// a quien arma no le dicen nada.
+    /// </summary>
+    private sealed record OpcionRecubrimiento(double Metros)
+    {
+        public override string ToString() =>
+            $"{Metros * 100:0.#} cm" + (Math.Abs(Metros - RecubrimientoNormal) < 0.0005 ? " (normal del equipo)" : "");
+    }
+
+    /// <summary>
     /// Lista maestra de todas las filas (columnas + tramos), las dos pestañas
     /// (issue #33) son vistas filtradas de esto. <see cref="List{T}"/> y no
     /// <see cref="ObservableCollection{T}"/> a propósito: nada se bindea
@@ -212,6 +238,9 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboLongitudBarra.ItemsSource = new[] { 6.0, 12.0 };
         ComboLongitudBarra.SelectedItem = 12.0;
 
+        ComboTipoEmpalme.ItemsSource = new[] { EmpalmePorDefecto }.Concat(_tipos.ListarEmpalmes()).ToList();
+        ComboTipoEmpalme.SelectedItem = EmpalmePorDefecto;
+
         RadioUniforme.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
         RadioConfinado.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
 
@@ -341,6 +370,7 @@ public partial class VentanaConfiguradorEstribos : Window
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
+        CargarRecubrimientoDeColumnaActiva();
         MostrarAvisos();
         NotificarElementosActivos();
 
@@ -900,6 +930,13 @@ public partial class VentanaConfiguradorEstribos : Window
     private const int NumeroVarillaLongitudinal = 4;
 
     /// <summary>
+    /// Primera opción del combo de tipo de empalme: los tipos propios del
+    /// add-in, con el solape del cuadro de la empresa. Se guarda como
+    /// <c>null</c> en <see cref="ConfigLongitudinal.TipoEmpalmeNombre"/>.
+    /// </summary>
+    private const string EmpalmePorDefecto = "Por defecto del add-in (cuadro CQ)";
+
+    /// <summary>
     /// El tipo de barra de esa varilla, o el primero de la lista si el
     /// documento no la tiene -- que ese caso se avisa una vez al abrir, en
     /// <see cref="AvisarSiFaltaAlgoPorDefecto"/>.
@@ -1018,6 +1055,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
         TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
         LongitudComercialBarra = ComboLongitudBarra.SelectedItem as double? ?? 12.0,
+        TipoEmpalmeNombre = ComboTipoEmpalme.SelectedItem is string empalme && empalme != EmpalmePorDefecto ? empalme : null,
         TipoGanchoLongitudinalNombre = ComboGanchoLongitudinal.SelectedItem as string,
         // Las posiciones de grapas/cajas no se leen del panel: se editan aparte
         // en L4 y viven en _longitudinalPorColumna hasta que este método las
@@ -1032,6 +1070,13 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
         ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
         ComboLongitudBarra.SelectedItem = cfg.LongitudComercialBarra;
+
+        // Un nombre que este modelo no tiene (configuración guardada traída de
+        // otro) se muestra como el por defecto; el generador avisa igual.
+        ComboTipoEmpalme.SelectedItem =
+            cfg.TipoEmpalmeNombre is not null && ComboTipoEmpalme.Items.Contains(cfg.TipoEmpalmeNombre)
+                ? cfg.TipoEmpalmeNombre
+                : EmpalmePorDefecto;
         ComboGanchoLongitudinal.SelectedItem = cfg.TipoGanchoLongitudinalNombre;
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
@@ -1087,6 +1132,57 @@ public partial class VentanaConfiguradorEstribos : Window
         if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
 
         _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores();
+    }
+
+    /// <summary>
+    /// Llena el combo con los recubrimientos distintos que tienen las piezas
+    /// de la columna activa (más el normal del equipo) y deja elegido el de la
+    /// columna -- el que ya tenía, o si es la primera vez que se activa, el
+    /// del tramo activo.
+    /// </summary>
+    private void CargarRecubrimientoDeColumnaActiva()
+    {
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
+
+        static double Redondear(double metros) => Math.Round(metros, 3);
+
+        if (!_recubrimientoPorColumna.TryGetValue(idColumna, out double elegido))
+        {
+            double delTramoActivo = _columnaActiva.Tramos.ElementAtOrDefault(_tramoActivoIndice)?.Recubrimiento ?? 0;
+            elegido = Redondear(delTramoActivo > 0 ? delTramoActivo
+                : _columnaActiva.Recubrimiento > 0 ? _columnaActiva.Recubrimiento
+                : RecubrimientoNormal);
+            _recubrimientoPorColumna[idColumna] = elegido;
+        }
+
+        List<OpcionRecubrimiento> opciones = _columnaActiva.Tramos
+            .Select(t => t.Recubrimiento)
+            .Where(r => r > 0)
+            .Append(RecubrimientoNormal)
+            .Append(elegido)
+            .Select(Redondear)
+            .Distinct()
+            .OrderBy(r => r)
+            .Select(r => new OpcionRecubrimiento(r))
+            .ToList();
+
+        _cargandoRecubrimiento = true;
+        try
+        {
+            ComboRecubrimiento.ItemsSource = opciones;
+            ComboRecubrimiento.SelectedItem = opciones.First(o => o.Metros == elegido);
+        }
+        finally
+        {
+            _cargandoRecubrimiento = false;
+        }
+    }
+
+    private void ComboRecubrimiento_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_cargandoRecubrimiento || _columnaIdActiva is not string idColumna) return;
+        if (ComboRecubrimiento.SelectedItem is OpcionRecubrimiento opcion)
+            _recubrimientoPorColumna[idColumna] = opcion.Metros;
     }
 
     private void CargarLongitudinalDeColumnaActiva()
@@ -1217,6 +1313,13 @@ public partial class VentanaConfiguradorEstribos : Window
             // el que está en el panel. Copia propia -- si compartieran las
             // listas de grapas y cajas, editarlas en una las cambiaría en todas.
             _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores().Copiar();
+
+            // El recubrimiento elegido también es parte de "la misma
+            // configuración para varias columnas": se lleva a las que todavía
+            // no tienen uno propio, sin pisar el que alguien ya eligió.
+            if (_columnaIdActiva is string idActivaParaRecubrimiento &&
+                _recubrimientoPorColumna.TryGetValue(idActivaParaRecubrimiento, out double recubrimientoActivo))
+                _recubrimientoPorColumna.TryAdd(idColumna, recubrimientoActivo);
 
             foreach (int indice in indices)
             {
@@ -1553,7 +1656,11 @@ public partial class VentanaConfiguradorEstribos : Window
                 ? l
                 : ConfigLongitudinalPorDefecto(_tipos);
 
-            plan.Columnas.Add(new ColumnaPlan { Id = id, Contexto = contexto, Tramos = tramos, Longitudinal = longitudinal });
+            plan.Columnas.Add(new ColumnaPlan
+            {
+                Id = id, Contexto = contexto, Tramos = tramos, Longitudinal = longitudinal,
+                Recubrimiento = _recubrimientoPorColumna.TryGetValue(id, out double recubrimiento) ? recubrimiento : null,
+            });
         }
 
         return plan;

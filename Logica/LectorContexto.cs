@@ -202,7 +202,8 @@ public sealed class LectorContexto : IProveedorContexto
             if (nudos.Count > 0) huboNudo = true;
 
             tramos.AddRange(ArmarTramos(
-                zArranque, el.ZSup, nudos, sobreZapata, IdTexto(el.Instancia.Id), tramos.Count));
+                zArranque, el.ZSup, nudos, sobreZapata, IdTexto(el.Instancia.Id), tramos.Count,
+                AMetros(LeerRecubrimiento(el.Instancia) ?? 0)));
 
             primero = false;
         }
@@ -217,6 +218,16 @@ public sealed class LectorContexto : IProveedorContexto
 
         if (pila.Count > 1)
             AvisarSiCambiaLaSeccion(pila, avisos);
+
+        List<double> recubrimientos = tramos
+            .Where(t => t.Recubrimiento > 0)
+            .Select(t => Math.Round(t.Recubrimiento, 3))
+            .Distinct().OrderBy(r => r).ToList();
+        if (recubrimientos.Count > 1)
+            avisos.Add(
+                "Las piezas de esta columna tienen recubrimientos distintos en Revit (" +
+                string.Join(" y ", recubrimientos.Select(r => $"{r * 100:0.#} cm")) +
+                "). Se arma toda con uno solo: el elegido en «Recubrimiento».");
 
         ElementoColumna base_ = pila[0];
 
@@ -345,7 +356,8 @@ public sealed class LectorContexto : IProveedorContexto
         List<(double Inf, double Sup)> nudos,
         bool sobreZapata,
         string idElementoHost,
-        int indiceBase)
+        int indiceBase,
+        double recubrimientoMetros)
     {
         var tramos = new List<Tramo>();
         double cursor = zArranque;
@@ -365,7 +377,8 @@ public sealed class LectorContexto : IProveedorContexto
                 Tipo = tramos.Count == 0 && sobreZapata && tipo == TipoTramo.Libre
                     ? TipoTramo.ContraZapata
                     : tipo,
-                IdElementoHost = idElementoHost
+                IdElementoHost = idElementoHost,
+                Recubrimiento = recubrimientoMetros
             });
         }
 
@@ -659,13 +672,17 @@ public sealed class LectorContexto : IProveedorContexto
     /// </summary>
     private const double RecubrimientoNormalMetros = 0.04;
 
-    private double Recubrimiento(FamilyInstance columna, List<string> avisos)
+    /// <summary>El recubrimiento lateral asignado a ese elemento, en pies; null si no tiene.</summary>
+    private double? LeerRecubrimiento(FamilyInstance columna)
     {
         Parameter? p = columna.get_Parameter(BuiltInParameter.CLEAR_COVER_OTHER);
+        return p is not null && _doc.GetElement(p.AsElementId()) is RebarCoverType tipo ? tipo.CoverDistance : null;
+    }
 
-        if (p is not null && _doc.GetElement(p.AsElementId()) is RebarCoverType tipo)
+    private double Recubrimiento(FamilyInstance columna, List<string> avisos)
+    {
+        if (LeerRecubrimiento(columna) is { } recubrimientoPies)
         {
-            double recubrimientoPies = tipo.CoverDistance;
             double recubrimientoMetros = AMetros(recubrimientoPies);
 
             if (Math.Abs(recubrimientoMetros - RecubrimientoNormalMetros) > 0.001)
