@@ -23,7 +23,8 @@ cantidades o en la web queda para después.
 
 ## Flujo que pide la issue (y muestra la maqueta)
 
-1. **Presupuesto**: selector con buscador (código, nombre) y estado del vínculo:
+1. **Presupuesto** *(el bloqueo por vínculo de este paso se reemplazó: ver decisión 5)*: selector
+   con buscador (código, nombre) y estado del vínculo:
    "Vinculado a este modelo", "Sin vínculo", "Vinculado a otro modelo · solo lectura".
    Si está vinculado a otro modelo, se ven las imágenes pero no se crean.
 2. **Estructura**: capítulos → subcapítulos → actividades, cada una con su código y cuántas
@@ -231,6 +232,20 @@ antes de seguir.
    los dos add-ins se instalan en carpetas distintas y pueden actualizarse por separado, y así
    ninguno se rompe si el otro cambia su `.env`. Si falta alguna variable, el add-in lo dice al
    abrir en vez de fallar al guardar.
+5. **El modelo de Revit se vincula a cada imagen de una actividad, NO al presupuesto** (pedido de
+   luffyjpl, 2026-10-13). Reemplaza el paso 1 de la issue ("si el presupuesto está vinculado a otro
+   modelo, solo lectura"):
+   - Ya no hay modo solo lectura ni se mira el `revitModelId` del presupuesto (ese vínculo es del
+     add-in de cantidades). Desde cualquier modelo se pueden crear imágenes en cualquier
+     presupuesto.
+   - Cada imagen guarda `IdModelo` (mismo cálculo que `RevitModelIdentifier` del add-in de
+     cantidades) y `NombreModelo` (título del documento), en el `registro.json` y en el `context`
+     de Cloudinary (`modelo`, `nombre_modelo`).
+   - El tablero de la actividad muestra todas sus imágenes, primero las de este modelo, y cada
+     tarjeta dice de qué modelo es ("este modelo" en verde, "otro modelo" en naranja).
+   - "Mismo modelo" compara solo la parte del id antes de `:`, para que en modelos colaborativos
+     cuente igual una imagen hecha desde otra copia local del mismo modelo central.
+   - Las imágenes guardadas antes de este cambio (`ACT_006_01`) muestran "Modelo: sin registrar".
 
 ## Estado
 
@@ -273,7 +288,8 @@ Prueba del usuario sobre `Prueba 080720sfsd26.rvt`, vista `{3D}`, con datos de e
 Otros puntos a confirmar antes del PR:
 - **Sin rastro en el modelo**: que en "Deshacer" no quede ninguna entrada y que no queden vistas
   `CQ_Imagen_*` (prueba del `TransactionGroup` + `RollBack`).
-- **Solo lectura**: el presupuesto de ejemplo "Bodega industrial" no debe mostrar Nueva imagen.
+- ~~**Solo lectura**~~: ya no aplica (decisión 5). En su lugar: una imagen nueva debe mostrar
+  "Modelo: <nombre> (este modelo)" en el tablero y llevar `modelo`/`nombre_modelo` en Cloudinary.
 - ~~**Cloudinary**: tags y contexto~~ ✅ Verificado: `https://res.cloudinary.com/chhoueyn/image/list/PROY_004_V2_ACT_006.json`
   responde (Resource list activo) con `ACT_006_01`, sus dos tags y `context.custom` (codigo,
   nombre; la descripción vacía no se guarda). El cuadro de cantidades podrá listar las imágenes de
@@ -287,11 +303,8 @@ Hallazgos al conectar la API real (2026-10-13):
   `pages`), no en snake_case como asumía el código copiado del add-in de cantidades; la estructura sí
   es snake_case. Corregido en `DtosApi.cs` (acepta los dos estilos) y `ClienteApi.cs` (recorre las
   páginas). Sin la prueba de consola, la lista de presupuestos habría salido vacía.
-- El modelo de prueba (`Downloads\Prueba 080720sfsd26.rvt`, hash de ruta `DD0EFA1DECA15581`) **no
-  está vinculado a ningún presupuesto**: en la API hay 7 vinculados a otros modelos (solo lectura) y
-  2 sin vínculo (`Proyecto-005`, `PROY_001_COPIA`). Las imágenes de prueba se crean en estos dos.
-  Hoy "Sin vínculo" permite crear imágenes; la issue solo restringe "vinculado a otro modelo".
-  Confirmar con el equipo si debe ser así.
+- ~~El modelo de prueba no está vinculado a ningún presupuesto, así que 7 salían en solo lectura~~:
+  resuelto por la decisión 5 (el vínculo con el modelo va en cada imagen, no en el presupuesto).
 - **Encuadre**: el cerramiento perimetral del modelo de prueba deja la estructura chica en la imagen.
   Funciona como se diseñó (respeta lo que muestra la vista del usuario); si se quiere un encuadre
   automático más ajustado, es una mejora aparte.
@@ -315,4 +328,5 @@ parámetros y después `dotnet build --no-restore`. Sin `-TargetFramework` (caso
 5. Guardar → aparece en el tablero con código `ACT_006_01` y sube a Cloudinary.
 6. En "Deshacer" de Revit no debe quedar nada (prueba del `TransactionGroup` + `RollBack`).
 7. Lo mismo desde una vista de **planta**.
-8. Presupuesto "Bodega industrial" (vinculado a otro modelo): sin botón Nueva imagen.
+8. ~~Presupuesto vinculado a otro modelo: sin botón Nueva imagen~~ → reemplazado por la decisión 5:
+   la imagen nueva muestra su modelo en el tablero.

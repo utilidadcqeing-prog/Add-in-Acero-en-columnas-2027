@@ -48,6 +48,7 @@ public partial class VentanaImagenesActividad : Window
         _config = ConfiguracionImagenes.Cargar();
         _api = new ClienteApi(_config);
         _subida = new SubidaCloudinary(_config);
+        TxtModeloActivo.Text = $"Modelo abierto: {_puente.NombreModeloActivo}";
 
         Loaded += async (_, _) => await CargarPresupuestosAsync(null);
         Closing += (_, _) =>
@@ -67,7 +68,7 @@ public partial class VentanaImagenesActividad : Window
         try
         {
             Estado("Cargando presupuestos…");
-            _presupuestos = await _api.ObtenerPresupuestosAsync(_puente.IdModeloActivo);
+            _presupuestos = await _api.ObtenerPresupuestosAsync();
             FiltrarPresupuestos(codigoAMantener ?? _presupuesto?.Codigo);
 
             // "Actualizar códigos" recarga también la estructura y el vínculo del presupuesto abierto.
@@ -116,7 +117,6 @@ public partial class VentanaImagenesActividad : Window
         string? actividadAMantener = presupuesto.Codigo == _presupuesto?.Codigo ? _actividad?.Codigo : null;
         _presupuesto = presupuesto;
         _registro = new RegistroLocal(presupuesto.Codigo);
-        MostrarEstadoVinculo(presupuesto);
 
         try
         {
@@ -141,19 +141,6 @@ public partial class VentanaImagenesActividad : Window
         }
 
         ActualizarPendientes();
-    }
-
-    private void MostrarEstadoVinculo(PresupuestoResumen p)
-    {
-        TxtEstadoVinculo.Text = p.TextoEstado;
-        (string fondo, string texto) = p.Estado switch
-        {
-            EstadoVinculo.VinculadoAEsteModelo => ("#DCF2E9", "#0F8660"),
-            EstadoVinculo.VinculadoAOtroModelo => ("#FBEFD9", "#B86A0C"),
-            _ => ("#E3E8EE", "#586777"),
-        };
-        PildoraEstado.Background = Pincel(fondo);
-        TxtEstadoVinculo.Foreground = Pincel(texto);
     }
 
     private async void BtnActualizar_Click(object sender, RoutedEventArgs e) => await CargarPresupuestosAsync(_presupuesto?.Codigo);
@@ -215,9 +202,6 @@ public partial class VentanaImagenesActividad : Window
         PanelTablero.Visibility = Visibility.Visible;
         BloquearNavegacion(false);
 
-        bool soloLectura = _presupuesto?.SoloLectura == true;
-        TxtSoloLectura.Visibility = soloLectura ? Visibility.Visible : Visibility.Collapsed;
-
         if (_actividad is null || _registro is null)
         {
             TxtCodigoActividad.Text = string.Empty;
@@ -229,13 +213,21 @@ public partial class VentanaImagenesActividad : Window
             return;
         }
 
-        List<TarjetaImagen> tarjetas = _registro.DeActividad(_actividad.Codigo).Select(i => new TarjetaImagen(i)).ToList();
+        // Se muestran todas las imágenes de la actividad, de cualquier modelo; las de este modelo
+        // primero. El modelo va en cada imagen, no en el presupuesto.
+        List<TarjetaImagen> tarjetas = _registro.DeActividad(_actividad.Codigo)
+            .Select(i => new TarjetaImagen(i, _puente.IdModeloActivo))
+            .OrderByDescending(t => t.EsDeEsteModelo)
+            .ToList();
+        int deEsteModelo = tarjetas.Count(t => t.EsDeEsteModelo);
         TxtCodigoActividad.Text = _actividad.Codigo;
         TxtDescripcionActividad.Text = _actividad.Descripcion;
-        TxtResumenActividad.Text = $"Unidad: {_actividad.Unidad} · {(tarjetas.Count == 1 ? "1 imagen" : $"{tarjetas.Count} imágenes")}";
+        TxtResumenActividad.Text =
+            $"Unidad: {_actividad.Unidad} · {(tarjetas.Count == 1 ? "1 imagen" : $"{tarjetas.Count} imágenes")}" +
+            (tarjetas.Count > 0 ? $" ({deEsteModelo} de este modelo)" : string.Empty);
         LstImagenes.ItemsSource = tarjetas;
         TxtSinImagenes.Visibility = tarjetas.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        BtnNuevaImagen.IsEnabled = !soloLectura;
+        BtnNuevaImagen.IsEnabled = true;
     }
 
     private void BtnNuevaImagen_Click(object sender, RoutedEventArgs e)
@@ -449,6 +441,8 @@ public partial class VentanaImagenesActividad : Window
             Descripcion = TxtDescripcion.Text.Trim(),
             TipoVista = _seleccion!.TipoVista,
             NombreVistaRevit = _seleccion.NombreVista,
+            IdModelo = _puente.IdModeloActivo,
+            NombreModelo = _puente.NombreModeloActivo,
             Colores = _seleccion.Tipos.Select(t => new ColorDeTipo { NombreTipo = t.Nombre, ColorHex = t.ColorHex }).ToList(),
             RutaLocal = rutaPng,
             Fecha = DateTime.Now,
@@ -535,6 +529,4 @@ public partial class VentanaImagenesActividad : Window
 
     private void Avisar(string mensaje) =>
         MessageBox.Show(this, mensaje, "CQEING · Imágenes por Actividad", MessageBoxButton.OK, MessageBoxImage.Warning);
-
-    private static SolidColorBrush Pincel(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
 }

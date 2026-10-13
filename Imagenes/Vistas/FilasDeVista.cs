@@ -51,16 +51,27 @@ public sealed class OpcionColor
 /// <summary>Una tarjeta del tablero de la actividad.</summary>
 public sealed class TarjetaImagen
 {
-    public TarjetaImagen(ImagenActividad imagen)
+    public TarjetaImagen(ImagenActividad imagen, string idModeloActivo)
     {
         Imagen = imagen;
         Miniatura = CargarSinBloquear(imagen.RutaLocal);
+        EsDeEsteModelo = imagen.EsDelModelo(idModeloActivo);
     }
 
     public ImagenActividad Imagen { get; }
     public BitmapImage? Miniatura { get; }
 
+    /// <summary>Si la imagen salió del modelo abierto ahora en Revit.</summary>
+    public bool EsDeEsteModelo { get; }
+
     public string TextoVista => $"Vista {Imagen.TipoVista} · {Imagen.NombreVistaRevit}";
+
+    public string TextoModelo =>
+        string.IsNullOrEmpty(Imagen.IdModelo) ? "Modelo: sin registrar (imagen anterior)"
+        : EsDeEsteModelo ? $"Modelo: {Imagen.NombreModelo} (este modelo)"
+        : $"Modelo: {Imagen.NombreModelo} (otro modelo)";
+
+    public string ColorModelo => EsDeEsteModelo ? "#0F8660" : "#B86A0C";
 
     /// <summary>
     /// Carga la imagen en memoria y suelta el archivo enseguida (<c>OnLoad</c>): si no, WPF lo deja

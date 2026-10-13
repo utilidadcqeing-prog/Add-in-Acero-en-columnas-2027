@@ -23,12 +23,12 @@ public sealed class ClienteApi
 
     public bool ModoEjemplo => !_config.ApiConfigurada;
 
-    public async Task<List<PresupuestoResumen>> ObtenerPresupuestosAsync(string idModeloActivo)
+    public async Task<List<PresupuestoResumen>> ObtenerPresupuestosAsync()
     {
         List<PresupuestoDto> dtos;
         if (ModoEjemplo)
         {
-            dtos = DatosDeEjemplo.Presupuestos(idModeloActivo);
+            dtos = DatosDeEjemplo.Presupuestos();
         }
         else
         {
@@ -53,15 +53,8 @@ public sealed class ClienteApi
             .Where(d => !string.IsNullOrWhiteSpace(d.CodigoPresupuesto))
             .GroupBy(d => d.CodigoPresupuesto)
             .Select(g => g.First())
-            .Select(d => new PresupuestoResumen
-            {
-                Codigo = d.CodigoPresupuesto,
-                Nombre = d.Nombre,
-                RevitModelId = d.IdModelo,
-                Estado = CalcularEstado(d.IdModelo, idModeloActivo),
-            })
-            .OrderByDescending(p => p.Estado == EstadoVinculo.VinculadoAEsteModelo)
-            .ThenBy(p => p.Codigo, StringComparer.OrdinalIgnoreCase)
+            .Select(d => new PresupuestoResumen { Codigo = d.CodigoPresupuesto, Nombre = d.Nombre })
+            .OrderBy(p => p.Codigo, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
@@ -93,19 +86,6 @@ public sealed class ClienteApi
                 }).ToList(),
             })
             .ToList();
-    }
-
-    /// <summary>
-    /// Misma regla que <c>RevitModelIdentifier.IsSameOrCompatibleModelId</c> del add-in de
-    /// cantidades: si la API guardó el id sin la parte de instancia (<c>ABC</c>) y el modelo activo
-    /// es colaborativo (<c>ABC:123</c>), es el mismo modelo.
-    /// </summary>
-    public static EstadoVinculo CalcularEstado(string? idVinculado, string idActivo)
-    {
-        if (string.IsNullOrWhiteSpace(idVinculado)) return EstadoVinculo.SinVinculo;
-        if (idVinculado == idActivo || idActivo.StartsWith(idVinculado + ":", StringComparison.Ordinal))
-            return EstadoVinculo.VinculadoAEsteModelo;
-        return EstadoVinculo.VinculadoAOtroModelo;
     }
 
     private async Task<string> GetAsync(string ruta)

@@ -21,13 +21,15 @@ public sealed class PuenteRevit : IPuenteRevit
     private bool _escuchando;
     private Action<int>? _alCambiarCantidad;
 
-    public PuenteRevit(UIApplication app, string idModeloActivo)
+    public PuenteRevit(UIApplication app, string idModeloActivo, string nombreModeloActivo)
     {
         _app = app;
         IdModeloActivo = idModeloActivo;
+        NombreModeloActivo = nombreModeloActivo;
     }
 
     public string IdModeloActivo { get; }
+    public string NombreModeloActivo { get; }
 
     public void IniciarSeleccion(bool mismoTipo, Action<int> alCambiarCantidad)
     {

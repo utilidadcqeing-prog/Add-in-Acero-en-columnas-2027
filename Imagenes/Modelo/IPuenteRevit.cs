@@ -14,6 +14,9 @@ public interface IPuenteRevit
     /// <summary>Id del modelo abierto, calculado igual que en el add-in de cantidades.</summary>
     string IdModeloActivo { get; }
 
+    /// <summary>Nombre del modelo abierto (título del documento de Revit).</summary>
+    string NombreModeloActivo { get; }
+
     /// <summary>
     /// Empieza el modo selección: cada vez que cambia la selección en Revit se avisa con la
     /// cantidad de elementos. Con <paramref name="mismoTipo"/>, un clic en un elemento selecciona

@@ -16,7 +16,9 @@ namespace practicacq.Imagenes.Almacen;
 /// - <c>public_id</c> = código de la imagen;
 /// - <c>tags</c> <c>{presupuesto}</c> y <c>{presupuesto}_{actividad}</c>, para que después el cuadro
 ///   de cantidades liste las imágenes de una actividad por tag;
-/// - <c>context</c> con código, nombre y descripción.
+/// - <c>context</c> con código, nombre y descripción, más el modelo de Revit del que salió
+///   (<c>modelo</c> = id del modelo, <c>nombre_modelo</c>): el vínculo modelo ↔ actividad va en cada
+///   imagen, no en el presupuesto.
 /// </summary>
 public sealed class SubidaCloudinary
 {
@@ -82,7 +84,8 @@ public sealed class SubidaCloudinary
             { new StringContent($"{imagen.CodigoPresupuesto},{imagen.CodigoPresupuesto}_{imagen.CodigoActividad}"), "tags" },
             {
                 new StringContent(
-                    $"codigo={ValorContexto(imagen.Codigo)}|nombre={ValorContexto(imagen.Nombre)}|descripcion={ValorContexto(imagen.Descripcion)}"),
+                    $"codigo={ValorContexto(imagen.Codigo)}|nombre={ValorContexto(imagen.Nombre)}|descripcion={ValorContexto(imagen.Descripcion)}" +
+                    $"|modelo={ValorContexto(imagen.IdModelo)}|nombre_modelo={ValorContexto(imagen.NombreModelo)}"),
                 "context"
             },
         };

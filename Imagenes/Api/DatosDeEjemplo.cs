@@ -7,15 +7,11 @@ namespace practicacq.Imagenes.Api;
 /// </summary>
 internal static class DatosDeEjemplo
 {
-    /// <summary>
-    /// El primero se vincula al modelo abierto, para poder crear imágenes; los otros muestran los
-    /// estados "sin vínculo" y "vinculado a otro modelo · solo lectura".
-    /// </summary>
-    public static List<PresupuestoDto> Presupuestos(string idModeloActivo) => new()
+    public static List<PresupuestoDto> Presupuestos() => new()
     {
-        new() { CodigoPresupuesto = "PROY_004_V2", Nombre = "Edificio estructural · versión 2", RevitModelIdSnake = idModeloActivo },
+        new() { CodigoPresupuesto = "PROY_004_V2", Nombre = "Edificio estructural · versión 2" },
         new() { CodigoPresupuesto = "PROY_004", Nombre = "Edificio estructural · copia" },
-        new() { CodigoPresupuesto = "PROY_007", Nombre = "Bodega industrial · copia", RevitModelIdSnake = "PROJECT_otro-modelo_0000000000000000" },
+        new() { CodigoPresupuesto = "PROY_007", Nombre = "Bodega industrial · copia" },
     };
 
     public static EstructuraDto Estructura(string codigoPresupuesto) => new()

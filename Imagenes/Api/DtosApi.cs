@@ -8,18 +8,19 @@ namespace practicacq.Imagenes.Api;
 // Ojo, los dos endpoints no usan el mismo estilo de nombres (verificado contra la API de producción
 // en Railway el 2026-10-13):
 // - GET /api/presupuestos responde en camelCase y paginado:
-//   { "total", "page", "pageSize", "pages", "data": [ { "codigoPresupuesto", "nombre", "revitModelId", ... } ] }
+//   { "total", "page", "pageSize", "pages", "data": [ { "codigoPresupuesto", "nombre", ... } ] }
 // - GET /api/presupuestos/{codigo}/estructura responde en snake_case:
 //   { "codigo_presupuesto", "capitulos": [ { "codigo_capitulo", "subcapitulos": [ { "items": [ { "codigo_actividad", ... } ] } ] } ] }
-// Para los presupuestos se aceptan los dos estilos, por si la API cambia.
+// Para el código del presupuesto se aceptan los dos estilos, por si la API cambia.
 
 internal sealed class PresupuestoDto
 {
     [JsonPropertyName("codigoPresupuesto")] public string? CodigoCamel { get; set; }
     [JsonPropertyName("codigo_presupuesto")] public string? CodigoSnake { get; set; }
     [JsonPropertyName("nombre")] public string Nombre { get; set; } = string.Empty;
-    [JsonPropertyName("revitModelId")] public string? RevitModelId { get; set; }
-    [JsonPropertyName("revit_model_id")] public string? RevitModelIdSnake { get; set; }
+
+    // El presupuesto trae también revitModelId (vínculo que hace el add-in de cantidades), pero aquí
+    // no se usa: el modelo se vincula a cada imagen de una actividad, no al presupuesto.
 
     // [JsonIgnore]: sin esto choca con "codigoPresupuesto" (la deserialización no distingue mayúsculas).
     [JsonIgnore]
@@ -28,9 +29,6 @@ internal sealed class PresupuestoDto
         get => CodigoCamel ?? CodigoSnake ?? string.Empty;
         set => CodigoCamel = value;
     }
-
-    [JsonIgnore]
-    public string? IdModelo => RevitModelId ?? RevitModelIdSnake;
 }
 
 /// <summary>

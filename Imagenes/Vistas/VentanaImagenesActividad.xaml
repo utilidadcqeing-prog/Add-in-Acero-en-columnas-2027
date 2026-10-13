@@ -52,9 +52,9 @@
                          ToolTip="Buscar por código o nombre" TextChanged="TxtBuscarPresupuesto_TextChanged"/>
                 <ComboBox x:Name="CmbPresupuesto" Width="380" VerticalAlignment="Center" DisplayMemberPath="TextoLista"
                           SelectionChanged="CmbPresupuesto_SelectionChanged"/>
-                <Border x:Name="PildoraEstado" CornerRadius="10" Padding="10,3" Margin="12,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left">
-                    <TextBlock x:Name="TxtEstadoVinculo" FontSize="12" FontWeight="SemiBold"/>
-                </Border>
+                <TextBlock x:Name="TxtModeloActivo" Foreground="#C9D6E3" VerticalAlignment="Center" Margin="16,0,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="Las imágenes nuevas quedan vinculadas a este modelo y a la actividad elegida (no al presupuesto)."/>
             </DockPanel>
         </Border>
 
@@ -104,9 +104,6 @@
                                    TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>
-                <TextBlock x:Name="TxtSoloLectura" DockPanel.Dock="Top" Visibility="Collapsed" Margin="0,0,0,10" Padding="10,6"
-                           Background="#FBEFD9" Foreground="#B86A0C" TextWrapping="Wrap"
-                           Text="Este presupuesto está vinculado a otro modelo de Revit: se ven sus imágenes pero no se pueden crear desde este modelo."/>
                 <TextBlock x:Name="TxtSinImagenes" DockPanel.Dock="Top" Visibility="Collapsed" Foreground="{StaticResource Tenue}"
                            Text="Sin imágenes todavía."/>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -128,7 +125,10 @@
                                             <TextBlock Text="{Binding Imagen.Nombre}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                                             <TextBlock Text="{Binding Imagen.Descripcion}" Foreground="#586777" TextWrapping="Wrap" MaxHeight="54"
                                                        TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding TextoVista}" Foreground="#586777" FontSize="11" Margin="0,4,0,0"
+                                            <TextBlock Text="{Binding TextoModelo}" FontSize="11" Margin="0,4,0,0" FontWeight="SemiBold"
+                                                       Foreground="{Binding ColorModelo}" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Imagen.IdModelo}"/>
+                                            <TextBlock Text="{Binding TextoVista}" Foreground="#586777" FontSize="11"
                                                        TextTrimming="CharacterEllipsis"/>
                                             <ItemsControl ItemsSource="{Binding Imagen.Colores}" Margin="0,4,0,0">
                                                 <ItemsControl.ItemTemplate>

@@ -41,7 +41,7 @@ public class ComandoImagenesActividad : IExternalCommand
         // El ExternalEvent se tiene que crear en contexto de API: aquí, en el comando.
         EjecutorRevit.Inicializar();
 
-        var puente = new PuenteRevit(uiapp, IdentificadorModelo.Obtener(doc));
+        var puente = new PuenteRevit(uiapp, IdentificadorModelo.Obtener(doc), doc.Title);
         _ventana = new VentanaImagenesActividad(puente, uiapp.MainWindowHandle);
         new WindowInteropHelper(_ventana).Owner = uiapp.MainWindowHandle;
         _ventana.Closed += (_, _) => _ventana = null;

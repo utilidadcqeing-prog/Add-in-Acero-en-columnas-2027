@@ -21,6 +21,17 @@ public sealed class ImagenActividad
     /// <summary>Nombre de la vista de Revit desde la que se generó, para poder rehacerla.</summary>
     public string NombreVistaRevit { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Modelo de Revit del que salió la imagen: el vínculo modelo ↔ actividad vive aquí, en cada
+    /// imagen, y no en el presupuesto. Mismo id que calcula el add-in de cantidades
+    /// (<c>RevitModelIdentifier</c>), para poder cruzarlos después. Vacío en imágenes guardadas antes
+    /// de este cambio.
+    /// </summary>
+    public string IdModelo { get; set; } = string.Empty;
+
+    /// <summary>Nombre del archivo del modelo (título del documento), para mostrarlo en el tablero.</summary>
+    public string NombreModelo { get; set; } = string.Empty;
+
     public List<ColorDeTipo> Colores { get; set; } = new();
 
     /// <summary>Ruta del PNG guardado en esta PC.</summary>
@@ -33,6 +44,17 @@ public sealed class ImagenActividad
 
     [JsonIgnore]
     public bool SubidaPendiente => string.IsNullOrEmpty(Url);
+
+    /// <summary>
+    /// Si la imagen salió del modelo con id <paramref name="idModelo"/>. Se compara solo la parte
+    /// antes de <c>:</c>: en modelos colaborativos lo que sigue es la copia local de cada usuario
+    /// (ver <c>RevitModelIdentifier</c> del add-in de cantidades), y una imagen hecha por otra persona
+    /// desde el mismo modelo central es del mismo modelo.
+    /// </summary>
+    public bool EsDelModelo(string idModelo) =>
+        IdModelo.Length > 0 && ParteCentral(IdModelo) == ParteCentral(idModelo);
+
+    private static string ParteCentral(string id) => id.Split(':')[0];
 
     [JsonIgnore]
     public string TextoEstadoSubida => SubidaPendiente ? "Solo en esta PC (subida pendiente)" : "Subida a Cloudinary";

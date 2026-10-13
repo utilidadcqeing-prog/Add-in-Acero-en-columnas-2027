@@ -1,35 +1,17 @@
 namespace practicacq.Imagenes.Modelo;
 
 /// <summary>
-/// Cómo se relaciona un presupuesto de la API con el modelo de Revit abierto.
-/// Decide si en el add-in se pueden crear imágenes o solo mirarlas.
+/// Un presupuesto tal como lo lista <c>GET /api/presupuestos</c>.
+///
+/// No lleva vínculo con el modelo de Revit (decisión del 2026-10-13): el modelo se vincula a cada
+/// IMAGEN de una actividad (<see cref="ImagenActividad.IdModelo"/>), no al presupuesto. Por eso desde
+/// cualquier modelo se pueden crear imágenes en cualquier presupuesto, y el <c>revit_model_id</c> del
+/// presupuesto (que usa el add-in de cantidades) aquí no se mira.
 /// </summary>
-public enum EstadoVinculo
-{
-    SinVinculo,
-    VinculadoAEsteModelo,
-    VinculadoAOtroModelo,
-}
-
-/// <summary>Un presupuesto tal como lo lista <c>GET /api/presupuestos</c>.</summary>
 public sealed class PresupuestoResumen
 {
     public string Codigo { get; init; } = string.Empty;
     public string Nombre { get; init; } = string.Empty;
-    public string? RevitModelId { get; init; }
-    public EstadoVinculo Estado { get; set; }
-
-    /// <summary>
-    /// Vinculado a otro modelo: se ven las imágenes pero no se crean (issue #183, paso 1).
-    /// </summary>
-    public bool SoloLectura => Estado == EstadoVinculo.VinculadoAOtroModelo;
-
-    public string TextoEstado => Estado switch
-    {
-        EstadoVinculo.VinculadoAEsteModelo => "Vinculado a este modelo",
-        EstadoVinculo.VinculadoAOtroModelo => "Vinculado a otro modelo · solo lectura",
-        _ => "Sin vínculo",
-    };
 
     public string TextoLista => $"{Codigo} — {Nombre}";
 }
