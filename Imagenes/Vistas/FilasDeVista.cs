@@ -30,10 +30,16 @@ public sealed class FilaTipo
     {
         Tipo = tipo;
         Opciones = PaletaColores.Colores.Select(c => new OpcionColor(c, this)).ToList();
+        Ampliada = PaletaColores.Ampliada.Select(fila => fila.Select(c => new OpcionColor(c, this)).ToList()).ToList();
     }
 
     public TipoSeleccionado Tipo { get; }
+
+    /// <summary>Los 8 colores rápidos.</summary>
     public List<OpcionColor> Opciones { get; }
+
+    /// <summary>La paleta del botón "+", por filas (de claro a oscuro, y grises al final).</summary>
+    public List<List<OpcionColor>> Ampliada { get; }
 }
 
 public sealed class OpcionColor

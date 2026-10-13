@@ -48,10 +48,14 @@
                 <Button DockPanel.Dock="Right" Content="Actualizar códigos" Style="{StaticResource BotonSecundario}"
                         VerticalAlignment="Center" Click="BtnActualizar_Click"/>
                 <TextBlock Text="Presupuesto" Foreground="#C9D6E3" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
-                <TextBox x:Name="TxtBuscarPresupuesto" Width="190" VerticalAlignment="Center" Padding="4,3" Margin="0,0,8,0"
-                         ToolTip="Buscar por código o nombre" TextChanged="TxtBuscarPresupuesto_TextChanged"/>
-                <ComboBox x:Name="CmbPresupuesto" Width="380" VerticalAlignment="Center" DisplayMemberPath="TextoLista"
-                          SelectionChanged="CmbPresupuesto_SelectionChanged"/>
+                <!-- La misma lista es el buscador: al escribir se filtra por código o nombre (autocompletar). -->
+                <ComboBox x:Name="CmbPresupuesto" Width="440" VerticalAlignment="Center"
+                          IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                          DisplayMemberPath="TextoLista" TextSearch.TextPath="TextoLista"
+                          ToolTip="Escribe parte del código o del nombre del presupuesto para buscarlo"
+                          SelectionChanged="CmbPresupuesto_SelectionChanged"
+                          TextBoxBase.TextChanged="CmbPresupuesto_TextChanged"
+                          DropDownClosed="CmbPresupuesto_DropDownClosed"/>
                 <TextBlock x:Name="TxtModeloActivo" Foreground="#C9D6E3" VerticalAlignment="Center" Margin="16,0,0,0"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="Las imágenes nuevas quedan vinculadas a este modelo y a la actividad elegida (no al presupuesto)."/>
@@ -115,7 +119,8 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Width="250" Margin="0,0,14,14" Background="White" BorderBrush="#D4DBE4" BorderThickness="1" CornerRadius="8">
+                                <Border Width="250" Margin="0,0,14,14" Background="White" BorderBrush="#D4DBE4" BorderThickness="1" CornerRadius="8"
+                        Cursor="Hand" ToolTip="Clic para ver la imagen en grande" MouseLeftButtonUp="TarjetaImagen_Click">
                                     <StackPanel>
                                         <Border Height="170" Background="White" CornerRadius="8,8,0,0" BorderBrush="#D4DBE4" BorderThickness="0,0,0,1">
                                             <Image Source="{Binding Miniatura}" Stretch="Uniform" Margin="6"/>
@@ -204,9 +209,41 @@
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
-                                                <TextBox Width="78" Margin="6,0,0,0" Padding="2,1" VerticalContentAlignment="Center"
-                                                         Text="{Binding Tipo.ColorHex, Mode=OneWay}" ToolTip="Color libre: #RRGGBB y Enter"
-                                                         Tag="{Binding}" KeyDown="TxtColorLibre_KeyDown" LostFocus="TxtColorLibre_LostFocus"/>
+                                                <!-- "+": paleta ampliada para elegir cualquier otro color con un clic -->
+                                                <ToggleButton x:Name="BtnMasColores" Width="26" Height="22" Margin="4,0,0,0" Content="+"
+                                                              FontWeight="Bold" Background="White" BorderBrush="#D4DBE4"
+                                                              ToolTip="Más colores"/>
+                                                <Popup IsOpen="{Binding IsChecked, ElementName=BtnMasColores, Mode=TwoWay}"
+                                                       PlacementTarget="{Binding ElementName=BtnMasColores}" Placement="Bottom"
+                                                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                                                    <Border Background="White" BorderBrush="#D4DBE4" BorderThickness="1" CornerRadius="6"
+                                                            Padding="8" Margin="0,4,0,0">
+                                                        <StackPanel>
+                                                            <TextBlock Text="Elige un color" FontSize="11" FontWeight="SemiBold"
+                                                                       Foreground="#586777" Margin="0,0,0,6"/>
+                                                            <ItemsControl ItemsSource="{Binding Ampliada}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <ItemsControl ItemsSource="{Binding}">
+                                                                            <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate>
+                                                                                    <StackPanel Orientation="Horizontal"/>
+                                                                                </ItemsPanelTemplate>
+                                                                            </ItemsControl.ItemsPanel>
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                    <Button Width="20" Height="20" Margin="0,0,3,3" Background="{Binding Hex}"
+                                                                                            BorderBrush="#D4DBE4" BorderThickness="1" ToolTip="{Binding Hex}"
+                                                                                            Click="BtnColorAmpliado_Click"/>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
                                             </StackPanel>
                                         </StackPanel>
                                     </Border>

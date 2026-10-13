@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -37,6 +39,8 @@ public partial class VentanaImagenesActividad : Window
     private List<FilaTipo> _filasTipo = new();
     private bool _vistaPreviaVigente;
     private bool _cargandoPresupuesto;
+    private ICollectionView? _vistaPresupuestos;
+    private string _filtroPresupuesto = string.Empty;
 
     private static string RutaVistaPrevia => Path.Combine(ConfiguracionImagenes.Carpeta, "vista-previa", "vista-previa");
 
@@ -69,7 +73,7 @@ public partial class VentanaImagenesActividad : Window
         {
             Estado("Cargando presupuestos…");
             _presupuestos = await _api.ObtenerPresupuestosAsync();
-            FiltrarPresupuestos(codigoAMantener ?? _presupuesto?.Codigo);
+            MostrarPresupuestos(codigoAMantener ?? _presupuesto?.Codigo);
 
             // "Actualizar códigos" recarga también la estructura y el vínculo del presupuesto abierto.
             if (CmbPresupuesto.SelectedItem is PresupuestoResumen abierto)
@@ -87,29 +91,73 @@ public partial class VentanaImagenesActividad : Window
         }
     }
 
-    private void FiltrarPresupuestos(string? codigoSeleccionado)
-    {
-        string filtro = TxtBuscarPresupuesto.Text.Trim();
-        List<PresupuestoResumen> visibles = _presupuestos
-            .Where(p => filtro.Length == 0
-                || p.Codigo.Contains(filtro, StringComparison.OrdinalIgnoreCase)
-                || p.Nombre.Contains(filtro, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+    // La lista de presupuestos es también el buscador (pedido del 2026-10-13, en vez de una caja de
+    // búsqueda aparte): el ComboBox es editable y al escribir se filtra por código o nombre. Detalles:
+    // - el filtro va sobre una ICollectionView, así no se reemplaza la lista mientras se escribe;
+    // - mientras la lista está desplegada no se abre ningún presupuesto (moverse con las flechas no
+    //   debe consultar la API por cada uno): se abre al cerrarla, con el que quedó elegido;
+    // - si se cierra sin elegir nada válido, vuelve a mostrar el presupuesto abierto.
 
-        // Solo cambia la lista visible: filtrar no debe reabrir el presupuesto.
+    private void MostrarPresupuestos(string? codigoSeleccionado)
+    {
+        _filtroPresupuesto = string.Empty;
+        _vistaPresupuestos = CollectionViewSource.GetDefaultView(_presupuestos);
+        _vistaPresupuestos.Filter = o => o is PresupuestoResumen p && CoincideConFiltro(p);
+
         _cargandoPresupuesto = true;
-        CmbPresupuesto.ItemsSource = visibles;
-        CmbPresupuesto.SelectedItem = visibles.FirstOrDefault(p => p.Codigo == codigoSeleccionado);
+        CmbPresupuesto.ItemsSource = _vistaPresupuestos;
+        CmbPresupuesto.SelectedItem = _presupuestos.FirstOrDefault(p => p.Codigo == codigoSeleccionado);
         _cargandoPresupuesto = false;
     }
 
-    private void TxtBuscarPresupuesto_TextChanged(object sender, TextChangedEventArgs e) => FiltrarPresupuestos(_presupuesto?.Codigo);
+    private bool CoincideConFiltro(PresupuestoResumen p) =>
+        _filtroPresupuesto.Length == 0
+        || p.Codigo.Contains(_filtroPresupuesto, StringComparison.OrdinalIgnoreCase)
+        || p.Nombre.Contains(_filtroPresupuesto, StringComparison.OrdinalIgnoreCase);
+
+    private void CmbPresupuesto_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_cargandoPresupuesto || _vistaPresupuestos is null) return;
+
+        string texto = CmbPresupuesto.Text;
+        // El texto cambió porque se eligió un presupuesto, no porque el usuario esté escribiendo.
+        if (CmbPresupuesto.SelectedItem is PresupuestoResumen elegido && elegido.TextoLista == texto) return;
+
+        TextBox? caja = CmbPresupuesto.Template.FindName("PART_EditableTextBox", CmbPresupuesto) as TextBox;
+        int cursor = caja?.CaretIndex ?? texto.Length;
+
+        _filtroPresupuesto = texto.Trim();
+        _cargandoPresupuesto = true;
+        _vistaPresupuestos.Refresh();
+        CmbPresupuesto.Text = texto; // Refresh puede borrar lo escrito si el elegido quedó fuera del filtro.
+        _cargandoPresupuesto = false;
+
+        CmbPresupuesto.IsDropDownOpen = true;
+        if (caja is not null)
+        {
+            caja.SelectionLength = 0;
+            caja.CaretIndex = Math.Min(cursor, texto.Length);
+        }
+    }
 
     private async void CmbPresupuesto_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_cargandoPresupuesto || CmbPresupuesto.SelectedItem is not PresupuestoResumen p) return;
-        if (p.Codigo == _presupuesto?.Codigo) return;
-        await AbrirPresupuestoAsync(p);
+        if (_cargandoPresupuesto || CmbPresupuesto.IsDropDownOpen) return;
+        await AbrirElegidoAsync();
+    }
+
+    private async void CmbPresupuesto_DropDownClosed(object sender, EventArgs e) => await AbrirElegidoAsync();
+
+    private async Task AbrirElegidoAsync()
+    {
+        PresupuestoResumen? elegido = CmbPresupuesto.SelectedItem as PresupuestoResumen;
+
+        // Al cerrar se quita el filtro y el texto vuelve a ser el del presupuesto (el elegido o, si no
+        // se eligió ninguno válido, el que ya estaba abierto).
+        MostrarPresupuestos(elegido?.Codigo ?? _presupuesto?.Codigo);
+
+        if (elegido is not null && elegido.Codigo != _presupuesto?.Codigo)
+            await AbrirPresupuestoAsync(elegido);
     }
 
     private async Task AbrirPresupuestoAsync(PresupuestoResumen presupuesto)
@@ -230,6 +278,15 @@ public partial class VentanaImagenesActividad : Window
         BtnNuevaImagen.IsEnabled = true;
     }
 
+    private void TarjetaImagen_Click(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not TarjetaImagen tarjeta) return;
+        if (LstImagenes.ItemsSource is not List<TarjetaImagen> tarjetas) return;
+
+        var visor = new VisorImagen(tarjetas, tarjetas.IndexOf(tarjeta)) { Owner = this };
+        visor.Show();
+    }
+
     private void BtnNuevaImagen_Click(object sender, RoutedEventArgs e)
     {
         if (_actividad is null || _registro is null) return;
@@ -262,7 +319,6 @@ public partial class VentanaImagenesActividad : Window
         // Mientras se arma una imagen no se cambia de presupuesto ni de actividad: la imagen quedaría
         // guardada con un código que no corresponde.
         CmbPresupuesto.IsEnabled = !bloquear;
-        TxtBuscarPresupuesto.IsEnabled = !bloquear;
         LstEstructura.IsEnabled = !bloquear;
         TxtBuscarActividad.IsEnabled = !bloquear;
     }
@@ -341,24 +397,14 @@ public partial class VentanaImagenesActividad : Window
             CambiarColor(opcion.Fila, opcion.Hex);
     }
 
-    private void TxtColorLibre_KeyDown(object sender, KeyEventArgs e)
+    /// <summary>
+    /// Un color de la paleta ampliada (botón "+"). Al elegirlo, la paleta se cierra sola: el
+    /// <c>Items.Refresh()</c> de <see cref="CambiarColor"/> vuelve a armar la fila y su Popup.
+    /// </summary>
+    private void BtnColorAmpliado_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Key == Key.Enter) AplicarColorLibre((TextBox)sender);
-    }
-
-    private void TxtColorLibre_LostFocus(object sender, RoutedEventArgs e) => AplicarColorLibre((TextBox)sender);
-
-    private void AplicarColorLibre(TextBox caja)
-    {
-        if (caja.Tag is not FilaTipo fila) return;
-        string? hex = PaletaColores.Normalizar(caja.Text);
-        if (hex is null)
-        {
-            caja.Text = fila.Tipo.ColorHex;
-            Estado("Color no válido: escribe #RRGGBB, por ejemplo #E0453A.");
-            return;
-        }
-        if (hex != fila.Tipo.ColorHex) CambiarColor(fila, hex);
+        if ((sender as FrameworkElement)?.DataContext is OpcionColor opcion)
+            CambiarColor(opcion.Fila, opcion.Hex);
     }
 
     private void CambiarColor(FilaTipo fila, string hex)

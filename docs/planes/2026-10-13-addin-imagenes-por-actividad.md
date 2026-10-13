@@ -90,7 +90,7 @@ Imagenes/
   Almacen/       SubidaCloudinary.cs, RegistroLocal.cs (JSON), CodigoImagen.cs
   Modelo/        Presupuesto.cs, ImagenActividad.cs, Seleccion.cs, PaletaColores.cs, IPuenteRevit.cs
   Vistas/        VentanaImagenesActividad.xaml(.cs) (tablero + editor), BarraSeleccion.xaml(.cs),
-                 FilasDeVista.cs
+                 VisorImagen.xaml(.cs) (vista previa en grande), FilasDeVista.cs
 ```
 
 Las ventanas no referencian `Autodesk.Revit` (misma regla que el resto del repo): hablan con Revit
@@ -310,6 +310,22 @@ Hallazgos al conectar la API real (2026-10-13):
   automático más ajustado, es una mejora aparte.
 - Corrección menor ya hecha (sin desplegar todavía): el `registro.json` guardaba dos campos
   calculados (`SubidaPendiente`, `TextoEstadoSubida`); ahora llevan `[JsonIgnore]`.
+
+### Cambios pedidos tras la primera prueba (2026-10-13)
+
+- **Vista previa dentro de Revit**: clic en una tarjeta del tablero abre `VisorImagen` con la imagen
+  en grande, sus datos (código, nombre, descripción, modelo, vista, colores, fecha, estado de la
+  subida), flechas ‹ › o teclas ← → para pasar por las imágenes de la actividad, y botones para
+  abrirla en el navegador (Cloudinary) o en su carpeta de la PC.
+- ~~Se quitó el texto "Presupuesto" de la barra superior~~ → corregido: lo que sobraba era la **caja
+  de búsqueda aparte** (filtraba la lista por código o nombre), no el texto. El texto "Presupuesto"
+  volvió y la lista de presupuestos es ahora el buscador: `ComboBox` editable que filtra mientras se
+  escribe (autocompletar, sobre una `ICollectionView`). Mientras la lista está desplegada no se abre
+  ningún presupuesto (moverse con las flechas no consulta la API por cada uno); se abre al cerrarla.
+  Si se cierra sin elegir uno válido, vuelve a mostrar el que estaba abierto.
+- **Color libre con paleta, no con código**: se quitó la caja para escribir `#RRGGBB`. Junto a los 8
+  colores rápidos hay un botón "+" que abre una paleta de 13 tonos × 5 intensidades más una fila de
+  grises (`PaletaColores.Ampliada`, generada en HSL); un clic aplica el color.
 
 ### Arreglo en `tools/deploy.ps1` (afecta a todo el repo)
 
