@@ -58,6 +58,9 @@ Precedentes que motivaron esta regla:
   usuario en ese momento. "Haz commit" es solo commit -- avisar
   explicitamente que no se pusheo y preguntar si tambien lo quiere.
 - Nunca `git add -A` -- agregar archivos especificos por nombre.
+- Sin marca de agua de Claude: nada de `Co-Authored-By: Claude ...` en
+  los commits ni de "Generated with Claude Code" en PRs, issues o
+  comentarios.
 - Antes de desplegar (`tools/deploy.ps1`), verificar que Revit este
   cerrado con `Get-Process -Name Revit -ErrorAction SilentlyContinue`
   -- no confiar en que el usuario diga "ya cerre" sin comprobarlo,
