@@ -256,6 +256,9 @@ antes de seguir.
 - [~] Fase 0: verificación en Revit real. Hecho: aspecto de la imagen en 3D (punto 5) y exportación.
   Falta: selección desde ventana no modal, planta y `TransactionGroup` + `RollBack` (los tres se
   prueban con la primera versión del add-in, ver abajo).
+- [x] PR abierto: utilidadcqeing-prog/Add-in-Acero-en-columnas-2027#68 (fork `luffyjpl:addin-de-imagenes` →
+  compartido `addin-de-imagenes`, 2026-10-13). Pendiente antes de mergear: planta, varios tipos a la
+  vez y "Deshacer" limpio.
 - [~] Fases 1 a 4: primera versión completa implementada el 2026-10-13 (compila para Revit 2026.5 /
   net10). Pendiente de prueba en Revit con el modelo de prueba.
   - Sin `API_URL`/`API_KEY` trabaja con **datos de ejemplo** (los de la maqueta) y lo avisa en la
