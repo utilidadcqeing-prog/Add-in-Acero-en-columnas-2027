@@ -65,6 +65,18 @@ public class App : IExternalApplication
             "TEMPORAL: prueba la API real de empalmes de Revit (RebarSpliceUtils) sobre una barra seleccionada, sin dejar cambios permanentes.",
             dllPath, folder, "iconoCQ"));
 
+        // Issue #183 del repo de cantidades: imágenes por actividad. PROVISIONAL en este add-in --
+        // ver el comentario de Imagenes/ComandoImagenesActividad.cs. Si se mueve a otro proyecto,
+        // se lleva la carpeta Imagenes/ y se quita este panel.
+        RibbonPanel panelImagenes = ObtenerOCrearPanel(app, "Imágenes");
+
+        panelImagenes.AddItem(CrearBoton(
+            "ComandoImagenesActividad",
+            "Imágenes\npor actividad",
+            "practicacq.Imagenes.ComandoImagenesActividad",
+            "Crea imágenes de los elementos de cada actividad del presupuesto: selecciona en Revit, elige colores y guarda con el código de la actividad.",
+            dllPath, folder, "iconoCQ"));
+
         return Result.Succeeded;
     }
 

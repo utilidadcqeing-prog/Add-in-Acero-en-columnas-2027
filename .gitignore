@@ -19,3 +19,6 @@ Add-in de Armado CQEING_files/
 
 # Claude Code local
 .claude/settings.local.json
+
+# Configuración local con claves (ver Imagenes/.env.example)
+.env

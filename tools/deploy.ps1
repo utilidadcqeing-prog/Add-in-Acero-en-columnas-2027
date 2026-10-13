@@ -72,8 +72,14 @@ foreach ($year in $Versions) {
     }
 
     Write-Host "== Compilando practicacq para Revit $year ==" -ForegroundColor Cyan
+    # Restore explicito y despues build con --no-restore: el restore implicito de `dotnet build`
+    # descarta el -p:TargetFramework que se le pasa, restaura con el default del .csproj
+    # (net8.0-windows para 2026) y el build falla con NETSDK1005 en Revit 2026.5+ (net10).
+    # Visto el 2026-10-13 al desplegar el add-in de imagenes en Revit 2026.5.
     if ($effectiveTargetFramework) {
-        dotnet build $proj -c $Configuration -p:RevitVersion=$year -p:TargetFramework=$effectiveTargetFramework
+        dotnet restore $proj -p:RevitVersion=$year -p:TargetFramework=$effectiveTargetFramework
+        if ($LASTEXITCODE -ne 0) { throw "Fallo el restore para Revit $year" }
+        dotnet build $proj --no-restore -c $Configuration -p:RevitVersion=$year -p:TargetFramework=$effectiveTargetFramework
     } else {
         dotnet build $proj -c $Configuration -p:RevitVersion=$year
     }
