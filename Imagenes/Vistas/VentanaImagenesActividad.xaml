@@ -38,6 +38,9 @@
             <DockPanel>
                 <Button x:Name="BtnReintentar" DockPanel.Dock="Right" Style="{StaticResource BotonSecundario}" Padding="10,2"
                         Content="Reintentar subidas pendientes" Visibility="Collapsed" Click="BtnReintentar_Click"/>
+                <Button x:Name="BtnCancelarActualizacion" DockPanel.Dock="Right" Style="{StaticResource BotonSecundario}" Padding="10,2"
+                        Margin="0,0,8,0" Content="Cancelar actualización" Visibility="Collapsed" Click="BtnCancelarActualizacion_Click"
+                        ToolTip="Termina la imagen que se está generando y no sigue con las demás"/>
                 <TextBlock x:Name="TxtEstado" VerticalAlignment="Center" Foreground="{StaticResource Tenue}" TextTrimming="CharacterEllipsis"/>
             </DockPanel>
         </Border>
@@ -47,6 +50,10 @@
             <DockPanel>
                 <Button DockPanel.Dock="Right" Content="Actualizar códigos" Style="{StaticResource BotonSecundario}"
                         VerticalAlignment="Center" Click="BtnActualizar_Click"/>
+                <Button x:Name="BtnActualizarTodas" DockPanel.Dock="Right" Content="Actualizar imágenes" Style="{StaticResource BotonSecundario}"
+                        VerticalAlignment="Center" Margin="0,0,8,0" IsEnabled="False" Click="BtnActualizarTodas_Click"
+                        ToolTipService.ShowOnDisabled="True"
+                        ToolTip="Vuelve a generar todas las imágenes de este presupuesto que salieron del modelo abierto, con el modelo como está ahora"/>
                 <TextBlock Text="Presupuesto" Foreground="#C9D6E3" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
                 <!-- La misma lista es el buscador: al escribir se filtra por código o nombre (autocompletar). -->
                 <ComboBox x:Name="CmbPresupuesto" Width="440" VerticalAlignment="Center"
@@ -146,6 +153,11 @@
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
                                             <TextBlock Text="{Binding Imagen.TextoEstadoSubida}" FontSize="11" Margin="0,6,0,0" Foreground="#0F8660"/>
+                                            <!-- El Button marca el clic como atendido: no abre el visor de la tarjeta. -->
+                                            <Button Content="Actualizar" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="10,3"
+                                                    Background="White" BorderBrush="#D4DBE4"
+                                                    IsEnabled="{Binding PuedeActualizar}" ToolTip="{Binding TextoActualizar}"
+                                                    ToolTipService.ShowOnDisabled="True" Click="BtnActualizarImagen_Click"/>
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>

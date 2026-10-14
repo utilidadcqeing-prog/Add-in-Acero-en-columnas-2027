@@ -7,8 +7,17 @@ Como instalar:
    particular).
 2. Cerrar Revit si esta abierto.
 3. Hacer doble clic en "Instalar.bat".
-4. Esperar a que diga "Listo." y presionar Enter para cerrar la ventana.
-5. Abrir Revit. El add-in aparece en el ribbon, en la pestana CQEING.
+4. Si es la primera vez, el instalador pide los datos del add-in de
+   Imagenes por Actividad que no encuentre solo:
+   - URL y X-Api-Key de la API de CQEING (si el add-in de cantidades ya
+     esta instalado, las toma de ahi y no pregunta);
+   - API Key y API Secret de Cloudinary (consola de Cloudinary > Settings >
+     API Keys).
+   Enter deja un dato vacio; se puede completar despues en
+   %APPDATA%\CQEING\imagenes\.env. Ese archivo lleva claves: no compartirlo.
+5. Esperar a que diga "Listo." y presionar Enter para cerrar la ventana.
+6. Abrir Revit. El add-in aparece en el ribbon, en la pestana CQEING. La
+   primera vez Revit pregunta si cargarlo: elegir "Cargar siempre".
 
 No hace falta saber nada de consola ni de programacion: el instalador
 detecta solo que version de Revit corresponde y copia todo donde va.

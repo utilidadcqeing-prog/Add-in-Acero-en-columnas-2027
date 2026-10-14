@@ -70,7 +70,19 @@ public sealed class TarjetaImagen
     /// <summary>Si la imagen salió del modelo abierto ahora en Revit.</summary>
     public bool EsDeEsteModelo { get; }
 
-    public string TextoVista => $"Vista {Imagen.TipoVista} · {Imagen.NombreVistaRevit}";
+    public string TextoVista =>
+        $"Vista {Imagen.TipoVista} · {Imagen.NombreVistaRevit}" + (Imagen.Version > 1 ? $" · versión {Imagen.Version}" : string.Empty);
+
+    /// <summary>
+    /// Si se puede rehacer sola (issue #186): tiene que ser del modelo abierto y guardar los
+    /// <c>UniqueId</c> (decisión 7 del plan <c>docs/planes/2026-10-14-actualizar-imagenes.md</c>).
+    /// </summary>
+    public bool PuedeActualizar => EsDeEsteModelo && Imagen.TieneDatosParaActualizar;
+
+    public string TextoActualizar =>
+        !EsDeEsteModelo ? "Solo se puede actualizar con el modelo del que salió abierto en Revit."
+        : !Imagen.TieneDatosParaActualizar ? "Imagen anterior a la actualización automática: rehazla con Nueva imagen."
+        : "Vuelve a generar la imagen con el modelo como está ahora (mismo código, nombre, descripción y colores).";
 
     public string TextoModelo =>
         string.IsNullOrEmpty(Imagen.IdModelo) ? "Modelo: sin registrar (imagen anterior)"

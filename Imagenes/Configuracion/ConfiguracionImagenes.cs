@@ -10,7 +10,8 @@ namespace practicacq.Imagenes.Configuracion;
 /// instala directo en <c>Addins\{año}\</c>, una carpeta que comparten todos los add-ins de Revit, y
 /// un <c>.env</c> suelto ahí puede pisarse con el de otro add-in. En AppData además sobrevive a
 /// reinstalar o actualizar el add-in. Es propio de este add-in y no se comparte con el de
-/// cantidades: la cuenta de Cloudinary es otra y los dos se actualizan por separado.
+/// cantidades: los dos se actualizan por separado. Desde la issue #186 la cuenta de Cloudinary es la
+/// de CQEING (<c>df6m0s0ri</c>) con subida firmada.
 ///
 /// Si el archivo no existe, se crea con las claves vacías para que el usuario solo tenga que
 /// completarlo.
@@ -29,19 +30,32 @@ public sealed class ConfiguracionImagenes
         "API_URL=\n" +
         "API_KEY=\n" +
         "\n" +
-        "# Cloudinary: cuenta propia del add-in de imágenes, con un upload preset SIN firma.\n" +
-        "CLOUDINARY_CLOUD_NAME=chhoueyn\n" +
-        "CLOUDINARY_UPLOAD_PRESET=addin_imagenes_actividad\n";
+        "# Cloudinary: cuenta de CQEING. Con API_KEY + API_SECRET se sube con firma (no hace falta preset)\n" +
+        "# y al actualizar una imagen se borra la versión anterior. Sin ellas se usa el preset SIN firma.\n" +
+        "# Nunca subir estos valores al repo.\n" +
+        "CLOUDINARY_CLOUD_NAME=df6m0s0ri\n" +
+        "CLOUDINARY_UPLOAD_PRESET=\n" +
+        "CLOUDINARY_API_KEY=\n" +
+        "CLOUDINARY_API_SECRET=\n";
 
     public string ApiUrl { get; private init; } = string.Empty;
     public string ApiKey { get; private init; } = string.Empty;
     public string CloudName { get; private init; } = string.Empty;
     public string UploadPreset { get; private init; } = string.Empty;
+    public string CloudinaryApiKey { get; private init; } = string.Empty;
+    public string CloudinaryApiSecret { get; private init; } = string.Empty;
 
     /// <summary>Sin URL o sin clave de la API se trabaja con datos de ejemplo.</summary>
     public bool ApiConfigurada => !string.IsNullOrWhiteSpace(ApiUrl) && !string.IsNullOrWhiteSpace(ApiKey);
 
-    public bool CloudinaryConfigurado => !string.IsNullOrWhiteSpace(CloudName) && !string.IsNullOrWhiteSpace(UploadPreset);
+    /// <summary>
+    /// Con API Key + Secret se sube con firma y se puede borrar (issue #186, decisión 10 de
+    /// <c>docs/planes/2026-10-14-actualizar-imagenes.md</c>).
+    /// </summary>
+    public bool CloudinaryFirmado =>
+        !string.IsNullOrWhiteSpace(CloudName) && !string.IsNullOrWhiteSpace(CloudinaryApiKey) && !string.IsNullOrWhiteSpace(CloudinaryApiSecret);
+
+    public bool CloudinaryConfigurado => CloudinaryFirmado || (!string.IsNullOrWhiteSpace(CloudName) && !string.IsNullOrWhiteSpace(UploadPreset));
 
     public static ConfiguracionImagenes Cargar()
     {
@@ -75,6 +89,8 @@ public sealed class ConfiguracionImagenes
             ApiKey = Leer("API_KEY"),
             CloudName = Leer("CLOUDINARY_CLOUD_NAME"),
             UploadPreset = Leer("CLOUDINARY_UPLOAD_PRESET"),
+            CloudinaryApiKey = Leer("CLOUDINARY_API_KEY"),
+            CloudinaryApiSecret = Leer("CLOUDINARY_API_SECRET"),
         };
     }
 }

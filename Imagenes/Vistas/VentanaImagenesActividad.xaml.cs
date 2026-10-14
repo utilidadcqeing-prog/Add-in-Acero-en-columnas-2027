@@ -25,7 +25,9 @@ public partial class VentanaImagenesActividad : Window
     private readonly IntPtr _ventanaRevit;
     private readonly ConfiguracionImagenes _config;
     private readonly ClienteApi _api;
-    private readonly SubidaCloudinary _subida;
+
+    /// <summary>No es readonly: "Reintentar" vuelve a leer el .env por si se agregaron las claves.</summary>
+    private SubidaCloudinary _subida;
 
     private List<PresupuestoResumen> _presupuestos = new();
     private PresupuestoResumen? _presupuesto;
@@ -41,6 +43,8 @@ public partial class VentanaImagenesActividad : Window
     private bool _cargandoPresupuesto;
     private ICollectionView? _vistaPresupuestos;
     private string _filtroPresupuesto = string.Empty;
+    private bool _actualizando;
+    private bool _cancelarActualizacion;
 
     private static string RutaVistaPrevia => Path.Combine(ConfiguracionImagenes.Carpeta, "vista-previa", "vista-previa");
 
@@ -165,6 +169,7 @@ public partial class VentanaImagenesActividad : Window
         string? actividadAMantener = presupuesto.Codigo == _presupuesto?.Codigo ? _actividad?.Codigo : null;
         _presupuesto = presupuesto;
         _registro = new RegistroLocal(presupuesto.Codigo);
+        BtnActualizarTodas.IsEnabled = true;
 
         try
         {
@@ -248,7 +253,8 @@ public partial class VentanaImagenesActividad : Window
     {
         PanelEditor.Visibility = Visibility.Collapsed;
         PanelTablero.Visibility = Visibility.Visible;
-        BloquearNavegacion(false);
+        // Durante "Actualizar" el tablero se redibuja tras cada subida, pero la navegación sigue bloqueada.
+        BloquearNavegacion(_actualizando);
 
         if (_actividad is null || _registro is null)
         {
@@ -275,7 +281,7 @@ public partial class VentanaImagenesActividad : Window
             (tarjetas.Count > 0 ? $" ({deEsteModelo} de este modelo)" : string.Empty);
         LstImagenes.ItemsSource = tarjetas;
         TxtSinImagenes.Visibility = tarjetas.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        BtnNuevaImagen.IsEnabled = true;
+        BtnNuevaImagen.IsEnabled = !_actualizando;
     }
 
     private void TarjetaImagen_Click(object sender, MouseButtonEventArgs e)
@@ -283,7 +289,7 @@ public partial class VentanaImagenesActividad : Window
         if ((sender as FrameworkElement)?.DataContext is not TarjetaImagen tarjeta) return;
         if (LstImagenes.ItemsSource is not List<TarjetaImagen> tarjetas) return;
 
-        var visor = new VisorImagen(tarjetas, tarjetas.IndexOf(tarjeta)) { Owner = this };
+        var visor = new VisorImagen(tarjetas, tarjetas.IndexOf(tarjeta), ActualizarUnaAsync) { Owner = this };
         visor.Show();
     }
 
@@ -489,7 +495,17 @@ public partial class VentanaImagenesActividad : Window
             NombreVistaRevit = _seleccion.NombreVista,
             IdModelo = _puente.IdModeloActivo,
             NombreModelo = _puente.NombreModeloActivo,
-            Colores = _seleccion.Tipos.Select(t => new ColorDeTipo { NombreTipo = t.Nombre, ColorHex = t.ColorHex }).ToList(),
+            Colores = _seleccion.Tipos.Select(t => new ColorDeTipo
+            {
+                NombreTipo = t.Nombre,
+                ColorHex = t.ColorHex,
+                IdTipo = t.IdTipo,
+                UniqueIdsElementos = t.UniqueIdsElementos.ToList(),
+            }).ToList(),
+            UniqueIdVista = _seleccion.UniqueIdVista,
+            MismoTipo = _seleccion.MismoTipo,
+            Camara = _seleccion.Camara,
+            Version = 1,
             RutaLocal = rutaPng,
             Fecha = DateTime.Now,
         };
@@ -514,8 +530,11 @@ public partial class VentanaImagenesActividad : Window
             if (r.Exito || (r.CodigoOcupado && !esNueva))
             {
                 imagen.Url = r.Url;
+                imagen.PublicIdCloudinary = r.PublicId;
                 _registro?.Guardar();
                 Estado($"{imagen.Codigo} subida a Cloudinary.");
+                // La versión anterior se borra solo cuando la nueva ya está arriba (decisión 3 del plan).
+                await BorrarVersionesAnterioresAsync(imagen);
                 break;
             }
 
@@ -541,23 +560,246 @@ public partial class VentanaImagenesActividad : Window
         ActualizarPendientes();
     }
 
+    /// <summary>
+    /// Borra en Cloudinary las versiones anteriores de una imagen. Si no se puede (faltan las claves o
+    /// falla la red), quedan en <see cref="ImagenActividad.PublicIdsPorBorrar"/> para "Reintentar".
+    /// </summary>
+    private async Task BorrarVersionesAnterioresAsync(ImagenActividad imagen)
+    {
+        if (!imagen.BorradoPendiente || !_subida.PuedeBorrar) return;
+
+        foreach (string publicId in imagen.PublicIdsPorBorrar.ToList())
+        {
+            // Nunca borrar la versión vigente, aunque por error haya quedado en la lista.
+            if (publicId == imagen.PublicIdCloudinary)
+            {
+                imagen.PublicIdsPorBorrar.Remove(publicId);
+                continue;
+            }
+
+            string? error = await _subida.BorrarAsync(publicId);
+            if (error is null) imagen.PublicIdsPorBorrar.Remove(publicId);
+            else Estado($"{imagen.Codigo}: no se pudo borrar la versión anterior en Cloudinary ({error}).");
+        }
+        _registro?.Guardar();
+    }
+
     private void ActualizarPendientes()
     {
-        int pendientes = _registro?.Todas.Count(i => i.SubidaPendiente) ?? 0;
+        int pendientes = _registro?.Todas.Count(i => i.SubidaPendiente || i.BorradoPendiente) ?? 0;
         BtnReintentar.Visibility = pendientes > 0 ? Visibility.Visible : Visibility.Collapsed;
-        BtnReintentar.Content = $"Reintentar subidas pendientes ({pendientes})";
+        BtnReintentar.Content = $"Reintentar pendientes ({pendientes})";
     }
 
     private async void BtnReintentar_Click(object sender, RoutedEventArgs e)
     {
         if (_registro is null) return;
         BtnReintentar.IsEnabled = false;
-        foreach (ImagenActividad imagen in _registro.Todas.Where(i => i.SubidaPendiente).ToList())
+
+        // Se vuelve a leer el .env: si se agregaron las claves de Cloudinary, ya se pueden usar sin
+        // cerrar el add-in.
+        _subida = new SubidaCloudinary(ConfiguracionImagenes.Cargar());
+
+        foreach (ImagenActividad imagen in _registro.Todas.Where(i => i.SubidaPendiente || i.BorradoPendiente).ToList())
         {
-            Estado($"Subiendo {imagen.Codigo}…");
-            await SubirAsync(imagen, esNueva: false);
+            if (imagen.SubidaPendiente)
+            {
+                Estado($"Subiendo {imagen.Codigo}…");
+                await SubirAsync(imagen, esNueva: false);
+            }
+            else
+            {
+                Estado($"Borrando versiones anteriores de {imagen.Codigo}…");
+                await BorrarVersionesAnterioresAsync(imagen);
+            }
         }
+
+        if (!_subida.PuedeBorrar && _registro.Todas.Any(i => i.BorradoPendiente))
+            Estado($"Hay versiones anteriores por borrar: falta CLOUDINARY_API_KEY o CLOUDINARY_API_SECRET en {ConfiguracionImagenes.RutaEnv}.");
+
+        if (PanelTablero.Visibility == Visibility.Visible) MostrarTablero();
+        ActualizarPendientes();
         BtnReintentar.IsEnabled = true;
+    }
+
+    // ───────────────────────────── Actualizar imágenes (issue #186) ─────────────────────────────
+
+    private async void BtnActualizarImagen_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is TarjetaImagen tarjeta)
+            await ActualizarUnaAsync(tarjeta.Imagen);
+    }
+
+    /// <summary>"Actualizar esta": desde la tarjeta o desde el visor en grande.</summary>
+    private async Task ActualizarUnaAsync(ImagenActividad imagen)
+    {
+        if (_actualizando || _registro is null) return;
+
+        Actualizando(true);
+        Estado($"Actualizando {imagen.Codigo} en Revit…");
+        ResultadoActualizacion r = await ActualizarImagenAsync(imagen);
+        Actualizando(false);
+        if (PanelTablero.Visibility == Visibility.Visible) MostrarTablero();
+        ActualizarPendientes();
+
+        if (r.Estado != EstadoActualizacion.Actualizada)
+        {
+            Estado($"{imagen.Codigo} no se actualizó.");
+            Avisar($"{imagen.Codigo} no se actualizó: {r.Detalle}");
+        }
+        else if (r.Faltantes > 0)
+        {
+            Avisar($"{imagen.Codigo} se actualizó, pero {TextoFaltantes(r.Faltantes)} y no sale en la imagen.");
+        }
+    }
+
+    /// <summary>"Actualizar imágenes": todas las del presupuesto (decisión 6 del plan).</summary>
+    private async void BtnActualizarTodas_Click(object sender, RoutedEventArgs e)
+    {
+        if (_actualizando || _registro is null || _presupuesto is null) return;
+
+        List<ImagenActividad> todas = _registro.Todas.OrderBy(i => i.Codigo, StringComparer.Ordinal).ToList();
+        List<ImagenActividad> deOtroModelo = todas.Where(i => !i.EsDelModelo(_puente.IdModeloActivo)).ToList();
+        List<ImagenActividad> sinDatos = todas.Except(deOtroModelo).Where(i => !i.TieneDatosParaActualizar).ToList();
+        List<ImagenActividad> aActualizar = todas.Except(deOtroModelo).Except(sinDatos).ToList();
+
+        if (aActualizar.Count == 0)
+        {
+            Avisar(todas.Count == 0
+                ? $"El presupuesto {_presupuesto.Codigo} no tiene imágenes guardadas en esta PC."
+                : $"Ninguna imagen de {_presupuesto.Codigo} se puede actualizar desde este modelo " +
+                  $"({deOtroModelo.Count} de otro modelo, {sinDatos.Count} anteriores a la actualización automática).");
+            return;
+        }
+
+        if (MessageBox.Show(this,
+                $"Se van a volver a generar {aActualizar.Count} imagen(es) de {_presupuesto.Codigo} con el modelo como está ahora. " +
+                "Cada imagen conserva su código, nombre, descripción y colores; en Cloudinary se reemplaza la versión anterior.\n\n¿Continuar?",
+                "CQEING · Actualizar imágenes", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        Actualizando(true);
+        var actualizadas = new List<string>();
+        var conFaltantes = new List<string>();
+        var conError = new List<string>();
+        int hechas = 0;
+        foreach (ImagenActividad imagen in aActualizar)
+        {
+            if (_cancelarActualizacion) break;
+            hechas++;
+            Estado($"Actualizando {hechas} de {aActualizar.Count} · {imagen.Codigo}…");
+
+            ResultadoActualizacion r = await ActualizarImagenAsync(imagen);
+            if (r.Estado != EstadoActualizacion.Actualizada) conError.Add($"{imagen.Codigo}: {r.Detalle}");
+            else if (r.Faltantes > 0) conFaltantes.Add($"{imagen.Codigo}: {TextoFaltantes(r.Faltantes)}");
+            else actualizadas.Add(imagen.Codigo);
+        }
+        bool cancelada = _cancelarActualizacion;
+        Actualizando(false);
+        if (PanelTablero.Visibility == Visibility.Visible) MostrarTablero();
+        RefrescarEstructura();
+        ActualizarPendientes();
+
+        var resumen = new System.Text.StringBuilder();
+        if (cancelada) resumen.AppendLine($"Cancelada: quedaron {aActualizar.Count - hechas} imagen(es) sin actualizar.").AppendLine();
+        resumen.AppendLine($"Actualizadas: {actualizadas.Count + conFaltantes.Count}");
+        foreach (string linea in conFaltantes) resumen.AppendLine($"   · {linea}");
+        if (deOtroModelo.Count > 0) resumen.AppendLine($"Omitidas por ser de otro modelo: {deOtroModelo.Count}");
+        if (sinDatos.Count > 0)
+            resumen.AppendLine($"Omitidas por ser anteriores a la actualización automática (rehacer con Nueva imagen): {sinDatos.Count}");
+        if (conError.Count > 0)
+        {
+            resumen.AppendLine($"Con error: {conError.Count}");
+            foreach (string linea in conError) resumen.AppendLine($"   · {linea}");
+        }
+        int pendientes = aActualizar.Count(i => i.SubidaPendiente);
+        if (pendientes > 0)
+            resumen.AppendLine().AppendLine($"{pendientes} quedaron solo en esta PC (subida pendiente): usa \"Reintentar pendientes\".");
+
+        Estado($"Actualización terminada: {actualizadas.Count + conFaltantes.Count} actualizadas, {conError.Count} con error.");
+        MessageBox.Show(this, resumen.ToString(), "CQEING · Actualizar imágenes", MessageBoxButton.OK,
+            conError.Count > 0 || conFaltantes.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
+    private void BtnCancelarActualizacion_Click(object sender, RoutedEventArgs e)
+    {
+        _cancelarActualizacion = true;
+        BtnCancelarActualizacion.IsEnabled = false;
+        Estado("Cancelando: se termina la imagen en curso…");
+    }
+
+    /// <summary>
+    /// Rehace una imagen: Revit genera el PNG nuevo, se guarda como la versión siguiente, se sube y,
+    /// ya arriba, se borra la anterior. El código, el nombre, la descripción y los colores no cambian.
+    /// </summary>
+    private async Task<ResultadoActualizacion> ActualizarImagenAsync(ImagenActividad imagen)
+    {
+        if (!imagen.EsDelModelo(_puente.IdModeloActivo))
+            return ResultadoActualizacion.NoSe("es de otro modelo; ábrela con el modelo del que salió.");
+        if (!imagen.TieneDatosParaActualizar)
+            return ResultadoActualizacion.NoSe("es anterior a la actualización automática; rehazla con Nueva imagen.");
+
+        int versionNueva = imagen.Version + 1;
+        string rutaSinExtension = _registro!.RutaParaImagen(imagen.PublicIdDeVersion(versionNueva));
+
+        // La respuesta de Revit llega por callback; se espera sin bloquear la ventana.
+        var tcs = new TaskCompletionSource<(ResultadoRecaptura?, string?)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _puente.Recapturar(imagen, rutaSinExtension, (r, error) => tcs.TrySetResult((r, error)));
+        var (recaptura, errorRevit) = await tcs.Task;
+        if (recaptura is null) return ResultadoActualizacion.NoSe(errorRevit ?? "Revit no generó la imagen.");
+
+        // La versión que está en Cloudinary pasa a "por borrar". Las imágenes subidas antes de guardar
+        // el public_id se identifican por su URL.
+        string publicIdAnterior = imagen.PublicIdCloudinary.Length > 0
+            ? imagen.PublicIdCloudinary
+            : SubidaCloudinary.PublicIdDesdeUrl(imagen.Url);
+        if (publicIdAnterior.Length > 0 && !imagen.PublicIdsPorBorrar.Contains(publicIdAnterior))
+            imagen.PublicIdsPorBorrar.Add(publicIdAnterior);
+
+        string rutaAnterior = imagen.RutaLocal;
+        imagen.Version = versionNueva;
+        imagen.RutaLocal = recaptura.RutaPng;
+        imagen.NombreVistaRevit = recaptura.NombreVista;
+        imagen.Fecha = DateTime.Now;
+        imagen.Url = null;
+        imagen.PublicIdCloudinary = string.Empty;
+        _registro.Guardar();
+
+        if (!string.Equals(rutaAnterior, recaptura.RutaPng, StringComparison.OrdinalIgnoreCase) && File.Exists(rutaAnterior))
+        {
+            try { File.Delete(rutaAnterior); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Abierto en otro programa: queda en la carpeta, no estorba.
+            }
+        }
+
+        await SubirAsync(imagen, esNueva: false);
+        return ResultadoActualizacion.Hecha(recaptura.Faltantes);
+    }
+
+    private void Actualizando(bool actualizando)
+    {
+        _actualizando = actualizando;
+        _cancelarActualizacion = false;
+        BtnActualizarTodas.IsEnabled = !actualizando && _registro is not null;
+        BtnNuevaImagen.IsEnabled = !actualizando && _actividad is not null;
+        BtnReintentar.IsEnabled = !actualizando;
+        LstImagenes.IsEnabled = !actualizando;
+        BtnCancelarActualizacion.IsEnabled = true;
+        BtnCancelarActualizacion.Visibility = actualizando ? Visibility.Visible : Visibility.Collapsed;
+        BloquearNavegacion(actualizando);
+    }
+
+    private static string TextoFaltantes(int n) =>
+        n == 1 ? "1 elemento ya no está en el modelo" : $"{n} elementos ya no están en el modelo";
+
+    private enum EstadoActualizacion { Actualizada, NoActualizada }
+
+    private sealed record ResultadoActualizacion(EstadoActualizacion Estado, string Detalle, int Faltantes)
+    {
+        public static ResultadoActualizacion Hecha(int faltantes) => new(EstadoActualizacion.Actualizada, string.Empty, faltantes);
+        public static ResultadoActualizacion NoSe(string motivo) => new(EstadoActualizacion.NoActualizada, motivo, 0);
     }
 
     // ───────────────────────────── Utilidades ─────────────────────────────

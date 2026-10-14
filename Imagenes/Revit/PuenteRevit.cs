@@ -84,13 +84,147 @@ public sealed class PuenteRevit : IPuenteRevit
                 var vista = doc.GetElement(new ElementId(seleccion.IdVista)) as View
                     ?? throw new InvalidOperationException($"La vista \"{seleccion.NombreVista}\" ya no existe.");
 
-                alTerminar(CapturaImagen.Exportar(doc, vista, seleccion, rutaSinExtension), null);
+                string ruta = SinSeleccion(app.ActiveUIDocument, () => CapturaImagen.Exportar(doc, vista, seleccion, rutaSinExtension));
+                seleccion.Camara = CapturaImagen.CamaraDe(vista);
+                alTerminar(ruta, null);
             }
             catch (Exception ex)
             {
                 alTerminar(null, ex.Message);
             }
         });
+    }
+
+    public void Recapturar(ImagenActividad imagen, string rutaSinExtension, Action<ResultadoRecaptura?, string?> alTerminar)
+    {
+        EjecutorRevit.Ejecutar(app =>
+        {
+            try
+            {
+                Document doc = app.ActiveUIDocument?.Document
+                    ?? throw new InvalidOperationException("No hay ningún modelo abierto en Revit.");
+                if (IdentificadorModelo.Obtener(doc) != IdModeloActivo)
+                    throw new InvalidOperationException("El modelo activo en Revit cambió. Vuelve al modelo donde abriste el add-in.");
+
+                View vista = VistaParaRecapturar(doc, imagen);
+                var (seleccion, faltantes) = ArmarSeleccionGuardada(doc, vista, imagen);
+                if (seleccion.TotalElementos == 0)
+                    throw new InvalidOperationException("Ninguno de los elementos de la imagen existe ya en el modelo.");
+
+                string ruta = SinSeleccion(app.ActiveUIDocument, () => CapturaImagen.Exportar(doc, vista, seleccion, rutaSinExtension, imagen.Camara));
+                alTerminar(new ResultadoRecaptura
+                {
+                    RutaPng = ruta,
+                    Encontrados = seleccion.TotalElementos,
+                    Faltantes = faltantes,
+                    NombreVista = vista.Name,
+                }, null);
+            }
+            catch (Exception ex)
+            {
+                alTerminar(null, ex.Message);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Exporta con la selección de Revit vacía y después la devuelve. Revit pinta el resaltado de
+    /// selección (cian translúcido) en la imagen exportada y tapa los colores: visto en Revit real el
+    /// 2026-10-14 (issue #186), con los elementos todavía seleccionados después de pulsar Aceptar.
+    /// </summary>
+    private static string SinSeleccion(UIDocument uidoc, Func<string> exportar)
+    {
+        ICollection<ElementId> seleccionUsuario = uidoc.Selection.GetElementIds();
+        if (seleccionUsuario.Count == 0) return exportar();
+
+        uidoc.Selection.SetElementIds(new List<ElementId>());
+        try
+        {
+            return exportar();
+        }
+        finally
+        {
+            try { uidoc.Selection.SetElementIds(seleccionUsuario.Where(id => uidoc.Document.GetElement(id) is not null).ToList()); }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[PuenteRevit] No se pudo devolver la selección: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>
+    /// La vista donde se hizo la imagen. Si la borraron, en 3D sirve cualquier vista 3D (se le aplica
+    /// la cámara guardada); en planta no hay forma segura de elegir otra, así que se avisa.
+    /// </summary>
+    private static View VistaParaRecapturar(Document doc, ImagenActividad imagen)
+    {
+        if (doc.GetElement(imagen.UniqueIdVista) is View vista && CapturaImagen.EsVistaSoportada(vista, out _))
+            return vista;
+
+        if (imagen.TipoVista == "3D" && imagen.Camara?.TieneOrientacion3D == true)
+        {
+            View3D? otra = new FilteredElementCollector(doc)
+                .OfClass(typeof(View3D))
+                .Cast<View3D>()
+                .FirstOrDefault(v => !v.IsTemplate && !v.IsPerspective);
+            if (otra is not null) return otra;
+        }
+
+        throw new InvalidOperationException(
+            $"La vista \"{imagen.NombreVistaRevit}\" ya no existe en el modelo. Rehaz la imagen con Nueva imagen.");
+    }
+
+    /// <summary>
+    /// Vuelve a armar la selección desde lo guardado: cada grupo de color con sus elementos por
+    /// <c>UniqueId</c>. Los que ya no existen se cuentan como faltantes. Con "mismo tipo" se suman los
+    /// elementos visibles de ese tipo (decisión 5 del plan). Un elemento va en un solo grupo.
+    /// </summary>
+    private static (ResultadoSeleccion seleccion, int faltantes) ArmarSeleccionGuardada(Document doc, View vista, ImagenActividad imagen)
+    {
+        var usados = new HashSet<long>();
+        int faltantes = 0;
+
+        Dictionary<long, List<Element>> visiblesPorTipo = imagen.MismoTipo
+            ? new FilteredElementCollector(doc, vista.Id).WhereElementIsNotElementType()
+                .Where(EsDeModelo)
+                .GroupBy(e => e.GetTypeId().Value)
+                .ToDictionary(g => g.Key, g => g.ToList())
+            : new();
+
+        var tipos = new List<TipoSeleccionado>();
+        foreach (ColorDeTipo grupo in imagen.Colores)
+        {
+            var elementos = new List<Element>();
+            foreach (string uniqueId in grupo.UniqueIdsElementos)
+            {
+                Element? e = doc.GetElement(uniqueId);
+                if (e is null || !EsDeModelo(e)) { faltantes++; continue; }
+                if (usados.Add(e.Id.Value)) elementos.Add(e);
+            }
+            if (imagen.MismoTipo && visiblesPorTipo.TryGetValue(grupo.IdTipo, out List<Element>? delTipo))
+            {
+                elementos.AddRange(delTipo.Where(e => usados.Add(e.Id.Value)));
+            }
+            if (elementos.Count == 0) continue;
+
+            tipos.Add(new TipoSeleccionado
+            {
+                IdTipo = grupo.IdTipo,
+                Nombre = grupo.NombreTipo,
+                ColorHex = grupo.ColorHex,
+                IdsElementos = elementos.Select(e => e.Id.Value).ToList(),
+                UniqueIdsElementos = elementos.Select(e => e.UniqueId).ToList(),
+            });
+        }
+
+        CapturaImagen.EsVistaSoportada(vista, out string tipoVista);
+        var seleccion = new ResultadoSeleccion
+        {
+            Tipos = tipos,
+            IdVista = vista.Id.Value,
+            NombreVista = vista.Name,
+            UniqueIdVista = vista.UniqueId,
+            TipoVista = tipoVista,
+            MismoTipo = imagen.MismoTipo,
+        };
+        return (seleccion, faltantes);
     }
 
     private void AlCambiarSeleccion(object? sender, SelectionChangedEventArgs e)
@@ -160,11 +294,20 @@ public sealed class PuenteRevit : IPuenteRevit
                 Categoria = g.First().Category?.Name ?? string.Empty,
                 Nombre = NombreTipo(doc, g.First()),
                 IdsElementos = g.Select(e => e.Id.Value).ToList(),
+                UniqueIdsElementos = g.Select(e => e.UniqueId).ToList(),
             })
             .OrderBy(t => t.Categoria).ThenBy(t => t.Nombre)
             .ToList();
 
-        return new ResultadoSeleccion { Tipos = tipos, IdVista = vista.Id.Value, NombreVista = vista.Name, TipoVista = tipoVista };
+        return new ResultadoSeleccion
+        {
+            Tipos = tipos,
+            IdVista = vista.Id.Value,
+            NombreVista = vista.Name,
+            UniqueIdVista = vista.UniqueId,
+            TipoVista = tipoVista,
+            MismoTipo = _mismoTipo,
+        };
     }
 
     /// <summary>"Mismo tipo" = todos los elementos con el mismo <c>GetTypeId()</c> visibles en la vista.</summary>

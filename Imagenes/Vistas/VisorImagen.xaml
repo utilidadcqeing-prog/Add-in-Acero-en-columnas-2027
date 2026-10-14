@@ -30,6 +30,9 @@
         <!-- Datos de la imagen -->
         <DockPanel Grid.Column="1" Margin="16">
             <StackPanel DockPanel.Dock="Bottom">
+                <Button x:Name="BtnActualizar" Content="Actualizar esta imagen" Padding="10,6" Margin="0,0,0,8"
+                        Background="White" BorderBrush="#2A68DE" Foreground="#2A68DE" FontWeight="SemiBold"
+                        ToolTipService.ShowOnDisabled="True" Click="BtnActualizar_Click"/>
                 <Button x:Name="BtnAbrirCloudinary" Content="Abrir en el navegador" Padding="10,6" Margin="0,0,0,8"
                         Background="#2A68DE" Foreground="White" BorderBrush="#2A68DE" Click="BtnAbrirCloudinary_Click"/>
                 <Button Content="Abrir la carpeta en esta PC" Padding="10,6" Background="White" BorderBrush="#D4DBE4"
