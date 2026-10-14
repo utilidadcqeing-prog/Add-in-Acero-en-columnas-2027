@@ -47,7 +47,7 @@ public partial class VisorImagen : Window
 
         Title = $"CQEING · {imagen.Codigo} {imagen.Nombre}";
         // Se lee del disco y no de la tarjeta: después de "Actualizar" el PNG es otro.
-        var png = TarjetaImagen.CargarSinBloquear(imagen.RutaLocal);
+        var png = TarjetaImagen.CargarImagen(imagen);
         ImgGrande.Source = png;
         TxtSinArchivo.Visibility = png is null ? Visibility.Visible : Visibility.Collapsed;
 

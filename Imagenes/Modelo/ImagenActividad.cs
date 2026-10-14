@@ -57,6 +57,24 @@ public sealed class ImagenActividad
     /// <summary>Versiones anteriores que quedan por borrar en Cloudinary (faltan las claves o falló el borrado).</summary>
     public List<string> PublicIdsPorBorrar { get; set; } = new();
 
+    // ── Registro en la BD del backend (fase B, docs/planes/2026-10-14-imagenes-por-actividad-en-bd.md). ──
+
+    /// <summary><c>id_item</c> de la actividad en la API. 0 en imágenes anteriores a la fase B.</summary>
+    public int IdItem { get; set; }
+
+    /// <summary><c>id</c> del registro en la BD (lo devuelve el POST). 0 si no se conoce.</summary>
+    public int IdApi { get; set; }
+
+    /// <summary>
+    /// Si la BD tiene registrada la versión actual (su URL). Pasa a false al actualizar la imagen, hasta
+    /// que se vuelve a registrar.
+    /// </summary>
+    public bool RegistradaEnApi { get; set; }
+
+    /// <summary>Imagen que solo está en la API (hecha en otra PC): no hay archivo ni datos locales.</summary>
+    [JsonIgnore]
+    public bool SoloEnApi { get; set; }
+
     /// <summary>Ruta del PNG guardado en esta PC.</summary>
     public string RutaLocal { get; set; } = string.Empty;
 
@@ -77,7 +95,7 @@ public sealed class ImagenActividad
     /// </summary>
     [JsonIgnore]
     public bool TieneDatosParaActualizar =>
-        Colores.Count > 0 && Colores.All(c => c.UniqueIdsElementos.Count > 0) && Camara is not null;
+        !SoloEnApi && Colores.Count > 0 && Colores.All(c => c.UniqueIdsElementos.Count > 0) && Camara is not null;
 
     /// <summary>
     /// Nombre en Cloudinary de una versión: la 1 usa el código tal cual (<c>ACT_006_01</c>, como las
@@ -99,9 +117,11 @@ public sealed class ImagenActividad
 
     [JsonIgnore]
     public string TextoEstadoSubida =>
-        SubidaPendiente ? "Solo en esta PC (subida pendiente)"
+        SoloEnApi ? "Registrada en la API (hecha en otra PC)"
+        : SubidaPendiente ? "Solo en esta PC (subida pendiente)"
         : BorradoPendiente ? "Subida a Cloudinary (falta borrar la versión anterior)"
-        : "Subida a Cloudinary";
+        : !RegistradaEnApi ? "Subida a Cloudinary (sin registrar en la API)"
+        : "Subida a Cloudinary y registrada en la API";
 }
 
 /// <summary>El color que se le puso a un tipo de Revit en una imagen. Sirve de leyenda.</summary>

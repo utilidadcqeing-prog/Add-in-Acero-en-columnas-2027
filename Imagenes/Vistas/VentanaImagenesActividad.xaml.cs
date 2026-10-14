@@ -46,6 +46,12 @@ public partial class VentanaImagenesActividad : Window
     private bool _actualizando;
     private bool _cancelarActualizacion;
 
+    /// <summary>
+    /// Imágenes registradas en la API por actividad (también las de otras PCs), leídas al abrir cada
+    /// actividad (fase B). Se mezclan con las locales en el tablero.
+    /// </summary>
+    private readonly Dictionary<string, List<ImagenActividad>> _imagenesApi = new();
+
     private static string RutaVistaPrevia => Path.Combine(ConfiguracionImagenes.Carpeta, "vista-previa", "vista-previa");
 
     public VentanaImagenesActividad(IPuenteRevit puente, IntPtr ventanaRevit)
@@ -169,6 +175,7 @@ public partial class VentanaImagenesActividad : Window
         string? actividadAMantener = presupuesto.Codigo == _presupuesto?.Codigo ? _actividad?.Codigo : null;
         _presupuesto = presupuesto;
         _registro = new RegistroLocal(presupuesto.Codigo);
+        _imagenesApi.Clear();
         BtnActualizarTodas.IsEnabled = true;
 
         try
@@ -245,7 +252,33 @@ public partial class VentanaImagenesActividad : Window
         if (actividad.Codigo == _actividad?.Codigo) return;
         _actividad = actividad;
         MostrarTablero();
+        _ = CargarImagenesApiAsync(actividad);
     }
+
+    /// <summary>
+    /// Pide a la API las imágenes de la actividad (las de todas las PCs) y redibuja el tablero. Si la API
+    /// falla, el tablero sigue con las locales.
+    /// </summary>
+    private async Task CargarImagenesApiAsync(ActividadPresupuesto actividad)
+    {
+        if (_api.ModoEjemplo || actividad.IdItem <= 0 || _presupuesto is null) return;
+        try
+        {
+            _imagenesApi[actividad.Codigo] = await _api.ListarImagenesAsync(actividad.IdItem, actividad.Codigo, _presupuesto.Codigo);
+            if (_actividad?.Codigo == actividad.Codigo && PanelTablero.Visibility == Visibility.Visible) MostrarTablero();
+        }
+        catch (Exception ex)
+        {
+            Estado($"No se pudieron leer las imágenes registradas en la API: {ex.Message}");
+        }
+    }
+
+    private IEnumerable<ImagenActividad> ImagenesApiDe(string codigoActividad) =>
+        _imagenesApi.TryGetValue(codigoActividad, out List<ImagenActividad>? lista) ? lista : Enumerable.Empty<ImagenActividad>();
+
+    private int IdItemDe(string codigoActividad) =>
+        _estructura.SelectMany(c => c.Subcapitulos).SelectMany(s => s.Actividades)
+            .FirstOrDefault(a => a.Codigo == codigoActividad)?.IdItem ?? 0;
 
     // ───────────────────────────── Tablero ─────────────────────────────
 
@@ -268,8 +301,12 @@ public partial class VentanaImagenesActividad : Window
         }
 
         // Se muestran todas las imágenes de la actividad, de cualquier modelo; las de este modelo
-        // primero. El modelo va en cada imagen, no en el presupuesto.
-        List<TarjetaImagen> tarjetas = _registro.DeActividad(_actividad.Codigo)
+        // primero. El modelo va en cada imagen, no en el presupuesto. A las locales se suman las que
+        // solo están en la API (otras PCs); si un código está en los dos lados, gana la local.
+        List<ImagenActividad> locales = _registro.DeActividad(_actividad.Codigo).ToList();
+        var codigosLocales = new HashSet<string>(locales.Select(i => i.Codigo), StringComparer.OrdinalIgnoreCase);
+        List<TarjetaImagen> tarjetas = locales
+            .Concat(ImagenesApiDe(_actividad.Codigo).Where(i => !codigosLocales.Contains(i.Codigo)))
             .Select(i => new TarjetaImagen(i, _puente.IdModeloActivo))
             .OrderByDescending(t => t.EsDeEsteModelo)
             .ToList();
@@ -317,8 +354,13 @@ public partial class VentanaImagenesActividad : Window
         BloquearNavegacion(true);
     }
 
+    /// <summary>
+    /// Siguiente código libre mirando las imágenes de esta PC y las registradas en la API (otras PCs),
+    /// para que dos PCs no generen el mismo código (fase B, paso 4).
+    /// </summary>
     private string SiguienteCodigo() =>
-        CodigoImagen.Armar(_actividad!.Codigo, CodigoImagen.SiguienteNumero(_actividad.Codigo, _registro!.Todas.Select(i => i.Codigo)));
+        CodigoImagen.Armar(_actividad!.Codigo, CodigoImagen.SiguienteNumero(_actividad.Codigo,
+            _registro!.Todas.Select(i => i.Codigo).Concat(ImagenesApiDe(_actividad.Codigo).Select(i => i.Codigo))));
 
     private void BloquearNavegacion(bool bloquear)
     {
@@ -506,6 +548,7 @@ public partial class VentanaImagenesActividad : Window
             MismoTipo = _seleccion.MismoTipo,
             Camara = _seleccion.Camara,
             Version = 1,
+            IdItem = _actividad.IdItem,
             RutaLocal = rutaPng,
             Fecha = DateTime.Now,
         };
@@ -535,6 +578,7 @@ public partial class VentanaImagenesActividad : Window
                 Estado($"{imagen.Codigo} subida a Cloudinary.");
                 // La versión anterior se borra solo cuando la nueva ya está arriba (decisión 3 del plan).
                 await BorrarVersionesAnterioresAsync(imagen);
+                await RegistrarEnApiAsync(imagen);
                 break;
             }
 
@@ -584,9 +628,35 @@ public partial class VentanaImagenesActividad : Window
         _registro?.Guardar();
     }
 
+    /// <summary>
+    /// Registra la versión actual en la BD (fase B, paso 3): POST si es la primera versión; si la imagen
+    /// se actualizó (#186), el registro viejo se reemplaza (decisión 2 del plan de la fase B). Si falla,
+    /// queda pendiente para "Reintentar pendientes". En modo ejemplo no hace nada.
+    /// </summary>
+    private async Task RegistrarEnApiAsync(ImagenActividad imagen)
+    {
+        if (!RegistroPendiente(imagen)) return;
+        if (imagen.IdItem <= 0) imagen.IdItem = IdItemDe(imagen.CodigoActividad);
+
+        string? error = imagen.Version > 1 ? await _api.ActualizarImagenAsync(imagen) : await _api.RegistrarImagenAsync(imagen);
+        if (error is null)
+        {
+            imagen.RegistradaEnApi = true;
+            Estado($"{imagen.Codigo} subida a Cloudinary y registrada en la API.");
+        }
+        else
+        {
+            Estado($"{imagen.Codigo} está en Cloudinary, pero no se pudo registrar en la API: {error}");
+        }
+        _registro?.Guardar();
+    }
+
+    private bool RegistroPendiente(ImagenActividad imagen) =>
+        !_api.ModoEjemplo && !imagen.SoloEnApi && !imagen.SubidaPendiente && !imagen.RegistradaEnApi;
+
     private void ActualizarPendientes()
     {
-        int pendientes = _registro?.Todas.Count(i => i.SubidaPendiente || i.BorradoPendiente) ?? 0;
+        int pendientes = _registro?.Todas.Count(i => i.SubidaPendiente || i.BorradoPendiente || RegistroPendiente(i)) ?? 0;
         BtnReintentar.Visibility = pendientes > 0 ? Visibility.Visible : Visibility.Collapsed;
         BtnReintentar.Content = $"Reintentar pendientes ({pendientes})";
     }
@@ -600,17 +670,24 @@ public partial class VentanaImagenesActividad : Window
         // cerrar el add-in.
         _subida = new SubidaCloudinary(ConfiguracionImagenes.Cargar());
 
-        foreach (ImagenActividad imagen in _registro.Todas.Where(i => i.SubidaPendiente || i.BorradoPendiente).ToList())
+        foreach (ImagenActividad imagen in _registro.Todas.Where(i => i.SubidaPendiente || i.BorradoPendiente || RegistroPendiente(i)).ToList())
         {
             if (imagen.SubidaPendiente)
             {
+                // Al subir, también borra las versiones viejas y registra en la API.
                 Estado($"Subiendo {imagen.Codigo}…");
                 await SubirAsync(imagen, esNueva: false);
+                continue;
             }
-            else
+            if (imagen.BorradoPendiente)
             {
                 Estado($"Borrando versiones anteriores de {imagen.Codigo}…");
                 await BorrarVersionesAnterioresAsync(imagen);
+            }
+            if (RegistroPendiente(imagen))
+            {
+                Estado($"Registrando {imagen.Codigo} en la API…");
+                await RegistrarEnApiAsync(imagen);
             }
         }
 
@@ -763,6 +840,7 @@ public partial class VentanaImagenesActividad : Window
         imagen.Fecha = DateTime.Now;
         imagen.Url = null;
         imagen.PublicIdCloudinary = string.Empty;
+        imagen.RegistradaEnApi = false; // la BD apunta a la URL vieja hasta que se registre la nueva
         _registro.Guardar();
 
         if (!string.Equals(rutaAnterior, recaptura.RutaPng, StringComparison.OrdinalIgnoreCase) && File.Exists(rutaAnterior))
