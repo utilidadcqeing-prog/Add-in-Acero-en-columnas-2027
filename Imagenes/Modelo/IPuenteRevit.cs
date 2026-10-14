@@ -40,4 +40,23 @@ public interface IPuenteRevit
     /// fantasma y exporta. Devuelve la ruta del PNG o un error en texto.
     /// </summary>
     void Capturar(ResultadoSeleccion seleccion, string rutaSinExtension, Action<string?, string?> alTerminar);
+
+    /// <summary>
+    /// Rehace una imagen guardada (issue #186): busca la vista y los elementos por <c>UniqueId</c>,
+    /// les pone los mismos colores, aplica la cámara guardada y exporta. Los elementos que ya no
+    /// existen se omiten y se cuentan en <see cref="ResultadoRecaptura.Faltantes"/>.
+    /// </summary>
+    void Recapturar(ImagenActividad imagen, string rutaSinExtension, Action<ResultadoRecaptura?, string?> alTerminar);
+}
+
+public sealed class ResultadoRecaptura
+{
+    public string RutaPng { get; init; } = string.Empty;
+    public int Encontrados { get; init; }
+
+    /// <summary>Elementos guardados que ya no están en el modelo.</summary>
+    public int Faltantes { get; init; }
+
+    /// <summary>Vista usada (puede ser otra 3D si la original se borró).</summary>
+    public string NombreVista { get; init; } = string.Empty;
 }

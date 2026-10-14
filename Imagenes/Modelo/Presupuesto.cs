@@ -37,6 +37,8 @@ public sealed class Subcapitulo
 /// </summary>
 public sealed class ActividadPresupuesto
 {
+    /// <summary><c>id_item</c> de la API: las imágenes se registran en la BD contra este id (fase B).</summary>
+    public int IdItem { get; init; }
     public string Codigo { get; init; } = string.Empty;
     public string Descripcion { get; init; } = string.Empty;
     public string Unidad { get; init; } = string.Empty;

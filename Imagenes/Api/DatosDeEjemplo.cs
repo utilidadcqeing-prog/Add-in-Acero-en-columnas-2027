@@ -24,7 +24,7 @@ internal static class DatosDeEjemplo
                 Codigo = "CAP_01", Nombre = "PRELIMINARES",
                 Subcapitulos =
                 {
-                    new() { Codigo = "SUB_01_01", Nombre = "Replanteo", Items = { Item("ACT_001", "Localización y replanteo", "m2") } },
+                    new() { Codigo = "SUB_01_01", Nombre = "Replanteo", Items = { Item(901, "ACT_001", "Localización y replanteo", "m2") } },
                 },
             },
             new()
@@ -35,7 +35,7 @@ internal static class DatosDeEjemplo
                     new()
                     {
                         Codigo = "SUB_02_01", Nombre = "Zapatas",
-                        Items = { Item("ACT_002", "Excavación de zapatas", "m3"), Item("ACT_003", "Concreto de zapatas", "m3") },
+                        Items = { Item(902, "ACT_002", "Excavación de zapatas", "m3"), Item(903, "ACT_003", "Concreto de zapatas", "m3") },
                     },
                 },
             },
@@ -49,11 +49,11 @@ internal static class DatosDeEjemplo
                         Codigo = "SUB_03_01", Nombre = "Concreto",
                         Items =
                         {
-                            Item("ACT_006", "Columnas en concreto 25x30 y 30x30", "m3"),
-                            Item("ACT_007", "Vigas aéreas nivel +3.50", "m3"),
+                            Item(904, "ACT_006", "Columnas en concreto 25x30 y 30x30", "m3"),
+                            Item(905, "ACT_007", "Vigas aéreas nivel +3.50", "m3"),
                         },
                     },
-                    new() { Codigo = "SUB_03_02", Nombre = "Acero", Items = { Item("ACT_008", "Acero de refuerzo", "kg") } },
+                    new() { Codigo = "SUB_03_02", Nombre = "Acero", Items = { Item(906, "ACT_008", "Acero de refuerzo", "kg") } },
                 },
             },
             new()
@@ -61,12 +61,13 @@ internal static class DatosDeEjemplo
                 Codigo = "CAP_04", Nombre = "MAMPOSTERÍA",
                 Subcapitulos =
                 {
-                    new() { Codigo = "SUB_04_01", Nombre = "Muros", Items = { Item("ACT_010", "Muro en bloque e = 0.12", "m2") } },
+                    new() { Codigo = "SUB_04_01", Nombre = "Muros", Items = { Item(907, "ACT_010", "Muro en bloque e = 0.12", "m2") } },
                 },
             },
         },
     };
 
-    private static ItemDto Item(string codigo, string descripcion, string unidad) =>
-        new() { CodigoActividad = codigo, Descripcion = descripcion, Unidad = unidad };
+    /// <summary>Los <c>id_item</c> son inventados (901, 902…): en modo ejemplo no se registra nada en la API.</summary>
+    private static ItemDto Item(int idItem, string codigo, string descripcion, string unidad) =>
+        new() { IdItem = idItem, CodigoActividad = codigo, Descripcion = descripcion, Unidad = unidad };
 }

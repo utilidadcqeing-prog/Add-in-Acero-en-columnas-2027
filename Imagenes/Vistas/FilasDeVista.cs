@@ -60,7 +60,7 @@ public sealed class TarjetaImagen
     public TarjetaImagen(ImagenActividad imagen, string idModeloActivo)
     {
         Imagen = imagen;
-        Miniatura = CargarSinBloquear(imagen.RutaLocal);
+        Miniatura = CargarImagen(imagen);
         EsDeEsteModelo = imagen.EsDelModelo(idModeloActivo);
     }
 
@@ -70,7 +70,20 @@ public sealed class TarjetaImagen
     /// <summary>Si la imagen salió del modelo abierto ahora en Revit.</summary>
     public bool EsDeEsteModelo { get; }
 
-    public string TextoVista => $"Vista {Imagen.TipoVista} · {Imagen.NombreVistaRevit}";
+    public string TextoVista =>
+        $"Vista {Imagen.TipoVista} · {Imagen.NombreVistaRevit}" + (Imagen.Version > 1 ? $" · versión {Imagen.Version}" : string.Empty);
+
+    /// <summary>
+    /// Si se puede rehacer sola (issue #186): tiene que ser del modelo abierto y guardar los
+    /// <c>UniqueId</c> (decisión 7 del plan <c>docs/planes/2026-10-14-actualizar-imagenes.md</c>).
+    /// </summary>
+    public bool PuedeActualizar => EsDeEsteModelo && Imagen.TieneDatosParaActualizar;
+
+    public string TextoActualizar =>
+        Imagen.SoloEnApi ? "Imagen hecha en otra PC: se actualiza desde la PC donde se creó."
+        : !EsDeEsteModelo ? "Solo se puede actualizar con el modelo del que salió abierto en Revit."
+        : !Imagen.TieneDatosParaActualizar ? "Imagen anterior a la actualización automática: rehazla con Nueva imagen."
+        : "Vuelve a generar la imagen con el modelo como está ahora (mismo código, nombre, descripción y colores).";
 
     public string TextoModelo =>
         string.IsNullOrEmpty(Imagen.IdModelo) ? "Modelo: sin registrar (imagen anterior)"
@@ -83,6 +96,29 @@ public sealed class TarjetaImagen
     /// Carga la imagen en memoria y suelta el archivo enseguida (<c>OnLoad</c>): si no, WPF lo deja
     /// bloqueado y no se puede renombrar ni reemplazar mientras el tablero esté abierto.
     /// </summary>
+    /// <summary>
+    /// La imagen desde el archivo de esta PC o, si no está (imagen de otra PC, fase B), desde su URL de
+    /// Cloudinary. La de la URL se descarga sola y no se congela (no se puede mientras descarga).
+    /// </summary>
+    public static BitmapImage? CargarImagen(ImagenActividad imagen)
+    {
+        BitmapImage? local = CargarSinBloquear(imagen.RutaLocal);
+        if (local is not null || string.IsNullOrEmpty(imagen.Url)) return local;
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(imagen.Url, UriKind.Absolute);
+            bmp.EndInit();
+            return bmp;
+        }
+        catch (Exception ex) when (ex is UriFormatException or NotSupportedException or IOException)
+        {
+            return null;
+        }
+    }
+
     public static BitmapImage? CargarSinBloquear(string ruta)
     {
         if (string.IsNullOrEmpty(ruta) || !File.Exists(ruta)) return null;

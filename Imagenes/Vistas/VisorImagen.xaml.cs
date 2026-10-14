@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using practicacq.Imagenes.Modelo;
 
 namespace practicacq.Imagenes.Vistas;
 
@@ -13,12 +14,18 @@ namespace practicacq.Imagenes.Vistas;
 public partial class VisorImagen : Window
 {
     private readonly IReadOnlyList<TarjetaImagen> _tarjetas;
+    private readonly Func<ImagenActividad, Task> _actualizar;
     private int _indice;
 
-    public VisorImagen(IReadOnlyList<TarjetaImagen> tarjetas, int indiceInicial)
+    /// <param name="actualizar">
+    /// Rehace la imagen en Revit (issue #186). Lo hace la ventana principal, que es dueña del registro y
+    /// de la subida; al terminar, el visor vuelve a cargar el PNG.
+    /// </param>
+    public VisorImagen(IReadOnlyList<TarjetaImagen> tarjetas, int indiceInicial, Func<ImagenActividad, Task> actualizar)
     {
         InitializeComponent();
         _tarjetas = tarjetas;
+        _actualizar = actualizar;
         _indice = Math.Clamp(indiceInicial, 0, tarjetas.Count - 1);
 
         KeyDown += (_, e) =>
@@ -39,8 +46,10 @@ public partial class VisorImagen : Window
         var imagen = t.Imagen;
 
         Title = $"CQEING · {imagen.Codigo} {imagen.Nombre}";
-        ImgGrande.Source = t.Miniatura;
-        TxtSinArchivo.Visibility = t.Miniatura is null ? Visibility.Visible : Visibility.Collapsed;
+        // Se lee del disco y no de la tarjeta: después de "Actualizar" el PNG es otro.
+        var png = TarjetaImagen.CargarImagen(imagen);
+        ImgGrande.Source = png;
+        TxtSinArchivo.Visibility = png is null ? Visibility.Visible : Visibility.Collapsed;
 
         TxtPosicion.Text = $"Imagen {_indice + 1} de {_tarjetas.Count} · actividad {imagen.CodigoActividad}";
         TxtCodigo.Text = imagen.Codigo;
@@ -50,10 +59,12 @@ public partial class VisorImagen : Window
         TxtModelo.Foreground = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(t.ColorModelo)!;
         TxtVista.Text = $"{imagen.TipoVista} · {imagen.NombreVistaRevit}";
         LstColores.ItemsSource = imagen.Colores;
-        TxtFecha.Text = imagen.Fecha.ToString("dd/MM/yyyy HH:mm");
+        TxtFecha.Text = imagen.Fecha.ToString("dd/MM/yyyy HH:mm") + (imagen.Version > 1 ? $" · versión {imagen.Version}" : string.Empty);
         TxtSubida.Text = imagen.TextoEstadoSubida;
 
         BtnAbrirCloudinary.IsEnabled = !imagen.SubidaPendiente;
+        BtnActualizar.IsEnabled = t.PuedeActualizar;
+        BtnActualizar.ToolTip = t.TextoActualizar;
         BtnAnterior.Visibility = _tarjetas.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
         BtnSiguiente.Visibility = BtnAnterior.Visibility;
     }
@@ -68,6 +79,21 @@ public partial class VisorImagen : Window
     private void BtnAnterior_Click(object sender, RoutedEventArgs e) => Mover(-1);
 
     private void BtnSiguiente_Click(object sender, RoutedEventArgs e) => Mover(1);
+
+    private async void BtnActualizar_Click(object sender, RoutedEventArgs e)
+    {
+        BtnActualizar.IsEnabled = false;
+        BtnActualizar.Content = "Actualizando en Revit…";
+        try
+        {
+            await _actualizar(Actual.Imagen);
+        }
+        finally
+        {
+            BtnActualizar.Content = "Actualizar esta imagen";
+            if (IsLoaded) Mostrar();
+        }
+    }
 
     private void BtnAbrirCloudinary_Click(object sender, RoutedEventArgs e)
     {

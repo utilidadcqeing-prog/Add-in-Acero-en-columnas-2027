@@ -10,6 +10,12 @@ public sealed class TipoSeleccionado
     public string Categoria { get; init; } = string.Empty;
     public string Nombre { get; init; } = string.Empty;
     public List<long> IdsElementos { get; init; } = new();
+
+    /// <summary>
+    /// Los mismos elementos por <c>UniqueId</c>, que es lo que se guarda en la imagen para poder
+    /// rehacerla después (issue #186): el <c>ElementId</c> no es una referencia estable fuera de Revit.
+    /// </summary>
+    public List<string> UniqueIdsElementos { get; init; } = new();
     public string ColorHex { get; set; } = string.Empty;
 
     public string TextoCantidad => IdsElementos.Count == 1 ? "1 elemento" : $"{IdsElementos.Count} elementos";
@@ -26,6 +32,16 @@ public sealed class ResultadoSeleccion
     /// </summary>
     public long IdVista { get; init; }
     public string NombreVista { get; init; } = string.Empty;
+    public string UniqueIdVista { get; init; } = string.Empty;
+
+    /// <summary>Si se seleccionó con "mismo tipo": al actualizar se vuelven a sumar los elementos nuevos de esos tipos.</summary>
+    public bool MismoTipo { get; init; }
+
+    /// <summary>
+    /// Cámara de la vista en el momento de exportar el PNG. La llena <c>PuenteRevit.Capturar</c>, así
+    /// que siempre corresponde a la última imagen generada (vista previa o la definitiva).
+    /// </summary>
+    public CamaraVista? Camara { get; set; }
 
     /// <summary>"3D" o "Planta".</summary>
     public string TipoVista { get; init; } = string.Empty;

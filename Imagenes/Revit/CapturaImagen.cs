@@ -54,9 +54,11 @@ public static class CapturaImagen
 
     /// <summary>
     /// Exporta la vista activa con los colores de <paramref name="seleccion"/> y devuelve la ruta del
-    /// PNG generado.
+    /// PNG generado. Con <paramref name="camara"/> (al actualizar una imagen, issue #186) la copia toma
+    /// esa orientación, caja de sección o recorte en vez de los que tenga hoy la vista base.
     /// </summary>
-    public static string Exportar(Document doc, View vistaBase, ResultadoSeleccion seleccion, string rutaSinExtension)
+    public static string Exportar(Document doc, View vistaBase, ResultadoSeleccion seleccion, string rutaSinExtension,
+        CamaraVista? camara = null)
     {
         if (!EsVistaSoportada(vistaBase, out _))
             throw new InvalidOperationException("Abre una vista 3D o de planta para generar la imagen.");
@@ -78,7 +80,7 @@ public static class CapturaImagen
             using (var t = new Transaction(doc, "Preparar vista para la imagen"))
             {
                 t.Start();
-                copia = PrepararCopia(doc, vistaBase, marca, colorPorElemento);
+                copia = PrepararCopia(doc, vistaBase, marca, colorPorElemento, camara);
                 t.Commit();
             }
 
@@ -93,7 +95,20 @@ public static class CapturaImagen
                 ShadowViewsFileType = ImageFileType.PNG,
             };
             opciones.SetViewsAndSheets(new List<ElementId> { copia.Id });
-            doc.ExportImage(opciones);
+
+            // El fondo de las vistas que no son 3D (planta) sale del fondo de Revit del usuario: con el
+            // tema oscuro, la planta se exportaba sobre gris oscuro (visto en Revit real el 2026-10-14,
+            // issue #186). Se pone blanco solo durante la exportación y se devuelve el del usuario.
+            Color fondoUsuario = doc.Application.BackgroundColor;
+            try
+            {
+                doc.Application.BackgroundColor = new Color(255, 255, 255);
+                doc.ExportImage(opciones);
+            }
+            finally
+            {
+                doc.Application.BackgroundColor = fondoUsuario;
+            }
         }
         finally
         {
@@ -112,7 +127,8 @@ public static class CapturaImagen
         return destino;
     }
 
-    private static View PrepararCopia(Document doc, View vistaBase, string nombre, Dictionary<long, Color> colorPorElemento)
+    private static View PrepararCopia(Document doc, View vistaBase, string nombre, Dictionary<long, Color> colorPorElemento,
+        CamaraVista? camara)
     {
         var copia = (View)doc.GetElement(vistaBase.Duplicate(ViewDuplicateOption.Duplicate));
 
@@ -129,7 +145,7 @@ public static class CapturaImagen
         copia.DetailLevel = ViewDetailLevel.Fine;
 
         // 2. Fondo blanco: si no, sale el fondo del tema de Revit del usuario (oscuro, en la fase 0).
-        //    Solo existe para vistas 3D; en planta el fondo de exportación ya es blanco.
+        //    Solo existe para vistas 3D; en planta se cambia el fondo de Revit al exportar (ver Exportar).
         if (copia is View3D)
         {
             var blanco = new Color(255, 255, 255);
@@ -161,7 +177,17 @@ public static class CapturaImagen
         //    "no sobrescribir", así que un elemento coloreado heredaría el 70 % de su categoría y
         //    saldría translúcido. Por eso los seleccionados solo llevan color y el fantasma va a cada
         //    uno de los demás.
-        foreach (Element elemento in new FilteredElementCollector(doc, vistaBase.Id).WhereElementIsNotElementType())
+        // Con cámara guardada, lo visible puede cambiar (otra caja de sección o recorte): se recorre la
+        // copia ya regenerada. Sin cámara, la copia es igual a la vista base (receta de la fase 0).
+        View vistaElementos = vistaBase;
+        if (camara is not null)
+        {
+            AplicarCamara(copia, camara);
+            doc.Regenerate();
+            vistaElementos = copia;
+        }
+
+        foreach (Element elemento in new FilteredElementCollector(doc, vistaElementos.Id).WhereElementIsNotElementType())
         {
             if (elemento.Category?.CategoryType != CategoryType.Model) continue;
             try
@@ -179,6 +205,77 @@ public static class CapturaImagen
         }
 
         return copia;
+    }
+
+    /// <summary>Lee la cámara (3D) o el recorte (planta) de una vista, para guardarlos con la imagen.</summary>
+    public static CamaraVista CamaraDe(View vista)
+    {
+        var camara = new CamaraVista();
+        if (vista is View3D v3)
+        {
+            ViewOrientation3D o = v3.GetOrientation();
+            camara.Ojo = APuntos(o.EyePosition);
+            camara.Adelante = APuntos(o.ForwardDirection);
+            camara.Arriba = APuntos(o.UpDirection);
+            if (v3.IsSectionBoxActive) camara.CajaSeccion = ACaja(v3.GetSectionBox());
+        }
+        else if (vista.CropBoxActive)
+        {
+            camara.Recorte = ACaja(vista.CropBox);
+        }
+        return camara;
+    }
+
+    private static void AplicarCamara(View copia, CamaraVista camara)
+    {
+        if (copia is View3D v3)
+        {
+            if (camara.TieneOrientacion3D)
+                v3.SetOrientation(new ViewOrientation3D(AXyz(camara.Ojo), AXyz(camara.Arriba), AXyz(camara.Adelante)));
+
+            if (camara.CajaSeccion is not null)
+            {
+                v3.IsSectionBoxActive = true;
+                v3.SetSectionBox(DesdeCaja(camara.CajaSeccion));
+            }
+            else
+            {
+                v3.IsSectionBoxActive = false;
+            }
+        }
+        else if (camara.Recorte is not null)
+        {
+            copia.CropBox = DesdeCaja(camara.Recorte);
+            copia.CropBoxActive = true;
+        }
+        else
+        {
+            copia.CropBoxActive = false;
+        }
+    }
+
+    private static double[] APuntos(XYZ p) => new[] { p.X, p.Y, p.Z };
+
+    private static XYZ AXyz(double[] p) => new(p[0], p[1], p[2]);
+
+    private static CajaVista ACaja(BoundingBoxXYZ caja) => new()
+    {
+        Min = APuntos(caja.Min),
+        Max = APuntos(caja.Max),
+        Origen = APuntos(caja.Transform.Origin),
+        EjeX = APuntos(caja.Transform.BasisX),
+        EjeY = APuntos(caja.Transform.BasisY),
+        EjeZ = APuntos(caja.Transform.BasisZ),
+    };
+
+    private static BoundingBoxXYZ DesdeCaja(CajaVista caja)
+    {
+        Transform t = Transform.Identity;
+        t.Origin = AXyz(caja.Origen);
+        t.BasisX = AXyz(caja.EjeX);
+        t.BasisY = AXyz(caja.EjeY);
+        t.BasisZ = AXyz(caja.EjeZ);
+        return new BoundingBoxXYZ { Min = AXyz(caja.Min), Max = AXyz(caja.Max), Transform = t };
     }
 
     private static OverrideGraphicSettings AjustesFantasma(ElementId relleno)
