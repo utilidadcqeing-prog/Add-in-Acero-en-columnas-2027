@@ -1,7 +1,8 @@
 # Convenciones de este repo
 
-Add-in de Revit (CQEING, ribbon "CQEING") para armado de columnas de
-hormigon armado -- genera refuerzo longitudinal, estribos y
+Monorepo de los add-ins de Revit de CQEING (ribbon "CQEING"): un add-in
+por carpeta en `addins/`, mas el gestor de instalacion en `gestor/`.
+El de armado de columnas genera refuerzo longitudinal, estribos y
 cajas/grapas a partir de la geometria de la seccion. El usuario
 (Luciano) no es experto en ingenieria civil ni en la API de Revit --
 las explicaciones y los planes tienen que ser en lenguaje llano.
@@ -48,12 +49,13 @@ arriesgar un fallo que solo aparece al correrlo.
   usuario en ese momento. "Haz commit" es solo commit -- avisar
   explicitamente que no se pusheo y preguntar si tambien lo quiere.
 - Nunca `git add -A` -- agregar archivos especificos por nombre.
-- Antes de desplegar (`tools/deploy.ps1`), verificar que Revit este
+- Antes de desplegar (`tools/desplegar-local.ps1`), verificar que Revit este
   cerrado con `Get-Process -Name Revit -ErrorAction SilentlyContinue`
   -- no confiar en que el usuario diga "ya cerre" sin comprobarlo,
   puede tardar en cerrar de verdad.
-- Comando de build: `dotnet build practicacq.csproj -c Debug -p:RevitVersion=2027`.
-- Comando de deploy: `powershell -ExecutionPolicy Bypass -File tools/deploy.ps1 -Versions 2027 -TargetFramework net10.0-windows`.
+- Build de un add-in: `dotnet build addins/armado-columnas/practicacq.csproj -c Debug -p:RevitVersion=2027`.
+- Deploy local: `powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado-columnas -Revit 2027`.
+- Publicar una version: etiqueta anotada `<id>-vX.Y.Z` (ver README).
 - Cada cambio/investigacion relevante se documenta en un archivo nuevo
   bajo `docs/planes/AAAA-MM-DD-tema.md` (contexto, que se encontro,
   fix implementado, estado/pendiente de retest).

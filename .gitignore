@@ -3,12 +3,12 @@ bin/
 obj/
 *.user
 
-# Paquete de instalación generado por tools/publish.ps1
-Publicar/
-Publicar-practicacq/
-Publicar-practicacq.zip
+# Salidas del publicador y del empaquetado del gestor
+dist/
+publish/
+Releases/
 
-# Material de referencia (Dynamo, add-ins ajenos), no es parte del add-in
+# Material de referencia (Dynamo, add-ins ajenos), no es parte de los add-ins
 Dymanos de referencia/
 Add-ins de referencia*/
 Add-in de Armado CQEING.html
@@ -20,6 +20,3 @@ Add-in de Armado CQEING_files/
 
 # Claude Code local
 .claude/settings.local.json
-
-# API Revit 2026
-Rev2026/

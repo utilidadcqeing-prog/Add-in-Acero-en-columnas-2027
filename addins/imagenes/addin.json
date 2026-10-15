@@ -1,0 +1,8 @@
+{
+  "id": "imagenes",
+  "nombre": "Imágenes por actividad",
+  "descripcion": "Imágenes de los elementos de cada actividad del presupuesto.",
+  "proyecto": "CQEING.Imagenes.csproj",
+  "revit": ["2026", "2027"],
+  "heredados": ["practicacq.addin"]
+}
