@@ -1,0 +1,42 @@
+name: Publicar add-in
+
+on:
+  push:
+    tags: ['*-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    # Las etiquetas gestor-v* las publica publicar-gestor.yml.
+    if: ${{ !startsWith(github.ref_name, 'gestor-v') }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # checkout deja la etiqueta como ligera; se trae de nuevo para leer su mensaje (las notas).
+      - run: git fetch --force --tags origin
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Notas (mensaje de la etiqueta anotada)
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          if ((git cat-file -t "refs/tags/$tag") -ne 'tag') { throw "La etiqueta $tag no es anotada. Créela con: git tag -a $tag -m 'notas'" }
+          git tag -l --format='%(contents)' $tag | Set-Content notas.md -Encoding utf8
+      - name: Compilar, empaquetar y escribir manifest.json
+        run: dotnet run --project tools/CQEING.Publicador -c Release -- --repo . --etiqueta "${{ github.ref_name }}" --notas-archivo notas.md --salida dist
+      - name: Crear la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $extra = @()
+          if ($tag -match '-rc\.[0-9]+$') { $extra += '--prerelease' }
+          gh release create $tag (Get-ChildItem dist -File).FullName --title $tag --notes-file notas.md @extra
