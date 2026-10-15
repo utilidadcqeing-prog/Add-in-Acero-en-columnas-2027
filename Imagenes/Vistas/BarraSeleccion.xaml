@@ -1,0 +1,26 @@
+<Window x:Class="practicacq.Imagenes.Vistas.BarraSeleccion"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CQEING · Selección para la imagen"
+        SizeToContent="WidthAndHeight" ResizeMode="NoResize" Topmost="True"
+        WindowStartupLocation="Manual" ShowInTaskbar="False"
+        FontFamily="Segoe UI" FontSize="13" Background="#1D3852">
+    <Border Padding="14,10">
+        <StackPanel Orientation="Horizontal">
+            <StackPanel VerticalAlignment="Center" Margin="0,0,18,0">
+                <TextBlock Foreground="White" FontWeight="SemiBold"
+                           Text="Selecciona los elementos de la imagen y pulsa Aceptar."/>
+                <TextBlock Foreground="#C9D6E3" FontSize="12" Margin="0,2,0,0"
+                           Text="Puedes orbitar y acomodar la vista; la imagen sale de esta vista (3D o planta)."/>
+            </StackPanel>
+            <CheckBox x:Name="ChkMismoTipo" VerticalAlignment="Center" Foreground="White" Margin="0,0,18,0"
+                      Content="Seleccionar todos los del mismo tipo"
+                      Checked="ChkMismoTipo_Cambio" Unchecked="ChkMismoTipo_Cambio"/>
+            <TextBlock x:Name="TxtCantidad" VerticalAlignment="Center" Foreground="White" MinWidth="110"
+                       Margin="0,0,18,0" Text="0 seleccionados"/>
+            <Button Content="Cancelar" Padding="14,5" Margin="0,0,8,0" Click="BtnCancelar_Click"/>
+            <Button x:Name="BtnAceptar" Content="Aceptar" Padding="18,5" FontWeight="SemiBold" IsDefault="True"
+                    Background="#2A68DE" Foreground="White" BorderBrush="#2A68DE" Click="BtnAceptar_Click"/>
+        </StackPanel>
+    </Border>
+</Window>

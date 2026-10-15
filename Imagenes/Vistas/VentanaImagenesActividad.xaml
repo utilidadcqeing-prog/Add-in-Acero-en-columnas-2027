@@ -1,0 +1,296 @@
+<Window x:Class="practicacq.Imagenes.Vistas.VentanaImagenesActividad"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="CQEING · Imágenes por Actividad"
+        Width="1180" Height="760" MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Segoe UI" FontSize="13" Background="#F3F6F9" Foreground="#16212C">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="VisibleSiVerdadero"/>
+        <SolidColorBrush x:Key="Linea" Color="#D4DBE4"/>
+        <SolidColorBrush x:Key="Tenue" Color="#586777"/>
+        <SolidColorBrush x:Key="Acento" Color="#2A68DE"/>
+        <SolidColorBrush x:Key="Marino" Color="#1D3852"/>
+
+        <Style x:Key="BotonPrincipal" TargetType="Button">
+            <Setter Property="Background" Value="#2A68DE"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#2A68DE"/>
+            <Setter Property="Padding" Value="16,7"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="BotonSecundario" TargetType="Button">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D4DBE4"/>
+            <Setter Property="Padding" Value="12,6"/>
+        </Style>
+        <Style x:Key="Etiqueta" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#586777"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Barra de estado -->
+        <Border DockPanel.Dock="Bottom" Background="White" BorderBrush="{StaticResource Linea}" BorderThickness="0,1,0,0" Padding="14,6">
+            <DockPanel>
+                <Button x:Name="BtnReintentar" DockPanel.Dock="Right" Style="{StaticResource BotonSecundario}" Padding="10,2"
+                        Content="Reintentar subidas pendientes" Visibility="Collapsed" Click="BtnReintentar_Click"/>
+                <Button x:Name="BtnCancelarActualizacion" DockPanel.Dock="Right" Style="{StaticResource BotonSecundario}" Padding="10,2"
+                        Margin="0,0,8,0" Content="Cancelar actualización" Visibility="Collapsed" Click="BtnCancelarActualizacion_Click"
+                        ToolTip="Termina la imagen que se está generando y no sigue con las demás"/>
+                <TextBlock x:Name="TxtEstado" VerticalAlignment="Center" Foreground="{StaticResource Tenue}" TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Presupuesto -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Marino}" Padding="16,12">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Actualizar códigos" Style="{StaticResource BotonSecundario}"
+                        VerticalAlignment="Center" Click="BtnActualizar_Click"/>
+                <Button x:Name="BtnActualizarTodas" DockPanel.Dock="Right" Content="Actualizar imágenes" Style="{StaticResource BotonSecundario}"
+                        VerticalAlignment="Center" Margin="0,0,8,0" IsEnabled="False" Click="BtnActualizarTodas_Click"
+                        ToolTipService.ShowOnDisabled="True"
+                        ToolTip="Vuelve a generar todas las imágenes de este presupuesto que salieron del modelo abierto, con el modelo como está ahora"/>
+                <TextBlock Text="Presupuesto" Foreground="#C9D6E3" VerticalAlignment="Center" Margin="0,0,10,0" FontWeight="SemiBold"/>
+                <!-- La misma lista es el buscador: al escribir se filtra por código o nombre (autocompletar). -->
+                <ComboBox x:Name="CmbPresupuesto" Width="440" VerticalAlignment="Center"
+                          IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True"
+                          DisplayMemberPath="TextoLista" TextSearch.TextPath="TextoLista"
+                          ToolTip="Escribe parte del código o del nombre del presupuesto para buscarlo"
+                          SelectionChanged="CmbPresupuesto_SelectionChanged"
+                          TextBoxBase.TextChanged="CmbPresupuesto_TextChanged"
+                          DropDownClosed="CmbPresupuesto_DropDownClosed"/>
+                <TextBlock x:Name="TxtModeloActivo" Foreground="#C9D6E3" VerticalAlignment="Center" Margin="16,0,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="Las imágenes nuevas quedan vinculadas a este modelo y a la actividad elegida (no al presupuesto)."/>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Estructura -->
+            <Border Grid.Column="0" Background="White" BorderBrush="{StaticResource Linea}" BorderThickness="0,0,1,0">
+                <DockPanel Margin="12">
+                    <TextBlock DockPanel.Dock="Top" Text="ESTRUCTURA" Style="{StaticResource Etiqueta}"/>
+                    <TextBox x:Name="TxtBuscarActividad" DockPanel.Dock="Top" Padding="4,4" Margin="0,0,0,8"
+                             ToolTip="Buscar por código o descripción" TextChanged="TxtBuscarActividad_TextChanged"/>
+                    <ListBox x:Name="LstEstructura" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="LstEstructura_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="{Binding Sangria}" ToolTip="{Binding Texto}">
+                                    <Border DockPanel.Dock="Right" Background="#E2EBFB" CornerRadius="8" Padding="7,0" Margin="6,0,0,0"
+                                            Visibility="{Binding EsActividad, Converter={StaticResource VisibleSiVerdadero}}">
+                                        <TextBlock Text="{Binding TextoCantidad}" FontSize="11" Foreground="#2A68DE" FontWeight="SemiBold"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Codigo}" FontFamily="Consolas" FontSize="12" Foreground="#586777"
+                                               Margin="0,0,6,0" FontWeight="{Binding Peso}"/>
+                                    <TextBlock Text="{Binding Texto}" TextTrimming="CharacterEllipsis" FontWeight="{Binding Peso}"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Tablero de la actividad -->
+            <DockPanel x:Name="PanelTablero" Grid.Column="1" Margin="20,16">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+                    <Button x:Name="BtnNuevaImagen" DockPanel.Dock="Right" VerticalAlignment="Top" Content="Nueva imagen"
+                            Style="{StaticResource BotonPrincipal}" Click="BtnNuevaImagen_Click"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TxtCodigoActividad" FontFamily="Consolas" FontWeight="Bold" Foreground="{StaticResource Acento}"/>
+                        <TextBlock x:Name="TxtDescripcionActividad" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   Text="Elige una actividad"/>
+                        <TextBlock x:Name="TxtResumenActividad" Foreground="{StaticResource Tenue}" Margin="0,2,0,0"
+                                   Text="Elige una actividad a la izquierda, pulsa Nueva imagen, selecciona los elementos en Revit y ajusta los colores."
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </DockPanel>
+                <TextBlock x:Name="TxtSinImagenes" DockPanel.Dock="Top" Visibility="Collapsed" Foreground="{StaticResource Tenue}"
+                           Text="Sin imágenes todavía."/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="LstImagenes">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Width="250" Margin="0,0,14,14" Background="White" BorderBrush="#D4DBE4" BorderThickness="1" CornerRadius="8"
+                        Cursor="Hand" ToolTip="Clic para ver la imagen en grande" MouseLeftButtonUp="TarjetaImagen_Click">
+                                    <StackPanel>
+                                        <Border Height="170" Background="White" CornerRadius="8,8,0,0" BorderBrush="#D4DBE4" BorderThickness="0,0,0,1">
+                                            <Image Source="{Binding Miniatura}" Stretch="Uniform" Margin="6"/>
+                                        </Border>
+                                        <StackPanel Margin="10,8,10,10">
+                                            <TextBlock Text="{Binding Imagen.Codigo}" FontFamily="Consolas" FontWeight="Bold" Foreground="#2A68DE"/>
+                                            <TextBlock Text="{Binding Imagen.Nombre}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding Imagen.Descripcion}" Foreground="#586777" TextWrapping="Wrap" MaxHeight="54"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding TextoModelo}" FontSize="11" Margin="0,4,0,0" FontWeight="SemiBold"
+                                                       Foreground="{Binding ColorModelo}" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Imagen.IdModelo}"/>
+                                            <TextBlock Text="{Binding TextoVista}" Foreground="#586777" FontSize="11"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <ItemsControl ItemsSource="{Binding Imagen.Colores}" Margin="0,4,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                                                            <Border Width="10" Height="10" CornerRadius="2" Background="{Binding ColorHex}" Margin="0,0,6,0"/>
+                                                            <TextBlock Text="{Binding NombreTipo}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock Text="{Binding Imagen.TextoEstadoSubida}" FontSize="11" Margin="0,6,0,0" Foreground="#0F8660"/>
+                                            <!-- El Button marca el clic como atendido: no abre el visor de la tarjeta. -->
+                                            <Button Content="Actualizar" HorizontalAlignment="Left" Margin="0,8,0,0" Padding="10,3"
+                                                    Background="White" BorderBrush="#D4DBE4"
+                                                    IsEnabled="{Binding PuedeActualizar}" ToolTip="{Binding TextoActualizar}"
+                                                    ToolTipService.ShowOnDisabled="True" Click="BtnActualizarImagen_Click"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+
+            <!-- Editor de una imagen nueva -->
+            <Grid x:Name="PanelEditor" Grid.Column="1" Margin="20,16" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="380"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.ColumnSpan="2" Margin="0,0,0,12">
+                    <TextBlock x:Name="TxtTituloEditor" FontSize="18" FontWeight="SemiBold"/>
+                    <TextBlock Foreground="{StaticResource Tenue}" Text="1 · Selección en Revit    2 · Colores    3 · Nombre y guardar"/>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,16,0">
+                    <StackPanel>
+                        <TextBlock Text="1 · SELECCIÓN" Style="{StaticResource Etiqueta}"/>
+                        <Button x:Name="BtnIrARevit" Content="Ir a Revit para seleccionar" Style="{StaticResource BotonPrincipal}"
+                                HorizontalAlignment="Left" Click="BtnIrARevit_Click"/>
+                        <TextBlock x:Name="TxtResumenSeleccion" Foreground="{StaticResource Tenue}" TextWrapping="Wrap" Margin="0,6,0,14"
+                                   Text="Todavía no hay elementos seleccionados."/>
+
+                        <TextBlock Text="2 · COLORES (el resto del modelo queda translúcido automáticamente)" Style="{StaticResource Etiqueta}" TextWrapping="Wrap"/>
+                        <ItemsControl x:Name="LstTipos" Margin="0,0,0,14">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="White" BorderBrush="#D4DBE4" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,8">
+                                        <StackPanel>
+                                            <DockPanel>
+                                                <Border DockPanel.Dock="Left" Width="18" Height="18" CornerRadius="3" Margin="0,0,8,0"
+                                                        Background="{Binding Tipo.ColorHex}"/>
+                                                <TextBlock DockPanel.Dock="Right" Text="{Binding Tipo.TextoCantidad}" Foreground="#586777" FontSize="12"/>
+                                                <TextBlock Text="{Binding Tipo.Nombre}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Tipo.Nombre}"/>
+                                            </DockPanel>
+                                            <TextBlock Text="{Binding Tipo.Categoria}" Foreground="#586777" FontSize="11" Margin="26,0,0,6"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <ItemsControl ItemsSource="{Binding Opciones}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal"/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Width="22" Height="22" Margin="0,0,4,0" Background="{Binding Hex}"
+                                                                    BorderBrush="#16212C" BorderThickness="0" ToolTip="{Binding Hex}"
+                                                                    Click="BtnColorPaleta_Click"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <!-- "+": paleta ampliada para elegir cualquier otro color con un clic -->
+                                                <ToggleButton x:Name="BtnMasColores" Width="26" Height="22" Margin="4,0,0,0" Content="+"
+                                                              FontWeight="Bold" Background="White" BorderBrush="#D4DBE4"
+                                                              ToolTip="Más colores"/>
+                                                <Popup IsOpen="{Binding IsChecked, ElementName=BtnMasColores, Mode=TwoWay}"
+                                                       PlacementTarget="{Binding ElementName=BtnMasColores}" Placement="Bottom"
+                                                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                                                    <Border Background="White" BorderBrush="#D4DBE4" BorderThickness="1" CornerRadius="6"
+                                                            Padding="8" Margin="0,4,0,0">
+                                                        <StackPanel>
+                                                            <TextBlock Text="Elige un color" FontSize="11" FontWeight="SemiBold"
+                                                                       Foreground="#586777" Margin="0,0,0,6"/>
+                                                            <ItemsControl ItemsSource="{Binding Ampliada}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <ItemsControl ItemsSource="{Binding}">
+                                                                            <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate>
+                                                                                    <StackPanel Orientation="Horizontal"/>
+                                                                                </ItemsPanelTemplate>
+                                                                            </ItemsControl.ItemsPanel>
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                    <Button Width="20" Height="20" Margin="0,0,3,3" Background="{Binding Hex}"
+                                                                                            BorderBrush="#D4DBE4" BorderThickness="1" ToolTip="{Binding Hex}"
+                                                                                            Click="BtnColorAmpliado_Click"/>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="3 · NOMBRE Y GUARDAR" Style="{StaticResource Etiqueta}"/>
+                        <TextBlock Text="Código (automático)" Foreground="{StaticResource Tenue}" FontSize="12"/>
+                        <TextBox x:Name="TxtCodigoImagen" IsReadOnly="True" FontFamily="Consolas" Padding="4,3" Margin="0,2,0,8" Background="#F3F6F9"/>
+                        <TextBlock Text="Nombre" Foreground="{StaticResource Tenue}" FontSize="12"/>
+                        <TextBox x:Name="TxtNombre" Padding="4,3" Margin="0,2,0,8" ToolTip="Escribe un nombre para la imagen"/>
+                        <TextBlock Text="Descripción" Foreground="{StaticResource Tenue}" FontSize="12"/>
+                        <TextBox x:Name="TxtDescripcion" Padding="4,3" Margin="0,2,0,8" Height="70" TextWrapping="Wrap"
+                                 AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Grid.Row="1" Grid.Column="1" Background="White" BorderBrush="{StaticResource Linea}" BorderThickness="1" CornerRadius="8">
+                    <Grid>
+                        <Image x:Name="ImgVistaPrevia" Stretch="Uniform" Margin="10"/>
+                        <TextBlock x:Name="TxtVistaPrevia" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="30" Foreground="{StaticResource Tenue}"
+                                   Text="Aquí aparece la vista previa cuando selecciones los elementos en Revit."/>
+                    </Grid>
+                </Border>
+
+                <DockPanel Grid.Row="2" Grid.ColumnSpan="2" Margin="0,12,0,0" LastChildFill="False">
+                    <Button DockPanel.Dock="Left" Content="Cancelar" Style="{StaticResource BotonSecundario}" Click="BtnCancelarEditor_Click"/>
+                    <Button x:Name="BtnGuardar" DockPanel.Dock="Right" Content="Guardar imagen" Style="{StaticResource BotonPrincipal}"
+                            IsEnabled="False" Click="BtnGuardar_Click"/>
+                    <Button x:Name="BtnVistaPrevia" DockPanel.Dock="Right" Content="Actualizar vista previa" Margin="0,0,8,0"
+                            Style="{StaticResource BotonSecundario}" IsEnabled="False" Click="BtnVistaPrevia_Click"/>
+                </DockPanel>
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>
