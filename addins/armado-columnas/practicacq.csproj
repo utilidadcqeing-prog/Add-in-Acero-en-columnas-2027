@@ -1,109 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
   <PropertyGroup>
     <!--
-      Default sin tocar nada: Revit 2026, net8.0-windows.
-      Para probar contra otra version instalada (por ejemplo, mientras no haya
-      2026 a mano): dotnet build -p:RevitVersion=2027
-
-      Issue #14: Revit 2026 arranca en net8.0-windows, pero desde el punto de
-      actualizacion 2026.5 en adelante pasa a net10.0-windows (mismo runtime
-      que ya usa 2027), y las dos versiones instalan en la MISMA carpeta
-      "Revit 2026", asi que RevitVersion=2026 no alcanza para distinguirlas
-      por si solo.
-
-      tools/deploy.ps1 detecta esto solo (lee el TargetFrameworkAttribute real
-      de RevitAPI.dll) y pasa -p:TargetFramework explicito - por eso el
-      default de aca abajo (net8.0-windows) solo importa si se compila este
-      .csproj directo con `dotnet build`/`msbuild` sin pasar por deploy.ps1.
-      En ese caso, si tu Revit 2026 es 2026.5+, forza el framework a mano:
-      dotnet build -p:RevitVersion=2026 -p:TargetFramework=net10.0-windows
-    -->
-    <RevitVersion Condition="'$(RevitVersion)' == ''">2026</RevitVersion>
-    <TargetFramework Condition="'$(RevitVersion)' == '2026' And '$(TargetFramework)' == ''">net8.0-windows</TargetFramework>
-    <TargetFramework Condition="'$(TargetFramework)' == ''">net10.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-
-    <!--
-      Metadatos del ensamblado: identifican el .dll como de CQEING en las
-      propiedades de Windows (clic derecho > Propiedades > Detalles) y en el
-      Add-In Manager de Revit. No es una firma digital (Authenticode): eso
-      necesita un certificado de firma de código real, que no se puede
-      generar de la nada; esto es solo metadata declarativa.
+      Metadatos del ensamblado: identifican el .dll como de CQEING en las propiedades de Windows y en
+      el Add-In Manager de Revit. No es una firma digital (Authenticode).
     -->
     <Company>CQEING</Company>
     <Product>CQEING - Armado de columnas</Product>
     <Copyright>© CQEING</Copyright>
-    <RevitInstallDir Condition="'$(RevitInstallDir)' == ''">C:\Program Files\Autodesk\Revit $(RevitVersion)\</RevitInstallDir>
-
-    <!-- Salida predecible por versión, para que tools/deploy.ps1 sepa siempre dónde buscar. -->
-    <OutputPath>bin\$(Configuration)\$(RevitVersion)\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-
-    <!--
-      practicacq.csproj vive en la raíz del repo, junto con otras carpetas que
-      no son suyas (el proyecto CQEING/ de la otra rama de trabajo, material de
-      referencia). El glob implícito del SDK las barre igual si no se excluyen
-      acá; si no, el build de este proyecto choca con los .g.cs generados de
-      CQEING/obj.
-
-      Rev2026/ (los RevitAPI.dll/RevitAPIUI.dll de Revit 2026 que se usan para
-      compilar contra esa versión sin tenerla instalada, ver .gitignore)
-      tiene que estar en esta lista también: sin excluirla, el SDK la agarra
-      como None del proyecto, y eso contaminaba la resolución de referencias
-      del compilador de WPF (el paso "wpftmp" interno) para TODAS las
-      versiones. Un build con -p:RevitVersion=2027 terminaba enlazado contra
-      el RevitAPI.dll de 2026, sin ningún error ni aviso: medido comparando
-      la versión del ensamblado embebida en el .dll compilado (26.3.0.0)
-      contra la del RevitAPI.dll real de la carpeta de Revit 2027 (27.2.0.0),
-      un desajuste invisible hasta que se lo mide, no algo que "compile en
-      verde" garantice (regla del CLAUDE.md sobre la API de Revit).
-    -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);CQEING/**;Dymanos de referencia/**;Dymanos de referencia\**;Add-ins de referencia*/**;Add-in de Armado CQEING_files/**;tools/PreviewUI/**;Rev2026/**;Rev2026\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!--
-    Los comandos de diagnóstico (ComandoDiagnostico*.cs) son herramientas de
-    desarrollo: sirven para medir contra Revit real y se conservan en el
-    repo, pero no forman parte de lo que se publica. tools/publish.ps1
-    compila en Release, así que ahí quedan afuera; tools/deploy.ps1 compila
-    en Debug por defecto y los incluye. Sus botones del ribbon (App.cs) y
-    los registros de diagnóstico de los generadores van con #if DEBUG por el
-    mismo motivo.
+    Los comandos de diagnóstico (ComandoDiagnostico*.cs) son herramientas de desarrollo: se conservan
+    en el repo pero no se publican. El publicador compila en Release, así que ahí quedan afuera;
+    tools/desplegar-local.ps1 compila en Debug y los incluye. Sus botones (App.cs) van con #if DEBUG.
   -->
   <ItemGroup Condition="'$(Configuration)' == 'Release'">
     <Compile Remove="ComandoDiagnostico*.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="RevitAPI">
-      <HintPath>$(RevitInstallDir)RevitAPI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="RevitAPIUI">
-      <HintPath>$(RevitInstallDir)RevitAPIUI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Resources\icono32.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\icono16.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\iconoCQ32.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\iconoCQ16.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <None Include="practicacq.addin">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="practicacq.addin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

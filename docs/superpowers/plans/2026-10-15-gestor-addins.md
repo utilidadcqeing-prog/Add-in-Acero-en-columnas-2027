@@ -16,7 +16,7 @@
 - Una rama estable: `main`. Una carpeta por add-in: `addins/<id>/`. Las ramas son solo trabajo temporal.
 - Add-ins: `armado-columnas` (ensamblado `practicacq.dll`, ClientId `2044e120-cc19-42a1-8018-a97f13adf192`, no cambia) e `imagenes` (ensamblado `CQEING.Imagenes.dll`, namespace `practicacq.Imagenes`, ClientId nuevo `5838d75b-878f-41de-a730-839e50e55535`). El Cuadro de cantidades no entra.
 - Se conserva el historial de git de los dos add-ins.
-- Año de Revit → framework → paquete de la API, definidos solo en `addins/Directory.Build.props`: 2026 → `net8.0-windows` → `Nice3point.Revit.Api.*` `2026.4.10`; 2027 → `net10.0-windows` → `2027.3.0`.
+- Año de Revit → framework → paquete de la API, definidos solo en `addins/Directory.Build.props`: 2026 → `net8.0-windows` → `Nice3point.Revit.Api.*` `2026.0.4`; 2027 → `net10.0-windows` → `2027.0.0`.
 - Etiqueta de release = `<id>-vX.Y.Z`, siempre **anotada** (su mensaje son las notas). Sufijo `-rc.N` = prerelease que el gestor ignora. El gestor se publica con `gestor-vX.Y.Z`.
 - Un ZIP por año: `<id>-<versión>-revit<año>.zip`, con la salida de compilación sin `.pdb`, **exactamente un** `.addin` y `Resources/`.
 - `manifest.json` con esquema 1, campos y nombres exactos de la sección 4 de la spec.
@@ -210,8 +210,8 @@ git commit -m "refactor: una carpeta por add-in en addins/"
     <RevitVersion Condition="'$(RevitVersion)' == ''">2026</RevitVersion>
     <TargetFramework Condition="'$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
     <TargetFramework Condition="'$(RevitVersion)' == '2027'">net10.0-windows</TargetFramework>
-    <RevitApiVersion Condition="'$(RevitVersion)' == '2026'">2026.4.10</RevitApiVersion>
-    <RevitApiVersion Condition="'$(RevitVersion)' == '2027'">2027.3.0</RevitApiVersion>
+    <RevitApiVersion Condition="'$(RevitVersion)' == '2026'">2026.0.4</RevitApiVersion>
+    <RevitApiVersion Condition="'$(RevitVersion)' == '2027'">2027.0.0</RevitApiVersion>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

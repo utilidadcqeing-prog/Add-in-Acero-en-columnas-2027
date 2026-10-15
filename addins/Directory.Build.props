@@ -1,0 +1,40 @@
+<Project>
+  <!--
+    Base común de todos los add-ins de addins/. Único lugar donde se decide, por año de Revit,
+    el framework y la versión de la API (por NuGet: compila sin Revit instalado, también en CI).
+    Compilar para otro año: dotnet build <proyecto> -p:RevitVersion=2027
+  -->
+  <PropertyGroup>
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2026</RevitVersion>
+    <TargetFramework Condition="'$(RevitVersion)' == '2026'">net8.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(RevitVersion)' == '2027'">net10.0-windows</TargetFramework>
+    <!--
+      La API más vieja de cada año, no la más nueva: un add-in compilado contra una actualización
+      reciente no carga en un Revit con una actualización anterior; al revés sí funciona.
+    -->
+    <RevitApiVersion Condition="'$(RevitVersion)' == '2026'">2026.0.4</RevitApiVersion>
+    <RevitApiVersion Condition="'$(RevitVersion)' == '2027'">2027.0.0</RevitApiVersion>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Salida predecible por año: la usan tools/desplegar-local.ps1 y el publicador. -->
+    <OutputPath>bin\$(Configuration)\$(RevitVersion)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Solo para compilar: Revit ya trae estas DLL, no se copian a la salida. -->
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitApiVersion)" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitApiVersion)" ExcludeAssets="runtime" PrivateAssets="all" />
+    <Compile Include="$(MSBuildThisFileDirectory)compartido\*.cs" Link="Compartido\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="RevitVersionSoportada" BeforeTargets="Restore;CollectPackageReferences;Build" Condition="'$(RevitApiVersion)' == ''">
+    <Error Text="RevitVersion '$(RevitVersion)' no está soportada. Use 2026 o 2027 (addins/Directory.Build.props)." />
+  </Target>
+
+  <!-- El publicador lee este archivo para escribir el framework de cada paquete en manifest.json (Empaquetador.ArchivoFramework). -->
+  <Target Name="EscribirFramework" AfterTargets="Build">
+    <WriteLinesToFile File="$(OutDir)framework.txt" Lines="$(TargetFramework)" Overwrite="true" />
+  </Target>
+</Project>
