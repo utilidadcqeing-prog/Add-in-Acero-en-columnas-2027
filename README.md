@@ -1,69 +1,52 @@
-# Add-in-Acero-en-columnas-2027
+# CQEING-Addins
 
-Add-in de Revit (CQEING) para armado de columnas: genera el refuerzo
-longitudinal, los estribos y las cajas/grapas a partir de la geometria de
-la seccion.
+Add-ins de Revit de CQEING y su gestor de instalación. Todo vive en la rama `main`, con una carpeta
+por add-in.
 
-## Como instalar el add-in
+| Carpeta | Qué es |
+|---|---|
+| `addins/armado-columnas/` | Armado de columnas: estribos, columnetas y viguetas de confinamiento. |
+| `addins/imagenes/` | Imágenes por actividad del presupuesto. |
+| `addins/compartido/` | Código común: la pestaña CQEING del ribbon (se compila dentro de cada add-in). |
+| `gestor/` | App de escritorio que instala, actualiza y revierte los add-ins (en construcción). |
+| `tools/` | Despliegue local, vista previa de la interfaz del armado y utilidades. |
 
-> **Importante:** este repositorio tiene el *codigo fuente*, no el
-> instalador. El `Instalar.bat` que esta en `tools/` de este repo **no
-> sirve por si solo** -- no tiene los `.dll` compilados al lado, asi que si
-> le haces doble clic ahi va a fallar diciendo que no encuentra las
-> carpetas de version. Lo que hay que usar es el **paquete ya compilado**
-> (un `.zip` separado, que no se sube a este repo -- ver mas abajo por
-> que), que trae su propia copia de `Instalar.bat` junto con los binarios.
+Los dos add-ins se compilan para **Revit 2026** (.NET 8) y **Revit 2027** (.NET 10). Ambos aparecen
+en la pestaña **CQEING** del ribbon.
 
-No hace falta saber nada de consola ni de programacion para instalar.
+## Instalar
 
-1. Descargar `Publicar-practicacq.zip` de la
-   [ultima Release](../../releases/latest) de este repositorio (seccion
-   "Assets" de la pagina de la release).
-2. Descomprimir el `.zip` **completo** en cualquier carpeta.
-3. Cerrar Revit si esta abierto.
-4. Doble clic en **`Instalar.bat`** (el que esta DENTRO de la carpeta que
-   acabas de descomprimir, con las carpetas `2026\`/`2027\` al lado -- no
-   el de este repositorio).
-5. Esperar el mensaje **"Listo."** y presionar Enter para cerrar la ventana.
-6. Abrir Revit. El add-in aparece en el ribbon, en la pestana **CQEING**.
+Con el gestor: descargar `CQEING.Gestor-win-Setup.exe` de la última release `gestor-v*` y abrirlo.
+El gestor muestra los add-ins, instala la versión para el Revit del equipo y avisa cuando hay una
+nueva. Mientras el gestor no esté publicado, se instala desde el código con el despliegue local
+(ver «Desarrollar»).
 
-El instalador detecta solo que version de Revit corresponde a cada carpeta
-que viene en el paquete (2026, 2027) y copia los archivos donde va --
-funciona igual sin importar que version de Revit tenga esa computadora, o
-si tiene ambas.
+## Publicar una versión de un add-in
 
-Si algo falla durante la instalacion (por ejemplo, Revit estaba abierto),
-cerrar Revit y volver a correr `Instalar.bat`. No hace falta ejecutarlo
-como administrador (solo escribe en una carpeta del usuario); si Windows no
-lo deja abrir con doble clic normal, es porque viene de un `.zip`
-descargado -- antes de descomprimir, clic derecho en el `.zip` >
-Propiedades > "Desbloquear" > Aceptar.
-
-Estas mismas instrucciones quedan tambien en `LEEME.txt`, adentro del
-paquete que se entrega -- para que quien instala no tenga que venir a este
-repositorio.
-
-### Por que el paquete no esta en el arbol del repositorio
-
-`Publicar-practicacq.zip` (y la carpeta `Publicar\` que lo arma) son
-binarios generados a partir del codigo fuente, no codigo fuente en si --
-por eso estan en `.gitignore`, igual que `bin\`/`obj\`. Un binario que
-cambia entero cada vez infla el historial de git para siempre (no se puede
-"actualizar" sin dejar todas las versiones viejas completas guardadas
-adentro). Por eso se sube como **asset de una
-[GitHub Release](../../releases)** en vez de comitearlo: queda versionado,
-descargable, y no pesa en el repo.
-
-### Como publicar una nueva version (para quien compila)
-
-Cada vez que se cambia el codigo y hace falta un paquete nuevo:
-
-```bash
-.\tools\publish.ps1 -Zip
-git tag -a vX.Y.Z -m "que cambio"
-git push origin vX.Y.Z
-gh release create vX.Y.Z Publicar-practicacq.zip --title "Add-in de Armado de Columnas vX.Y.Z" --notes "que cambio"
+```powershell
+git tag -a armado-columnas-v1.2.0 -m "Qué cambió en esta versión"
+git push origin armado-columnas-v1.2.0
 ```
 
-(`gh` es la [CLI de GitHub](https://cli.github.com/); necesita estar
-autenticada con `gh auth login` una sola vez por maquina.)
+La etiqueta es `<id del add-in>-vX.Y.Z` y debe ser **anotada**: su mensaje son las notas de la
+versión. Al subirla, GitHub compila el add-in para cada año de su `addin.json`, arma un ZIP por año y
+crea la release con su `manifest.json`. El sufijo `-rc.N` (por ejemplo `-v1.2.0-rc.1`) publica una
+prueba que el gestor no muestra.
+
+## Desarrollar
+
+```powershell
+dotnet build addins/armado-columnas/practicacq.csproj -p:RevitVersion=2027
+powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado-columnas -Revit 2027
+```
+
+- No hace falta tener Revit instalado para compilar: la API llega por NuGet. El año de Revit decide el
+  framework y la versión de la API en un solo lugar, `addins/Directory.Build.props`.
+- `desplegar-local.ps1` compila y deja el add-in cargado en ese Revit de este equipo. Revit tiene que
+  estar cerrado.
+- Cada add-in describe su nombre, proyecto y años de Revit en su `addin.json`.
+- Agregar un add-in: crear `addins/<id>/` con su `.csproj`, su `.addin` (ClientId propio) y su
+  `addin.json`, y sumarlo a `CQEING-Addins.sln`.
+
+Diseño y plan: `docs/superpowers/specs/2026-10-15-gestor-addins-cqeing-design.md` y
+`docs/superpowers/plans/2026-10-15-gestor-addins.md`.

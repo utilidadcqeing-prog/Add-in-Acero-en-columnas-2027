@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
+  <PropertyGroup>
+    <!--
+      Metadatos del ensamblado: identifican el .dll como de CQEING en las propiedades de Windows y en
+      el Add-In Manager de Revit. No es una firma digital (Authenticode).
+    -->
+    <Company>CQEING</Company>
+    <Product>CQEING - Armado de columnas</Product>
+    <Copyright>© CQEING</Copyright>
+  </PropertyGroup>
+
+  <!--
+    Los comandos de diagnóstico (ComandoDiagnostico*.cs) son herramientas de desarrollo: se conservan
+    en el repo pero no se publican. El publicador compila en Release, así que ahí quedan afuera;
+    tools/desplegar-local.ps1 compila en Debug y los incluye. Sus botones (App.cs) van con #if DEBUG.
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <Compile Remove="ComandoDiagnostico*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="practicacq.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

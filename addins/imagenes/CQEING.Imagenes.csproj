@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
+  <PropertyGroup>
+    <AssemblyName>CQEING.Imagenes</AssemblyName>
+    <RootNamespace>practicacq.Imagenes</RootNamespace>
+    <Company>CQEING</Company>
+    <Product>CQEING - Imágenes por actividad</Product>
+    <Copyright>© CQEING</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="CQEING.Imagenes.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

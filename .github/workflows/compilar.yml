@@ -1,0 +1,29 @@
+name: Compilar
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  compilar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Pruebas
+        run: dotnet test CQEING-Addins.sln -c Release
+      - name: Compilar cada add-in para cada año de Revit
+        shell: pwsh
+        run: |
+          foreach ($json in Get-ChildItem addins/*/addin.json) {
+            $config = Get-Content $json -Raw | ConvertFrom-Json
+            foreach ($anio in $config.revit) {
+              dotnet build (Join-Path $json.DirectoryName $config.proyecto) -c Release -p:RevitVersion=$anio
+              if ($LASTEXITCODE) { exit 1 }
+            }
+          }

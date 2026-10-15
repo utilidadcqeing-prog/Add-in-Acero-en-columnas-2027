@@ -1,0 +1,75 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Vista previa de la interfaz SIN Revit.
+
+    La ventana del add-in no tiene ninguna dependencia de Revit: vive de
+    IProveedorContexto/IProveedorTipos y ya trae un "modo de prueba". Este
+    proyecto aprovecha eso para abrirla como una aplicaciÃ³n WPF normal, con los
+    proveedores falsos, y poder mirar y criticar la interfaz sin depender de que
+    Revit abra.
+
+    NO es parte del add-in: practicacq.csproj excluye esta carpeta
+    (DefaultItemExcludes) y acÃ¡ no hay ninguna referencia a RevitAPI.
+    Los archivos se enlazan (Link) en vez de copiarse: hay una sola copia de
+    cada uno, la del add-in.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>practicacq.PreviewUI</RootNamespace>
+    <AssemblyName>PreviewUI</AssemblyName>
+  </PropertyGroup>
+
+  <!--
+    Del Modelo entra todo MENOS lo que sÃ­ referencia Revit (EstandarCQ,
+    MuroSeleccionado, OpcionesGeneracion, TipoFamilia): son el cuadro de la
+    empresa y los tipos del comando de muros, que la ventana no usa.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\addins\armado-columnas\Modelo\*.cs"
+             Exclude="..\..\addins\armado-columnas\Modelo\EstandarCQ.cs;..\..\addins\armado-columnas\Modelo\MuroSeleccionado.cs;..\..\addins\armado-columnas\Modelo\OpcionesGeneracion.cs;..\..\addins\armado-columnas\Modelo\TipoFamilia.cs">
+      <Link>Modelo\%(Filename)%(Extension)</Link>
+    </Compile>
+  </ItemGroup>
+
+  <!--
+    De las vistas, las tres del configurador de estribos. VentanaColumnetas
+    queda afuera: es la del comando de muros y sÃ­ usa la API de Revit.
+  -->
+  <ItemGroup>
+    <Page Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.xaml">
+      <Link>Vistas\VentanaConfiguradorEstribos.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.xaml.cs">
+      <Link>Vistas\VentanaConfiguradorEstribos.xaml.cs</Link>
+      <DependentUpon>VentanaConfiguradorEstribos.xaml</DependentUpon>
+    </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\PanelPlantaColumnas.xaml">
+      <Link>Vistas\PanelPlantaColumnas.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\PanelPlantaColumnas.xaml.cs">
+      <Link>Vistas\PanelPlantaColumnas.xaml.cs</Link>
+      <DependentUpon>PanelPlantaColumnas.xaml</DependentUpon>
+    </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\VentanaEstribosMenores.xaml">
+      <Link>Vistas\VentanaEstribosMenores.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaEstribosMenores.xaml.cs">
+      <Link>Vistas\VentanaEstribosMenores.xaml.cs</Link>
+      <DependentUpon>VentanaEstribosMenores.xaml</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+</Project>

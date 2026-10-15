@@ -49,3 +49,15 @@ Compilado. Pendiente: desplegar y retest visual del usuario contra Revit real (g
 ## Comando temporal de diagnóstico
 
 `ComandoDiagnosticoRebar.cs` + botón "Diagnóstico de Rebar" en el ribbon (panel Herramientas) quedan en el add-in por ahora -- sacar una vez que se termine de confirmar toda la geometría de traslapos (incluyendo esquinas y cara Y).
+
+## Corregido el 9-sep (más tarde): "siempre en Y" tampoco era el criterio
+
+La conclusión de la sección anterior quedó sin efecto. Las dos mediciones que
+la sostenían dieron **exactamente la misma firma** (misma X, Y corrida
+~1.9cm), lo que encaja con que las dos barras medidas fueran de la misma cara
+y no de caras distintas como se creyó al elegirlas.
+
+El criterio real, reportado por el usuario con un dibujo del antes/después: el
+corrimiento va **paralelo a la cara donde apoya cada barra**, para que las dos
+barras del par queden pegadas al borde. Ver
+`docs/planes/2026-09-09-corrimiento-paralelo-a-la-cara.md`.

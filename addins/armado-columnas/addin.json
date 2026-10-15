@@ -1,0 +1,8 @@
+{
+  "id": "armado-columnas",
+  "nombre": "Armado de columnas",
+  "descripcion": "Estribos, columnetas y viguetas de confinamiento.",
+  "proyecto": "practicacq.csproj",
+  "revit": ["2026", "2027"],
+  "heredados": ["practicacq.addin"]
+}
