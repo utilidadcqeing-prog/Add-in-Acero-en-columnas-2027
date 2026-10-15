@@ -4,15 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using Microsoft.Win32;
 using practicacq.Modelo;
 
 /// <summary>
@@ -33,11 +30,18 @@ public partial class VentanaConfiguradorEstribos : Window
     private readonly IProveedorTipos _tipos;
 
     /// <summary>
+    /// De dónde salen las configuraciones con nombre. La real las guarda dentro
+    /// del modelo de Revit; si nadie pasa una, se usa la de memoria, así la
+    /// ventana abre igual sin Revit (vista previa).
+    /// </summary>
+    private readonly IAlmacenConfiguraciones _almacen;
+
+    /// <summary>
     /// Una copia de <see cref="ConfigTramo"/> por (columna, tramo). Es el
     /// germen de la persistencia que formaliza L5 ("D1 — ida y vuelta sin
     /// perder nada"): alcanza para que navegar con la lista o las flechas no
     /// pierda lo que se tecleó, y cada tramo guarda su propia copia (no una
-    /// referencia compartida) incluso cuando llegó por "Aplicar a selección".
+    /// referencia compartida) incluso cuando llegó por un "aplicar al resto de...".
     /// </summary>
     private readonly Dictionary<(string ColumnaId, int Indice), ConfigTramo> _configPorTramo = new();
 
@@ -49,6 +53,32 @@ public partial class VentanaConfiguradorEstribos : Window
     /// dentro de este mismo tipo.
     /// </summary>
     private readonly Dictionary<string, ConfigLongitudinal> _longitudinalPorColumna = new();
+
+    /// <summary>
+    /// El recubrimiento elegido para cada columna, en metros -- uno solo para
+    /// toda la pila (ver <see cref="ColumnaPlan.Recubrimiento"/>). Entra acá la
+    /// primera vez que la columna se activa, con el del tramo que quedó activo
+    /// en ese momento: "el que esté seleccionado; si son varios, el primero"
+    /// (Luciano, 8-oct). Después solo lo cambia el combo.
+    /// </summary>
+    private readonly Dictionary<string, double> _recubrimientoPorColumna = new();
+
+    /// <summary>Corta el eco de <c>ComboRecubrimiento_SelectionChanged</c> cuando el combo se llena por código.</summary>
+    private bool _cargandoRecubrimiento;
+
+    /// <summary>El valor normal del equipo (William, 9-sep): siempre se ofrece, lo tenga o no alguna pieza.</summary>
+    private const double RecubrimientoNormal = 0.04;
+
+    /// <summary>
+    /// Una opción del combo de recubrimiento. Se muestra el VALOR y nada más:
+    /// identificar de qué pieza sale obligaría a mostrar los ids de Revit, que
+    /// a quien arma no le dicen nada.
+    /// </summary>
+    private sealed record OpcionRecubrimiento(double Metros)
+    {
+        public override string ToString() =>
+            $"{Metros * 100:0.#} cm" + (Math.Abs(Metros - RecubrimientoNormal) < 0.0005 ? " (normal del equipo)" : "");
+    }
 
     /// <summary>
     /// Lista maestra de todas las filas (columnas + tramos), las dos pestañas
@@ -85,6 +115,59 @@ public partial class VentanaConfiguradorEstribos : Window
     private bool _sincronizandoDesdeRevit;
 
     /// <summary>
+    /// El espaciado no confinado se sugiere al doble del confinado, pero deja
+    /// de recalcularse en cuanto el usuario lo escribe a mano: antes se pisaba
+    /// en CADA pulsación de tecla del campo confinado, así que quien ajustaba
+    /// el no confinado lo perdía sin aviso (el comentario del método prometía
+    /// esto, pero no había ningún flag que lo implementara). Se resetea al
+    /// cargar otro tramo.
+    /// </summary>
+    /// <summary>
+    /// En alto mientras se resalta en la lista de columnetas por código (desde
+    /// la planta o desde una selección hecha en Revit). Sin esto, cada elemento
+    /// agregado a <c>SelectedItems</c> volvería a entrar por
+    /// <see cref="ListaSeleccion_SelectionChanged"/> y activaría un tramo a
+    /// mitad de camino.
+    /// </summary>
+    private bool _resaltandoEnLista;
+
+    /// <summary>
+    /// Los tramos ACEPTADOS: los que llevan chulito y los únicos que se
+    /// generan (issue #56, reunión del 11-sep -- desapareció el paso de
+    /// "aplicar" y las casillas de tildar).
+    ///
+    /// Es a propósito un conjunto aparte de <see cref="_configPorTramo"/>, que
+    /// significa otra cosa: ahí se guarda lo que el panel tiene cargado para
+    /// cada tramo, y se escribe SOLO para no perder lo tecleado al navegar
+    /// (<see cref="GuardarPanelEnTramoActivo"/>). Si el chulito saliera de ahí,
+    /// recorrer la columna con las flechitas dejaría todo marcado sin que nadie
+    /// lo haya pedido. Acá solo se entra por un gesto explícito: "Aceptar", o un
+    /// "aplicar al resto de..." que lo incluya.
+    /// </summary>
+    private readonly HashSet<(string ColumnaId, int Indice)> _tramosAceptados = new();
+
+    /// <summary>
+    /// Las columnas elegidas en la planta (o en la lista de columnetas). La
+    /// activa siempre está adentro. Con más de una, aceptar le cae a todas
+    /// -- siempre que compartan estructura, ver <see cref="MismaEstructura"/>
+    /// (issue #63).
+    ///
+    /// Vive acá y no en los <c>SelectedItems</c> de un ListBox porque desde el
+    /// issue #62 la lista de columnas principales ya no existe: la selección se
+    /// hace en la planta, que no es un control con selección propia.
+    /// </summary>
+    private readonly HashSet<string> _columnasElegidas = new();
+
+    private bool _noConfinadoEditadoAMano;
+
+    /// <summary>
+    /// En alto mientras el panel se llena por código (cargar un tramo, o la
+    /// propia sugerencia automática). Sin esto, esas escrituras se leerían como
+    /// si las hubiera tecleado el usuario.
+    /// </summary>
+    private bool _llenandoPanel;
+
+    /// <summary>
     /// Se dispara con los ids de los elementos de Revit a seleccionar: todos
     /// los de la pila si se activó la columna entera, o uno solo (el
     /// <see cref="Tramo.IdElementoHost"/> del tramo) si se activó un tramo
@@ -97,18 +180,8 @@ public partial class VentanaConfiguradorEstribos : Window
     public event Action<IReadOnlyList<string>>? ElementosActivados;
 
     /// <summary>
-    /// Se dispara con los ids de TODOS los elementos cuyo tramo está tildado en
-    /// la lista, cada vez que cambia una tilde -- puede venir vacía (nada
-    /// tildado). A diferencia de <see cref="ElementosActivados"/>, quien lo
-    /// escucha NO debe mover la cámara: es solo reflejar en Revit qué está
-    /// marcado para "Aplicar a selección", sin interrumpir al usuario mirando
-    /// otra cosa.
-    /// </summary>
-    public event Action<IReadOnlyList<string>>? SeleccionMarcadaCambio;
-
-    /// <summary>
     /// Issue #5 (J3): se dispara con el <see cref="OpcionesArmado"/> armado
-    /// (mismo <see cref="PlanArmado"/> que <see cref="BotonExportar_Click"/>,
+    /// (el <see cref="PlanArmado"/> que arma <see cref="ConstruirPlanArmado"/>,
     /// más el estado del checkbox de borrado) cuando se pide generar el
     /// armado real. Sin una sola línea de Autodesk.Revit acá adentro:
     /// <c>ComandoEstribos</c> es quien lo traduce a la API real y devuelve el
@@ -116,21 +189,39 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     public event Action<OpcionesArmado>? GenerarSolicitado;
 
-    public VentanaConfiguradorEstribos(IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false)
+    public VentanaConfiguradorEstribos(
+        IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false,
+        IAlmacenConfiguraciones? almacen = null)
     {
         InitializeComponent();
 
         _contexto = contexto;
         _tipos = tipos;
+        _almacen = almacen ?? new AlmacenConfiguracionesEnMemoria();
 
         BannerSimulado.Visibility = modoSimulado ? Visibility.Visible : Visibility.Collapsed;
 
-        ComboTipoBarra.ItemsSource = _tipos.ListarTiposBarra();
-        ComboTipoGancho.ItemsSource = _tipos.ListarTiposGancho();
-        ComboBarraCaraX.ItemsSource = _tipos.ListarTiposBarra();
-        ComboBarraCaraY.ItemsSource = _tipos.ListarTiposBarra();
-        ComboBarraEsquinas.ItemsSource = _tipos.ListarTiposBarra();
-        ComboGanchoLongitudinal.ItemsSource = _tipos.ListarTiposGancho();
+        // Los combos muestran nombres, que es lo que ConfigTramo/ConfigLongitudinal
+        // guardan como texto; el diámetro que trae cada TipoBarra se usa aparte,
+        // para elegir el valor por defecto (#3 y #4, issue #60).
+        IReadOnlyList<TipoBarra> barras = _tipos.ListarBarras();
+        List<string> nombresDeBarra = barras.Select(b => b.Nombre).ToList();
+
+        ComboTipoBarra.ItemsSource = nombresDeBarra;
+        ComboBarraCaraX.ItemsSource = nombresDeBarra;
+        ComboBarraCaraY.ItemsSource = nombresDeBarra;
+        ComboBarraEsquinas.ItemsSource = nombresDeBarra;
+
+        // Cada combo de gancho ve SOLO los de su estilo: en Revit un gancho
+        // solo se puede aplicar a barras de su mismo estilo, así que ofrecer
+        // los dos mezclados es ofrecer ganchos que fallan recién al generar.
+        // Los dos combos están ocultos (el valor se fija por defecto, reunión
+        // del 10-sep) pero se llenan igual, porque de ahí los lee el panel.
+        IReadOnlyList<TipoGancho> ganchos = _tipos.ListarGanchos();
+        ComboTipoGancho.ItemsSource = ganchos.Where(g => g.Estilo == EstiloGancho.Estribo).Select(g => g.Nombre).ToList();
+        ComboGanchoLongitudinal.ItemsSource = ganchos.Where(g => g.Estilo == EstiloGancho.Estandar).Select(g => g.Nombre).ToList();
+
+        AvisarSiFaltaAlgoPorDefecto(barras, ganchos);
 
         // Pares del 2 al 20 -- "nada se teclea a mano" aplica también acá,
         // no solo a los tipos de barra.
@@ -147,6 +238,9 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboLongitudBarra.ItemsSource = new[] { 6.0, 12.0 };
         ComboLongitudBarra.SelectedItem = 12.0;
 
+        ComboTipoEmpalme.ItemsSource = new[] { EmpalmePorDefecto }.Concat(_tipos.ListarEmpalmes()).ToList();
+        ComboTipoEmpalme.SelectedItem = EmpalmePorDefecto;
+
         RadioUniforme.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
         RadioConfinado.Checked += (_, _) => { ActualizarVisibilidadModo(); RevalidarPanel(); };
 
@@ -158,14 +252,18 @@ public partial class VentanaConfiguradorEstribos : Window
         CampoEspaciadoConfinado.TextChanged += CampoEspaciadoConfinado_TextChanged;
         CampoEspaciadoConfinado.TextChanged += (_, _) => RevalidarPanel();
 
-        PanelPlanta.ColumnaClicked += ActivarYAlternarMarcadoDesdePlanta;
+        PanelPlanta.ColumnaClicked += ElegirColumnaDesdePlanta;
+        PanelPlanta.ColumnasEnRectangulo += ElegirColumnasDesdeRectangulo;
         CampoEspaciadoUniforme.TextChanged += (_, _) => RevalidarPanel();
         CampoL1.TextChanged += (_, _) => RevalidarPanel();
+        CampoEspaciadoNoConfinado.TextChanged += CampoEspaciadoNoConfinado_TextChanged;
         CampoEspaciadoNoConfinado.TextChanged += (_, _) => RevalidarPanel();
         ComboTipoBarra.SelectionChanged += (_, _) => RevalidarPanel();
         ComboTipoGancho.SelectionChanged += (_, _) => RevalidarPanel();
 
+        RefrescarConfiguracionesGuardadas();
         CargarColumnas();
+        ActualizarResumenDeGeneracion();
     }
 
     // -------------------------------------------------------- lista / árbol
@@ -177,13 +275,10 @@ public partial class VentanaConfiguradorEstribos : Window
         foreach (ColumnaResumen resumen in _contexto.ListarColumnas())
             AgregarColumnaYTramos(resumen);
 
-        // Issue #33: dos pestañas en vez de una sola lista -- cada ListBox
-        // muestra un subconjunto de los mismos NodoLista (comparten
-        // instancia, así que tildar en una pestaña no desincroniza nada de
-        // lo que ya recorre _nodos completo). La pestaña de columnetas se
-        // oculta si el modelo no tiene ninguna, para no agregar una pestaña
-        // vacía de más.
-        ListaPrincipales.ItemsSource = _nodos.Where(n => !n.EsColumneta).ToList();
+        // Issue #62: la lista de columnas principales se fue (se eligen en la
+        // planta). Queda la de columnetas, que son delgadas y suelen estar
+        // juntas -- pincharlas en la planta es incómodo. Se oculta si el
+        // modelo no tiene ninguna, para no dejar una pestaña vacía.
         List<NodoLista> columnetas = _nodos.Where(n => n.EsColumneta).ToList();
         ListaColumnetas.ItemsSource = columnetas;
         PestanaColumnetas.Visibility = columnetas.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -212,7 +307,7 @@ public partial class VentanaConfiguradorEstribos : Window
                 EsColumneta = resumen.EsColumneta,
                 ColumnaId = resumen.Id,
                 TramoIndice = tramo.Indice,
-                Etiqueta = $"     Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
+                Etiqueta = $"Tramo {tramo.Indice}  ·  {tramo.Altura:0.00} m  ·  {Rotulo(tramo.Tipo)}",
                 IdElementoHost = tramo.IdElementoHost,
             });
         }
@@ -226,54 +321,34 @@ public partial class VentanaConfiguradorEstribos : Window
         _ => tipo.ToString(),
     };
 
-    /// <summary>Handler compartido por las dos pestañas (issue #33) -- cada una es un ListBox distinto.</summary>
+    /// <summary>
+    /// Selección en la lista de columnetas (la única que quedó, issue #62).
+    /// Resaltar es ELEGIR columnas: con una sola se activa esa; con varias no
+    /// se cambia el tramo activo (si no, la vista de Revit se movería una vez
+    /// por Ctrl+clic).
+    /// </summary>
     private void ListaSeleccion_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // Si esto lo disparó SincronizarDesdeRevit (al poner lista.SelectedItem
-        // = nodo, unas líneas más abajo de ahí), ese método ya llama a
-        // Activar(nodo) explícitamente después -- sin este corte se llama
-        // Activar dos veces reentrante, una desde acá en medio de la otra,
-        // pisando _columnaActiva/_tramoActivoIndice a mitad de camino. Eso
-        // dejaba el estado inconsistente y probablemente era la causa real
-        // del crash de Revit al cerrar la ventana (una excepción ahí se
-        // escapa por el lado nativo del evento de selección de Revit).
-        if (_sincronizandoDesdeRevit) return;
-        if (sender is ListBox { SelectedItem: NodoLista nodo }) Activar(nodo);
-    }
+        // Si esto lo disparó una selección hecha por código, quien la hizo ya
+        // llama a Activar explícitamente después -- sin este corte se llama dos
+        // veces reentrante, pisando _columnaActiva/_tramoActivoIndice a mitad de
+        // camino. Eso dejaba el estado inconsistente y probablemente era la
+        // causa real del crash de Revit al cerrar la ventana (una excepción ahí
+        // se escapa por el lado nativo del evento de selección de Revit).
+        if (_sincronizandoDesdeRevit || _resaltandoEnLista) return;
+        if (sender is not ListBox lista) return;
 
-    /// <summary>
-    /// Tildar/destildar una columna cascadea a todos sus tramos. Tildar un
-    /// tramo suelto no toca a los demás ni a su columna — los dos niveles de
-    /// selección son independientes, como quedó confirmado en el issue.
-    /// </summary>
-    private void CheckBoxNodo_Changed(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement { DataContext: NodoLista nodo }) return;
+        List<NodoLista> seleccionados = lista.SelectedItems.Cast<NodoLista>().ToList();
+        if (seleccionados.Count == 0) return;
 
-        if (nodo.EsColumna)
-        {
-            foreach (NodoLista tramo in _nodos.Where(n => !n.EsColumna && n.ColumnaId == nodo.ColumnaId))
-                tramo.Marcado = nodo.Marcado;
-        }
+        _columnasElegidas.Clear();
+        foreach (NodoLista nodo in seleccionados) _columnasElegidas.Add(nodo.ColumnaId);
 
-        NotificarSeleccionMarcada();
-    }
+        if (seleccionados.Count == 1) Activar(seleccionados[0]);
+        else RedibujarElevacion();
 
-    /// <summary>
-    /// Junta los elementos de todos los tramos tildados (la cascada de arriba
-    /// ya se encargó de que tildar una columna tilde a sus tramos) y avisa --
-    /// puede salir vacía si se destildó todo, y eso también hay que avisarlo
-    /// para que Revit deseleccione.
-    /// </summary>
-    private void NotificarSeleccionMarcada()
-    {
-        List<string> ids = _nodos
-            .Where(n => !n.EsColumna && n.Marcado && n.IdElementoHost is not null)
-            .Select(n => n.IdElementoHost!)
-            .Distinct()
-            .ToList();
-
-        SeleccionMarcadaCambio?.Invoke(ids);
+        RedibujarPanelPlanta();
+        AvisarSiLaSeleccionNoEsUniforme();
     }
 
     // ------------------------------------------------------- tramo activo
@@ -285,64 +360,281 @@ public partial class VentanaConfiguradorEstribos : Window
 
         _columnaActiva = _contexto.Leer(nodo.ColumnaId);
         _columnaIdActiva = nodo.ColumnaId;
+
+        // La activa siempre forma parte de lo elegido: aceptar le cae a ella
+        // aunque nadie la haya resaltado aparte.
+        _columnasElegidas.Add(nodo.ColumnaId);
         _tramoActivoIndice = nodo.EsColumna ? 0 : nodo.TramoIndice;
         _modoColumnaCompleta = nodo.EsColumna;
 
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
+        CargarRecubrimientoDeColumnaActiva();
         MostrarAvisos();
         NotificarElementosActivos();
 
-        // Si el selector visual de planta está a la vista, resaltar en él la
-        // misma columna que acaba de activarse -- por cualquier camino:
-        // clic en la lista, clic en el propio panel, flechas de la
-        // elevación, o sincronización desde una selección hecha en Revit.
-        if (PanelPlanta.Visibility == Visibility.Visible) RedibujarPanelPlanta();
+        // Resaltar en la planta la misma columna que acaba de activarse -- por
+        // cualquier camino: clic en la lista, clic en el propio panel, flechas
+        // de la elevación, o sincronización desde una selección hecha en Revit.
+        // Si su pestaña no está a la vista el panel mide cero y no dibuja nada,
+        // así que no hace falta preguntarlo.
+        RedibujarPanelPlanta();
     }
 
     /// <summary>
-    /// Alterna, en el mismo espacio de la columna izquierda, entre la lista
-    /// de tramos y el selector visual de planta (reunión 9-sep, #39) --
-    /// pedido explícito: se mantiene la lista con checkboxes para configurar
-    /// tramos, el selector visual es solo una forma más fácil de identificar
-    /// y elegir QUÉ columna activar, no la reemplaza.
+    /// La planta pasó de ser un MODO que tapaba la lista (había un botón para
+    /// alternar) a ser la primera pestaña, siempre a mano -- reunión del
+    /// 10-sep: en lista se perdía de vista cuál columna era cuál, y en planta
+    /// no se podía editar un tramo puntual. Ahora conviven, y los tramos
+    /// tienen su propio panel al lado.
     /// </summary>
-    private void BotonVerPlanta_Click(object sender, RoutedEventArgs e)
+    private void PestanasSeleccion_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        bool aPlanta = PanelPlanta.Visibility != Visibility.Visible;
-
-        PanelPlanta.Visibility = aPlanta ? Visibility.Visible : Visibility.Collapsed;
-        PestanasSeleccion.Visibility = aPlanta ? Visibility.Collapsed : Visibility.Visible;
-        BotonVerPlanta.Content = aPlanta ? "Ver lista" : "Ver en planta";
-
-        if (aPlanta) RedibujarPanelPlanta();
+        if (!ReferenceEquals(e.OriginalSource, PestanasSeleccion)) return;
+        RedibujarPanelPlanta();
     }
 
+    // ------------------------------------------ configuraciones guardadas
+
+    /// <summary>
+    /// En alto mientras el combo se rellena por código: cambiar su
+    /// <c>ItemsSource</c> dispara <c>SelectionChanged</c>, y eso cargaría una
+    /// configuración que el usuario no eligió.
+    /// </summary>
+    private bool _refrescandoConfiguraciones;
+
+    private void RefrescarConfiguracionesGuardadas(string? seleccionar = null)
+    {
+        _refrescandoConfiguraciones = true;
+        try
+        {
+            List<string> nombres = _almacen.Listar().Select(g => g.Nombre).OrderBy(n => n).ToList();
+            ComboConfiguraciones.ItemsSource = nombres;
+            ComboConfiguraciones.SelectedItem = seleccionar is not null && nombres.Contains(seleccionar) ? seleccionar : null;
+        }
+        finally
+        {
+            _refrescandoConfiguraciones = false;
+        }
+    }
+
+    /// <summary>
+    /// Elegir una configuración solo CARGA el panel -- no acepta ningún tramo.
+    /// Llevarla a los tramos es el otro gesto (Aceptar), a propósito: así se
+    /// puede mirar qué trae antes de decidir nada.
+    /// </summary>
+    private void ComboConfiguraciones_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_refrescandoConfiguraciones) return;
+        if (ComboConfiguraciones.SelectedItem is not string nombre) return;
+        if (_almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) is not { } guardada) return;
+
+        MostrarConfigEnPanel(guardada.Tramo);
+
+        // Los estribos menores (grapas y cajas) no están en el panel: se editan
+        // aparte y viven por columna. Cargar la configuración los lleva a la
+        // columna activa, si no el resumen que se muestra sería mentira.
+        ConfigLongitudinal longitudinal = guardada.Longitudinal.Copiar();
+        if (_columnaIdActiva is string idColumna) _longitudinalPorColumna[idColumna] = longitudinal;
+        MostrarLongitudinalEnPanel(longitudinal);
+
+        CampoNombreConfiguracion.Text = nombre;
+        RevalidarPanel();
+
+        string menores = ResumenEstribosMenores(longitudinal);
+        TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel ({menores.ToLowerInvariant().TrimEnd('.')}). " +
+                           "Todavía no se aplicó a ningún tramo: para eso, aprieta Aceptar.";
+    }
+
+    private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
+    {
+        string nombre = CampoNombreConfiguracion.Text.Trim();
+        if (nombre.Length == 0)
+        {
+            TextoEstado.Text = "Escribe un nombre para la configuración antes de guardarla.";
+            return;
+        }
+
+        bool reemplaza = _almacen.Listar().Any(g => g.Nombre == nombre);
+
+        // Copia: si la configuración compartiera las listas de grapas/cajas con
+        // la columna de la que salió, seguir editando los estribos menores de
+        // esa columna cambiaría también lo guardado.
+        _almacen.Guardar(new ConfiguracionGuardada
+        {
+            Nombre = nombre,
+            Tramo = LeerConfigDelPanel(),
+            Longitudinal = LeerLongitudinalConEstribosMenores().Copiar(),
+        });
+
+        RefrescarConfiguracionesGuardadas(nombre);
+        TextoEstado.Text = reemplaza
+            ? $"Configuración «{nombre}» actualizada."
+            : $"Configuración «{nombre}» guardada.";
+    }
+
+    private void BotonBorrarConfiguracion_Click(object sender, RoutedEventArgs e)
+    {
+        if (ComboConfiguraciones.SelectedItem is not string nombre)
+        {
+            TextoEstado.Text = "Elige en la lista la configuración que quieras borrar.";
+            return;
+        }
+
+        _almacen.Borrar(nombre);
+        CampoNombreConfiguracion.Text = "";
+        RefrescarConfiguracionesGuardadas();
+        TextoEstado.Text = $"Configuración «{nombre}» borrada.";
+    }
+
+    /// <summary>
+    /// La planta muestra las dos cosas por separado, que desde el issue #56 ya
+    /// no son la misma: qué columnas están ELEGIDAS (a las que les cae Aceptar)
+    /// y cuáles tienen al menos un tramo ACEPTADO (las que se van a generar).
+    /// </summary>
     private void RedibujarPanelPlanta()
     {
-        HashSet<string> marcadas = _nodos.Where(n => n.EsColumna && n.Marcado).Select(n => n.ColumnaId).ToHashSet();
-        PanelPlanta.Cargar(_contexto.ListarColumnas(), _contexto.ListarRejillas(), _columnaIdActiva, marcadas);
+        HashSet<string> configuradas = _tramosAceptados.Select(t => t.ColumnaId).ToHashSet();
+
+        PanelPlanta.Cargar(
+            _contexto.ListarColumnas(), _contexto.ListarRejillas(),
+            _columnaIdActiva, _columnasElegidas, configuradas);
     }
 
     /// <summary>
-    /// Clic en una columna del selector visual de planta: activa Y tilda (o
-    /// destilda) la columna entera de un solo gesto -- pedido explícito del
-    /// usuario, mismo efecto combinado que activar la fila en negrita de la
-    /// lista y tildar su checkbox. Cascadea a todos sus tramos, igual que
-    /// <see cref="CheckBoxNodo_Changed"/>.
+    /// Clic en una columna del selector visual de planta: la elige y la activa.
+    /// Ya no tilda nada -- el tilde desapareció con el issue #56: lo que se
+    /// genera se decide aceptando cada tramo en el panel de la derecha. Con
+    /// Ctrl se suma (o se saca) de lo ya elegido en vez de reemplazarlo.
     /// </summary>
-    private void ActivarYAlternarMarcadoDesdePlanta(string columnaId)
+    private void ElegirColumnaDesdePlanta(string columnaId, bool sumar)
     {
         NodoLista? nodo = _nodos.FirstOrDefault(n => n.EsColumna && n.ColumnaId == columnaId);
         if (nodo is null) return;
 
-        nodo.Marcado = !nodo.Marcado;
-        foreach (NodoLista tramo in _nodos.Where(n => !n.EsColumna && n.ColumnaId == nodo.ColumnaId))
-            tramo.Marcado = nodo.Marcado;
-        NotificarSeleccionMarcada();
+        if (!sumar)
+        {
+            _columnasElegidas.Clear();
+        }
+        else if (_columnasElegidas.Contains(columnaId) && _columnasElegidas.Count > 1)
+        {
+            // Ctrl+clic sobre una ya elegida la saca -- salvo que sea la única,
+            // porque quedarse sin ninguna no es un estado útil.
+            _columnasElegidas.Remove(columnaId);
+            SincronizarResaltadoDeColumnetas();
+            RedibujarPanelPlanta();
+            AvisarSiLaSeleccionNoEsUniforme();
+            return;
+        }
 
+        _columnasElegidas.Add(columnaId);
+        SincronizarResaltadoDeColumnetas();
         Activar(nodo);
+        AvisarSiLaSeleccionNoEsUniforme();
+    }
+
+    /// <summary>
+    /// Arrastre sobre la planta (reunión 10-sep): elige todas las columnas
+    /// alcanzadas. A diferencia del clic suelto no alterna -- las deja
+    /// elegidas, que es lo que uno espera de una selección por rectángulo.
+    /// </summary>
+    private void ElegirColumnasDesdeRectangulo(IReadOnlyList<string> idsColumnas, bool sumar)
+    {
+        var alcanzadas = new HashSet<string>(idsColumnas);
+        List<NodoLista> columnas = _nodos.Where(n => n.EsColumna && alcanzadas.Contains(n.ColumnaId)).ToList();
+        if (columnas.Count == 0) return;
+
+        if (!sumar) _columnasElegidas.Clear();
+        foreach (NodoLista nodo in columnas) _columnasElegidas.Add(nodo.ColumnaId);
+
+        SincronizarResaltadoDeColumnetas();
+        Activar(columnas[0]);
+        AvisarSiLaSeleccionNoEsUniforme();
+    }
+
+    /// <summary>
+    /// Refleja <see cref="_columnasElegidas"/> en la lista de columnetas, que es
+    /// el único ListBox que quedó (issue #62) y muestra solo una parte de las
+    /// columnas: las que no están ahí simplemente no se reflejan, se ven
+    /// elegidas en la planta.
+    /// </summary>
+    private void SincronizarResaltadoDeColumnetas()
+    {
+        _resaltandoEnLista = true;
+        try
+        {
+            ListaColumnetas.SelectedItems.Clear();
+            foreach (NodoLista nodo in ListaColumnetas.Items.OfType<NodoLista>()
+                         .Where(n => n.EsColumna && _columnasElegidas.Contains(n.ColumnaId)))
+            {
+                ListaColumnetas.SelectedItems.Add(nodo);
+            }
+        }
+        finally
+        {
+            _resaltandoEnLista = false;
+        }
+    }
+
+    /// <summary>
+    /// Issue #63: configurar varias columnas de una sola vez solo tiene sentido
+    /// si comparten estructura -- "el mismo nudo, los mismos tramos… solo que
+    /// una va a tener el traslapo a otra altura porque sea más larga o más
+    /// corta" (William, 11-sep). La diferencia de ALTURA no importa; la de
+    /// cantidad y tipo de tramos sí, porque lo que se copia es tramo por tramo.
+    /// </summary>
+    private static bool MismaEstructura(ColumnaContexto a, ColumnaContexto b) =>
+        a.Tramos.Count == b.Tramos.Count &&
+        a.Tramos.Select(t => t.Tipo).SequenceEqual(b.Tramos.Select(t => t.Tipo));
+
+    /// <summary>
+    /// Las columnas elegidas que comparten estructura con la activa, y las que
+    /// no. La activa siempre encabeza la lista de compatibles.
+    /// </summary>
+    private (List<(string Id, ColumnaContexto Ctx)> Compatibles, List<string> Descartadas) ColumnasCompatibles()
+    {
+        var compatibles = new List<(string, ColumnaContexto)>();
+        var descartadas = new List<string>();
+
+        if (_columnaActiva is null || _columnaIdActiva is not string idActiva)
+            return (compatibles, descartadas);
+
+        compatibles.Add((idActiva, _columnaActiva));
+
+        foreach (string id in _columnasElegidas.Where(i => i != idActiva).OrderBy(i => i))
+        {
+            ColumnaContexto otra = _contexto.Leer(id);
+
+            if (MismaEstructura(_columnaActiva, otra)) compatibles.Add((id, otra));
+            else descartadas.Add($"{otra.Marca} ({CuantosTramos(otra.Tramos.Count)})");
+        }
+
+        return (compatibles, descartadas);
+    }
+
+    private static string CuantosTramos(int cuantos) => cuantos == 1 ? "1 tramo" : $"{cuantos} tramos";
+
+    /// <summary>
+    /// Avisa apenas se eligen varias columnas que no comparten estructura, sin
+    /// esperar a que alguien apriete Aceptar: el issue #63 pide justamente eso,
+    /// avisar en vez de aplicar en silencio.
+    /// </summary>
+    private void AvisarSiLaSeleccionNoEsUniforme()
+    {
+        if (_columnasElegidas.Count <= 1) return;
+
+        (List<(string Id, ColumnaContexto Ctx)> compatibles, List<string> descartadas) = ColumnasCompatibles();
+        if (_columnaActiva is null) return;
+
+        bool esUna = descartadas.Count == 1;
+
+        TextoEstado.Text = descartadas.Count == 0
+            ? $"{compatibles.Count} columnas elegidas, todas con la misma estructura: lo que aceptes les cae a todas."
+            : $"{_columnasElegidas.Count} columnas elegidas, pero {string.Join(", ", descartadas)} " +
+              $"{(esUna ? "no tiene" : "no tienen")} la misma estructura que " +
+              $"{_columnaActiva.Marca} ({CuantosTramos(_columnaActiva.Tramos.Count)}): " +
+              $"{(esUna ? "queda" : "quedan")} afuera de lo que aceptes.";
     }
 
     /// <summary>
@@ -366,18 +658,33 @@ public partial class VentanaConfiguradorEstribos : Window
         if (idsSeleccionados.Count == 0) return;
 
         var idsSet = new HashSet<string>(idsSeleccionados);
-        NodoLista? nodo = _nodos.FirstOrDefault(n => !n.EsColumna && n.IdElementoHost is not null && idsSet.Contains(n.IdElementoHost))
-            ?? _nodos.FirstOrDefault(n => n.EsColumna && idsSet.Contains(n.ColumnaId));
-        if (nodo is null) return;
+
+        // TODOS los que coincidan, no solo el primero: seleccionar cinco
+        // columnas en Revit y que acá se active una sola, arbitraria (la
+        // primera en el orden del modelo, ni siquiera en el orden de
+        // selección), era lo que se veía hasta la reunión del 10-sep.
+        List<NodoLista> coinciden = _nodos
+            .Where(n => !n.EsColumna && n.IdElementoHost is not null && idsSet.Contains(n.IdElementoHost))
+            .ToList();
+
+        // Si no cae en ningún tramo puede ser el elemento de más abajo de la
+        // pila, que es el mismo id que la fila de columna usa como ColumnaId.
+        if (coinciden.Count == 0)
+            coinciden = _nodos.Where(n => n.EsColumna && idsSet.Contains(n.ColumnaId)).ToList();
+
+        if (coinciden.Count == 0) return;
 
         _sincronizandoDesdeRevit = true;
         try
         {
-            if (nodo.EsColumneta) PestanasSeleccion.SelectedIndex = 1;
-            ListBox lista = nodo.EsColumneta ? ListaColumnetas : ListaPrincipales;
-            if (!ReferenceEquals(lista.SelectedItem, nodo)) lista.SelectedItem = nodo;
+            NodoLista primero = coinciden[0];
+            if (primero.EsColumneta) PestanaColumnetas.IsSelected = true;
 
-            Activar(nodo);
+            _columnasElegidas.Clear();
+            foreach (NodoLista nodo in coinciden) _columnasElegidas.Add(nodo.ColumnaId);
+
+            SincronizarResaltadoDeColumnetas();
+            Activar(primero);
         }
         finally
         {
@@ -499,10 +806,10 @@ public partial class VentanaConfiguradorEstribos : Window
                     $"L1 ({cfg.LongitudConfinamiento:0.00} m) x2 ≥ la altura del tramo " +
                     $"({tramo.Altura:0.00} m): no queda zona central.");
 
-            if (tramo is { Tipo: TipoTramo.DentroDeViga })
-                errores.Add(
-                    "Este tramo ya es un nudo (dentro de viga): el confinamiento normalmente " +
-                    "se configura en los tramos libres adyacentes, no acá.");
+            // El caso "esto es un nudo" ya no se valida acá: desde el issue
+            // #58 el modo Confinado queda directamente DESHABILITADO con un
+            // nudo activo (ver CargarPanelDelTramoActivo), así que no hay forma
+            // de llegar hasta acá con esa combinación.
         }
 
         return errores;
@@ -519,15 +826,30 @@ public partial class VentanaConfiguradorEstribos : Window
     }
 
     /// <summary>
-    /// Autocompleta el espaciado no confinado al doble del confinado. Queda
-    /// editable después: si el usuario lo toca, esto no lo vuelve a pisar en
-    /// esta misma edición (la máquina de estados completa que decide cuándo
-    /// re-sugerir es trabajo de L3).
+    /// Autocompleta el espaciado no confinado al doble del confinado -- pero
+    /// solo mientras el usuario no lo haya escrito a mano
+    /// (<see cref="_noConfinadoEditadoAMano"/>).
     /// </summary>
     private void CampoEspaciadoConfinado_TextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_llenandoPanel || _noConfinadoEditadoAMano) return;
+
         double confinado = LeerDouble(CampoEspaciadoConfinado.Text);
-        CampoEspaciadoNoConfinado.Text = (confinado * 2).ToString("0.###", CultureInfo.InvariantCulture);
+
+        _llenandoPanel = true;
+        try { CampoEspaciadoNoConfinado.Text = (confinado * 2).ToString("0.###", CultureInfo.InvariantCulture); }
+        finally { _llenandoPanel = false; }
+    }
+
+    /// <summary>
+    /// Si el texto lo escribió el usuario (y no la sugerencia automática ni la
+    /// carga de un tramo), a partir de ahí el campo es suyo y no se vuelve a
+    /// pisar.
+    /// </summary>
+    private void CampoEspaciadoNoConfinado_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_llenandoPanel) return;
+        _noConfinadoEditadoAMano = true;
     }
 
     private ConfigTramo LeerConfigDelPanel() => new()
@@ -543,23 +865,97 @@ public partial class VentanaConfiguradorEstribos : Window
 
     private void MostrarConfigEnPanel(ConfigTramo cfg)
     {
-        RadioUniforme.IsChecked = cfg.Modo == ModoEstribo.Uniforme;
-        RadioConfinado.IsChecked = cfg.Modo == ModoEstribo.Confinado;
-        ActualizarVisibilidadModo();
+        // Cargar otro tramo empieza de cero: lo que se muestra es lo guardado
+        // de ESE tramo, no una edición manual del anterior.
+        _noConfinadoEditadoAMano = false;
+        _llenandoPanel = true;
+        try
+        {
+            RadioUniforme.IsChecked = cfg.Modo == ModoEstribo.Uniforme;
+            RadioConfinado.IsChecked = cfg.Modo == ModoEstribo.Confinado;
+            ActualizarVisibilidadModo();
 
-        ComboTipoBarra.SelectedItem = cfg.TipoBarraNombre;
-        ComboTipoGancho.SelectedItem = cfg.TipoGanchoNombre;
+            ComboTipoBarra.SelectedItem = cfg.TipoBarraNombre;
+            ComboTipoGancho.SelectedItem = cfg.TipoGanchoNombre;
 
-        CampoEspaciadoUniforme.Text = Formato(cfg.EspaciadoUniforme);
-        CampoL1.Text = Formato(cfg.LongitudConfinamiento);
-        CampoEspaciadoConfinado.Text = Formato(cfg.EspaciadoConfinado);
-        CampoEspaciadoNoConfinado.Text = Formato(cfg.EspaciadoNoConfinado);
+            CampoEspaciadoUniforme.Text = Formato(cfg.EspaciadoUniforme);
+            CampoL1.Text = Formato(cfg.LongitudConfinamiento);
+            CampoEspaciadoConfinado.Text = Formato(cfg.EspaciadoConfinado);
+            CampoEspaciadoNoConfinado.Text = Formato(cfg.EspaciadoNoConfinado);
+        }
+        finally
+        {
+            _llenandoPanel = false;
+        }
+    }
+
+    /// <summary>
+    /// El add-in no crea tipos de gancho: si el documento no tiene uno del
+    /// estilo y ángulo esperados, se usa el que haya de ese estilo, y eso hay
+    /// que decirlo -- si no, el armado sale con un gancho que nadie eligió.
+    /// </summary>
+    private void AvisarSiFaltaAlgoPorDefecto(IReadOnlyList<TipoBarra> barras, IReadOnlyList<TipoGancho> ganchos)
+    {
+        var faltan = new List<string>();
+
+        // Issue #60: la barra por defecto se elige por DIÁMETRO contra el cuadro
+        // de la empresa, no por nombre ("#3", "#3 COL", "3"… cambian de modelo a
+        // modelo) ni por "la primera de la lista", que en el modelo de William
+        // daba la #10. Si el documento no tiene ese diámetro se cae a la primera
+        // que haya, pero avisando.
+        foreach ((int numero, string para) in new[] { (NumeroVarillaEstribo, "el estribo"), (NumeroVarillaLongitudinal, "la longitudinal") })
+        {
+            if (TipoBarra.PorDefecto(barras, numero) is null)
+                faltan.Add($"no hay ninguna barra #{numero} para {para}; se usa «{barras.FirstOrDefault()?.Nombre}»");
+        }
+
+        if (TipoGancho.PorDefecto(ganchos, EstiloGancho.Estribo, 135) is not { } estribo)
+            faltan.Add("no hay ningún gancho de estilo estribo/tirante");
+        else if (Math.Abs(estribo.AnguloGrados - 135) >= 1)
+            faltan.Add($"no hay gancho de estribo de 135°; se usa «{estribo.Nombre}» ({estribo.AnguloGrados:0}°)");
+
+        if (TipoGancho.PorDefecto(ganchos, EstiloGancho.Estandar, 90) is not { } zapata)
+            faltan.Add("no hay ningún gancho de estilo estándar para el anclaje en la zapata");
+        else if (Math.Abs(zapata.AnguloGrados - 90) >= 1)
+            faltan.Add($"no hay gancho estándar de 90° para la zapata; se usa «{zapata.Nombre}» ({zapata.AnguloGrados:0}°)");
+
+        if (faltan.Count > 0)
+            TextoEstado.Text = "Atención: " + string.Join("; ", faltan) + ".";
+    }
+
+    /// <summary>Barra por defecto del estribo: #3 (William, 11-sep).</summary>
+    private const int NumeroVarillaEstribo = 3;
+
+    /// <summary>Barra por defecto de la longitudinal, caras y esquinas: #4 ("todo número cuatro por defecto").</summary>
+    private const int NumeroVarillaLongitudinal = 4;
+
+    /// <summary>
+    /// Primera opción del combo de tipo de empalme: los tipos propios del
+    /// add-in, con el solape del cuadro de la empresa. Se guarda como
+    /// <c>null</c> en <see cref="ConfigLongitudinal.TipoEmpalmeNombre"/>.
+    /// </summary>
+    private const string EmpalmePorDefecto = "Por defecto del add-in (cuadro CQ)";
+
+    /// <summary>
+    /// El tipo de barra de esa varilla, o el primero de la lista si el
+    /// documento no la tiene -- que ese caso se avisa una vez al abrir, en
+    /// <see cref="AvisarSiFaltaAlgoPorDefecto"/>.
+    /// </summary>
+    private static string? BarraPorDefecto(IProveedorTipos tipos, int numeroVarilla)
+    {
+        IReadOnlyList<TipoBarra> barras = tipos.ListarBarras();
+
+        return TipoBarra.PorDefecto(barras, numeroVarilla)?.Nombre ?? barras.FirstOrDefault()?.Nombre;
     }
 
     private static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
     {
-        TipoBarraNombre = tipos.ListarTiposBarra().FirstOrDefault(),
-        TipoGanchoNombre = tipos.ListarTiposGancho().FirstOrDefault(),
+        // Issue #60: por diámetro contra el cuadro de la empresa. Antes era "el
+        // primero alfabéticamente", que no es un criterio -- en el modelo de
+        // William daba la #10.
+        TipoBarraNombre = BarraPorDefecto(tipos, NumeroVarillaEstribo),
+        // Estribo/tirante de 135°, confirmado por William el 10-sep.
+        TipoGanchoNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estribo, 135)?.Nombre,
         EspaciadoUniforme = 0.20,
         LongitudConfinamiento = 0.50,
         EspaciadoConfinado = 0.07,
@@ -588,8 +984,66 @@ public partial class VentanaConfiguradorEstribos : Window
         Tramo tramo = _columnaActiva.Tramos[_tramoActivoIndice];
         TextoTramoActivo.Text = $"{_columnaActiva.Marca} · {_tramoActivoIndice + 1}/{_columnaActiva.Tramos.Count} · {Rotulo(tramo.Tipo)}";
 
+        // Issue #58: en el nudo el estribo va siempre uniforme -- "obliga que en
+        // los nudos sea uniforme, no se permita meter confinamiento en el nudo"
+        // (William, 11-sep). Se deshabilita después de MostrarConfigEnPanel, que
+        // es quien pone los radios según lo guardado: un tramo que quedó en
+        // confinado de antes (o una configuración guardada que viene en
+        // confinado) se corrige acá en vez de quedar en un estado imposible.
+        bool esNudo = tramo.Tipo == TipoTramo.DentroDeViga;
+
+        RadioConfinado.IsEnabled = !esNudo;
+        TextoModoFijo.Visibility = esNudo ? Visibility.Visible : Visibility.Collapsed;
+
+        if (esNudo && RadioConfinado.IsChecked == true)
+        {
+            _llenandoPanel = true;
+            try { RadioUniforme.IsChecked = true; }
+            finally { _llenandoPanel = false; }
+
+            ActualizarVisibilidadModo();
+        }
+
+        ActualizarBotonesDeAceptar(tramo);
         RevalidarPanel();
     }
+
+    /// <summary>
+    /// Los botones de aceptar, armados contra el tramo activo (issue #57):
+    /// "aplicar al resto de los tramos libres" solo aparece con un tramo libre
+    /// activo, "al resto de los nudos" solo con un nudo. Contextual, no un botón
+    /// genérico -- "seleccionas un tramo libre, lo configuras […] y está la
+    /// opción 'aplicar al resto de tramos libres' y pan, se coloca" (William).
+    ///
+    /// Los conteos son del RESTO (sin el activo, que se acepta igual) y salen
+    /// del mismo helper que después se usa para aplicar
+    /// (<see cref="TramosDeLaColumnaActiva"/>), así que no pueden discrepar.
+    /// Con 0 el botón no se muestra: una columna de un solo tramo libre no
+    /// ofrece "aplicar al resto" como si hiciera algo.
+    /// </summary>
+    private void ActualizarBotonesDeAceptar(Tramo activo)
+    {
+        int delMismoTipo = TramosDeLaColumnaActiva(t => t.Tipo == activo.Tipo).Count - 1;
+        int enLaColumna = TramosDeLaColumnaActiva(null).Count - 1;
+
+        BotonAceptarMismoTipo.Content = $"✓  Aceptar y aplicar al resto de {RotuloPlural(activo.Tipo)} ({delMismoTipo})";
+        BotonAceptarMismoTipo.Visibility = delMismoTipo > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Si todos los tramos de la columna son del mismo tipo, los dos botones
+        // harían exactamente lo mismo: se muestra uno solo.
+        BotonAceptarColumna.Content = $"✓  Aceptar y aplicar a toda la columna ({enLaColumna + 1})";
+        BotonAceptarColumna.Visibility = enLaColumna > 0 && delMismoTipo != enLaColumna
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private static string RotuloPlural(TipoTramo tipo) => tipo switch
+    {
+        TipoTramo.Libre => "los tramos libres",
+        TipoTramo.DentroDeViga => "los nudos",
+        TipoTramo.ContraZapata => "los tramos contra zapata",
+        _ => "los tramos de ese tipo",
+    };
 
     // -------------------------------------------------- acero longitudinal (L4)
 
@@ -601,6 +1055,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
         TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
         LongitudComercialBarra = ComboLongitudBarra.SelectedItem as double? ?? 12.0,
+        TipoEmpalmeNombre = ComboTipoEmpalme.SelectedItem is string empalme && empalme != EmpalmePorDefecto ? empalme : null,
         TipoGanchoLongitudinalNombre = ComboGanchoLongitudinal.SelectedItem as string,
         // Las posiciones de grapas/cajas no se leen del panel: se editan aparte
         // en L4 y viven en _longitudinalPorColumna hasta que este método las
@@ -615,6 +1070,13 @@ public partial class VentanaConfiguradorEstribos : Window
         ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
         ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
         ComboLongitudBarra.SelectedItem = cfg.LongitudComercialBarra;
+
+        // Un nombre que este modelo no tiene (configuración guardada traída de
+        // otro) se muestra como el por defecto; el generador avisa igual.
+        ComboTipoEmpalme.SelectedItem =
+            cfg.TipoEmpalmeNombre is not null && ComboTipoEmpalme.Items.Contains(cfg.TipoEmpalmeNombre)
+                ? cfg.TipoEmpalmeNombre
+                : EmpalmePorDefecto;
         ComboGanchoLongitudinal.SelectedItem = cfg.TipoGanchoLongitudinalNombre;
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
@@ -634,29 +1096,93 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         BarrasPorCaraX = 2,
         BarrasPorCaraY = 2,
-        TipoBarraCaraXNombre = tipos.ListarTiposBarra().FirstOrDefault(),
-        TipoBarraCaraYNombre = tipos.ListarTiposBarra().FirstOrDefault(),
-        TipoBarraEsquinasNombre = tipos.ListarTiposBarra().FirstOrDefault(),
+        // Issue #60: "todo número cuatro por defecto" (William, 11-sep).
+        TipoBarraCaraXNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
+        TipoBarraCaraYNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
+        TipoBarraEsquinasNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
         LongitudComercialBarra = 12.0,
-        TipoGanchoLongitudinalNombre = tipos.ListarTiposGancho().FirstOrDefault(),
+        // Anclaje en la zapata: estándar de 90°, también de la reunión del 10-sep.
+        TipoGanchoLongitudinalNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estandar, 90)?.Nombre,
     };
 
-    private void GuardarLongitudinalDeColumnaActiva()
+    /// <summary>
+    /// Lo del panel MÁS los estribos menores de la columna activa. Las
+    /// posiciones de grapas y cajas no se editan en este panel (se editan
+    /// aparte, en L4) y viven en <see cref="_longitudinalPorColumna"/>, así que
+    /// leer solo el panel las perdería. Lo usan tanto el guardado por columna
+    /// como las configuraciones con nombre.
+    /// </summary>
+    private ConfigLongitudinal LeerLongitudinalConEstribosMenores()
     {
-        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
-
-        // Las grapas/cajas ya editadas en L4 (si las hay) se preservan --
-        // este panel no las toca, solo cantidad/tipo de barra.
         ConfigLongitudinal nuevo = LeerLongitudinalDelPanel();
 
-        if (_longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo))
+        if (_columnaIdActiva is string idColumna &&
+            _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? previo))
         {
             nuevo.GrapasFila = previo.GrapasFila;
             nuevo.GrapasColumna = previo.GrapasColumna;
             nuevo.Cajas = previo.Cajas;
         }
 
-        _longitudinalPorColumna[idColumna] = nuevo;
+        return nuevo;
+    }
+
+    private void GuardarLongitudinalDeColumnaActiva()
+    {
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
+
+        _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores();
+    }
+
+    /// <summary>
+    /// Llena el combo con los recubrimientos distintos que tienen las piezas
+    /// de la columna activa (más el normal del equipo) y deja elegido el de la
+    /// columna -- el que ya tenía, o si es la primera vez que se activa, el
+    /// del tramo activo.
+    /// </summary>
+    private void CargarRecubrimientoDeColumnaActiva()
+    {
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
+
+        static double Redondear(double metros) => Math.Round(metros, 3);
+
+        if (!_recubrimientoPorColumna.TryGetValue(idColumna, out double elegido))
+        {
+            double delTramoActivo = _columnaActiva.Tramos.ElementAtOrDefault(_tramoActivoIndice)?.Recubrimiento ?? 0;
+            elegido = Redondear(delTramoActivo > 0 ? delTramoActivo
+                : _columnaActiva.Recubrimiento > 0 ? _columnaActiva.Recubrimiento
+                : RecubrimientoNormal);
+            _recubrimientoPorColumna[idColumna] = elegido;
+        }
+
+        List<OpcionRecubrimiento> opciones = _columnaActiva.Tramos
+            .Select(t => t.Recubrimiento)
+            .Where(r => r > 0)
+            .Append(RecubrimientoNormal)
+            .Append(elegido)
+            .Select(Redondear)
+            .Distinct()
+            .OrderBy(r => r)
+            .Select(r => new OpcionRecubrimiento(r))
+            .ToList();
+
+        _cargandoRecubrimiento = true;
+        try
+        {
+            ComboRecubrimiento.ItemsSource = opciones;
+            ComboRecubrimiento.SelectedItem = opciones.First(o => o.Metros == elegido);
+        }
+        finally
+        {
+            _cargandoRecubrimiento = false;
+        }
+    }
+
+    private void ComboRecubrimiento_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_cargandoRecubrimiento || _columnaIdActiva is not string idColumna) return;
+        if (ComboRecubrimiento.SelectedItem is OpcionRecubrimiento opcion)
+            _recubrimientoPorColumna[idColumna] = opcion.Metros;
     }
 
     private void CargarLongitudinalDeColumnaActiva()
@@ -703,73 +1229,207 @@ public partial class VentanaConfiguradorEstribos : Window
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
     }
 
-    // ----------------------------------------------------------- selección
+    // ------------------------------------------------------------- aceptar
 
-    private void BotonAplicarSeleccion_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Los tramos de la columna activa que pasan el filtro (o todos, con
+    /// <paramref name="filtro"/> en <c>null</c>). El contexto de la columna se
+    /// lee UNA vez: los conteos de los botones y lo que después se acepta salen
+    /// de acá, así que no pueden discrepar.
+    /// </summary>
+    private List<NodoLista> TramosDeLaColumnaActiva(Func<Tramo, bool>? filtro)
     {
-        ConfigTramo plantilla = LeerConfigDelPanel();
+        if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return new List<NodoLista>();
 
-        // Validación de campos (sin altura -- eso depende de a qué tramo se
-        // le aplique, se chequea abajo, por tramo, una vez que se sabe).
-        List<string> erroresPlantilla = Validar(plantilla, tramo: null);
-        if (erroresPlantilla.Count > 0)
+        return _nodos
+            .Where(n => !n.EsColumna && n.ColumnaId == idColumna)
+            .Where(n => n.TramoIndice >= 0 && n.TramoIndice < _columnaActiva.Tramos.Count)
+            .Where(n => filtro is null || filtro(_columnaActiva.Tramos[n.TramoIndice]))
+            .ToList();
+    }
+
+    private void BotonAceptar_Click(object sender, RoutedEventArgs e) => Aceptar(extenderA: null);
+
+    private void BotonAceptarMismoTipo_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnaActiva is null) return;
+
+        TipoTramo tipo = _columnaActiva.Tramos[_tramoActivoIndice].Tipo;
+        Aceptar(t => t.Tipo == tipo);
+    }
+
+    private void BotonAceptarColumna_Click(object sender, RoutedEventArgs e) => Aceptar(_ => true);
+
+    /// <summary>
+    /// El gesto central de la ventana desde el issue #56: acepta el tramo
+    /// activo -- y, si <paramref name="extenderA"/> no es null, también a los
+    /// tramos de la columna que pasen ese filtro (issue #57).
+    ///
+    /// "Aceptado" es lo que decide el chulito y lo que se genera, y es lo único
+    /// que hace entrar algo en <see cref="_tramosAceptados"/>: navegar hasta un
+    /// tramo o teclear en un campo no alcanza, a propósito.
+    ///
+    /// Con varias columnas elegidas le cae a todas las que compartan estructura
+    /// con la activa, y las que no quedan nombradas en el estado (issue #63).
+    /// </summary>
+    private void Aceptar(Func<Tramo, bool>? extenderA)
+    {
+        if (_columnaActiva is null || _columnaIdActiva is null) return;
+
+        ConfigTramo plantilla = LeerConfigDelPanel();
+        Tramo tramoActivo = _columnaActiva.Tramos[_tramoActivoIndice];
+
+        // Se valida ANTES de aceptar nada: aceptar es decir "esto va a Revit
+        // así", y no tiene sentido marcar con chulito algo que el generador va
+        // a rebotar.
+        List<string> errores = Validar(plantilla, tramoActivo);
+        if (errores.Count > 0)
         {
-            TextoEstado.Text = "No se aplicó nada: " + string.Join(" ", erroresPlantilla);
+            TextoValidacion.Text = string.Join(Environment.NewLine, errores);
+            TextoEstado.Text = "No se aceptó nada: falta corregir lo que dice arriba en rojo.";
             return;
         }
 
-        List<NodoLista> objetivo = _nodos.Where(n => !n.EsColumna && n.Marcado).ToList();
-        if (objetivo.Count == 0)
+        (List<(string Id, ColumnaContexto Ctx)> compatibles, List<string> descartadas) = ColumnasCompatibles();
+
+        // Qué índices de tramo se tocan. Solo el activo, o el activo más los
+        // que pasen el filtro -- los índices valen para todas las columnas
+        // compatibles justamente porque comparten estructura.
+        var indices = new HashSet<int> { _tramoActivoIndice };
+        if (extenderA is not null)
         {
-            TextoEstado.Text = "No hay tramos tildados en la lista: tilda alguno (o una columna entera) para aplicarles esta configuración.";
-            return;
+            foreach (NodoLista nodo in TramosDeLaColumnaActiva(extenderA)) indices.Add(nodo.TramoIndice);
         }
 
         var conProblemaDeNorma = new List<string>();
+        int aceptados = 0;
 
-        foreach (NodoLista nodo in objetivo)
+        foreach ((string idColumna, ColumnaContexto ctx) in compatibles)
         {
-            // Copia independiente por tramo -- no una referencia compartida.
-            // Editar uno solo después (con las flechas) no le tiene que
-            // cambiar el valor a los demás que recibieron esta misma config.
-            _configPorTramo[(nodo.ColumnaId, nodo.TramoIndice)] = new ConfigTramo
-            {
-                Modo = plantilla.Modo,
-                TipoBarraNombre = plantilla.TipoBarraNombre,
-                TipoGanchoNombre = plantilla.TipoGanchoNombre,
-                EspaciadoUniforme = plantilla.EspaciadoUniforme,
-                LongitudConfinamiento = plantilla.LongitudConfinamiento,
-                EspaciadoConfinado = plantilla.EspaciadoConfinado,
-                EspaciadoNoConfinado = plantilla.EspaciadoNoConfinado,
-            };
+            // El acero longitudinal es por columna, no por tramo, pero también
+            // forma parte de "la misma configuración para varias columnas" que
+            // pidió William (issue #63): sin esto, las columnas que no son la
+            // activa se generaban con el longitudinal por defecto en vez de con
+            // el que está en el panel. Copia propia -- si compartieran las
+            // listas de grapas y cajas, editarlas en una las cambiaría en todas.
+            _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores().Copiar();
 
-            // El chequeo de L1 vs altura sí depende de CADA tramo -- distintos
-            // tramos de la selección pueden tener distinta altura. Se avisa
-            // pero no se bloquea: es la misma filosofía del resto del código
-            // (avisos, no excepciones), la geometría incoherente de verdad la
-            // ataja el generador (J3), esto es una alerta temprana en la UI.
-            ColumnaContexto contexto = _contexto.Leer(nodo.ColumnaId);
-            Tramo tramoReal = contexto.Tramos[nodo.TramoIndice];
-            if (plantilla.Modo == ModoEstribo.Confinado
-                && tramoReal.Altura > 0
-                && plantilla.LongitudConfinamiento * 2 >= tramoReal.Altura)
+            // El recubrimiento elegido también es parte de "la misma
+            // configuración para varias columnas": se lleva a las que todavía
+            // no tienen uno propio, sin pisar el que alguien ya eligió.
+            if (_columnaIdActiva is string idActivaParaRecubrimiento &&
+                _recubrimientoPorColumna.TryGetValue(idActivaParaRecubrimiento, out double recubrimientoActivo))
+                _recubrimientoPorColumna.TryAdd(idColumna, recubrimientoActivo);
+
+            foreach (int indice in indices)
             {
-                conProblemaDeNorma.Add($"{contexto.Marca}[{nodo.TramoIndice}]");
+                // Copia independiente por tramo -- no una referencia compartida.
+                // Editar uno solo después (con las flechas) no le tiene que
+                // cambiar el valor a los demás que recibieron esta misma config.
+                _configPorTramo[(idColumna, indice)] = new ConfigTramo
+                {
+                    Modo = plantilla.Modo,
+                    TipoBarraNombre = plantilla.TipoBarraNombre,
+                    TipoGanchoNombre = plantilla.TipoGanchoNombre,
+                    EspaciadoUniforme = plantilla.EspaciadoUniforme,
+                    LongitudConfinamiento = plantilla.LongitudConfinamiento,
+                    EspaciadoConfinado = plantilla.EspaciadoConfinado,
+                    EspaciadoNoConfinado = plantilla.EspaciadoNoConfinado,
+                };
+
+                _tramosAceptados.Add((idColumna, indice));
+                aceptados++;
+
+                // El chequeo de L1 vs altura sí depende de CADA tramo: distintas
+                // columnas y distintos tramos tienen distinta altura, y eso es
+                // exactamente lo que William dijo que no debía impedir compartir
+                // la configuración. Se avisa, no se bloquea -- la geometría
+                // incoherente de verdad la ataja el generador.
+                Tramo tramoReal = ctx.Tramos[indice];
+
+                if (plantilla.Modo == ModoEstribo.Confinado
+                    && tramoReal.Altura > 0
+                    && plantilla.LongitudConfinamiento * 2 >= tramoReal.Altura)
+                {
+                    conProblemaDeNorma.Add($"{ctx.Marca}[{indice}]");
+                }
             }
         }
 
-        TextoEstado.Text = conProblemaDeNorma.Count == 0
-            ? $"Aplicado a {objetivo.Count} tramo(s)."
-            : $"Aplicado a {objetivo.Count} tramo(s). Atención: en {string.Join(", ", conProblemaDeNorma)} " +
-              "L1 x2 ≥ la altura del tramo -- revisa esos, no queda zona central.";
-
-        // Si el tramo activo estaba entre los que se acaban de tocar, refleja
-        // el resultado en el panel en vez de dejarlo desactualizado.
-        if (_columnaActiva is not null
-            && objetivo.Any(n => n.ColumnaId == _columnaIdActiva && n.TramoIndice == _tramoActivoIndice))
+        var mensaje = new List<string>
         {
-            CargarPanelDelTramoActivo();
+            compatibles.Count == 1
+                ? $"Aceptado: {aceptados} tramo(s) de {compatibles[0].Ctx.Marca}."
+                : $"Aceptado: {aceptados} tramo(s) en {compatibles.Count} columnas ({string.Join(", ", compatibles.Select(c => c.Ctx.Marca))}).",
+        };
+
+        if (descartadas.Count > 0)
+            mensaje.Add($"Quedaron afuera {string.Join(", ", descartadas)}: " +
+                        $"{(descartadas.Count == 1 ? "no tiene" : "no tienen")} la misma estructura que " +
+                        $"{_columnaActiva.Marca} ({CuantosTramos(_columnaActiva.Tramos.Count)}).");
+
+        if (conProblemaDeNorma.Count > 0)
+            mensaje.Add($"Atención: en {string.Join(", ", conProblemaDeNorma)} L1 x2 ≥ la altura del tramo -- " +
+                        "revisa esos, no queda zona central.");
+
+        TextoEstado.Text = string.Join(" ", mensaje);
+
+        RefrescarChulitos();
+        RedibujarElevacion();
+        RedibujarPanelPlanta();
+        ActualizarResumenDeGeneracion();
+    }
+
+    /// <summary>
+    /// Saca un tramo de la generación. El chulito no es una casilla que haya que
+    /// tildar (eso es justamente lo que pidió sacar William), pero tiene que
+    /// haber forma de deshacer uno puesto por error: se clickea el ✓ en la
+    /// elevación. La configuración del tramo NO se borra -- queda cargada por si
+    /// se lo vuelve a aceptar.
+    /// </summary>
+    private void QuitarAceptacion(int indiceTramo)
+    {
+        if (_columnaIdActiva is not string idColumna) return;
+        if (!_tramosAceptados.Remove((idColumna, indiceTramo))) return;
+
+        TextoEstado.Text = $"Tramo {indiceTramo} de {_columnaActiva?.Marca} sacado de la generación " +
+                           "(su configuración queda cargada).";
+
+        RefrescarChulitos();
+        RedibujarElevacion();
+        RedibujarPanelPlanta();
+        ActualizarResumenDeGeneracion();
+    }
+
+    /// <summary>
+    /// Pasa <see cref="_tramosAceptados"/> a los <see cref="NodoLista"/>, que es
+    /// lo que muestra la lista de columnetas. Una fila de columna lleva chulito
+    /// si alguno de sus tramos está aceptado.
+    /// </summary>
+    private void RefrescarChulitos()
+    {
+        HashSet<string> columnasConAceptados = _tramosAceptados.Select(t => t.ColumnaId).ToHashSet();
+
+        foreach (NodoLista nodo in _nodos)
+        {
+            nodo.Aceptado = nodo.EsColumna
+                ? columnasConAceptados.Contains(nodo.ColumnaId)
+                : _tramosAceptados.Contains((nodo.ColumnaId, nodo.TramoIndice));
         }
+    }
+
+    /// <summary>
+    /// Sin las casillas de tildar hay que decir en números qué se va a armar; si
+    /// no, el botón de generar es una caja negra.
+    /// </summary>
+    private void ActualizarResumenDeGeneracion()
+    {
+        int columnas = _tramosAceptados.Select(t => t.ColumnaId).Distinct().Count();
+        int tramos = _tramosAceptados.Count;
+
+        TextoResumenGeneracion.Text = tramos == 0
+            ? "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar."
+            : $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓.";
     }
 
     // -------------------------------------------------------------- dibujo
@@ -780,10 +1440,10 @@ public partial class VentanaConfiguradorEstribos : Window
     /// punteada -- mismo lenguaje visual que usa la ventana de referencia de
     /// William. Las bandas de color se superponen al contorno donde
     /// corresponde: nudo/zapata cruzando más ancho que la columna (como lo
-    /// hace una viga real), el tramo activo resaltado en verde, y los tramos
-    /// que ya tienen una configuración guardada en esta sesión con una trama
-    /// rayada (todavía no hay geometría real creada en Revit -- esa marca es
-    /// de "configurado en la UI", no de "generado en el modelo").
+    /// hace una viga real), el tramo activo en verde, y los tramos
+    /// que están ACEPTADOS con un chulito verde a la izquierda (todavía no hay
+    /// geometría real creada en Revit -- ese ✓ es de "esto se va a generar", no
+    /// de "ya está generado"). El chulito se clickea para sacarlo.
     /// </summary>
     private void RedibujarElevacion()
     {
@@ -864,7 +1524,7 @@ public partial class VentanaConfiguradorEstribos : Window
             double yTop = Y(tramo.ZSuperior);
             double alto = Math.Max(1, Y(tramo.ZInferior) - yTop);
             bool activo = i == _tramoActivoIndice;
-            bool configurado = _columnaIdActiva is not null && _configPorTramo.ContainsKey((_columnaIdActiva, i));
+            bool aceptado = _columnaIdActiva is not null && _tramosAceptados.Contains((_columnaIdActiva, i));
 
             if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
             {
@@ -883,18 +1543,40 @@ public partial class VentanaConfiguradorEstribos : Window
                 Canvas.SetTop(banda, yTop);
                 CanvasElevacion.Children.Add(banda);
             }
-            else if (configurado)
+
+            // El chulito, por fuera del contorno y a la izquierda: adentro ya
+            // conviven la banda del nudo y el verde del tramo activo, y un tramo
+            // puede ser las tres cosas a la vez. Va con un tinte verde suave
+            // sobre el tramo para que "lo que se genera" se lea de un vistazo
+            // en toda la columna, no leyendo ✓ por ✓.
+            if (aceptado)
             {
-                var relleno = new Rectangle
+                var tinte = new Rectangle
                 {
                     Width = anchoColumna,
                     Height = alto,
-                    Fill = TramaConfigurado,
+                    Fill = new SolidColorBrush(Color.FromArgb(30, 0x16, 0xA3, 0x4A)),
                     IsHitTestVisible = false,
                 };
-                Canvas.SetLeft(relleno, xColumna);
-                Canvas.SetTop(relleno, yTop);
-                CanvasElevacion.Children.Add(relleno);
+                Canvas.SetLeft(tinte, xColumna);
+                Canvas.SetTop(tinte, yTop);
+                CanvasElevacion.Children.Add(tinte);
+
+                int indiceDelChulito = i;
+                var chulito = new TextBlock
+                {
+                    Text = "✓",
+                    FontSize = 13,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A)),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    ToolTip = "Este tramo se genera. Clic para sacarlo.",
+                    Background = Brushes.Transparent,
+                };
+                Canvas.SetLeft(chulito, xColumna - sobresaleNudo - 18);
+                Canvas.SetTop(chulito, yTop + Math.Max(0, alto / 2 - 9));
+                chulito.MouseLeftButtonUp += (_, _) => QuitarAceptacion(indiceDelChulito);
+                CanvasElevacion.Children.Add(chulito);
             }
 
             if (activo)
@@ -931,69 +1613,41 @@ public partial class VentanaConfiguradorEstribos : Window
         }
     }
 
-    /// <summary>Trama rayada 45° para marcar un tramo con configuración ya guardada.</summary>
-    private static readonly Brush TramaConfigurado = CrearTramaConfigurado();
-
-    private static Brush CrearTramaConfigurado()
-    {
-        var celda = new Canvas { Width = 6, Height = 6 };
-        celda.Children.Add(new Rectangle { Width = 6, Height = 6, Fill = Brushes.White });
-        celda.Children.Add(new Line
-        {
-            X1 = 0,
-            Y1 = 6,
-            X2 = 6,
-            Y2 = 0,
-            Stroke = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8)),
-            StrokeThickness = 1,
-        });
-
-        return new VisualBrush(celda)
-        {
-            TileMode = TileMode.Tile,
-            Viewport = new Rect(0, 0, 6, 6),
-            ViewportUnits = BrushMappingMode.Absolute,
-        };
-    }
-
-    // ---------------------------------------------------------- exportar
+    // ------------------------------------------------------------ generar
 
     /// <summary>
-    /// Arma el PlanArmado completo a partir del estado en memoria -- separado
-    /// de <see cref="BotonExportar_Click"/> para poder probarlo sin disparar
-    /// el SaveFileDialog real (L5).
-    /// </summary>
-    /// <summary>
-    /// Solo con lo tildado en la lista -- exportar o generar sobre TODAS las
-    /// columnas del modelo (rellenando con la config por defecto lo que
-    /// nadie tocó) inundaba de avisos irrelevantes y armaba de más sin que
-    /// nadie lo pidiera. Un tramo no tildado queda en <c>null</c> en
-    /// <see cref="ColumnaPlan.Tramos"/> (ver su comentario), no con un
-    /// default inventado; una columna sin ningún tramo tildado ni siquiera
-    /// entra en <see cref="PlanArmado.Columnas"/>.
+    /// Solo con lo ACEPTADO (issue #56) -- generar sobre todas las columnas del
+    /// modelo, rellenando con la config por defecto lo que nadie tocó, inundaba
+    /// de avisos irrelevantes y armaba de más sin que nadie lo pidiera. Un tramo
+    /// no aceptado queda en <c>null</c> en <see cref="ColumnaPlan.Tramos"/> (ver
+    /// su comentario), no con un default inventado; una columna sin ningún tramo
+    /// aceptado ni siquiera entra en <see cref="PlanArmado.Columnas"/>.
+    ///
+    /// El acero LONGITUDINAL no se decide tramo por tramo: es por columna y va
+    /// de punta a punta siempre. Una columna genera su longitudinal si tiene al
+    /// menos un tramo aceptado.
     /// </summary>
     private PlanArmado ConstruirPlanArmado()
     {
         GuardarPanelEnTramoActivo();
         GuardarLongitudinalDeColumnaActiva();
 
-        ILookup<string, int> tramosMarcadosPorColumna = _nodos
-            .Where(n => !n.EsColumna && n.Marcado)
-            .ToLookup(n => n.ColumnaId, n => n.TramoIndice);
+        ILookup<string, int> aceptadosPorColumna = _tramosAceptados
+            .ToLookup(t => t.ColumnaId, t => t.Indice);
 
         var plan = new PlanArmado();
 
         foreach (string id in _nodos.Where(n => n.EsColumna).Select(n => n.ColumnaId))
         {
-            HashSet<int> marcados = tramosMarcadosPorColumna[id].ToHashSet();
-            if (marcados.Count == 0) continue;
+            HashSet<int> aceptados = aceptadosPorColumna[id].ToHashSet();
+            if (aceptados.Count == 0) continue;
 
             ColumnaContexto contexto = _contexto.Leer(id);
             var tramos = new List<ConfigTramo?>();
 
             for (int i = 0; i < contexto.Tramos.Count; i++)
             {
-                tramos.Add(marcados.Contains(i)
+                tramos.Add(aceptados.Contains(i)
                     ? (_configPorTramo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos))
                     : null);
             }
@@ -1002,28 +1656,14 @@ public partial class VentanaConfiguradorEstribos : Window
                 ? l
                 : ConfigLongitudinalPorDefecto(_tipos);
 
-            plan.Columnas.Add(new ColumnaPlan { Id = id, Contexto = contexto, Tramos = tramos, Longitudinal = longitudinal });
+            plan.Columnas.Add(new ColumnaPlan
+            {
+                Id = id, Contexto = contexto, Tramos = tramos, Longitudinal = longitudinal,
+                Recubrimiento = _recubrimientoPorColumna.TryGetValue(id, out double recubrimiento) ? recubrimiento : null,
+            });
         }
 
         return plan;
-    }
-
-    private void BotonExportar_Click(object sender, RoutedEventArgs e)
-    {
-        PlanArmado plan = ConstruirPlanArmado();
-        if (plan.Columnas.Count == 0)
-        {
-            TextoEstado.Text = "Tilda al menos un tramo (o una columna entera) antes de exportar.";
-            return;
-        }
-
-        var dialogo = new SaveFileDialog { Filter = "JSON (*.json)|*.json", FileName = "PlanArmado.json" };
-        if (dialogo.ShowDialog() != true) return;
-
-        string json = JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(dialogo.FileName, json);
-
-        TextoEstado.Text = $"Exportado: {dialogo.FileName}";
     }
 
     private void BotonGenerar_Click(object sender, RoutedEventArgs e)
@@ -1031,7 +1671,7 @@ public partial class VentanaConfiguradorEstribos : Window
         PlanArmado plan = ConstruirPlanArmado();
         if (plan.Columnas.Count == 0)
         {
-            TextoEstado.Text = "Tilda al menos un tramo (o una columna entera) antes de generar.";
+            TextoEstado.Text = "Configura un tramo y aprieta \"Aceptar\" antes de generar: se arma lo que tiene ✓.";
             return;
         }
 
@@ -1047,20 +1687,6 @@ public partial class VentanaConfiguradorEstribos : Window
         GenerarSolicitado?.Invoke(opciones);
     }
 
-    private void BotonLimpiarSeleccion_Click(object sender, RoutedEventArgs e)
-    {
-        // Asignación directa, no vía la cascada de CheckBoxNodo_Changed: la
-        // ListBox virtualiza filas fuera de pantalla, así que tocar la
-        // propiedad de un nodo no realizado no dispara Checked/Unchecked en
-        // ningún control real. Se notifica una sola vez al final en vez de
-        // depender de eso.
-        foreach (NodoLista nodo in _nodos)
-            nodo.Marcado = false;
-
-        NotificarSeleccionMarcada();
-        TextoEstado.Text = "Selección limpiada.";
-    }
-
     /// <summary>
     /// Llamado por <c>ComandoEstribos</c> cuando la generación (#5) terminó --
     /// re-habilita el botón y deja un resumen en <see cref="TextoEstado"/>. Los
@@ -1074,7 +1700,7 @@ public partial class VentanaConfiguradorEstribos : Window
         // La generación modificó el documento (creó y/o borró Rebar) -- la
         // geometría que _contexto tenía cacheada de antes ya no es válida.
         // Ver el comentario de IProveedorContexto.InvalidarCache: sin esto,
-        // el próximo "Aplicar a selección" o click en la lista puede
+        // el próximo Aceptar o click en la planta puede
         // terminar en un crash nativo de Revit en vez de una excepción.
         _contexto.InvalidarCache();
 
@@ -1110,10 +1736,10 @@ public partial class VentanaConfiguradorEstribos : Window
 }
 
 /// <summary>
-/// Fila de <c>ListaPrincipales</c>/<c>ListaColumnetas</c> (issue #33) — una
-/// columna o uno de sus tramos. Vive acá y no en Modelo/ porque es puro
-/// estado de presentación (el checkbox tildado), no algo que tenga sentido
-/// serializar en un PlanArmado.
+/// Fila de <c>ListaColumnetas</c> (issue #33) — una columna o uno de sus
+/// tramos. Vive acá y no en Modelo/ porque es puro estado de presentación (el
+/// ✓ que se ve en la lista), no algo que tenga sentido serializar en un
+/// PlanArmado.
 /// </summary>
 public sealed class NodoLista : INotifyPropertyChanged
 {
@@ -1133,17 +1759,27 @@ public sealed class NodoLista : INotifyPropertyChanged
     /// </summary>
     public string? IdElementoHost { get; init; }
 
-    private bool _marcado;
-    public bool Marcado
+    /// <summary>
+    /// Si este tramo (o, en una fila de columna, alguno de sus tramos) está
+    /// aceptado y por lo tanto se va a generar. La fuente de la verdad es
+    /// <c>_tramosAceptados</c> en la ventana; esto es el espejo para la lista,
+    /// y lo sincroniza <c>RefrescarChulitos</c>.
+    /// </summary>
+    private bool _aceptado;
+    public bool Aceptado
     {
-        get => _marcado;
+        get => _aceptado;
         set
         {
-            if (_marcado == value) return;
-            _marcado = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Marcado)));
+            if (_aceptado == value) return;
+            _aceptado = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Aceptado)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Chulito)));
         }
     }
+
+    /// <summary>El ✓ que muestra la lista -- vacío si no está aceptado.</summary>
+    public string Chulito => _aceptado ? "✓" : "";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }

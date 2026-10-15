@@ -72,7 +72,7 @@ public sealed class LectorContexto : IProveedorContexto
     /// geometría de Revit de cuando se leyeron; en cuanto el documento se
     /// modifica (creación/borrado de Rebar, <c>Document.Regenerate()</c>) esos
     /// objetos dejan de ser válidos, y volver a usarlos (por ejemplo desde
-    /// "Aplicar a selección" o el panel de elevación, sin cerrar la ventana)
+    /// aceptar un tramo o el panel de elevación, sin cerrar la ventana)
     /// puede terminar en un crash nativo de Revit en vez de una excepción de
     /// .NET -- probado sobre Revit real.
     /// </summary>
@@ -98,7 +98,8 @@ public sealed class LectorContexto : IProveedorContexto
                 // GeometriaSeccion.ValidarRectangular, misma limitación que
                 // ya tiene el resto del generador para columnas rotadas).
                 AMetros(pila[0].Centro.X),
-                AMetros(pila[0].Centro.Y)))
+                AMetros(pila[0].Centro.Y),
+                MarcaUbicacion(pila[0].Instancia)))
             .ToList();
 
     /// <summary>
@@ -201,7 +202,8 @@ public sealed class LectorContexto : IProveedorContexto
             if (nudos.Count > 0) huboNudo = true;
 
             tramos.AddRange(ArmarTramos(
-                zArranque, el.ZSup, nudos, sobreZapata, IdTexto(el.Instancia.Id), tramos.Count));
+                zArranque, el.ZSup, nudos, sobreZapata, IdTexto(el.Instancia.Id), tramos.Count,
+                AMetros(LeerRecubrimiento(el.Instancia) ?? 0)));
 
             primero = false;
         }
@@ -216,6 +218,16 @@ public sealed class LectorContexto : IProveedorContexto
 
         if (pila.Count > 1)
             AvisarSiCambiaLaSeccion(pila, avisos);
+
+        List<double> recubrimientos = tramos
+            .Where(t => t.Recubrimiento > 0)
+            .Select(t => Math.Round(t.Recubrimiento, 3))
+            .Distinct().OrderBy(r => r).ToList();
+        if (recubrimientos.Count > 1)
+            avisos.Add(
+                "Las piezas de esta columna tienen recubrimientos distintos en Revit (" +
+                string.Join(" y ", recubrimientos.Select(r => $"{r * 100:0.#} cm")) +
+                "). Se arma toda con uno solo: el elegido en «Recubrimiento».");
 
         ElementoColumna base_ = pila[0];
 
@@ -344,7 +356,8 @@ public sealed class LectorContexto : IProveedorContexto
         List<(double Inf, double Sup)> nudos,
         bool sobreZapata,
         string idElementoHost,
-        int indiceBase)
+        int indiceBase,
+        double recubrimientoMetros)
     {
         var tramos = new List<Tramo>();
         double cursor = zArranque;
@@ -364,7 +377,8 @@ public sealed class LectorContexto : IProveedorContexto
                 Tipo = tramos.Count == 0 && sobreZapata && tipo == TipoTramo.Libre
                     ? TipoTramo.ContraZapata
                     : tipo,
-                IdElementoHost = idElementoHost
+                IdElementoHost = idElementoHost,
+                Recubrimiento = recubrimientoMetros
             });
         }
 
@@ -658,13 +672,17 @@ public sealed class LectorContexto : IProveedorContexto
     /// </summary>
     private const double RecubrimientoNormalMetros = 0.04;
 
-    private double Recubrimiento(FamilyInstance columna, List<string> avisos)
+    /// <summary>El recubrimiento lateral asignado a ese elemento, en pies; null si no tiene.</summary>
+    private double? LeerRecubrimiento(FamilyInstance columna)
     {
         Parameter? p = columna.get_Parameter(BuiltInParameter.CLEAR_COVER_OTHER);
+        return p is not null && _doc.GetElement(p.AsElementId()) is RebarCoverType tipo ? tipo.CoverDistance : null;
+    }
 
-        if (p is not null && _doc.GetElement(p.AsElementId()) is RebarCoverType tipo)
+    private double Recubrimiento(FamilyInstance columna, List<string> avisos)
+    {
+        if (LeerRecubrimiento(columna) is { } recubrimientoPies)
         {
-            double recubrimientoPies = tipo.CoverDistance;
             double recubrimientoMetros = AMetros(recubrimientoPies);
 
             if (Math.Abs(recubrimientoMetros - RecubrimientoNormalMetros) > 0.001)
@@ -710,6 +728,25 @@ public sealed class LectorContexto : IProveedorContexto
         columna.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } marca
             ? marca
             : $"[{columna.Id}]";
+
+    /// <summary>
+    /// La "marca de ubicación del pilar": la coordenada de rejilla que Revit ya
+    /// calcula solo ("A-1", más el desfase entre paréntesis cuando la columna no
+    /// cae justo en el cruce). No se calcula acá a propósito -- reunión del
+    /// 11-sep, William: "eso existe, no hay que ponerse a calcular, sino
+    /// dejarlo, solamente obtenerlo".
+    ///
+    /// <c>BuiltInParameter.COLUMN_LOCATION_MARK</c>, público y documentado
+    /// (equivale a <c>ParameterTypeId.ColumnLocationMark</c>, la forma moderna;
+    /// se usa el BuiltInParameter por consistencia con el resto del archivo).
+    /// Devuelve vacío si el modelo no tiene rejillas o si el elemento no es una
+    /// columna estructural -- ahí simplemente no se dibuja etiqueta en la
+    /// planta, no es un error.
+    /// </summary>
+    private static string MarcaUbicacion(FamilyInstance columna) =>
+        columna.get_Parameter(BuiltInParameter.COLUMN_LOCATION_MARK)?.AsString() is { Length: > 0 } ubicacion
+            ? ubicacion
+            : "";
 
     /// <summary>Simétrico de <c>new ElementId(long.Parse(id))</c> del lado de lectura.</summary>
     private static string IdTexto(ElementId id) =>

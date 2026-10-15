@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using practicacq.Modelo;
@@ -29,6 +30,11 @@ using practicacq.Modelo;
 /// Revit ni de que el modelo tenga rejillas -- ninguna de las dos cosas es
 /// requisito para que esto dibuje algo útil.
 ///
+/// Selección múltiple (reunión 10-sep): <b>Ctrl+clic</b> suma columnas a lo
+/// que ya haya elegido, y el <b>arrastre</b> selecciona por rectángulo con el
+/// mismo criterio que Revit -- hacia la izquierda agarra todo lo que el
+/// rectángulo toque, hacia la derecha solo lo que quede completamente adentro.
+///
 /// Norte: se usan directamente las coordenadas de proyecto (X/Y), sin
 /// transformar por Norte Verdadero -- es lo mismo que muestra cualquier
 /// vista de planta por defecto de Revit. Simplificación deliberada (no hay
@@ -41,42 +47,105 @@ using practicacq.Modelo;
 /// </summary>
 public partial class PanelPlantaColumnas : UserControl
 {
-    /// <summary>Se dispara con el <see cref="ColumnaResumen.Id"/> de la columna clickeada.</summary>
-    public event Action<string>? ColumnaClicked;
+    /// <summary>
+    /// Clic en una columna: su <see cref="ColumnaResumen.Id"/>, más si venía
+    /// con Ctrl (sumar a lo ya elegido en vez de reemplazarlo).
+    /// </summary>
+    public event Action<string, bool>? ColumnaClicked;
+
+    /// <summary>
+    /// Arrastre: los <see cref="ColumnaResumen.Id"/> que quedaron dentro del
+    /// rectángulo, más si venía con Ctrl. A diferencia del clic suelto, esto
+    /// no alterna: las deja elegidas.
+    /// </summary>
+    public event Action<IReadOnlyList<string>, bool>? ColumnasEnRectangulo;
 
     private static readonly Brush ColorColumna = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
     private static readonly Brush ColorBordeColumna = new SolidColorBrush(Color.FromRgb(0x4B, 0x55, 0x63));
     private static readonly Brush ColorColumnaActiva = new SolidColorBrush(Color.FromArgb(120, 0x22, 0xC5, 0x5E));
     private static readonly Brush ColorBordeActiva = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
 
-    // Mismo azul que BotonAplicarSeleccion (VentanaConfiguradorEstribos.xaml)
-    // -- una columna tildada (incluida en "Aplicar a selección") se marca con
-    // este color, independiente de si además está activa (verde).
+    // Azul de "columna elegida": a las elegidas les cae lo que se acepte en el
+    // panel del tramo (issue #56). Independiente de si además está activa
+    // (verde) o de si ya tiene tramos aceptados (✓).
     private static readonly Brush ColorColumnaMarcada = new SolidColorBrush(Color.FromArgb(140, 0x0B, 0x63, 0xCE));
     private static readonly Brush ColorBordeMarcada = new SolidColorBrush(Color.FromRgb(0x0B, 0x63, 0xCE));
 
     private static readonly Brush ColorRejilla = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0));
 
-    public PanelPlantaColumnas() => InitializeComponent();
+    /// <summary>Mismo verde que el chulito de la elevación (VentanaConfiguradorEstribos).</summary>
+    private static readonly Brush ColorChulito = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A));
+
+    // Rectángulo de arrastre: azul para "ventana" (izq -> der, solo lo que
+    // entra entero) y verde para "cruce" (der -> izq, todo lo que toca),
+    // mismos colores que usa Revit.
+    private static readonly Brush ColorVentana = new SolidColorBrush(Color.FromRgb(0x0B, 0x63, 0xCE));
+    private static readonly Brush ColorCruce = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
+
+    /// <summary>Un clic que se movió menos que esto sigue siendo un clic, no un arrastre.</summary>
+    private const double MinimoArrastre = 4;
+
+    /// <summary>Dónde quedó cada columna dibujada, para resolver clics y arrastres sin hit-test de WPF.</summary>
+    private readonly List<(string Id, Rect Caja)> _marcadores = new();
+
+    /// <summary>Lo último que se dibujó, para poder repetirlo cuando cambia el tamaño del panel.</summary>
+    private (IReadOnlyList<ColumnaResumen> Columnas,
+             IReadOnlyList<Rejilla> Rejillas,
+             string? IdActiva,
+             IReadOnlySet<string> Elegidas,
+             IReadOnlySet<string> Configuradas)? _ultimo;
+
+    private Point _inicioArrastre;
+    private Rectangle? _rectanguloArrastre;
+
+    public PanelPlantaColumnas()
+    {
+        InitializeComponent();
+
+        // El lienzo ya no tiene tamaño fijo: cada vez que cambia, se repite el
+        // último dibujo con la escala nueva.
+        Lienzo.SizeChanged += (_, _) => Redibujar();
+
+        Lienzo.MouseLeftButtonDown += Lienzo_MouseLeftButtonDown;
+        Lienzo.MouseMove += Lienzo_MouseMove;
+        Lienzo.MouseLeftButtonUp += Lienzo_MouseLeftButtonUp;
+    }
 
     /// <summary>
-    /// Redibuja todo el panel. <paramref name="idActiva"/> es el
-    /// <see cref="ColumnaResumen.Id"/> de la columna activa (para resaltarla
-    /// en verde), o <c>null</c> si ninguna lo está todavía.
-    /// <paramref name="idsMarcadas"/> son las columnas tildadas (incluidas en
-    /// "Aplicar a selección" -- se resaltan en azul, ver
-    /// <see cref="ColumnaClicked"/>).
+    /// Redibuja todo el panel.
+    ///
+    /// Son tres estados distintos y se ven distinto, porque desde el issue #56
+    /// ya no son la misma cosa: <paramref name="idActiva"/> es la columna que
+    /// muestra la elevación (verde); <paramref name="idsElegidas"/> son las que
+    /// están seleccionadas, o sea a las que les cae lo que se acepte (azul); y
+    /// <paramref name="idsConfiguradas"/> son las que tienen al menos un tramo
+    /// aceptado, o sea las que se van a generar (✓ verde en la esquina).
     /// </summary>
     public void Cargar(
         IReadOnlyList<ColumnaResumen> columnas, IReadOnlyList<Rejilla> rejillas,
-        string? idActiva, IReadOnlySet<string> idsMarcadas)
+        string? idActiva, IReadOnlySet<string> idsElegidas, IReadOnlySet<string> idsConfiguradas)
+    {
+        _ultimo = (columnas, rejillas, idActiva, idsElegidas, idsConfiguradas);
+        Redibujar();
+    }
+
+    private void Redibujar()
     {
         Lienzo.Children.Clear();
+        _marcadores.Clear();
+        _rectanguloArrastre = null;
+
+        if (_ultimo is not { } estado) return;
+        (IReadOnlyList<ColumnaResumen> columnas,
+         IReadOnlyList<Rejilla> rejillas,
+         string? idActiva,
+         IReadOnlySet<string> idsElegidas,
+         IReadOnlySet<string> idsConfiguradas) = estado;
         if (columnas.Count == 0 && rejillas.Count == 0) return;
 
         const double margen = 22;
-        double anchoDisponible = Math.Max(1, Lienzo.Width - margen * 2);
-        double altoDisponible = Math.Max(1, Lienzo.Height - margen * 2);
+        double anchoDisponible = Math.Max(1, Lienzo.ActualWidth - margen * 2);
+        double altoDisponible = Math.Max(1, Lienzo.ActualHeight - margen * 2);
 
         double minX = double.MaxValue, maxX = double.MinValue, minY = double.MaxValue, maxY = double.MinValue;
         void Expandir(double x, double y)
@@ -119,7 +188,69 @@ public partial class PanelPlantaColumnas : UserControl
             DibujarRejilla(r, Cx, Cy);
 
         foreach (ColumnaResumen c in columnas)
-            DibujarColumna(c, Cx(c.X), Cy(c.Y), c.Id == idActiva, idsMarcadas.Contains(c.Id));
+            DibujarColumna(c, Cx(c.X), Cy(c.Y), c.Id == idActiva, idsElegidas.Contains(c.Id), idsConfiguradas.Contains(c.Id));
+
+        // Las etiquetas SIEMPRE después de todos los cuadraditos: así ninguna
+        // queda tapada por una columna dibujada más tarde, y el chequeo de
+        // encimado (ver el método) ya tiene la lista completa de cuadraditos.
+        DibujarEtiquetasDeUbicacion(columnas, Cx, Cy);
+    }
+
+    /// <summary>
+    /// La marca de ubicación del pilar ("A-1") al lado de cada columna --
+    /// reunión del 11-sep: es la coordenada que Revit ya calcula del cruce de
+    /// rejillas, no hay que inventar nada, solo dibujarla.
+    ///
+    /// El 10-sep se habían sacado las etiquetas de la planta justamente porque
+    /// con las columnas juntas se encimaban entre sí y tapaban el dibujo. "A-1"
+    /// es corto, pero el problema no desaparece solo, así que acá se resuelve
+    /// explícito: cada etiqueta se dibuja únicamente si su caja no se pisa con
+    /// nada ya dibujado (cuadraditos y etiquetas anteriores). Se prueban dos
+    /// posiciones -- debajo y a la derecha -- antes de rendirse. Una columna
+    /// sin etiqueta no pierde nada: el nombre sigue en el tooltip y en la
+    /// elevación.
+    /// </summary>
+    private void DibujarEtiquetasDeUbicacion(
+        IReadOnlyList<ColumnaResumen> columnas, Func<double, double> cx, Func<double, double> cy)
+    {
+        const double tam = 12;
+        const double aire = 2;
+
+        // Arranca ocupado por todos los cuadraditos, que ya están dibujados.
+        List<Rect> ocupado = _marcadores.Select(m => m.Caja).ToList();
+
+        foreach (ColumnaResumen c in columnas)
+        {
+            if (c.MarcaUbicacion.Length == 0) continue;
+
+            var texto = new TextBlock
+            {
+                Text = c.MarcaUbicacion,
+                FontSize = 9,
+                Foreground = Brushes.DimGray,
+                IsHitTestVisible = false,
+            };
+            texto.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+            double ancho = texto.DesiredSize.Width;
+            double alto = texto.DesiredSize.Height;
+            double x = cx(c.X);
+            double y = cy(c.Y);
+
+            Rect[] candidatas =
+            {
+                new(x - ancho / 2, y + tam / 2 + aire, ancho, alto),   // debajo, centrada
+                new(x + tam / 2 + aire, y - alto / 2, ancho, alto),    // a la derecha
+            };
+
+            if (candidatas.FirstOrDefault(r => !ocupado.Any(o => o.IntersectsWith(r))) is not { Width: > 0 } libre)
+                continue;
+
+            Canvas.SetLeft(texto, libre.X);
+            Canvas.SetTop(texto, libre.Y);
+            Lienzo.Children.Add(texto);
+            ocupado.Add(libre);
+        }
     }
 
     private void DibujarIndicadorNorte()
@@ -182,36 +313,132 @@ public partial class PanelPlantaColumnas : UserControl
         Lienzo.Children.Add(etiqueta);
     }
 
-    private void DibujarColumna(ColumnaResumen c, double x, double y, bool activa, bool marcada)
+    /// <summary>
+    /// El cuadradito solo. La etiqueta la pone aparte
+    /// <see cref="DibujarEtiquetasDeUbicacion"/>, después de que estén todos
+    /// dibujados: el NOMBRE de la columna ("C-12") sigue sin dibujarse -- con
+    /// las columnas juntas se encimaba (William, 10-sep) -- y lo que se
+    /// etiqueta es la marca de ubicación, que es corta.
+    /// </summary>
+    private void DibujarColumna(ColumnaResumen c, double x, double y, bool activa, bool elegida, bool configurada)
     {
-        const double tam = 10;
+        const double tam = 12;
 
         var marcador = new Rectangle
         {
             Width = tam,
             Height = tam,
-            Fill = marcada ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
-            Stroke = activa ? ColorBordeActiva : (marcada ? ColorBordeMarcada : ColorBordeColumna),
-            StrokeThickness = activa || marcada ? 2 : 1,
-            Cursor = System.Windows.Input.Cursors.Hand,
+            Fill = elegida ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
+            Stroke = activa ? ColorBordeActiva : (elegida ? ColorBordeMarcada : ColorBordeColumna),
+            StrokeThickness = activa || elegida ? 2 : 1,
+            Cursor = Cursors.Hand,
+            ToolTip = c.MarcaUbicacion.Length > 0 ? $"{c.Marca}  ·  {c.MarcaUbicacion}" : c.Marca,
+            // Los clics los resuelve el lienzo contra _marcadores: si cada
+            // cuadradito se los quedara, un arrastre que empieza encima de uno
+            // no llegaría nunca a ser arrastre.
+            IsHitTestVisible = false,
         };
         Canvas.SetLeft(marcador, x - tam / 2);
         Canvas.SetTop(marcador, y - tam / 2);
-
-        string idCapturado = c.Id;
-        marcador.MouseLeftButtonUp += (_, _) => ColumnaClicked?.Invoke(idCapturado);
         Lienzo.Children.Add(marcador);
 
-        var etiqueta = new TextBlock
+        // El ✓ de "esta columna tiene tramos aceptados, se va a generar" --
+        // mismo símbolo y mismo verde que en la elevación (issue #56), para que
+        // sea el mismo concepto y no dos marcas distintas que hay que aprender.
+        if (configurada)
         {
-            Text = c.Marca,
-            FontSize = 9,
-            Foreground = Brushes.Black,
-            FontWeight = activa ? FontWeights.Bold : FontWeights.Normal,
-            IsHitTestVisible = false,
-        };
-        Canvas.SetLeft(etiqueta, x + tam / 2 + 2);
-        Canvas.SetTop(etiqueta, y - 7);
-        Lienzo.Children.Add(etiqueta);
+            var chulito = new TextBlock
+            {
+                Text = "✓",
+                FontSize = 11,
+                FontWeight = FontWeights.Bold,
+                Foreground = ColorChulito,
+                IsHitTestVisible = false,
+            };
+            Canvas.SetLeft(chulito, x + tam / 2 - 1);
+            Canvas.SetTop(chulito, y - tam / 2 - 11);
+            Lienzo.Children.Add(chulito);
+        }
+
+        _marcadores.Add((c.Id, new Rect(x - tam / 2, y - tam / 2, tam, tam)));
+    }
+
+    // ------------------------------------------------------------ selección
+
+    private static bool ConCtrl => (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+    private void Lienzo_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _inicioArrastre = e.GetPosition(Lienzo);
+        Lienzo.CaptureMouse();
+    }
+
+    private void Lienzo_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || !Lienzo.IsMouseCaptured) return;
+
+        Point actual = e.GetPosition(Lienzo);
+        if (Math.Abs(actual.X - _inicioArrastre.X) < MinimoArrastre &&
+            Math.Abs(actual.Y - _inicioArrastre.Y) < MinimoArrastre) return;
+
+        bool haciaLaDerecha = actual.X >= _inicioArrastre.X;
+
+        if (_rectanguloArrastre is null)
+        {
+            _rectanguloArrastre = new Rectangle { StrokeThickness = 1, IsHitTestVisible = false };
+            Lienzo.Children.Add(_rectanguloArrastre);
+        }
+
+        // Ventana (izq -> der): línea llena. Cruce (der -> izq): punteada.
+        _rectanguloArrastre.Stroke = haciaLaDerecha ? ColorVentana : ColorCruce;
+        _rectanguloArrastre.Fill = new SolidColorBrush(Color.FromArgb(
+            30, haciaLaDerecha ? (byte)0x0B : (byte)0x22, haciaLaDerecha ? (byte)0x63 : (byte)0xC5, haciaLaDerecha ? (byte)0xCE : (byte)0x5E));
+        _rectanguloArrastre.StrokeDashArray = haciaLaDerecha ? null : new DoubleCollection { 4, 3 };
+
+        Rect caja = new(_inicioArrastre, actual);
+        _rectanguloArrastre.Width = caja.Width;
+        _rectanguloArrastre.Height = caja.Height;
+        Canvas.SetLeft(_rectanguloArrastre, caja.X);
+        Canvas.SetTop(_rectanguloArrastre, caja.Y);
+    }
+
+    private void Lienzo_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!Lienzo.IsMouseCaptured) return;
+        Lienzo.ReleaseMouseCapture();
+
+        Point fin = e.GetPosition(Lienzo);
+        bool huboArrastre = _rectanguloArrastre is not null;
+
+        if (_rectanguloArrastre is not null)
+        {
+            Lienzo.Children.Remove(_rectanguloArrastre);
+            _rectanguloArrastre = null;
+        }
+
+        if (!huboArrastre)
+        {
+            // Clic suelto: la columna que esté bajo el cursor, si hay alguna.
+            foreach ((string id, Rect caja) in _marcadores)
+            {
+                if (!caja.Contains(fin)) continue;
+                ColumnaClicked?.Invoke(id, ConCtrl);
+                return;
+            }
+            return;
+        }
+
+        // Criterio de Revit: arrastrando hacia la DERECHA solo entra lo que
+        // queda completamente adentro ("ventana"); hacia la IZQUIERDA entra
+        // todo lo que el rectángulo toque ("cruce").
+        bool haciaLaDerecha = fin.X >= _inicioArrastre.X;
+        Rect seleccion = new(_inicioArrastre, fin);
+
+        List<string> alcanzadas = _marcadores
+            .Where(m => haciaLaDerecha ? seleccion.Contains(m.Caja) : seleccion.IntersectsWith(m.Caja))
+            .Select(m => m.Id)
+            .ToList();
+
+        if (alcanzadas.Count > 0) ColumnasEnRectangulo?.Invoke(alcanzadas, ConCtrl);
     }
 }

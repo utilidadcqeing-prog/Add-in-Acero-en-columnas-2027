@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using practicacq.Modelo;
 using Autodesk.Revit.DB.Structure;
 
 /// <summary>
@@ -48,6 +49,51 @@ internal static class GeometriaSeccion
         var resultado = (contorno, caraInferior.Origin.Z);
         cache[host.Id] = resultado;
         return resultado;
+    }
+
+    /// <summary>Un rectángulo horizontal a la cota <paramref name="z"/>, como contorno.</summary>
+    public static CurveLoop Rectangulo(double xMin, double xMax, double yMin, double yMax, double z)
+    {
+        XYZ a = new(xMin, yMin, z), b = new(xMax, yMin, z), c = new(xMax, yMax, z), d = new(xMin, yMax, z);
+        return CurveLoop.Create(new List<Curve>
+        {
+            Line.CreateBound(a, b), Line.CreateBound(b, c), Line.CreateBound(c, d), Line.CreateBound(d, a),
+        });
+    }
+
+    /// <summary>
+    /// La zona común en planta de todas las piezas de la columna: la
+    /// intersección de sus huellas, o sea la sección más chica, esté donde
+    /// esté. Es la sección con la que se arma TODA la columna -- estribos,
+    /// longitudinal y estribos menores -- para que el acero salga igual y
+    /// alineado de abajo a arriba aunque una pieza (típico: el dado de
+    /// cimentación) sea más ancha (issue #42 y pedido de Luciano del 8-oct).
+    /// <c>null</c> si ninguna pieza se pudo leer o no comparten zona.
+    /// </summary>
+    public static (double XMin, double XMax, double YMin, double YMax)? ZonaComun(
+        Document doc, ColumnaContexto contexto, Dictionary<ElementId, (CurveLoop, double)> cache)
+    {
+        double xMin = double.MinValue, xMax = double.MaxValue, yMin = double.MinValue, yMax = double.MaxValue;
+        bool alguna = false;
+
+        foreach (string idTexto in contexto.Tramos.Select(t => t.IdElementoHost).OfType<string>().Distinct())
+        {
+            if (!long.TryParse(idTexto, out long id) || doc.GetElement(new ElementId(id)) is not FamilyInstance host)
+                continue;
+
+            CurveLoop contorno;
+            try { (contorno, _) = ObtenerContornoHost(host, cache); }
+            catch (InvalidOperationException) { continue; }
+
+            (double hXMin, double hXMax, double hYMin, double hYMax) = Huella(contorno);
+            xMin = Math.Max(xMin, hXMin);
+            xMax = Math.Min(xMax, hXMax);
+            yMin = Math.Max(yMin, hYMin);
+            yMax = Math.Min(yMax, hYMax);
+            alguna = true;
+        }
+
+        return alguna && xMax > xMin && yMax > yMin ? (xMin, xMax, yMin, yMax) : null;
     }
 
     /// <summary>
@@ -115,18 +161,108 @@ internal static class GeometriaSeccion
                  f.Name.Contains("Estribo") || f.Name.Contains("Stirrup")));
 
     /// <summary>
-    /// Primer <see cref="RebarSpliceType"/> que tenga el documento (issue
-    /// empalmes reales, ver docs/planes/2026-09-09-empalmes-rebarspliceutils.md)
-    /// -- no hay ninguna convención de nombre conocida todavía (a diferencia
-    /// de <see cref="BuscarFormaEstribo"/>), así que se toma el primero que
-    /// haya. Null si el documento no tiene ninguno cargado -- el llamador
-    /// tiene que caer al método anterior (dos Rebar con corrimiento a mano)
-    /// en ese caso, no crear un tipo nuevo silenciosamente.
+    /// La forma nativa de GRAPA: un solo segmento recto con estilo
+    /// <see cref="RebarStyle.Standard"/>.
+    ///
+    /// El estilo salió de MEDIR una grapa del modelo de referencia de la
+    /// empresa con el comando de diagnóstico (10-sep): usa el gancho
+    /// "Standard - 180 deg." (180°, Style=Standard), y como un
+    /// <c>RebarHookType</c> solo se puede aplicar a barras de su mismo estilo,
+    /// esa grapa es una barra Standard -- NO un estribo. En ese documento,
+    /// además, todas las formas de un solo segmento son Standard.
+    ///
+    /// Antes la grapa se armaba pasándole a <c>Rebar.CreateFromCurves</c> una
+    /// línea suelta con estilo <c>StirrupTie</c> (un "estribo" de un solo lado,
+    /// que no es una forma real) y ganchos de tirante de 135°: Revit tenía que
+    /// sintetizar la forma y sacaba ganchos enormes y deformes, también en
+    /// columnas de 40x40 -- no era cuestión del tamaño de la sección.
+    ///
+    /// Se busca por ESTRUCTURA (estilo + un segmento), no por nombre.
+    /// <c>null</c> si el documento no tiene ninguna: quien llama debe caer al
+    /// camino anterior, no fallar.
     /// </summary>
-    public static ElementId? BuscarTipoEmpalme(Document doc)
+    public static RebarShape? BuscarFormaGrapa(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarShape))
+            .Cast<RebarShape>()
+            .FirstOrDefault(f => f.RebarStyle == RebarStyle.Standard && UnSoloSegmento(f));
+
+    /// <summary>
+    /// El gancho de las grapas: 180° con estilo <see cref="RebarStyle.Standard"/>,
+    /// que es el que usa el modelo de referencia de la empresa (medido con el
+    /// diagnóstico, 10-sep). Los 180° dan la vuelta completa alrededor de la
+    /// barra longitudinal -- por eso la grapa la agarra "por detrás", cosa que
+    /// un gancho de 135° no hace.
+    /// </summary>
+    public static RebarHookType? BuscarGanchoGrapa(Document doc) =>
+        new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarHookType))
+            .Cast<RebarHookType>()
+            .FirstOrDefault(h => h.Style == RebarStyle.Standard &&
+                                 Math.Abs(h.HookAngle - Math.PI) < 1e-3);
+
+    private static bool UnSoloSegmento(RebarShape forma)
     {
-        ICollection<ElementId> existentes = RebarSpliceTypeUtils.GetAllRebarSpliceTypes(doc);
-        return existentes.Count > 0 ? existentes.First() : null;
+        try
+        {
+            return forma.GetRebarShapeDefinition() is RebarShapeDefinitionBySegments porSegmentos &&
+                   porSegmentos.NumberOfSegments == 1;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Tolerancia para distinguir una diagonal real (decenas de cm) del
+    /// ruido de punto flotante de <c>ScaleToBox</c> (una transformación
+    /// afín de un rectángulo debería quedar exactamente alineada a los
+    /// ejes) -- 1 mm en pies.
+    /// </summary>
+    private static readonly double ToleranciaDiagonalPies = UnitUtils.ConvertToInternalUnits(0.001, UnitTypeId.Meters);
+
+    /// <summary>
+    /// Si algún lado recto del lazo (sin ganchos ni radios) se mueve en X Y EN
+    /// Y a la vez, es una diagonal -- un estribo o una caja rectangular en
+    /// planta nunca debería tener una.
+    ///
+    /// Hace falta porque <see cref="BuscarFormaEstribo"/> elige por NOMBRE, no
+    /// por geometría (a diferencia de <see cref="BuscarFormaGrapa"/>, que sí
+    /// valida estructura): una forma cuyo nombre hace match pero que en
+    /// realidad trae una cruceta de confinamiento incorporada (patas
+    /// diagonales adicionales, catálogos de detallado sísmico con nombres
+    /// tipo "T1".."T9") se aceptaría sin darse cuenta. Medido contra Revit
+    /// real el 11-sep: la forma "T1" del modelo de William generó exactamente
+    /// esto -- un rectángulo bien formado con dos diagonales cruzando por
+    /// dentro.
+    ///
+    /// Se mide la geometría REAL que Revit ya creó (no la definición
+    /// abstracta de la forma): <c>ScaleToBox</c> es un escalado afín, no
+    /// puede fabricar una diagonal que la forma original no tuviera, así que
+    /// si aparece acá viene heredada de la propia forma elegida.
+    /// </summary>
+    public static bool TieneLadoDiagonal(Rebar rebar)
+    {
+        try
+        {
+            foreach (Curve c in rebar.GetCenterlineCurves(
+                         false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, 0))
+            {
+                if (c is not Line linea) continue;
+
+                XYZ d = linea.GetEndPoint(1) - linea.GetEndPoint(0);
+                if (Math.Abs(d.X) > ToleranciaDiagonalPies && Math.Abs(d.Y) > ToleranciaDiagonalPies)
+                    return true;
+            }
+        }
+        catch
+        {
+            // Si no se puede leer la geometría, no se bloquea por esto -- el
+            // resto de la creación (ScaleToBox, ganchos) ya validó lo suyo.
+        }
+
+        return false;
     }
 
     public static Solid? ObtenerSolido(Element el)

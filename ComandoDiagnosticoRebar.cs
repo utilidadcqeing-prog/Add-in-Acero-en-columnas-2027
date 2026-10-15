@@ -40,6 +40,8 @@ public class ComandoDiagnosticoRebar : IExternalCommand
         }
 
         var sb = new StringBuilder();
+        CatalogoFormasYGanchos(doc, sb);
+
         foreach (Reference r in refs)
         {
             Element el = doc.GetElement(r);
@@ -57,9 +59,244 @@ public class ComandoDiagnosticoRebar : IExternalCommand
         return Result.Succeeded;
     }
 
+    /// <summary>
+    /// Qué formas de armadura y qué tipos de gancho tiene cargados el
+    /// documento. Sirve para decidir si hay una forma NATIVA de grapa
+    /// (barra recta con dos ganchos) que se pueda usar con
+    /// <c>Rebar.CreateFromRebarShape</c>, como ya se hace con el estribo
+    /// principal, en vez de armar la grapa a mano con curvas; y para ver si
+    /// el gancho que heredan grapas y cajas es simplemente uno
+    /// sobredimensionado. Ver docs/planes/2026-09-10-cajas-por-eje-y-diagnostico-ganchos.md.
+    /// </summary>
+    private static void CatalogoFormasYGanchos(Document doc, StringBuilder sb)
+    {
+        sb.AppendLine("=== FORMAS (RebarShape) del documento ===");
+        foreach (RebarShape forma in new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarShape)).Cast<RebarShape>().OrderBy(f => f.Name))
+        {
+            string segmentos;
+            try
+            {
+                segmentos = forma.GetRebarShapeDefinition() is RebarShapeDefinitionBySegments porSegmentos
+                    ? $"{porSegmentos.NumberOfSegments} segmento(s)"
+                    : "definida por arco";
+            }
+            catch (Exception ex) { segmentos = $"(no se pudo leer: {ex.Message})"; }
+
+            sb.AppendLine($"  {forma.Name} | {forma.RebarStyle} | {segmentos}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("=== TIPOS DE GANCHO (RebarHookType) del documento ===");
+        foreach (RebarHookType tipo in new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarHookType)).Cast<RebarHookType>().OrderBy(t => t.Name))
+        {
+            sb.AppendLine($"  {tipo.Name}");
+            foreach (Parameter p in tipo.Parameters)
+            {
+                if (!p.HasValue) continue;
+                string? valor = p.AsValueString() ?? p.AsString();
+                if (!string.IsNullOrWhiteSpace(valor))
+                    sb.AppendLine($"      {p.Definition.Name} = {valor}");
+            }
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("=== ELEMENTOS SELECCIONADOS ===");
+    }
+
+    /// <summary>
+    /// Qué gancho tiene puesto realmente esta barra y de dónde sale su largo.
+    /// La clave es <c>AutoCalcHookLengths</c>: si está apagado en el tipo de
+    /// barra, el largo del gancho lo manda el propio <c>RebarBarType</c> y
+    /// **ignora** el multiplicador del <c>RebarHookType</c> -- o sea que achicar
+    /// el multiplicador no cambia nada. Sin este dato no se puede saber por qué
+    /// un gancho sigue saliendo grande.
+    /// </summary>
+    /// <summary>
+    /// Para una barra VERTICAL (longitudinal de columna): hacia qué lado dobla
+    /// el gancho de cada extremo, y si eso es hacia el centro de la sección o
+    /// hacia afuera.
+    ///
+    /// Es la medición que pedía la regla del CLAUDE.md para los issues #43 y
+    /// #59: <c>RebarTerminationOrientation.Left/Right</c> no dice en qué
+    /// dirección del espacio queda la pata, y eso no se deduce de la
+    /// documentación. Acá se lee de la geometría REAL que devolvió Revit, no de
+    /// lo que se le pidió.
+    ///
+    /// Si el veredicto dice AFUERA, hay que invertir OrientacionPositiva /
+    /// OrientacionNegativa en <c>Logica/GeneradorLongitudinal</c> -- están las
+    /// dos juntas y es el único lugar donde se decide.
+    /// </summary>
+    private static void DiagnosticarOrientacionDeGanchos(Rebar rebar, StringBuilder sb)
+    {
+        IList<Curve> curvas;
+        try { curvas = rebar.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeAllMultiplanarCurves, 0); }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"  Orientación de ganchos: no se pudieron leer las curvas ({ex.Message})");
+            return;
+        }
+
+        if (curvas.Count == 0) return;
+
+        // El eje de la barra: la recta más larga que va en Z. Si no hay
+        // ninguna, esto no es una longitudinal de columna y no hay nada que
+        // medir acá (los estribos son lazos horizontales).
+        Line? eje = curvas
+            .OfType<Line>()
+            .Where(l => Math.Abs(l.Direction.Z) > 0.9)
+            .OrderByDescending(l => l.Length)
+            .FirstOrDefault();
+
+        if (eje is null)
+        {
+            sb.AppendLine("  Orientación de ganchos: la barra no es vertical, no aplica (esto es para longitudinales de columna).");
+            return;
+        }
+
+        XYZ ejeXY = eje.GetEndPoint(0);
+
+        // El centro de la sección del host, para saber qué es "adentro".
+        BoundingBoxXYZ? caja = null;
+        try { caja = rebar.Document.GetElement(rebar.GetHostId())?.get_BoundingBox(null); }
+        catch { /* se reporta abajo */ }
+
+        if (caja is null)
+        {
+            sb.AppendLine("  Orientación de ganchos: no se pudo leer el sólido del host, no hay contra qué comparar.");
+            return;
+        }
+
+        double cx = (caja.Min.X + caja.Max.X) / 2;
+        double cy = (caja.Min.Y + caja.Max.Y) / 2;
+        double haciaElCentroX = cx - ejeXY.X;
+        double haciaElCentroY = cy - ejeXY.Y;
+
+        sb.AppendLine(
+            $"  Orientación de ganchos: barra en (X {Metros(ejeXY.X):0.000}, Y {Metros(ejeXY.Y):0.000}), " +
+            $"centro del host en (X {Metros(cx):0.000}, Y {Metros(cy):0.000})");
+
+        void Reportar(string queExtremo, XYZ punta)
+        {
+            double dx = punta.X - ejeXY.X;
+            double dy = punta.Y - ejeXY.Y;
+            double desvio = Math.Sqrt(dx * dx + dy * dy);
+
+            if (desvio < 1e-6)
+            {
+                sb.AppendLine($"    {queExtremo}: recto (la punta no se sale del eje), sin gancho que medir.");
+                return;
+            }
+
+            double proyeccion = dx * haciaElCentroX + dy * haciaElCentroY;
+            string veredicto = proyeccion > 0 ? "ADENTRO (correcto)" : "AFUERA (hay que invertir la polaridad)";
+
+            sb.AppendLine(
+                $"    {queExtremo}: la punta se corre {Metros(desvio) * 100:0.#} cm " +
+                $"(ΔX {Metros(dx) * 100:+0.#;-0.#;0} cm, ΔY {Metros(dy) * 100:+0.#;-0.#;0} cm) -> {veredicto}");
+        }
+
+        // Las curvas vienen de principio a fin de la barra, y este archivo las
+        // crea siempre de abajo hacia arriba: la primera es el gancho inferior
+        // y la última el superior.
+        Reportar("Extremo 0 (abajo, anclaje en zapata)", curvas[0].GetEndPoint(0));
+        Reportar("Extremo 1 (arriba, remate)", curvas[^1].GetEndPoint(1));
+    }
+
+    private static void DiagnosticarGanchosDe(Rebar rebar, StringBuilder sb)
+    {
+        Document doc = rebar.Document;
+
+        RebarBarType? tipoBarra = null;
+        try { tipoBarra = doc.GetElement(rebar.GetTypeId()) as RebarBarType; }
+        catch { /* se reporta abajo */ }
+
+        if (tipoBarra is null)
+        {
+            sb.AppendLine("  (no se pudo leer el tipo de barra)");
+            return;
+        }
+
+        sb.AppendLine($"  Barra: «{tipoBarra.Name}», diámetro nominal {Metros(tipoBarra.BarNominalDiameter) * 1000:0.#} mm, " +
+                      $"de modelo {Metros(tipoBarra.BarModelDiameter) * 1000:0.#} mm");
+
+        // Los diámetros de DOBLADO son lo que hace bulto en un gancho de 180°:
+        // el semicírculo del gancho tiene ese radio. Nunca se habían mirado --
+        // todas las conclusiones sobre "el gancho es muy grande" salieron de
+        // GetHookLength, que es el tramo recto, no el arco.
+        string Doblado(Func<double> leer)
+        {
+            try { return $"{Metros(leer()) * 100:0.00} cm"; }
+            catch (Exception ex) { return $"(no se pudo leer: {ex.Message})"; }
+        }
+
+        sb.AppendLine(
+            $"  Diámetros de doblado: estándar={Doblado(() => tipoBarra.StandardBendDiameter)}, " +
+            $"gancho estándar={Doblado(() => tipoBarra.StandardHookBendDiameter)}, " +
+            $"estribo/tirante={Doblado(() => tipoBarra.StirrupTieBendDiameter)}");
+
+        sb.AppendLine("  Parámetros del tipo de barra:");
+        foreach (Parameter p in tipoBarra.Parameters)
+        {
+            if (!p.HasValue) continue;
+            string? valor = p.AsValueString() ?? p.AsString();
+            if (!string.IsNullOrWhiteSpace(valor))
+                sb.AppendLine($"      {p.Definition.Name} = {valor}");
+        }
+
+        try
+        {
+            if (doc.GetElement(rebar.GetShapeId()) is RebarShape forma)
+                sb.AppendLine($"  Forma: «{forma.Name}» | estilo {forma.RebarStyle}");
+        }
+        catch { /* la barra puede no tener forma asociada */ }
+
+        for (int extremo = 0; extremo < 2; extremo++)
+        {
+            ElementId idGancho;
+            try { idGancho = rebar.GetHookTypeId(extremo); }
+            catch { continue; }
+
+            if (idGancho == ElementId.InvalidElementId)
+            {
+                sb.AppendLine($"  Extremo {extremo}: sin gancho");
+                continue;
+            }
+
+            if (doc.GetElement(idGancho) is not RebarHookType gancho)
+            {
+                sb.AppendLine($"  Extremo {extremo}: gancho {idGancho.Value} (no se pudo leer)");
+                continue;
+            }
+
+            // Si "largo real" NO coincide con multiplicador × diámetro, quiere
+            // decir que el tipo de barra tiene un largo de gancho propio que
+            // pisa al multiplicador -- y entonces achicar el multiplicador del
+            // RebarHookType no cambia nada.
+            string largo;
+            try { largo = $"{Metros(tipoBarra.GetHookLength(gancho.Id)) * 100:0.#} cm"; }
+            catch (Exception ex) { largo = $"(no se pudo leer: {ex.Message})"; }
+
+            double esperado = gancho.StraightLineMultiplier * tipoBarra.BarNominalDiameter;
+
+            // El giro del gancho fuera del plano no se lee acá: Rebar no expone
+            // GetHookRotationAngle en la API de 2027. Si el gancho quedara fuera
+            // del plano se nota igual en la normal del ARCO que imprime
+            // DescribirCurva.
+            sb.AppendLine(
+                $"  Extremo {extremo}: «{gancho.Name}» | ángulo {gancho.HookAngle * 180 / Math.PI:0.#}° | " +
+                $"Style={gancho.Style} | multiplicador={gancho.StraightLineMultiplier:0.##} | " +
+                $"largo real={largo} | esperado por multiplicador={Metros(esperado) * 100:0.#} cm");
+        }
+    }
+
     private static void DiagnosticarRebar(Rebar rebar, StringBuilder sb)
     {
         sb.AppendLine($"--- Rebar {rebar.Id.Value} (host {rebar.GetHostId().Value}) ---");
+
+        DiagnosticarGanchosDe(rebar, sb);
+        DiagnosticarOrientacionDeGanchos(rebar, sb);
 
         int posiciones;
         try { posiciones = rebar.NumberOfBarPositions; }
@@ -67,20 +304,11 @@ public class ComandoDiagnosticoRebar : IExternalCommand
 
         for (int pos = 0; pos < Math.Max(1, posiciones); pos++)
         {
-            IList<Curve>? curvas;
-            try
-            {
-                curvas = rebar.GetCenterlineCurves(false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, pos);
-            }
-            catch (Exception ex)
-            {
-                sb.AppendLine($"  [posición {pos}] no se pudo leer geometría: {ex.Message}");
-                continue;
-            }
+            sb.AppendLine($"  [posición {pos}] SIN ganchos ni radios (solo los tramos rectos, como en los reportes anteriores)");
+            VolcarCurvas(rebar, pos, suprimir: true, MultiplanarOption.IncludeOnlyPlanarCurves, sb);
 
-            sb.AppendLine($"  [posición {pos}]");
-            foreach (Curve c in curvas)
-                sb.AppendLine($"    {Fmt(c.GetEndPoint(0))} -> {Fmt(c.GetEndPoint(1))}");
+            sb.AppendLine($"  [posición {pos}] CON ganchos y radios REALES");
+            VolcarCurvas(rebar, pos, suprimir: false, MultiplanarOption.IncludeAllMultiplanarCurves, sb);
 
             // Confirma si Revit reconoce esta barra como parte de un empalme
             // formal (RebarSplice) en cada extremo -- para distinguir un par
@@ -101,14 +329,91 @@ public class ComandoDiagnosticoRebar : IExternalCommand
     }
 
     /// <summary>
+    /// Hasta el 10-sep el diagnóstico pedía las curvas con
+    /// <c>suppressHooks</c>/<c>suppressBendRadius</c> en <c>true</c>, así que
+    /// Revit devolvía SOLO el tramo recto: el gancho nunca se midió, y todas
+    /// las conclusiones sobre su tamaño salieron de <c>GetHookLength</c> (un
+    /// número), no de la geometría. Con los flags en <c>false</c> aparecen los
+    /// arcos, y con ellos el radio de doblado (lo que hace bulto en un gancho
+    /// de 180°) y el CENTRO del arco -- que es donde tiene que caer la barra
+    /// longitudinal para que la grapa la abrace.
+    /// </summary>
+    private static void VolcarCurvas(Rebar rebar, int pos, bool suprimir, MultiplanarOption opcion, StringBuilder sb)
+    {
+        IList<Curve> curvas;
+        try
+        {
+            curvas = rebar.GetCenterlineCurves(false, suprimir, suprimir, opcion, pos);
+        }
+        catch (Exception ex)
+        {
+            sb.AppendLine($"    no se pudo leer geometría: {ex.Message}");
+            return;
+        }
+
+        foreach (Curve c in curvas)
+            sb.AppendLine($"    {DescribirCurva(c)}");
+    }
+
+    private static string DescribirCurva(Curve c)
+    {
+        if (c is Arc arco)
+        {
+            double barrido = arco.GetEndParameter(1) - arco.GetEndParameter(0);
+            XYZ n = arco.Normal;
+            return $"ARCO  centro={Fmt(arco.Center)} radio={Metros(arco.Radius) * 100:0.00} cm " +
+                   $"barrido={barrido * 180 / Math.PI:0.#}° normal=({n.X:0.00}, {n.Y:0.00}, {n.Z:0.00})  " +
+                   $"{Fmt(c.GetEndPoint(0))} -> {Fmt(c.GetEndPoint(1))}";
+        }
+
+        return $"RECTA largo={Metros(c.Length) * 100:0.00} cm  " +
+               $"{Fmt(c.GetEndPoint(0))} -> {Fmt(c.GetEndPoint(1))}";
+    }
+
+    /// <summary>
     /// Mismo cálculo que <c>LectorContexto.HuellaPlanta</c>/<c>ExtensionZ</c> --
     /// sólido mayor del elemento, caja en planta (XMin/XMax/YMin/YMax) y
     /// extensión en Z, para comparar contra lo que el add-in ve realmente de
     /// una viga/vigueta/columna.
     /// </summary>
+    /// <summary>
+    /// LectorContexto.Recubrimiento hoy solo lee CLEAR_COVER_OTHER, asumiendo
+    /// que es el único parámetro de cobertura relevante para una columna
+    /// (Exterior/Interior serían "solo para muros", según lo que se encontró
+    /// buscando -- sin confirmar contra la API real). Esto imprime los TRES
+    /// parámetros (Exterior/Interior/Other) del elemento seleccionado para
+    /// ver cuál existe de verdad en un host que no es un muro, y si tienen
+    /// valores distintos entre sí -- lo que explicaría un recubrimiento
+    /// distinto al esperado sin que sea un error de carga del modelo.
+    /// </summary>
+    private static void DiagnosticarCoberturas(Element el, StringBuilder sb)
+    {
+        foreach ((BuiltInParameter bip, string nombre) in new[]
+                 {
+                     (BuiltInParameter.CLEAR_COVER_EXTERIOR, "Exterior"),
+                     (BuiltInParameter.CLEAR_COVER_INTERIOR, "Interior"),
+                     (BuiltInParameter.CLEAR_COVER_OTHER, "Other"),
+                 })
+        {
+            Parameter? p = el.get_Parameter(bip);
+            if (p is null)
+            {
+                sb.AppendLine($"  Cobertura [{nombre}]: el parámetro no existe en este elemento.");
+                continue;
+            }
+
+            if (el.Document.GetElement(p.AsElementId()) is RebarCoverType tipo)
+                sb.AppendLine($"  Cobertura [{nombre}]: «{tipo.Name}» = {Metros(tipo.CoverDistance) * 100:0.#} cm");
+            else
+                sb.AppendLine($"  Cobertura [{nombre}]: existe el parámetro pero sin RebarCoverType asignado (AsElementId={p.AsElementId().Value}).");
+        }
+    }
+
     private static void DiagnosticarSolido(Element el, StringBuilder sb)
     {
         sb.AppendLine($"--- {el.Category?.Name ?? "Elemento"} {el.Id.Value} ({el.Name}) ---");
+
+        DiagnosticarCoberturas(el, sb);
 
         Solid? solido = SolidoMayor(el.get_Geometry(new Options { DetailLevel = ViewDetailLevel.Fine }));
         if (solido is null)

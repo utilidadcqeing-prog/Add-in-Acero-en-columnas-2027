@@ -45,6 +45,11 @@ public class App : IExternalApplication
             "Genera columnetas y viguetas de confinamiento en los muros seleccionados.",
             dllPath, folder, "iconoCQ"));
 
+#if DEBUG
+        // Herramientas de diagnóstico: solo en las compilaciones de desarrollo
+        // (Debug). El paquete que se publica (Release) no las trae -- ver el
+        // comentario de practicacq.csproj.
+
         // TEMPORAL -- ver comentario de ComandoDiagnosticoRebar.cs. Sacar
         // este botón (y el comando) una vez confirmado el corrimiento lateral
         // real del traslapo.
@@ -64,6 +69,25 @@ public class App : IExternalApplication
             "practicacq.ComandoDiagnosticoSplice",
             "TEMPORAL: prueba la API real de empalmes de Revit (RebarSpliceUtils) sobre una barra seleccionada, sin dejar cambios permanentes.",
             dllPath, folder, "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoBarraContinua.cs.
+        // Sacar este botón (y el comando) una vez decidido el diseño del #41.
+        panelHerramientas.AddItem(CrearBoton(
+            "ComandoDiagnosticoBarraContinua",
+            "Diagnóstico\nbarra continua",
+            "practicacq.ComandoDiagnosticoBarraContinua",
+            "TEMPORAL: prueba si una sola barra puede recorrer varias columnas apiladas y llevar varios empalmes. Deja barras de prueba (Ctrl+Z las saca).",
+            dllPath, folder, "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoFormasPropias.cs.
+        // Sacar este botón (y el comando) una vez implementado el #64.
+        panelHerramientas.AddItem(CrearBoton(
+            "ComandoDiagnosticoFormasPropias",
+            "Diagnóstico\nformas propias",
+            "practicacq.ComandoDiagnosticoFormasPropias",
+            "TEMPORAL: prueba crear formas y ganchos propios del add-in para estribos, cajas y grapas. Al terminar pregunta si deja las barras de prueba o deshace todo.",
+            dllPath, folder, "iconoCQ"));
+#endif
 
         return Result.Succeeded;
     }

@@ -34,8 +34,18 @@ public sealed class ColumnaPlan
     public ColumnaContexto? Contexto { get; set; }
 
     /// <summary>
+    /// El recubrimiento lateral elegido en la ventana para TODA la columna, en
+    /// metros: estribos, longitudinal y estribos menores salen alineados con
+    /// este valor aunque alguna pieza de la pila tenga otro en Revit (pedido
+    /// de Luciano, 8-oct). Solo se usa para dibujar el acero; no se cambia el
+    /// parámetro de las columnas en el modelo. <c>null</c> = el del contexto
+    /// (<see cref="ColumnaContexto.Recubrimiento"/>).
+    /// </summary>
+    public double? Recubrimiento { get; set; }
+
+    /// <summary>
     /// Uno por tramo de <see cref="Contexto"/>, mismo índice -- pero solo para
-    /// los tramos que estaban tildados en la lista al exportar/generar; los
+    /// los tramos que estaban aceptados en la ventana al generar; los
     /// demás índices quedan en <c>null</c> (no "sin tildar" descartado del
     /// array, porque eso correría los índices y los desalinearía de
     /// <c>Contexto.Tramos</c>). Un tramo en <c>null</c> significa "no pedido

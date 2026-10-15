@@ -15,22 +15,27 @@ public class ComandoEstribos : IExternalCommand
 {
     private static VentanaConfiguradorEstribos? _ventana;
 
-    // Issue #24 (sincronizar selección): viven a nivel de comando, no de
+    // Issue #24 (sincronizar selección): vive a nivel de comando, no de
     // ventana, porque VentanaConfiguradorEstribos no puede referenciar
     // Autodesk.Revit -- es la misma regla de L1 que la mantiene corriendo
-    // sin Revit abierto. Dos pares separados y no uno compartido: activar
-    // una fila mueve la cámara, tildar en la lista no debe hacerlo, y son
-    // dos eventos de la ventana que pueden dispararse en cualquier orden.
+    // sin Revit abierto.
+    //
+    // Antes había un segundo par (sin centrar la vista) para reflejar en Revit
+    // lo que estaba TILDADO en la lista. El tilde desapareció con el issue #56
+    // y no se recableó a lo "aceptado" a propósito: cada Aceptar le mandaría
+    // una selección nueva a Revit y movería lo que el usuario esté mirando.
     private static readonly ManejadorSeleccionElemento _manejadorActivar = new() { CentrarVista = true };
     private static readonly ExternalEvent _eventoActivar = ExternalEvent.Create(_manejadorActivar);
-
-    private static readonly ManejadorSeleccionElemento _manejadorMarcado = new() { CentrarVista = false };
-    private static readonly ExternalEvent _eventoMarcado = ExternalEvent.Create(_manejadorMarcado);
 
     // J3 (#5): generar el armado real necesita transacción, por eso pasa por
     // el mismo patrón ExternalEvent que la selección de arriba.
     private static readonly ManejadorGeneracionArmado _manejadorGenerar = new();
     private static readonly ExternalEvent _eventoGenerar = ExternalEvent.Create(_manejadorGenerar);
+
+    // Configuraciones guardadas (10-sep): escribir en el documento tambien
+    // necesita transaccion, mismo patron.
+    private static readonly ManejadorPersistirConfiguraciones _manejadorConfiguraciones = new();
+    private static readonly ExternalEvent _eventoConfiguraciones = ExternalEvent.Create(_manejadorConfiguraciones);
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
@@ -52,10 +57,19 @@ public class ComandoEstribos : IExternalCommand
         // una línea -- ver L1, este era exactamente el punto de la interfaz.
         Document doc = uiapp.ActiveUIDocument.Document;
 
+        // Las configuraciones con nombre viven DENTRO del modelo (Extensible
+        // Storage), asi que viajan con el proyecto.
+        var almacen = new AlmacenConfiguracionesRevit(doc);
+        _manejadorConfiguraciones.Almacen = almacen;
+        _manejadorConfiguraciones.AlFallar = motivo =>
+            TaskDialog.Show("CQEING", $"No se pudieron guardar las configuraciones en el modelo: {motivo}");
+        almacen.CambiosPendientes += () => _eventoConfiguraciones.Raise();
+
         _ventana = new VentanaConfiguradorEstribos(
             new LectorContexto(doc),
             new ProveedorTiposReal(doc),
-            modoSimulado: false);
+            modoSimulado: false,
+            almacen);
 
         _ventana.ElementosActivados += ids =>
         {
@@ -64,15 +78,6 @@ public class ComandoEstribos : IExternalCommand
 
             _manejadorActivar.Objetivos = objetivos;
             _eventoActivar.Raise();
-        };
-
-        // Tildar puede vaciar el conjunto (destildar todo) -- a diferencia de
-        // ElementosActivados, acá sí hay que avisarle a Revit para que
-        // deseleccione, no cortar antes.
-        _ventana.SeleccionMarcadaCambio += ids =>
-        {
-            _manejadorMarcado.Objetivos = ParsearIds(ids);
-            _eventoMarcado.Raise();
         };
 
         // La ventana que dispara esto puede haberse cerrado (y reabierto) para

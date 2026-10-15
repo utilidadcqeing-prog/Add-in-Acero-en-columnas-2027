@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:practicacq.Vistas"
         Title="Configurador de Estribos"
-        Height="640" Width="1040"
-        MinHeight="560" MinWidth="960"
+        Height="780" Width="1180"
+        MinHeight="660" MinWidth="1000"
         WindowStartupLocation="CenterOwner"
         Background="#F0F0F0">
 
@@ -20,13 +20,25 @@
             <Setter Property="Padding" Value="10" />
         </Style>
 
-        <!-- Compartida entre las dos pestañas (columnas principales / columnetas, issue #33) -->
+        <!-- Lista de columnetas (issue #33). Sin casilla de tildar: desde la
+             reunión del 11-sep lo que se genera no se tilda, se acepta en el
+             panel del tramo (issue #56); el ✓ de la izquierda lo muestra. -->
         <DataTemplate x:Key="PlantillaNodo">
+            <!-- La sangría de los tramos es un margen, no espacios en el texto. -->
             <StackPanel Orientation="Horizontal" Margin="0,1">
-                <CheckBox IsChecked="{Binding Marcado, Mode=TwoWay}"
-                          Checked="CheckBoxNodo_Changed" Unchecked="CheckBoxNodo_Changed"
-                          VerticalAlignment="Center" Margin="0,0,4,0" />
-                <TextBlock Text="{Binding Etiqueta}" VerticalAlignment="Center">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding EsColumna}" Value="False">
+                                <Setter Property="Margin" Value="14,1,0,1" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="{Binding Chulito}" Foreground="#16A34A" FontWeight="Bold"
+                           VerticalAlignment="Center" Width="12" Margin="0,0,2,0" />
+                <TextBlock Text="{Binding Etiqueta}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Etiqueta}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Style.Triggers>
@@ -55,65 +67,52 @@
             <TextBlock Text="MODO DE PRUEBA — datos simulados, no hay conexión a Revit." FontWeight="Bold" Foreground="#92400E" />
         </Border>
 
-        <!-- Barra superior -->
-        <Grid Grid.Row="1" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Tilda columnas o tramos sueltos en la lista y usa &quot;Aplicar a selección&quot; para cargarles la misma configuración. Solo lo tildado se exporta o se genera en Revit."
-                       TextWrapping="Wrap" Foreground="#555555" VerticalAlignment="Center" />
-            <Button Grid.Column="1" x:Name="BotonLimpiarSeleccion" Content="Limpiar selección"
-                    Height="30" Padding="12,0" Background="#6B7280" Foreground="White"
-                    BorderThickness="0" Margin="0,0,8,0" Click="BotonLimpiarSeleccion_Click" />
-            <Button Grid.Column="2" x:Name="BotonAplicarSeleccion" Content="Aplicar a selección"
-                    Height="30" Padding="12,0" Background="#0B63CE" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0" Click="BotonAplicarSeleccion_Click" />
-        </Grid>
+        <!-- Barra superior. Ya no hay botones: el paso de "aplicar" desapareció
+             (issue #56, reunión del 11-sep) y todo se decide con Aceptar, en el
+             panel del tramo. -->
+        <TextBlock Grid.Row="1" Margin="0,0,0,8"
+                   Text="Elige la columna en la planta (Ctrl o arrastre para varias), configura cada tramo y aprieta Aceptar. Los tramos con ✓ son los que se generan; para sacar uno, clic en su ✓ en la elevación."
+                   TextWrapping="Wrap" Foreground="#555555" VerticalAlignment="Center" />
 
-        <!-- Cuerpo: lista | elevación | panel -->
+        <!-- Cuerpo: planta | elevación | configuración. El panel de tramos que
+             había en el medio se fue con el issue #56: era redundante con la
+             elevación y sus flechitas ("me sigue generando ruido,
+             redundancia", William 11-sep). Su ancho se repartió entre los
+             otros dos. -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="280" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="330" />
+                <ColumnDefinition Width="380" />
                 <ColumnDefinition Width="10" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Selección: columnas y tramos -->
+            <!-- Elegir la columna: la planta, con la marca de ubicación del
+                 pilar de cada una como etiqueta (issue #62). La lista enorme de
+                 columnas se fue con ese mismo issue ("esa lista enorme también
+                 desaparecería, no la veo", William 11-sep); la de columnetas se
+                 queda porque son delgadas y suelen estar juntas, y pincharlas
+                 en la planta es incómodo (issue #33; se oculta sola si el
+                 modelo no tiene ninguna). -->
             <Border Grid.Column="0" Style="{StaticResource Panel}">
                 <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Columnas y tramos" Style="{StaticResource Etiqueta}" Margin="0" />
-                        <Button Grid.Column="1" x:Name="BotonVerPlanta" Content="Ver en planta"
-                                Padding="8,2" FontSize="11" Click="BotonVerPlanta_Click" />
-                    </Grid>
+                    <TextBlock DockPanel.Dock="Top" Text="Columnas" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
 
-                    <!-- Issue #33: dos pestañas en vez de una sola lista con
-                         encabezados. La de Columnetas se oculta sola si el
-                         modelo no tiene ninguna. -->
-                    <TabControl x:Name="PestanasSeleccion" BorderThickness="0" Background="Transparent">
-                        <TabItem Header="Columnas principales">
-                            <ListBox x:Name="ListaPrincipales" BorderThickness="0"
-                                     ItemTemplate="{StaticResource PlantillaNodo}"
-                                     SelectionChanged="ListaSeleccion_SelectionChanged" />
+                    <TabControl x:Name="PestanasSeleccion" BorderThickness="0" Background="Transparent"
+                                SelectionChanged="PestanasSeleccion_SelectionChanged">
+                        <TabItem Header="Planta">
+                            <local:PanelPlantaColumnas x:Name="PanelPlanta" />
                         </TabItem>
                         <TabItem x:Name="PestanaColumnetas" Header="Columnetas">
                             <ListBox x:Name="ListaColumnetas" BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     HorizontalContentAlignment="Stretch"
+                                     SelectionMode="Extended"
                                      ItemTemplate="{StaticResource PlantillaNodo}"
                                      SelectionChanged="ListaSeleccion_SelectionChanged" />
                         </TabItem>
                     </TabControl>
-
-                    <!-- Selector visual de planta (reunión 9-sep, #39): alterna
-                         con el TabControl de arriba en el mismo espacio (ver
-                         BotonVerPlanta_Click). Empieza oculto. -->
-                    <local:PanelPlantaColumnas x:Name="PanelPlanta" Visibility="Collapsed" />
                 </DockPanel>
             </Border>
 
@@ -130,27 +129,18 @@
                         <TextBlock x:Name="TextoAvisos" TextWrapping="Wrap" FontSize="11" Foreground="#92400E" />
                     </Border>
 
-                    <!-- Leyenda -->
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                    <!-- Leyenda. WrapPanel y no StackPanel: en una sola fila
+                         no entran las cuatro entradas. -->
+                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
                         <Rectangle Width="12" Height="12" Fill="#3B82F6" Margin="0,0,4,0" />
                         <TextBlock Text="nudo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
                         <Rectangle Width="12" Height="12" Fill="#B45309" Margin="0,0,4,0" />
                         <TextBlock Text="contra zapata" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
                         <Rectangle Width="12" Height="12" Fill="#DCFCE7" Stroke="#22C55E" StrokeThickness="2" Margin="0,0,4,0" />
                         <TextBlock Text="tramo activo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
-                        <Rectangle Width="12" Height="12" Margin="0,0,4,0">
-                            <Rectangle.Fill>
-                                <VisualBrush TileMode="Tile" Viewport="0,0,6,6" ViewportUnits="Absolute">
-                                    <VisualBrush.Visual>
-                                        <Canvas Width="6" Height="6" Background="White">
-                                            <Line X1="0" Y1="6" X2="6" Y2="0" Stroke="#94A3B8" StrokeThickness="1" />
-                                        </Canvas>
-                                    </VisualBrush.Visual>
-                                </VisualBrush>
-                            </Rectangle.Fill>
-                        </Rectangle>
-                        <TextBlock Text="configurado" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
-                    </StackPanel>
+                        <TextBlock Text="✓" FontSize="12" FontWeight="Bold" Foreground="#16A34A" Margin="0,0,4,0" VerticalAlignment="Center" />
+                        <TextBlock Text="se genera (clic para sacarlo)" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
+                    </WrapPanel>
 
                     <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
                          del texto: la elevación de abajo también es vertical (de piso a
@@ -171,27 +161,86 @@
                     </Grid>
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <Canvas x:Name="CanvasElevacion" Width="310" Height="460" Background="Transparent" />
+                        <Canvas x:Name="CanvasElevacion" Width="350" Height="460" Background="Transparent" />
                     </ScrollViewer>
                 </DockPanel>
             </Border>
 
             <!-- Panel del tramo activo -->
             <Border Grid.Column="4" Style="{StaticResource Panel}">
-              <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <DockPanel>
+                <!-- La fila de Aceptar va FUERA del ScrollViewer, pegada abajo:
+                     es la acción principal de toda la ventana (issue #56) y no
+                     puede depender de hasta dónde scrolleó el usuario. Los dos
+                     botones de "aplicar al resto" son contextuales al tipo del
+                     tramo activo (issue #57): el texto, el conteo y si se ven
+                     los pone ActualizarBotonesDeAceptar. -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                    <Border Height="1" Background="#E5E5E5" Margin="0,0,0,8" />
+                    <Button x:Name="BotonAceptar" Content="✓  Aceptar este tramo" Height="32"
+                            Background="#16A34A" Foreground="White" FontWeight="Bold"
+                            BorderThickness="0" Click="BotonAceptar_Click" />
+                    <Button x:Name="BotonAceptarMismoTipo" Height="26" Margin="0,4,0,0"
+                            Click="BotonAceptarMismoTipo_Click" Visibility="Collapsed" />
+                    <Button x:Name="BotonAceptarColumna" Height="26" Margin="0,4,0,0"
+                            Click="BotonAceptarColumna_Click" Visibility="Collapsed" />
+                </StackPanel>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
+                    <!-- Configuraciones guardadas (pedido de Luciano, 10-sep):
+                         elegir una CARGA el panel; de ahí sale hacia los tramos
+                         cuando se aprieta Aceptar. Se guardan dentro del modelo
+                         de Revit, así que viajan con el proyecto. -->
+                    <TextBlock Text="Configuración guardada:" Style="{StaticResource Etiqueta}" Margin="0,0,0,3" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones" Height="24"
+                                  SelectionChanged="ComboConfiguraciones_SelectionChanged" />
+                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" Content="Borrar"
+                                Height="24" Padding="8,0" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
+                    </Grid>
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" Height="24"
+                                 VerticalContentAlignment="Center" />
+                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" Content="Guardar"
+                                Height="24" Padding="8,0" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
+                    </Grid>
+                    <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre."
+                               TextWrapping="Wrap" Foreground="Gray" FontSize="10" Margin="0,3,0,0" />
+
+                    <Border Height="1" Background="#E5E5E5" Margin="0,12,0,4" />
+
                     <TextBlock Text="Configuración del tramo activo" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
 
-                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,2">
                         <RadioButton x:Name="RadioUniforme" Content="Uniforme" GroupName="Modo" IsChecked="True" Margin="0,0,20,0" />
                         <RadioButton x:Name="RadioConfinado" Content="Confinado" GroupName="Modo" />
                     </StackPanel>
+                    <!-- Issue #58: en el nudo el confinamiento queda deshabilitado,
+                         y hay que decir por qué: un control gris sin explicación
+                         se lee como un error de la ventana. -->
+                    <TextBlock x:Name="TextoModoFijo" Visibility="Collapsed" Margin="0,0,0,6"
+                               Text="En los nudos el estribo va siempre uniforme: no se permite confinamiento dentro del canto de la viga."
+                               TextWrapping="Wrap" Foreground="Gray" FontSize="11" />
 
                     <TextBlock Text="Tipo de barra:" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboTipoBarra" Height="24" />
 
-                    <TextBlock Text="Tipo de gancho:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboTipoGancho" Height="24" />
+                    <!-- Oculto a propósito (reunión 10-sep): el gancho del
+                         estribo es siempre el de 135° de estilo estribo/tirante,
+                         así que se fija por defecto y no se pregunta. El combo
+                         se queda en el árbol, con su valor puesto, porque es de
+                         donde lo lee LeerConfigDelPanel. -->
+                    <TextBlock x:Name="EtiquetaTipoGancho" Text="Tipo de gancho:" Style="{StaticResource Etiqueta}" Visibility="Collapsed" />
+                    <ComboBox x:Name="ComboTipoGancho" Height="24" Visibility="Collapsed" />
 
                     <!-- Modo Uniforme -->
                     <StackPanel x:Name="PanelUniforme">
@@ -209,12 +258,22 @@
 
                         <TextBlock Text="Espaciado no confinado (m):" Style="{StaticResource Etiqueta}" />
                         <TextBox x:Name="CampoEspaciadoNoConfinado" Height="22" Text="0.14" />
-                        <TextBlock Text="Sugerido al doble del confinado — se puede editar."
+                        <TextBlock Text="Sugerido al doble del confinado. Si lo editas a mano, deja de recalcularse hasta que cambies de tramo."
                                    TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
                     </StackPanel>
 
                     <TextBlock x:Name="TextoValidacion" TextWrapping="Wrap" Foreground="#B91C1C"
                                FontSize="11" Margin="0,10,0,0" />
+
+                    <Border Height="1" Background="#E5E5E5" Margin="0,16,0,12" />
+
+                    <!-- Un solo recubrimiento para toda la columna, aunque sus piezas
+                         tengan valores distintos en Revit: estribos y longitudinal
+                         salen alineados de abajo a arriba. -->
+                    <TextBlock Text="Recubrimiento (toda la columna):" Style="{StaticResource Etiqueta}" Margin="0,0,0,4" />
+                    <ComboBox x:Name="ComboRecubrimiento" Height="24" SelectionChanged="ComboRecubrimiento_SelectionChanged" />
+                    <TextBlock Text="Se usa solo para dibujar el acero; no cambia el recubrimiento de las columnas en Revit."
+                               TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
 
                     <Border Height="1" Background="#E5E5E5" Margin="0,16,0,12" />
 
@@ -249,14 +308,20 @@
                     <TextBlock Text="Longitud de barra comercial (traslapos, Fase 5):" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboLongitudBarra" Height="24" />
 
-                    <TextBlock Text="Gancho de anclaje en zapata (issue #37):" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboGanchoLongitudinal" Height="24" />
+                    <TextBlock Text="Tipo de empalme (solape de los traslapos):" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboTipoEmpalme" Height="24" />
+
+                    <!-- Igual que el del estribo: el anclaje en la zapata es
+                         siempre el de 90° de estilo estándar. -->
+                    <TextBlock x:Name="EtiquetaGanchoLongitudinal" Text="Gancho de anclaje en zapata:" Style="{StaticResource Etiqueta}" Visibility="Collapsed" />
+                    <ComboBox x:Name="ComboGanchoLongitudinal" Height="24" Visibility="Collapsed" />
 
                     <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,4,0,0" />
                 </StackPanel>
-              </ScrollViewer>
+                </ScrollViewer>
+              </DockPanel>
             </Border>
         </Grid>
 
@@ -266,15 +331,17 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" x:Name="TextoEstado" Foreground="Gray" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <!-- Sin las casillas de tildar hace falta decir en números qué
+                     se va a armar, si no el botón de generar es una caja negra
+                     (issue #56). -->
+                <TextBlock x:Name="TextoResumenGeneracion" Foreground="#166534" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock x:Name="TextoEstado" Foreground="Gray" TextWrapping="Wrap" />
+            </StackPanel>
             <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar TODO el armado existente en estas columnas (incluido el que no generó el addin)"
                       VerticalAlignment="Center" Margin="0,0,12,0" />
-            <Button Grid.Column="2" x:Name="BotonExportar" Content="Exportar PlanArmado (JSON)"
-                    Height="32" Padding="12,0" Background="#1E8449" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0" Margin="0,0,8,0" Click="BotonExportar_Click" />
-            <Button Grid.Column="3" x:Name="BotonGenerar" Content="Generar armado en Revit"
+            <Button Grid.Column="2" x:Name="BotonGenerar" Content="Generar armado en Revit"
                     Height="32" Padding="12,0" Background="#B45309" Foreground="White"
                     FontWeight="Bold" BorderThickness="0" Click="BotonGenerar_Click" />
         </Grid>

@@ -29,10 +29,24 @@ public static class GeneradorArmado
     /// <summary>
     /// 5 cm de norma entre el arranque/remate del estribo y la cara del
     /// tramo -- issue #5: "se respetan en los cuatro bordes de cada tramo".
+    /// Se miden al BORDE del estribo, no a su eje (Luciano, 8-oct) -- mismo
+    /// criterio que el recubrimiento, que va a la cara exterior de la barra
+    /// (#1): quien arma el tramo le suma medio diámetro.
     /// No es un dato que la ventana pida hoy, así que va fijo acá, igual que
     /// el cuadro de <see cref="EstandarCQ"/>.
     /// </summary>
     private const double SeparacionExtremosMetros = 0.05;
+
+    /// <summary>
+    /// TEMPORAL -- traza de diagnóstico (8-oct): deja en un archivo de texto
+    /// las cotas reales, medidas sobre el Rebar ya creado, del primer y el
+    /// último estribo de cada grupo, para comprobar contra Revit los 5 cm de
+    /// los extremos sin depender de una cota puesta a mano. Sacar una vez
+    /// comprobado.
+    /// </summary>
+#pragma warning disable CS0649 // en Release nadie lo asigna: el registro es solo de Debug
+    private static System.Text.StringBuilder? _traza;
+#pragma warning restore CS0649
 
     public static ResultadoArmado Generar(Document doc, OpcionesArmado opciones)
     {
@@ -41,6 +55,11 @@ public static class GeneradorArmado
 
         if (opciones.BorrarAnteriores)
             res.Eliminados = BorrarAnteriores(doc, plan);
+
+#if DEBUG
+        // Solo en Debug: el paquete publicado (Release) no deja registros.
+        _traza = new System.Text.StringBuilder();
+#endif
 
         Dictionary<string, RebarBarType> barrasPorNombre = new FilteredElementCollector(doc)
             .OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
@@ -60,10 +79,27 @@ public static class GeneradorArmado
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
         var ganchosYaAvisados = new HashSet<(ElementId Barra, ElementId Gancho)>();
 
+        // Qué formas de estribo (RebarShape) ya se comprobó que generan un
+        // lado diagonal (ver GeometriaSeccion.TieneLadoDiagonal) -- una sola
+        // vez por corrida: si "formaEstribo" resulta mala, no tiene sentido
+        // crear+escalar+medir+borrar en cada uno de los estribos de todas las
+        // columnas, ni repetir el mismo aviso decenas de veces.
+        var formasRechazadas = new HashSet<ElementId>();
+
         foreach (ColumnaPlan columnaPlan in plan.Columnas)
         {
-            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, res);
+            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, formasRechazadas, res);
         }
+
+#if DEBUG
+        try
+        {
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "practicacq-estribos.log"), _traza?.ToString() ?? "");
+        }
+        catch { /* best-effort */ }
+        _traza = null;
+#endif
 
         return res;
     }
@@ -76,6 +112,7 @@ public static class GeneradorArmado
         RebarShape? formaEstribo,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
+        HashSet<ElementId> formasRechazadas,
         ResultadoArmado res)
     {
         ColumnaContexto? contexto = columnaPlan.Contexto;
@@ -85,7 +122,7 @@ public static class GeneradorArmado
             return;
         }
 
-        double recubrimientoPies = EstandarCQ.APies(contexto.Recubrimiento);
+        double recubrimientoPies = EstandarCQ.APies(columnaPlan.Recubrimiento ?? contexto.Recubrimiento);
         if (recubrimientoPies <= Tolerancia)
         {
             res.Avisos.Add(
@@ -95,10 +132,19 @@ public static class GeneradorArmado
             return;
         }
 
+        // Todos los estribos de la columna salen con la misma sección: la zona
+        // común de la pila. Sin esto, en una pieza más ancha (el dado de
+        // cimentación) el estribo salía más grande que en el resto y dejaba
+        // las barras longitudinales -- que ya van con la zona común -- sueltas
+        // adentro (visto por Luciano el 8-oct).
+        (double XMin, double XMax, double YMin, double YMax)? zonaComun =
+            GeometriaSeccion.ZonaComun(doc, contexto, cacheHost);
+        var tramosConSeccionMayor = new List<int>();
+
         int n = Math.Min(contexto.Tramos.Count, columnaPlan.Tramos.Count);
         for (int i = 0; i < n; i++)
         {
-            // null: este tramo no estaba tildado en la ventana -- no es un
+            // null: este tramo no estaba aceptado en la ventana -- no es un
             // problema que reportar, es simplemente "no pedido en esta corrida".
             if (columnaPlan.Tramos[i] is not ConfigTramo cfg) continue;
 
@@ -108,7 +154,7 @@ public static class GeneradorArmado
             {
                 if (!GenerarTramo(
                         doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo,
-                        recubrimientoPies, cacheHost, ganchosYaAvisados, res))
+                        recubrimientoPies, zonaComun, tramosConSeccionMayor, cacheHost, ganchosYaAvisados, formasRechazadas, res))
                 {
                     res.TramosOmitidos++;
                 }
@@ -126,12 +172,19 @@ public static class GeneradorArmado
                 try { doc.Regenerate(); } catch { /* best-effort */ }
             }
         }
+
+        if (tramosConSeccionMayor.Count > 0 && zonaComun is { } zona)
+            res.Avisos.Add(
+                $"{contexto.Marca}: {tramosConSeccionMayor.Count} tramo(s) están en una pieza más ancha que el resto de la " +
+                $"columna; sus estribos se armaron con la sección común " +
+                $"({GeometriaSeccion.Metros(zona.XMax - zona.XMin) * 100:0.#}×{GeometriaSeccion.Metros(zona.YMax - zona.YMin) * 100:0.#} cm) " +
+                "para que todos queden iguales y alineados.");
     }
 
     /// <summary>
     /// Un tramo, un <see cref="ConfigTramo"/>. Devuelve false (con aviso, sin
-    /// tirar excepción) para los motivos "esperables" -- viga, host borrado,
-    /// tipo de barra/gancho que ya no existe -- y deja que una excepción real
+    /// tirar excepción) para los motivos "esperables" -- host borrado, tipo de
+    /// barra/gancho que ya no existe -- y deja que una excepción real
     /// de geometría se propague para que <see cref="GenerarColumna"/> la
     /// registre con <see cref="GeometriaSeccion.Explicar"/> sin tumbar el resto del lote.
     /// </summary>
@@ -144,17 +197,27 @@ public static class GeneradorArmado
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
         double recubrimientoPies,
+        (double XMin, double XMax, double YMin, double YMax)? zonaComun,
+        List<int> tramosConSeccionMayor,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
+        HashSet<ElementId> formasRechazadas,
         ResultadoArmado res)
     {
-        // Dentro del canto de una viga no hay confinamiento (ver TipoTramo):
-        // no es un error, es el tramo haciendo exactamente lo que dice ser.
-        if (tramo.Tipo == TipoTramo.DentroDeViga) return true;
+        // Un tramo dentro del canto de la viga (nudo) genera estribos como
+        // cualquier otro: hasta el 11-sep se salteaba con un "return true" sin
+        // avisar, y quedaba un hueco de armadura justo en el nudo. William lo
+        // cerró en la reunión de ese día -- "obliga que en los nudos sea
+        // uniforme, no se permita meter confinamiento en el nudo" (issue #58,
+        // que contesta el #55). La parte de "uniforme" la garantiza la ventana,
+        // que deshabilita el modo confinado con un nudo activo.
+        //
+        // Las grapas y cajas (estribos menores, J4) siguen yendo solo en los
+        // tramos libres: eso no cambia acá.
 
         // tramo.Indice ya es el mismo número 0-indexado que muestra la
         // ventana ("Tramo 0", "Tramo 1"...); sumarle 1 acá desalineaba el
-        // aviso con lo que el usuario tenía tildado en pantalla.
+        // aviso con lo que el usuario tenía aceptado en pantalla.
         string etiquetaTramo = $"{marcaColumna} tramo {tramo.Indice}";
 
         if (tramo.IdElementoHost is null || !long.TryParse(tramo.IdElementoHost, out long idHost))
@@ -186,6 +249,22 @@ public static class GeneradorArmado
 
         (CurveLoop contornoCrudo, double zBase) = GeometriaSeccion.ObtenerContornoHost(host, cacheHost);
 
+        // Si esta pieza es más ancha que la zona común de la columna, el
+        // estribo se arma con la zona común y no con el contorno propio. Si
+        // coincide (lo normal, y siempre en una columna de una sola sección)
+        // se deja el contorno real del elemento, sin tocar nada.
+        if (zonaComun is { } zona)
+        {
+            const double margen = 0.003; // ~1 mm, en pies
+            (double hXMin, double hXMax, double hYMin, double hYMax) = GeometriaSeccion.Huella(contornoCrudo);
+            if (hXMin < zona.XMin - margen || hXMax > zona.XMax + margen ||
+                hYMin < zona.YMin - margen || hYMax > zona.YMax + margen)
+            {
+                contornoCrudo = GeometriaSeccion.Rectangulo(zona.XMin, zona.XMax, zona.YMin, zona.YMax, zBase);
+                tramosConSeccionMayor.Add(tramo.Indice);
+            }
+        }
+
         // Recubrimiento a la cara EXTERIOR de la barra, no a su centro (#1):
         // la curva que le pasamos a Rebar.CreateFromCurves es el eje de la
         // barra, así que hay que meter el contorno medio diámetro más que el
@@ -211,7 +290,11 @@ public static class GeneradorArmado
 
         AvisarSiGanchoNoCumpleNorma(barra, gancho, ganchosYaAvisados, res);
 
-        double separacionExtremos = EstandarCQ.APies(SeparacionExtremosMetros);
+        // Los 5 cm van al BORDE del estribo: el eje queda medio diámetro más adentro.
+        double separacionExtremos = EstandarCQ.APies(SeparacionExtremosMetros) + barra.BarNominalDiameter / 2;
+        _traza?.AppendLine(
+            $"{etiquetaTramo} ({tramo.Tipo}): Z {tramo.ZInferior:0.####} -> {tramo.ZSuperior:0.####} m; barra «{barra.Name}» " +
+            $"Ø {GeometriaSeccion.Metros(barra.BarNominalDiameter) * 1000:0.#} mm");
         double zInf = EstandarCQ.APies(tramo.ZInferior) + separacionExtremos;
         double zSup = EstandarCQ.APies(tramo.ZSuperior) - separacionExtremos;
         double altura = zSup - zInf;
@@ -236,7 +319,7 @@ public static class GeneradorArmado
         if (cfg.Modo == ModoEstribo.Uniforme)
         {
             double espaciado = EstandarCQ.APies(cfg.EspaciadoUniforme);
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, formasRechazadas, terminaciones, espaciado, etiquetaTramo, "uniforme", res, claveTramo);
             return true;
         }
 
@@ -254,19 +337,19 @@ public static class GeneradorArmado
             res.Avisos.Add(
                 $"{etiquetaTramo}: la longitud de confinamiento ×2 no deja zona central; " +
                 "se armó confinado de punta a punta.");
-            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
+            CrearGrupo(doc, host, contorno, zBase, zInf, altura, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoConf, etiquetaTramo, "confinado (sin zona central)", res, claveTramo);
             return true;
         }
 
         double l2 = altura - 2 * l1;
 
-        CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, formaEstribo, terminaciones, espaciadoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf, l1, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoConf,
             etiquetaTramo, "confinado inferior", res, claveTramo, incluirUltimo: false);
 
-        CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, formaEstribo, terminaciones, espaciadoNoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf + l1, l2, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoNoConf,
             etiquetaTramo, "zona central", res, claveTramo, incluirUltimo: false);
 
-        CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, formaEstribo, terminaciones, espaciadoConf,
+        CrearGrupo(doc, host, contorno, zBase, zInf + l1 + l2, l1, barra, formaEstribo, formasRechazadas, terminaciones, espaciadoConf,
             etiquetaTramo, "confinado superior", res, claveTramo);
 
         return true;
@@ -288,6 +371,7 @@ public static class GeneradorArmado
         double longitud,
         RebarBarType barra,
         RebarShape? formaEstribo,
+        HashSet<ElementId> formasRechazadas,
         BarTerminationsData terminaciones,
         double espaciado,
         string etiquetaTramo,
@@ -305,7 +389,7 @@ public static class GeneradorArmado
         // familia RebarShape resuelve sus propias esquinas/ganchos, sin el
         // quiebre a mitad de lado ni su dobladura visible.
         Rebar? estribo = formaEstribo is not null
-            ? CrearDesdeForma(doc, host, curvasTrasladadas, barra, formaEstribo, terminaciones, res, etiquetaTramo)
+            ? CrearDesdeForma(doc, host, curvasTrasladadas, barra, formaEstribo, formasRechazadas, terminaciones, res, etiquetaTramo)
             : null;
 
         // Sin forma cargada en el documento, o si CrearDesdeForma no pudo
@@ -357,6 +441,14 @@ public static class GeneradorArmado
 
         MarcaEstribos.Marcar(estribo, host.Id);
 
+        // Sin regenerar, NumberOfBarPositions todavía devuelve la cuenta de
+        // ANTES de aplicar el reparto: uno menos de los que quedan de verdad.
+        // Medido contra Revit real el 8-oct (17 estribos reales, 16 leídos).
+        // Con la cuenta corta salía mal el detalle que se le muestra al
+        // usuario y, peor, las posiciones que se le pasan a los estribos
+        // menores (RegistrarPosiciones): 16 a 20,3 cm en vez de 17 a 19 cm.
+        doc.Regenerate();
+
         RebarShapeDrivenAccessor acceso = estribo.GetShapeDrivenAccessor();
         int posiciones = estribo.NumberOfBarPositions;
         double reparto = acceso.ArrayLength;
@@ -368,6 +460,49 @@ public static class GeneradorArmado
             $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
 
         RegistrarPosiciones(posiciones, zInicio, separacionReal, claveTramo, res);
+
+        if (_traza is not null)
+        {
+            try
+            {
+                doc.Regenerate();
+
+                // Extensión real en Z de un estribo del grupo: el eje (sin
+                // ganchos) y el estribo completo (con ganchos y radios, que no
+                // siempre es plano -- el solape del cierre lo desplaza).
+                (double Min, double Max) RangoZ(int indice, bool completo)
+                {
+                    Transform lugar = acceso.GetBarPositionTransform(indice);
+                    List<double> zs = estribo
+                        .GetCenterlineCurves(false, !completo, !completo, MultiplanarOption.IncludeAllMultiplanarCurves, indice)
+                        .SelectMany(c => c.Tessellate())
+                        .Select(q => lugar.OfPoint(q).Z)
+                        .ToList();
+                    return (zs.Min(), zs.Max());
+                }
+
+                _traza.AppendLine(
+                    $"    {etiquetaGrupo}: posiciones {estribo.NumberOfBarPositions}, cantidad {estribo.Quantity}, " +
+                    $"largo del reparto {GeometriaSeccion.Metros(acceso.ArrayLength):0.####} m, espaciado máximo " +
+                    $"{GeometriaSeccion.Metros(estribo.MaxSpacing) * 100:0.##} cm, incluye primero: {estribo.IncludeFirstBar}, " +
+                    $"último: {estribo.IncludeLastBar}; pedido: arranque Z {GeometriaSeccion.Metros(zInicio):0.####}, " +
+                    $"largo {GeometriaSeccion.Metros(longitud):0.####} m, espaciado {GeometriaSeccion.Metros(espaciado) * 100:0.##} cm");
+
+                foreach (int indice in new[] { 0, posiciones - 2, posiciones - 1 }.Where(i => i >= 0).Distinct())
+                {
+                    (double ejeMin, double ejeMax) = RangoZ(indice, completo: false);
+                    (double todoMin, double todoMax) = RangoZ(indice, completo: true);
+                    _traza.AppendLine(
+                        $"    {etiquetaGrupo}, estribo {indice + 1} de {posiciones} (existe: {estribo.DoesBarExistAtPosition(indice)}): eje Z {GeometriaSeccion.Metros(ejeMin):0.####} a " +
+                        $"{GeometriaSeccion.Metros(ejeMax):0.####}; con ganchos Z {GeometriaSeccion.Metros(todoMin):0.####} a " +
+                        $"{GeometriaSeccion.Metros(todoMax):0.####} m");
+                }
+            }
+            catch (Exception ex)
+            {
+                _traza.AppendLine($"    {etiquetaGrupo}: no se pudo medir ({ex.GetType().Name}: {ex.Message})");
+            }
+        }
     }
 
     /// <summary>
@@ -386,9 +521,15 @@ public static class GeneradorArmado
     /// </summary>
     private static Rebar? CrearDesdeForma(
         Document doc, FamilyInstance host, IList<Curve> curvasTrasladadas,
-        RebarBarType barra, RebarShape forma, BarTerminationsData terminaciones,
-        ResultadoArmado res, string etiquetaTramo)
+        RebarBarType barra, RebarShape forma, HashSet<ElementId> formasRechazadas,
+        BarTerminationsData terminaciones, ResultadoArmado res, string etiquetaTramo)
     {
+        // Ya se comprobó en esta corrida que esta forma trae un lado
+        // diagonal (ver GeometriaSeccion.TieneLadoDiagonal) -- no vale la
+        // pena repetir crear+escalar+medir+borrar para cada estribo, cae
+        // directo al camino de respaldo.
+        if (formasRechazadas.Contains(forma.Id)) return null;
+
         try
         {
             (double xMin, double xMax, double yMin, double yMax) = GeometriaSeccion.Huella(curvasTrasladadas);
@@ -410,6 +551,24 @@ public static class GeneradorArmado
 
                 try { estribo.SetTerminationOrientation(0, RebarTerminationOrientation.Left); estribo.SetTerminationOrientation(1, RebarTerminationOrientation.Left); }
                 catch { /* idem */ }
+            }
+
+            // BuscarFormaEstribo elige por NOMBRE, no por geometría -- una
+            // forma cuyo nombre hace match pero en realidad trae una cruceta
+            // de confinamiento incorporada (patas diagonales) se aceptaría
+            // sin darse cuenta. Medido contra Revit real el 11-sep: la forma
+            // "T1" del modelo de William generó justo esto.
+            if (GeometriaSeccion.TieneLadoDiagonal(estribo))
+            {
+                try { doc.Delete(estribo.Id); } catch { /* best-effort */ }
+
+                if (formasRechazadas.Add(forma.Id))
+                    res.Avisos.Add(
+                        $"{etiquetaTramo}: la forma «{forma.Name}» generó un lado diagonal en vez de un " +
+                        "rectángulo simple (¿tiene una cruceta de confinamiento incorporada?); se usa el " +
+                        "camino de respaldo para el resto de esta corrida.");
+
+                return null;
             }
 
             return estribo;
@@ -503,7 +662,7 @@ public static class GeneradorArmado
     {
         if (!yaAvisados.Add((barra.Id, gancho.Id))) return;
 
-        EstandarCQ.Varilla? varilla = EstandarCQ.Buscar(barra);
+        CuadroVarillas.Varilla? varilla = EstandarCQ.Buscar(barra);
         if (varilla is null)
         {
             res.Avisos.Add(

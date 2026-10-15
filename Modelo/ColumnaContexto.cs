@@ -26,8 +26,9 @@ public sealed class ColumnaContexto
     public double BaseY { get; init; }
 
     /// <summary>
-    /// Recubrimiento lateral leído del parámetro de la columna, en metros.
-    /// Se lee, nunca se impone: el desfase del estribo sale de aquí.
+    /// Recubrimiento lateral leído del parámetro del elemento de MÁS ABAJO de
+    /// la columna, en metros. Es el que se usa si nadie eligió otro: el que
+    /// manda al generar es <see cref="ColumnaPlan.Recubrimiento"/>.
     /// </summary>
     public double Recubrimiento { get; init; }
 
@@ -78,7 +79,11 @@ public enum TipoTramo
     /// <summary>Entre dos vigas, o entre el arranque y la primera viga.</summary>
     Libre,
 
-    /// <summary>Dentro del canto de una viga. Aquí no hay confinamiento.</summary>
+    /// <summary>
+    /// Dentro del canto de una viga (el nudo). Lleva estribos UNIFORMES, nunca
+    /// confinados (issue #58, William 11-sep): la ventana deshabilita ahí el
+    /// modo confinado.
+    /// </summary>
     DentroDeViga,
 
     /// <summary>El de más abajo cuando arranca sobre una zapata: el acero no entra en ella.</summary>
@@ -101,6 +106,16 @@ public sealed class Tramo
 
     /// <summary>Altura libre del tramo, en metros.</summary>
     public double Altura => ZSuperior - ZInferior;
+
+    /// <summary>
+    /// Recubrimiento lateral que tiene en Revit el elemento que contiene este
+    /// tramo, en metros (0 si no tiene ninguno asignado). Las piezas de una
+    /// misma columna pueden traer valores distintos -- lo típico, un dado de
+    /// cimentación con 7,5 cm debajo de columnas con 4 cm. La ventana los
+    /// ofrece para elegir UNO para toda la columna (ver
+    /// <see cref="ColumnaPlan.Recubrimiento"/>).
+    /// </summary>
+    public double Recubrimiento { get; init; }
 
     /// <summary>
     /// Id del elemento de Revit que físicamente contiene este tramo — mismo
