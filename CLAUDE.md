@@ -7,6 +7,29 @@ cajas/grapas a partir de la geometria de la seccion. El usuario
 (Luciano) no es experto en ingenieria civil ni en la API de Revit --
 las explicaciones y los planes tienen que ser en lenguaje llano.
 
+## Regla general: primero un plan .md, y se sigue al pie de la letra
+
+Todo trabajo (issue, feature, fix o investigacion) arranca con un plan
+en `docs/planes/AAAA-MM-DD-tema.md`, armado con la plantilla
+`docs/planes/PLANTILLA.md`, ANTES de tocar codigo:
+
+- El plan dice que se va a hacer, en que archivos, en que orden y como
+  se prueba cada paso. Se implementa siguiendolo paso por paso, sin
+  improvisar fuera de el.
+- Si algo cambia (una decision del usuario, un hallazgo en Revit real,
+  un error), primero se actualiza el plan (seccion Decisiones o
+  Hallazgos, con fecha y por que) y despues el codigo. El plan siempre
+  describe lo que hay de verdad en el codigo.
+- Tiene que poder reutilizarse: alguien que no estuvo en la
+  conversacion (otra persona, otra PC u otra sesion de Claude) debe
+  poder retomar o repetir el trabajo solo leyendo el plan. Por eso
+  lleva rutas, comandos, valores probados y evidencia (capturas en
+  `docs/planes/imagenes/`), no solo conclusiones.
+- Al cerrar, la seccion Estado dice que se probo, que quedo pendiente y
+  que criterios de aceptacion se cumplen.
+
+Ejemplo completo: `docs/planes/2026-10-13-addin-imagenes-por-actividad.md`.
+
 ## Regla de proceso: verificar contra Revit real antes de implementar a mano
 
 Antes de programar a mano algo que "se ve" como un concepto propio de
@@ -49,6 +72,9 @@ arriesgar un fallo que solo aparece al correrlo.
   usuario en ese momento. "Haz commit" es solo commit -- avisar
   explicitamente que no se pusheo y preguntar si tambien lo quiere.
 - Nunca `git add -A` -- agregar archivos especificos por nombre.
+- Sin marca de agua de Claude: nada de `Co-Authored-By: Claude ...` en
+  los commits ni de "Generated with Claude Code" en PRs, issues o
+  comentarios.
 - Antes de desplegar (`tools/desplegar-local.ps1`), verificar que Revit este
   cerrado con `Get-Process -Name Revit -ErrorAction SilentlyContinue`
   -- no confiar en que el usuario diga "ya cerre" sin comprobarlo,
