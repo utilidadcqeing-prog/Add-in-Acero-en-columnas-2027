@@ -11,11 +11,8 @@ namespace practicacq.Imagenes;
 /// Botón "Imágenes por actividad" de la pestaña CQEING: abre la ventana no modal (una sola a la vez).
 /// Issue utilidadcqeing-prog/Add-in-Cuadro-de-cantidades-V0#183.
 ///
-/// UBICACIÓN PROVISIONAL (decisión del 2026-10-13): vive en este repo (armado de columnas, rama
-/// <c>addin-de-imagenes</c>) aunque la issue está en el repo del add-in de cantidades. Todo lo del
-/// add-in de imágenes está en la carpeta <c>Imagenes/</c> y no depende del armado de columnas, así que
-/// si el equipo decide moverlo a su propio proyecto o al de cantidades, basta con copiar esa carpeta
-/// y el botón de <c>App.cs</c>.
+/// Vive en su propio proyecto (addins/imagenes, ensamblado CQEING.Imagenes.dll) dentro del monorepo de
+/// add-ins de CQEING; su botón lo registra AppImagenes.cs.
 /// </summary>
 [Transaction(TransactionMode.Manual)]
 public class ComandoImagenesActividad : IExternalCommand
