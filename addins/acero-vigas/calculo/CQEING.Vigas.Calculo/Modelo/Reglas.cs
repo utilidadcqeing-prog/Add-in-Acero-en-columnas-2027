@@ -54,6 +54,7 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
         var errores = new List<string>();
         if (Modulo <= 0) errores.Add("El múltiplo de corte debe ser mayor que 0.");
         if (Varilla is not (6000 or 12000)) errores.Add("La varilla debe ser de 6 m o de 12 m.");
+        if (VarillaLarga < Varilla) errores.Add("La varilla larga no puede ser más corta que la normal.");
         if (DistanciaLibre <= 0) errores.Add("La distancia libre entre barras debe ser mayor que 0.");
         foreach ((int d, ReglaDiametro r) in PorDiametro.OrderBy(par => par.Key))
         {
@@ -62,6 +63,7 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
             if (r.Gancho180.B <= 0) errores.Add($"El gancho de 180° del #{d} debe ser mayor que 0.");
             if (r.Estribo135.B <= 0) errores.Add($"El estribo de 135° del #{d} debe ser mayor que 0.");
             if (r.KgPorMetro <= 0) errores.Add($"El peso por metro del #{d} debe ser mayor que 0.");
+            if (r.Diametro <= 0) errores.Add($"El diámetro del #{d} debe ser mayor que 0.");
         }
         return errores;
     }

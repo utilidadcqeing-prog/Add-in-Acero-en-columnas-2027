@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace CQEING.Vigas.Calculo.Modelo;
 
@@ -13,6 +14,7 @@ public sealed class AlmacenReglas(string ruta)
 {
     private const int Version = 1;
     private const string ProblemaAlLeer = "No se pudieron leer las reglas guardadas; se usan las de base.";
+    private const string ProblemaInvalidas = "Las reglas guardadas tienen valores inválidos; se usan las de base.";
 
     private static readonly JsonSerializerOptions Opciones = new()
     {
@@ -25,52 +27,68 @@ public sealed class AlmacenReglas(string ruta)
     public static string RutaPorDefecto { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CQEING", "vigas", "reglas.json");
 
-    /// <summary>Nunca lanza: si el archivo no se puede leer, devuelve las de base con el problema.</summary>
+    /// <summary>
+    /// Nunca lanza: si el archivo no se puede leer o trae valores inválidos, devuelve las de base con el problema.
+    /// Lo que el archivo no trae, en cualquier nivel, sale de la base (un archivo de otra versión o hecho a mano).
+    /// </summary>
     public ReglasCargadas Cargar()
     {
         if (!File.Exists(ruta))
             return new ReglasCargadas(Reglas.Generales, null);
+        Reglas? reglas;
         try
         {
-            Archivo? archivo = JsonSerializer.Deserialize<Archivo>(File.ReadAllText(ruta), Opciones);
-            return archivo?.Reglas is { } reglas
-                ? new ReglasCargadas(Completar(reglas), null)
-                : new ReglasCargadas(Reglas.Generales, ProblemaAlLeer);
+            JsonNode? mezcla = Mezclar(JsonSerializer.SerializeToNode(new Archivo(Version, Reglas.Generales), Opciones),
+                JsonNode.Parse(File.ReadAllText(ruta)));
+            reglas = mezcla?.Deserialize<Archivo>(Opciones)?.Reglas;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception)
         {
-            return new ReglasCargadas(Reglas.Generales, ProblemaAlLeer);
+            reglas = null;
         }
+        if (reglas is null || !Completas(reglas))
+            return new ReglasCargadas(Reglas.Generales, ProblemaAlLeer);
+        return reglas.Validar().Count == 0
+            ? new ReglasCargadas(reglas, null)
+            : new ReglasCargadas(Reglas.Generales, ProblemaInvalidas);
     }
 
-    /// <summary>Escribe primero un temporal y lo pone en su lugar, para que un cierre a mitad no deje el archivo cortado.</summary>
+    /// <summary>
+    /// Escribe primero un temporal y lo pone en su lugar, para que un cierre a mitad no deje el archivo cortado.
+    /// Lanza <see cref="IOException"/> o <see cref="UnauthorizedAccessException"/> si no puede escribir.
+    /// </summary>
     public void Guardar(Reglas reglas)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(ruta))!);
         string temporal = ruta + ".tmp";
-        File.WriteAllText(temporal, JsonSerializer.Serialize(new Archivo(Version, reglas), Opciones));
-        File.Move(temporal, ruta, overwrite: true);
+        try
+        {
+            File.WriteAllText(temporal, JsonSerializer.Serialize(new Archivo(Version, reglas), Opciones));
+            File.Move(temporal, ruta, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temporal);
+        }
     }
 
     /// <summary>
-    /// Lo que un archivo de otra versión no trae se toma de la base: los diámetros que faltan y, en los que sí están,
-    /// los ganchos que faltan.
+    /// Pone el archivo encima de la base: los objetos se mezclan propiedad por propiedad; un valor (o un null escrito)
+    /// reemplaza al de la base.
     /// </summary>
-    private static Reglas Completar(Reglas leidas)
+    private static JsonNode? Mezclar(JsonNode? baseNodo, JsonNode? archivo)
     {
-        var porDiametro = new Dictionary<int, ReglaDiametro>(Reglas.Generales.PorDiametro);
-        foreach ((int d, ReglaDiametro r) in leidas.PorDiametro ?? new Dictionary<int, ReglaDiametro>())
-        {
-            ReglaDiametro? baseD = porDiametro.GetValueOrDefault(d);
-            porDiametro[d] = r with
-            {
-                Gancho90 = r.Gancho90 ?? baseD?.Gancho90 ?? throw new JsonException(),
-                Gancho180 = r.Gancho180 ?? baseD?.Gancho180 ?? throw new JsonException(),
-                Estribo135 = r.Estribo135 ?? baseD?.Estribo135 ?? throw new JsonException(),
-            };
-        }
-        return leidas with { PorDiametro = porDiametro };
+        if (baseNodo is not JsonObject b || archivo is not JsonObject a)
+            return archivo?.DeepClone();
+        foreach ((string clave, JsonNode? valor) in a)
+            b[clave] = Mezclar(b[clave], valor);
+        return b;
     }
+
+    /// <summary>System.Text.Json deja null lo que el archivo pone en null aunque el tipo no lo admita.</summary>
+    private static bool Completas(Reglas r) =>
+        r.PorDiametro is not null && r.PorDiametro.Values.All(d =>
+            d is { Gancho90: not null, Gancho180: not null, Estribo135: not null });
 
     private sealed record Archivo(int Version, Reglas? Reglas);
 }

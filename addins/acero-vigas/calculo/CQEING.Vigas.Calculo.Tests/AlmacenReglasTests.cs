@@ -90,6 +90,71 @@ public sealed class AlmacenReglasTests : IDisposable
     }
 
     [Fact]
+    public void UnDiametroEnNull_NoRevientaYAvisa()
+    {
+        Escribir("""{ "version": 1, "reglas": { "porDiametro": { "5": null } } }""");
+
+        ReglasCargadas cargadas = new AlmacenReglas(Ruta).Cargar();
+
+        Assert.True(cargadas.Reglas.Equivale(Reglas.Generales));
+        Assert.Equal("No se pudieron leer las reglas guardadas; se usan las de base.", cargadas.Problema);
+    }
+
+    [Fact]
+    public void UnArchivoConValoresInvalidos_UsaLaBaseYAvisa()
+    {
+        Escribir("""{ "version": 1, "reglas": { "modulo": -5 } }""");
+
+        ReglasCargadas cargadas = new AlmacenReglas(Ruta).Cargar();
+
+        Assert.True(cargadas.Reglas.Equivale(Reglas.Generales));
+        Assert.Equal("Las reglas guardadas tienen valores inválidos; se usan las de base.", cargadas.Problema);
+    }
+
+    [Fact]
+    public void UnDiametroSinPesoNiDiametro_LosCompletaConLaBase()
+    {
+        Escribir("""{ "version": 1, "reglas": { "porDiametro": { "5": { "traslapo": 1000, "gancho90": { "b": 300 } } } } }""");
+
+        ReglasCargadas cargadas = new AlmacenReglas(Ruta).Cargar();
+        ReglaDiametro numero5 = cargadas.Reglas.PorDiametro[5];
+
+        Assert.Null(cargadas.Problema);
+        Assert.Equal(1000, numero5.Traslapo);
+        Assert.Equal(1.552, numero5.KgPorMetro);
+        Assert.Equal(15.9, numero5.Diametro);
+        Assert.Equal(new Gancho(300, 191, 95, 227), numero5.Gancho90);
+    }
+
+    [Fact]
+    public void UnTraslapoEnNullSeRespeta()
+    {
+        Escribir("""{ "version": 1, "reglas": { "porDiametro": { "5": { "traslapo": null } } } }""");
+
+        Assert.Null(new AlmacenReglas(Ruta).Cargar().Reglas.PorDiametro[5].Traslapo);
+    }
+
+    [Fact]
+    public void SiNoSePuedeEscribir_NoQuedaElTemporal()
+    {
+        var almacen = new AlmacenReglas(Ruta);
+        almacen.Guardar(Reglas.Generales);
+        using (new FileStream(Ruta, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Exception ex = Assert.ThrowsAny<Exception>(() => almacen.Guardar(Reglas.Generales with { Modulo = 600 }));
+            Assert.True(ex is IOException or UnauthorizedAccessException);
+        }
+
+        Assert.False(File.Exists(Ruta + ".tmp"));
+    }
+
+    private void Escribir(string json)
+    {
+        Directory.CreateDirectory(_carpeta);
+        File.WriteAllText(Ruta, json);
+    }
+
+    [Fact]
     public void NoQuedaElArchivoTemporal()
     {
         new AlmacenReglas(Ruta).Guardar(Reglas.Generales);

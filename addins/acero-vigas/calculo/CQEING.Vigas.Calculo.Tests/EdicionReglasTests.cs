@@ -90,6 +90,23 @@ public sealed class EdicionReglasTests : IDisposable
     }
 
     [Fact]
+    public void SiNoSePuedeEscribirElArchivo_DevuelveMensajeYSigueDesbloqueada()
+    {
+        new AlmacenReglas(Ruta).Guardar(Reglas.Generales);
+        EdicionReglas edicion = Nueva();
+        edicion.Desbloquear();
+        edicion.Cambiar(edicion.Borrador with { Modulo = 600 });
+
+        IReadOnlyList<string> errores;
+        using (new FileStream(Ruta, FileMode.Open, FileAccess.Read, FileShare.None))
+            errores = edicion.GuardarYBloquear();
+
+        Assert.Equal(["No se pudieron guardar las reglas en el PC."], errores);
+        Assert.False(edicion.Bloqueadas);
+        Assert.Equal(500, edicion.Guardadas.Modulo);
+    }
+
+    [Fact]
     public void Descartar_VuelveALoGuardadoYBloquea()
     {
         EdicionReglas edicion = Nueva();

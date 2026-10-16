@@ -88,6 +88,19 @@ public class ReglasTests
     }
 
     [Fact]
+    public void UnDiametroRealEnCeroNoEsValido()
+    {
+        Assert.Equal(["El diámetro del #5 debe ser mayor que 0."], ConDiametro(5, r => r with { Diametro = 0 }).Validar());
+    }
+
+    [Fact]
+    public void UnaVarillaLargaMasCortaQueLaNormalNoEsValida()
+    {
+        Assert.Equal(["La varilla larga no puede ser más corta que la normal."],
+            (Reglas.Generales with { Varilla = 12000, VarillaLarga = 6000 }).Validar());
+    }
+
+    [Fact]
     public void UnDiametroSinTraslapoSiEsValido()
     {
         Assert.Empty(ConDiametro(5, r => r with { Traslapo = null }).Validar());

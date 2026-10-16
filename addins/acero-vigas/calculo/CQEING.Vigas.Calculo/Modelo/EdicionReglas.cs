@@ -38,12 +38,22 @@ public sealed class EdicionReglas
     public void CambiarDiametro(int diametro, ReglaDiametro regla) =>
         Cambiar(Borrador with { PorDiametro = new Dictionary<int, ReglaDiametro>(Borrador.PorDiametro) { [diametro] = regla } });
 
-    /// <summary>Con errores no guarda y sigue desbloqueada; los devuelve para mostrarlos. Vacía si guardó.</summary>
+    /// <summary>
+    /// Con errores (valores inválidos o el archivo que no se pudo escribir) no guarda y sigue desbloqueada; los
+    /// devuelve para mostrarlos. Vacía si guardó.
+    /// </summary>
     public IReadOnlyList<string> GuardarYBloquear()
     {
         IReadOnlyList<string> errores = Borrador.Validar();
         if (errores.Count > 0) return errores;
-        _almacen.Guardar(Borrador);
+        try
+        {
+            _almacen.Guardar(Borrador);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ["No se pudieron guardar las reglas en el PC."];
+        }
         Guardadas = Borrador;
         Bloqueadas = true;
         return errores;
