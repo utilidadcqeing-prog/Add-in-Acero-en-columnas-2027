@@ -134,6 +134,55 @@ public class BastonesTests
     }
 
     [Fact]
+    public void PrevisualizarBaston_DevuelveElPorticoConElLargoNuevo()
+    {
+        Previsualizacion p = MotorVigas.PrevisualizarBaston(Entrada(), "BS2", 2300);
+
+        Assert.True(p.SePuede);
+        Assert.Equal((3250, 5550), (De(p.Resultado!, "BS2").Desde, De(p.Resultado!, "BS2").Hasta));
+    }
+
+    [Fact]
+    public void PrevisualizarBaston_ConElMismoLargo_NoCambiaNada()
+    {
+        Assert.Equal(MotivoBloqueo.SinCambio, MotorVigas.PrevisualizarBaston(Entrada(), "BS2", 2000).Motivo);
+    }
+
+    [Fact]
+    public void PrevisualizarBaston_EnCero_NoSePuede()
+    {
+        Previsualizacion p = MotorVigas.PrevisualizarBaston(Entrada(), "BS2", 0);
+
+        Assert.False(p.SePuede);
+        Assert.Equal(MotivoBloqueo.LargoNoValido, p.Motivo);
+    }
+
+    [Fact]
+    public void PrevisualizarBaston_UnIdQueNoExiste()
+    {
+        Assert.Equal(MotivoBloqueo.NoExiste, MotorVigas.PrevisualizarBaston(Entrada(), "BS9", 2300).Motivo);
+    }
+
+    [Fact]
+    public void UnLargoGuardadoEnCero_SeIgnoraYAvisa()
+    {
+        var largos = new Dictionary<string, int> { ["BS2"] = 0 };
+        ResultadoVigas r = MotorVigas.Calcular(Entrada(new ArmadoBastones(Largos: largos)));
+
+        Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "BS2", Motivo: MotivoBloqueo.LargoNoValido });
+        Assert.Equal((2000, false), (De(r, "BS2").Largo, De(r, "BS2").Manual));
+    }
+
+    [Fact]
+    public void UnLargoGeneralEnCero_NoPoneBastonesYAvisa()
+    {
+        ResultadoVigas r = MotorVigas.Calcular(Entrada(new ArmadoBastones(Largo: 0)));
+
+        Assert.Empty(r.Bastones);
+        Assert.Contains(r.Avisos, a => a.Tipo == TipoAviso.BastonLargoNoValido);
+    }
+
+    [Fact]
     public void UnDiametroSinReglas_AvisaYNoPoneEsosBastones()
     {
         ResultadoVigas r = MotorVigas.Calcular(Entrada(new ArmadoBastones(Superior: new GrupoBarras(1, 9))));

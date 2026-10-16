@@ -15,6 +15,11 @@ internal static class CalculadorBastones
     public static IReadOnlyList<Baston> Calcular(EntradaVigas e, GeometriaPortico g, List<Aviso> avisos)
     {
         ArmadoBastones armado = e.Bastones ?? new ArmadoBastones();
+        if (armado.Largo <= 0)
+        {
+            avisos.Add(new Aviso(TipoAviso.BastonLargoNoValido, "general", armado.Largo));
+            return [];
+        }
         Posicion capaDeLosApoyos = e.Tipo == TipoViga.Aerea ? Posicion.Superior : Posicion.Inferior;
         IReadOnlyList<Lugar> apoyos = e.Portico.Apoyos.Select(a => new Lugar(a.Eje, true, a.PosicionEje)).ToList();
         IReadOnlyList<Lugar> luces = g.Luces.Select(l => new Lugar(l.Nombre, false, (l.CaraIzquierda + l.CaraDerecha) / 2)).ToList();
@@ -32,20 +37,27 @@ internal static class CalculadorBastones
             }
             string prefijo = capa == Posicion.Superior ? "BS" : "BI";
             IEnumerable<Lugar> lugares = (capa == capaDeLosApoyos ? apoyos : luces).OrderBy(l => l.Centro);
-            bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, armado, g)));
+            bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, armado, g, avisos)));
         }
         return bastones;
     }
+
+    /// <summary>El largo con que se arma el bastón <paramref name="id"/>: el escrito a mano si es válido, o el general.</summary>
+    public static int LargoDe(ArmadoBastones armado, string id) =>
+        armado.Largos?.TryGetValue(id, out int largo) == true && largo > 0 ? largo : armado.Largo;
 
     private static GrupoBarras GrupoDe(ArmadoBastones armado, EntradaVigas e, Posicion capa) => capa == Posicion.Superior
         ? armado.Superior ?? new GrupoBarras(1, e.Superior[0].Diametro)
         : armado.Inferior ?? new GrupoBarras(1, e.Inferior[0].Diametro);
 
     private static Baston Armar(string id, Posicion capa, Lugar lugar, GrupoBarras grupo, ReglaDiametro regla,
-        ArmadoBastones armado, GeometriaPortico g)
+        ArmadoBastones armado, GeometriaPortico g, List<Aviso> avisos)
     {
-        bool manual = armado.Largos?.ContainsKey(id) == true;
-        int largo = manual ? armado.Largos![id] : armado.Largo;
+        int? escrito = armado.Largos?.TryGetValue(id, out int valor) == true ? valor : null;
+        if (escrito <= 0)
+            avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, escrito.Value, Motivo: MotivoBloqueo.LargoNoValido));
+        bool manual = escrito > 0;
+        int largo = LargoDe(armado, id);
         int desde = lugar.Centro - largo / 2, hasta = desde + largo;
         int ganchoInicio = armado.ConGancho && desde < g.InicioBarras ? regla.Gancho90.B : 0;
         int ganchoFin = armado.ConGancho && hasta > g.FinBarras ? regla.Gancho90.B : 0;

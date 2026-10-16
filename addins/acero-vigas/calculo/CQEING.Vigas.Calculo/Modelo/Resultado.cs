@@ -60,6 +60,8 @@ public enum TipoAviso
     CambioNoAplicado,
     /// <summary>El diámetro de los bastones de una cara no está en las reglas; esa cara queda sin bastones.</summary>
     DiametroSinReglas,
+    /// <summary>El largo general de los bastones es 0 o negativo; el pórtico queda sin bastones.</summary>
+    BastonLargoNoValido,
 }
 
 /// <summary>Por qué un traslapo quedó largo.</summary>
