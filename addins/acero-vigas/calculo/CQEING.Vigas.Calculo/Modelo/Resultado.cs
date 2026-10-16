@@ -62,6 +62,11 @@ public enum TipoAviso
     DiametroSinReglas,
     /// <summary>El largo general de los bastones es 0 o negativo; el pórtico queda sin bastones.</summary>
     BastonLargoNoValido,
+    /// <summary>
+    /// Una separación de los estribos es 0 o negativa, o el largo de la zona es negativo; ese tramo (o el pórtico, con
+    /// <c>"general"</c>) queda sin estribos.
+    /// </summary>
+    EstriboValorNoValido,
 }
 
 /// <summary>Por qué un traslapo quedó largo.</summary>
