@@ -23,20 +23,57 @@ public static class ResolvedorCapa
         if (lucesFijas is not null)
             return Probar(g, p, lucesFijas, largosFijos);
 
+        // Manda tener menos varillas de 12 m: una solución sin ninguna le gana a cualquiera con alguna, así que la
+        // respuesta es la mejor sin varillas de 12 m de la menor cantidad de traslapos que la tenga. Solo se resuelven
+        // las combinaciones cuyas barras pueden salir todas de la varilla normal (tarea 3 del plan del tablero #83).
+        for (int cantidad = 0; cantidad <= g.Luces.Count; cantidad++)
+        {
+            CapaResuelta? sinDoce = null;
+            foreach (IReadOnlyList<Luz> luces in Combinaciones(g.Luces, cantidad))
+            {
+                if (LargoMinimoMayor(g, p, luces) > p.Varilla)
+                    continue;
+                CapaResuelta? capa = Probar(g, p, luces, largosFijos);
+                if (capa is { Solucion.BarrasDe12: 0 } && (sinDoce is null || EsMejor(capa.Solucion, sinDoce.Solucion)))
+                    sinDoce = capa;
+            }
+            if (sinDoce is not null)
+                return sinDoce;
+        }
+
+        // Ninguna sale sin varillas de 12 m: la búsqueda completa, sin resolver las combinaciones imposibles.
         CapaResuelta? mejor = null;
+        int maxima = Math.Max(p.Varilla, p.VarillaLarga);
         for (int cantidad = 0; cantidad <= g.Luces.Count; cantidad++)
         {
             foreach (IReadOnlyList<Luz> luces in Combinaciones(g.Luces, cantidad))
             {
+                if (LargoMinimoMayor(g, p, luces) > maxima)
+                    continue;
                 CapaResuelta? capa = Probar(g, p, luces, largosFijos);
                 if (capa is not null && (mejor is null || EsMejor(capa.Solucion, mejor.Solucion)))
                     mejor = capa;
             }
-            // Con más traslapos no se puede mejorar una solución que ya no usa varillas de 12 m.
-            if (mejor is { Solucion.BarrasDe12: 0 })
-                break;
         }
         return mejor;
+    }
+
+    /// <summary>
+    /// El largo mínimo posible de la barra más larga si se traslapa en <paramref name="luces"/>, sin resolver: cada
+    /// traslapo queda dentro de su ranura y mide al menos el mínimo. La primera barra va del gancho al fin del primer
+    /// traslapo, las del medio del inicio de un traslapo al fin del siguiente y la última hasta el gancho final.
+    /// </summary>
+    private static int LargoMinimoMayor(GeometriaPortico g, ParametrosCapa p, IReadOnlyList<Luz> luces)
+    {
+        int min = p.TraslapoMinimo;
+        int inicio = g.InicioBarras - p.Gancho, fin = g.FinBarras + p.Gancho;
+        if (luces.Count == 0)
+            return fin - inicio;
+        List<Ranura> ranuras = luces.Select(l => g.Ranura(l, p.Referencia)).ToList();
+        int mayor = Math.Max(ranuras[0].ZonaDesde + min - inicio, fin - (ranuras[^1].ZonaHasta - min));
+        for (int i = 1; i < ranuras.Count; i++)
+            mayor = Math.Max(mayor, ranuras[i].ZonaDesde - ranuras[i - 1].ZonaHasta + 2 * min);
+        return mayor;
     }
 
     private static CapaResuelta? Probar(GeometriaPortico g, ParametrosCapa p, IReadOnlyList<Luz> luces,

@@ -155,20 +155,16 @@ public class ArmadorVistaTests
         Assert.Equal(rv.Traslapos.Count(), v.ZonasTraslapo.Count);
     }
 
-    /// <summary>
-    /// Más luces que la maqueta. El plan pedía 8, pero <c>MotorVigas</c> tarda 135 s con 8 luces de 5 m (hallazgo de la
-    /// tarea 2 del plan del tablero #83): con 5 luces la prueba dura unos 4 s. Vuelve a 8 cuando se arregle el motor.
-    /// </summary>
     [Fact]
-    public void UnPorticoDeMuchasLuces_ArmaTodosSusTramosYZonas()
+    public void UnPorticoDeOchoLuces_ArmaTodosSusTramosYZonas()
     {
-        var portico = new Portico(Enumerable.Range(0, 6).Select(i => Datos.Columna(((char)('A' + i)).ToString(), i * 5000)).ToList());
+        var portico = new Portico(Enumerable.Range(0, 9).Select(i => Datos.Columna(((char)('A' + i)).ToString(), i * 5000)).ToList());
 
         VistaPortico v = Armar(p: Portico1(portico));
 
-        Assert.Equal(5, ArmadorVista.EnLista(Portico1(portico)).Tramos.Count);
-        Assert.Equal(15, v.Zonas.Count);
-        Assert.Equal(6, v.Apoyos.Count);
+        Assert.Equal(8, ArmadorVista.EnLista(Portico1(portico)).Tramos.Count);
+        Assert.Equal(24, v.Zonas.Count);
+        Assert.Equal(9, v.Apoyos.Count);
     }
 
     [Fact]

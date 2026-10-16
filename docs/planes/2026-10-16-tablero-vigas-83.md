@@ -43,7 +43,7 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
 ## Criterios de aceptación
 
 - [ ] El botón "Tablero" de la pestaña CQEING › Vigas abre la ventana en Revit 2026.
-- [ ] Con los datos de demostración, cada estado se ve igual que su tablero en la maqueta: normal, reglas, cimentación, aviso, varias y vacío. Se comprueba con la comparación de capturas de la tarea 3.
+- [ ] Con los datos de demostración, cada estado se ve igual que su tablero en la maqueta: normal, reglas, cimentación, aviso, varias y vacío. Se comprueba con la comparación de capturas de la tarea 4.
 - [ ] Con un modelo real, la lista muestra sus pórticos y tramos, y al elegir uno se ven sus barras, traslapos, bastones, estribos, kilos y avisos, calculados por el motor.
 - [ ] Cambiar algo en los pasos 1 a 3 (barras, recubrimiento, tipo, bastones, estribos) recalcula al momento.
 - [ ] La pantalla Reglas lee y guarda las reglas del PC (`AlmacenReglas`), con el candado de la maqueta.
@@ -59,7 +59,7 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
   - el runtime de Edge WebView2 instalado es el 155.0.4283.45.
   - Por eso el add-in compila contra el NuGet 1.0.2478.35 **sin copiar las DLL** y usa las que ya cargó Revit.
   - Revit 2027 no está instalado: su versión de WebView2 queda por medir (tarea 1, paso 6).
-  - **Probado en Revit 2026** (Juan, 16-oct, tarea 1): el botón Tablero abre la ventana y el eco va y vuelve entre la página y C#. No se copió la línea de diagnóstico (versión y DLL cargada); queda por anotar en la tarea 5.
+  - **Probado en Revit 2026** (Juan, 16-oct, tarea 1): el botón Tablero abre la ventana y el eco va y vuelve entre la página y C#. No se copió la línea de diagnóstico (versión y DLL cargada); queda por anotar en la tarea 6.
 - **La maqueta** es un "Design Component":
   - la plantilla va en `<x-dc>`, con `{{huecos}}`, `<sc-if>`, `<sc-for>` y `<dc-import>`;
   - la lógica es una clase tipo React (`state`, `setState`, `renderVals()`);
@@ -88,6 +88,15 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
   | 10 | — | 288.5 s |
 
   `MotorEstribos` tarda menos de 25 ms. La causa está en `ResolvedorLinea` (#80): la programación dinámica sobre módulos × milímetros de holgura se repite por cada total de acero que prueba (hasta 2 módulos de más por traslapo), y crece con las luces. El tablero recalcula en cada cambio, así que con pórticos largos no sirve hasta arreglarlo. La prueba del punto 2 de "Lo que más puede fallar" queda con 5 luces mientras tanto.
+- **Arreglado en la tarea 3** (16-oct). `ResolvedorCapa` ya no resuelve las combinaciones que piden varilla de 12 m: primero busca la menor cantidad de traslapos con alguna solución sin ellas. En 201 casos da lo mismo que la búsqueda completa (`ResolvedorCapaRapidoTests`). Tiempos en Release:
+
+  | Luces de 5 m | Antes | Después |
+  |---|---|---|
+  | 4 | 0.18 s | < 1 ms |
+  | 6 | 3.8 s | 13 ms |
+  | 8 | 45.5 s | 12 ms |
+  | 10 | 288.5 s | 11 ms |
+  | 15 | — | 223 ms |
 - **Repo:**
   - `AppVigas.cs` hoy pone un botón temporal "Pórticos (diagnóstico)", con la nota de quitarlo cuando el tablero tenga "Seleccionar en Revit";
   - todos los add-ins usan WPF (`UseWPF` en `Directory.Build.props`);
@@ -121,14 +130,15 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
 9. **Botón de la cinta:** "Tablero" abre una sola ventana sin modo, que no bloquea Revit; si ya está abierta, la trae al frente. El botón temporal "Pórticos (diagnóstico)" se quita, como decía su nota (#81).
 10. **En vivo con Revit:** con el enlace activo, si en Revit se selecciona una viga de un pórtico, el tablero abre ese pórtico (`UIApplication.SelectionChanged`); elegir un pórtico en el tablero lo selecciona en Revit. Sin enlace, no hace ninguna de las dos cosas.
 11. **"3D"** abre la vista 3D `CQEING Vigas 3D`, que se crea la primera vez, aislada temporalmente en las vigas del pórtico y con caja de sección ajustada. Es una transacción corta.
+12. **El resolvedor se acelera antes de seguir con la página** (Juan, 16-oct: *"la tarea 3 que sea el acelerador"*), por el hallazgo de la tarea 2. Va como tarea 3 de este plan y no cambia ningún resultado del motor: la misma solución, más rápido.
 
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 
-1. **Pantalla chica o escala de Windows al 125–150 %:** 1440 × 900 no entra y se cortaría. Debe achicarse todo (decisión 6). Prueba manual en la tarea 5 (cambiar la escala de Windows) y prueba de `CalculadoraZoom` en la tarea 4.
-2. **Un pórtico con muchas luces** (8 luces y 40 m): el alzado, la lista de tramos y la lista de barras deben seguir sin encimarse; el ajuste y el zoom resuelven el alzado. Prueba `UnPorticoDeOchoLuces_ArmaTodosSusTramosYZonas` en la tarea 2, y revisión visual con demo `?estado=largo` en la tarea 3.
+1. **Pantalla chica o escala de Windows al 125–150 %:** 1440 × 900 no entra y se cortaría. Debe achicarse todo (decisión 6). Prueba manual en la tarea 6 (cambiar la escala de Windows) y prueba de `CalculadoraZoom` en la tarea 5.
+2. **Un pórtico con muchas luces** (8 luces y 40 m): el alzado, la lista de tramos y la lista de barras deben seguir sin encimarse; el ajuste y el zoom resuelven el alzado. Prueba `UnPorticoDeOchoLuces_ArmaTodosSusTramosYZonas` en la tarea 2, y revisión visual con demo `?estado=largo` en la tarea 4.
 3. **Un modelo sin pórticos, o con avisos de lectura** (`SinApoyos`, `SinEje`): se ve el estado "vacío" de la maqueta y no revienta. Prueba `SinPorticos_LaVistaVaVacia` en la tarea 2.
 4. **El motor no tiene solución o falta una regla** (`SinSolucion`, `SinTraslapoMinimo`, `DiametroSinReglas`, `NoCaben`): el panel muestra el mensaje, "Generar en Revit" queda desactivado y no hay excepción. Prueba `UnPorticoSinSolucion_DaAvisoYNoGenera` en la tarea 2.
-5. **Cerrar o cambiar de documento en Revit con la ventana abierta:** la ventana no puede usar un documento cerrado. Al cerrarse o activarse otro documento, se recarga la lista desde el documento activo, o queda vacía si no hay. Prueba manual en la tarea 5.
+5. **Cerrar o cambiar de documento en Revit con la ventana abierta:** la ventana no puede usar un documento cerrado. Al cerrarse o activarse otro documento, se recarga la lista desde el documento activo, o queda vacía si no hay. Prueba manual en la tarea 6.
 
 ---
 
@@ -274,7 +284,45 @@ Datos de prueba: un `PorticoLeido` "Pórtico 1" del eje "1", aérea, con `Datos.
 - [ ] **Paso 7:** implementar `ProtocoloTablero` (System.Text.Json con un conversor polimórfico por `tipo`) y `SesionTablero`.
 - [ ] **Paso 8:** `rtk dotnet test CQEING-Addins.sln -c Release` → en verde. Commit `feat(vigas): la vista del tablero armada con el motor (#83)`.
 
-### Tarea 3: la página, portada de la maqueta e idéntica al píxel
+### Tarea 3: acelerar el resolvedor de traslapos, sin cambiar sus resultados
+
+**Por qué:** hallazgo de la tarea 2. `MotorVigas` tarda 45 s con 8 luces de 5 m en Release.
+
+**Causa:**
+- `ResolvedorCapa.Resolver` (`Vigas/ResolvedorCapa.cs`) prueba todas las combinaciones de luces con traslapo, con 0, 1, 2… traslapos (hasta 2^n), y para cada una corre `ResolvedorLinea.Resolver`, que es una programación dinámica cara.
+- Solo para cuando en una cantidad encuentra una solución sin varillas de 12 m.
+
+**Arreglo** (mismo resultado, decisión 2 del plan #80: manda tener menos barras de 12 m, después menos traslapos, menos acero y menos desvío):
+1. **Cota rápida por combinación:** el largo mínimo posible de cada barra se calcula con las zonas de las ranuras, sin resolver:
+   - primera barra: `ZonaDesde₀ + mínimo − (Inicio − GanchoInicio)`;
+   - barra del medio: `ZonaDesdeᵢ − ZonaHastaᵢ₋₁ + 2·mínimo`;
+   - última barra: `Fin + GanchoFin − (ZonaHasta_último − mínimo)`.
+   - Si alguna pasa de `VarillaBase`, esa combinación no puede salir sin varillas de 12 m. Si pasa de `VarillaMaxima`, no tiene solución.
+2. **Primera pasada:** por cantidad de traslapos de menor a mayor, se resuelven solo las combinaciones cuya cota no pide varillas de 12 m. Se guardan solo las soluciones con 0 barras de 12 m. En la primera cantidad que tenga alguna, la mejor (`EsMejor`, en el mismo orden de combinaciones) es la respuesta.
+   - Es la misma que daba la búsqueda completa: una solución sin varillas de 12 m le gana a cualquiera con varillas de 12 m, y en una cantidad menor no hay ninguna.
+3. **Si no hay ninguna** sin varillas de 12 m, se hace la búsqueda completa de hoy, sin resolver las combinaciones cuya cota pasa de `VarillaMaxima` (no tienen solución).
+
+**Archivos:**
+- Modificar: `addins/acero-vigas/calculo/CQEING.Vigas.Calculo/Vigas/ResolvedorCapa.cs`.
+- Prueba: `.../CQEING.Vigas.Calculo.Tests/ResolvedorCapaRapidoTests.cs`.
+
+**Interfaces:** no cambia ninguna firma pública. `ResolvedorCapa.Resolver(GeometriaPortico, ParametrosCapa, …)` da el mismo `CapaResuelta`.
+
+- [ ] **Paso 1: pruebas:**
+  - `OchoLucesDeCincoMetrosSeResuelvenRapido`: `MotorVigas.Calcular` con 9 columnas cada 5 m y 3 #5 arriba y abajo tarda menos de 3 s (`Stopwatch`), también en Debug. **Debe fallar hoy** (unos 135 s en Debug).
+  - `DiezLucesSeResuelvenRapido`: 11 columnas cada 5 m, menos de 5 s. Debe fallar hoy.
+  - `DaLoMismoQueLaBusquedaCompleta`: un oráculo en la prueba (`BusquedaCompleta`, copia del algoritmo de hoy: todas las combinaciones con `ResolvedorLinea.Resolver` y `EsMejor`) contra `ResolvedorCapa.Resolver`, en los mismos barras, traslapos y luces. Se prueba con:
+    - pórticos de 1 a 5 luces de 3, 4.4, 5, 6.5 y 8 m (los 3 primeros también con voladizo de 1.5 m);
+    - referencia `Inicio`, `Fin` y `Centro`;
+    - varilla de 6 m y de 12 m;
+    - diámetros #5 y #8.
+    - Pasa hoy, porque es la misma búsqueda, y tiene que seguir pasando.
+- [ ] **Paso 2:** `rtk dotnet test addins/acero-vigas/calculo/CQEING.Vigas.Calculo.Tests --filter ResolvedorCapaRapidoTests`. Las dos de tiempo FALLAN y la de equivalencia PASA.
+- [ ] **Paso 3:** implementar el arreglo en `ResolvedorCapa`.
+- [ ] **Paso 4:** las tres PASAN. Volver a 8 luces la prueba `UnPorticoDeMuchasLuces_ArmaTodosSusTramosYZonas` de la tarea 2. Medir en Release 4, 6, 8 y 10 luces y anotar los tiempos en "Hallazgos".
+- [ ] **Paso 5:** `rtk dotnet test CQEING-Addins.sln -c Release` → en verde. Commit `perf(vigas): el resolvedor descarta sin resolver las combinaciones que piden varilla de 12 m (#83)`.
+
+### Tarea 4: la página, portada de la maqueta e idéntica al píxel
 
 **Archivos:**
 - Crear, en `addins/acero-vigas/Tablero/web/`:
@@ -322,7 +370,7 @@ Datos de prueba: un `PorticoLeido` "Pórtico 1" del eje "1", aérea, con `Datos.
 - [ ] **Paso 6:** revisar a ojo `?estado=largo`: el alzado entra con el ajuste, la lista de tramos tiene barra de desplazamiento y ningún texto se parte en dos líneas.
 - [ ] **Paso 7:** commit `feat(vigas): la página del tablero, portada de la maqueta (#83)`, con las capturas.
 
-### Tarea 4: puente entre la página, la sesión y Revit
+### Tarea 5: puente entre la página, la sesión y Revit
 
 **Archivos:**
 - Crear:
@@ -358,7 +406,7 @@ Datos de prueba: un `PorticoLeido` "Pórtico 1" del eje "1", aérea, con `Datos.
   - suscribirse a `ViewActivated` y `DocumentClosing` para `Recargar()` (punto 5 de "Lo que más puede fallar").
 - [ ] **Paso 5:** `rtk dotnet test CQEING-Addins.sln -c Release` → en verde. Commit `feat(vigas): el tablero habla con Revit (#83)`.
 
-### Tarea 5: prueba en Revit real y documentación
+### Tarea 6: prueba en Revit real y documentación
 
 - [ ] **Paso 1:** desplegar (`tools/desplegar-local.ps1 -Addin acero-vigas -Revit 2026`) y probar en un modelo con:
   - un pórtico aéreo con voladizo;
