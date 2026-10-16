@@ -20,6 +20,12 @@ public sealed class RutasGestor(string localAppData, string appData)
 
     public string CarpetaCache => Path.Combine(localAppData, "CQEING", "Gestor", "cache");
 
+    /// <summary>
+    /// Zona de trabajo de las descargas (ZIP y extracción). Está FUERA de la carpeta de versiones: si algo se corta,
+    /// lo que queda aquí nunca se confunde con una versión instalada.
+    /// </summary>
+    public string CarpetaTemporal => Path.Combine(localAppData, "CQEING", "Gestor", "temp");
+
     public string CarpetaVersiones(string id) => Path.Combine(CarpetaAddins, ValidarId(id));
 
     /// <summary>Una carpeta por versión y año: instalar con Revit abierto no choca con la DLL que Revit tiene cargada.</summary>
