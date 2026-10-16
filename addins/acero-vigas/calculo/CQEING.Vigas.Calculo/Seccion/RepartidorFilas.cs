@@ -67,7 +67,7 @@ public static class RepartidorFilas
     }
 
     /// <summary><paramref name="cantidad"/> puestos de <paramref name="desde"/> a <paramref name="hasta"/> a la misma distancia; uno solo va al centro.</summary>
-    private static double[] Puestos(double desde, double hasta, int cantidad, double ancho) =>
+    internal static double[] Puestos(double desde, double hasta, int cantidad, double ancho) =>
         cantidad == 1 ? [ancho / 2]
             : Enumerable.Range(0, cantidad).Select(i => desde + i * (hasta - desde) / (cantidad - 1)).ToArray();
 
@@ -132,5 +132,5 @@ public static class RepartidorFilas
     private static CaraSeccion ConErrorDeAlto(CaraSeccion c) =>
         c.Error == ErrorCara.Ninguno ? c with { Error = ErrorCara.NoCabenEnElAlto } : c;
 
-    private static double Diametro(EntradaSeccion e, int numero) => e.Reglas.PorDiametro[numero].Diametro;
+    internal static double Diametro(EntradaSeccion e, int numero) => e.Reglas.PorDiametro[numero].Diametro;
 }
