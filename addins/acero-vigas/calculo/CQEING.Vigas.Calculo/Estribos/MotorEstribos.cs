@@ -31,9 +31,19 @@ public static class MotorEstribos
         var principal = new EstriboEnSeccion(IdCerrado, TipoEstribo.Cerrado, rec.Lados, seccion.Ancho - rec.Lados, rec.Abajo, seccion.Alto - rec.Arriba);
 
         bool generalValida = EsValida(e.General, General, avisos);
-        IReadOnlyList<Tramo> tramos = DistribuidorEstribos.Tramos(e.Portico);
-        List<ConfigEstribos?> propias = tramos.Select(t => e.PorTramo?.GetValueOrDefault(t.Nombre)).ToList();
-        IReadOnlyList<(string Id, EstriboAdicional Adicional)> adicionales = Numerar(e.General, propias);
+        // Los tramos que llevan estribos: con su configuración válida y su diámetro en las reglas.
+        var conEstribos = new List<(Tramo Tramo, ConfigEstribos Config, ReglaDiametro Regla)>();
+        foreach (Tramo t in DistribuidorEstribos.Tramos(e.Portico))
+        {
+            ConfigEstribos? propia = e.PorTramo?.GetValueOrDefault(t.Nombre);
+            ConfigEstribos c = propia ?? e.General;
+            if ((propia is null ? generalValida : EsValida(propia, t.Nombre, avisos)) && ReglaDe(seccion, c, avisos) is { } regla)
+                conEstribos.Add((t, c, regla));
+        }
+
+        // Solo se alinean los adicionales que van en algún tramo: los demás no deben mover barras.
+        IReadOnlyList<(string Id, EstriboAdicional Adicional)> adicionales =
+            Numerar(conEstribos.Select(x => x.Config).OrderBy(c => ReferenceEquals(c, e.General) ? 0 : 1));
         (ResultadoSeccion corte, IReadOnlyList<EstriboEnSeccion> figuras) = AlineadorEstribos.Alinear(seccion, adicionales, avisos);
         var figuraDe = new Dictionary<EstriboAdicional, EstriboEnSeccion>(ReferenceEqualityComparer.Instance);
         foreach ((string id, EstriboAdicional a) in adicionales)
@@ -42,14 +52,8 @@ public static class MotorEstribos
 
         double estriboSeccion = RepartidorFilas.Diametro(seccion, seccion.DiametroEstribo);
         var estribos = new List<EstriboEnPortico>();
-        for (int k = 0; k < tramos.Count; k++)
+        foreach ((Tramo t, ConfigEstribos c, ReglaDiametro regla) in conEstribos)
         {
-            Tramo t = tramos[k];
-            ConfigEstribos? propia = propias[k];
-            ConfigEstribos c = propia ?? e.General;
-            if (!(propia is null ? generalValida : EsValida(propia, t.Nombre, avisos)) || ReglaDe(seccion, c, avisos) is not { } regla)
-                continue;
-
             IReadOnlyList<double> posiciones = DistribuidorEstribos.Posiciones(t, c, regla.Diametro);
             double alto = AltoAlEje(seccion, regla);
             int gancho = Gancho(regla, c.Gancho);
@@ -71,14 +75,14 @@ public static class MotorEstribos
     }
 
     /// <summary>
-    /// <c>EA1</c>, <c>EA2</c>…: primero los adicionales del pórtico y después los de cada tramo, en el orden de los
-    /// tramos. Un tramo que copia la configuración del pórtico (<c>General with { … }</c>) trae los mismos adicionales:
-    /// conservan su id y no se repiten.
+    /// <c>EA1</c>, <c>EA2</c>…, en el orden de <paramref name="configs"/>: primero la del pórtico y después las de los
+    /// tramos, en su orden. Un tramo que copia la configuración del pórtico (<c>General with { … }</c>) trae los mismos
+    /// adicionales: conservan su id y no se repiten.
     /// </summary>
-    private static IReadOnlyList<(string Id, EstriboAdicional Adicional)> Numerar(ConfigEstribos general, IEnumerable<ConfigEstribos?> propias)
+    private static IReadOnlyList<(string Id, EstriboAdicional Adicional)> Numerar(IEnumerable<ConfigEstribos> configs)
     {
         var vistos = new HashSet<EstriboAdicional>(ReferenceEqualityComparer.Instance);
-        return new[] { general }.Concat(propias.OfType<ConfigEstribos>())
+        return configs
             .SelectMany(c => c.Adicionales ?? [])
             .Where(vistos.Add)
             .Select((a, i) => ($"EA{i + 1}", a))

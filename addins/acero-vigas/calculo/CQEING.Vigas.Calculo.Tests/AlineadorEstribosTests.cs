@@ -147,6 +147,21 @@ public class AlineadorEstribosTests
     }
 
     [Fact]
+    public void UnAdicionalDeUnTramoSinEstribos_NoMueveBarras()
+    {
+        var porTramo = new Dictionary<string, ConfigEstribos>
+        {
+            ["B-C"] = General with { SeparacionZona = 0, Adicionales = [Abierto(S(2), I(2))] },
+        };
+
+        ResultadoEstribos r = MotorEstribos.Calcular(new EntradaEstribos(Datos.PorticoMaqueta(), Seccion(), General, porTramo));
+
+        Assert.Equal([new Aviso(TipoAviso.EstriboValorNoValido, "B-C")], r.Avisos);
+        Assert.Equal(AbajoSinMover, Xs(r, Posicion.Inferior));
+        Assert.DoesNotContain(r.EnSeccion, e => e.Id == "EA1");
+    }
+
+    [Fact]
     public void SinLasBarrasQuePide_EstriboIncompleto()
     {
         NoSeAgrega(Calcular(Abierto(S(2), S(3))), TipoAviso.EstriboIncompleto);
