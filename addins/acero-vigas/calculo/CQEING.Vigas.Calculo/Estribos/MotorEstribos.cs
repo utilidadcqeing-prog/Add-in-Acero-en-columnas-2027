@@ -75,8 +75,8 @@ public static class MotorEstribos
     }
 
     /// <summary>
-    /// <c>EA1</c>, <c>EA2</c>…, en el orden de <paramref name="configs"/>: primero la del pórtico y después las de los
-    /// tramos, en su orden. Un tramo que copia la configuración del pórtico (<c>General with { … }</c>) trae los mismos
+    /// <c>E1</c>, <c>E2</c>… (como en la lista de la maqueta), en el orden de <paramref name="configs"/>: primero la del
+    /// pórtico y después las de los tramos, en su orden. Un tramo que copia la configuración del pórtico (<c>General with { … }</c>) trae los mismos
     /// adicionales: conservan su id y no se repiten.
     /// </summary>
     private static IReadOnlyList<(string Id, EstriboAdicional Adicional)> Numerar(IEnumerable<ConfigEstribos> configs)
@@ -85,7 +85,7 @@ public static class MotorEstribos
         return configs
             .SelectMany(c => c.Adicionales ?? [])
             .Where(vistos.Add)
-            .Select((a, i) => ($"EA{i + 1}", a))
+            .Select((a, i) => ($"{IdCerrado}{i + 1}", a))
             .ToList();
     }
 

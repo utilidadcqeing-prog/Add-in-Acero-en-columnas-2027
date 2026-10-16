@@ -13,16 +13,21 @@ namespace CQEING.Vigas.Calculo.Estribos;
 /// dos fijas se quedan si cumplen la distancia libre y, si no, se reparten parejas entre esas dos;</item>
 /// <item>si así tampoco caben, el adicional no se pone y nada se mueve.</item>
 /// </list>
-/// Parte del reparto de <see cref="RepartidorFilas"/> sin cambiarlo y devuelve otro con las x movidas.
+/// Hace lo mismo que la maqueta (corte 1-1). Parte del reparto de <see cref="RepartidorFilas"/> sin cambiarlo y devuelve
+/// otro con las x movidas; cada fila conserva el orden del reparto, así que <see cref="PuntoBarra.Numero"/> sigue
+/// nombrando la misma barra aunque se mueva.
 /// </summary>
 internal static class AlineadorEstribos
 {
     private const double Tolerancia = 1e-9;
 
-    /// <summary>Una fila del corte, de izquierda a derecha: la x y el diámetro real de cada barra, y cuáles ya alineó otro adicional.</summary>
-    private sealed record Fila(double[] X, double[] Diametros, bool[] Alineada)
+    /// <summary>
+    /// Una fila del corte, en el orden del reparto: la x, la y y el diámetro real de cada barra, y cuáles ya alineó otro
+    /// adicional.
+    /// </summary>
+    private sealed record Fila(double[] X, double[] Y, double[] Diametros, bool[] Alineada)
     {
-        public Fila Copia() => new((double[])X.Clone(), Diametros, (bool[])Alineada.Clone());
+        public Fila Copia() => new((double[])X.Clone(), Y, Diametros, (bool[])Alineada.Clone());
     }
 
     /// <summary>Las filas de cada cara; la fila 1 es la primera.</summary>
@@ -33,6 +38,8 @@ internal static class AlineadorEstribos
         public Fila De(PuntoBarra b) => filas[b.Cara][b.Fila - 1];
 
         public double X(PuntoBarra b) => De(b).X[b.Numero - 1];
+
+        public double Y(PuntoBarra b) => De(b).Y[b.Numero - 1];
 
         public double Diametro(PuntoBarra b) => De(b).Diametros[b.Numero - 1];
 
@@ -114,9 +121,8 @@ internal static class AlineadorEstribos
 
         foreach (var enFila in destinos.GroupBy(d => (d.Key.Cara, d.Key.Fila)))
         {
-            Fila fila1 = corte.De(enFila.Key.Cara)[0];
             Dictionary<int, double> fijas = enFila.ToDictionary(d => d.Key.Numero - 1, d => d.Value);
-            if (!Acomodar(e, corte.De(enFila.First().Key), enFila.Key.Fila == 1, fijas, fila1.X[0], fila1.X[^1]))
+            if (!Acomodar(e, corte.De(enFila.First().Key), enFila.Key.Fila == 1, fijas))
                 return TipoAviso.NoSePuedeAlinear;
         }
         foreach (PuntoBarra b in elegidas)
@@ -127,12 +133,12 @@ internal static class AlineadorEstribos
     }
 
     /// <summary>
-    /// Pone las barras de <paramref name="fijas"/> en su x y acomoda las sueltas: entre dos fijas (las elegidas, las ya
-    /// alineadas y las esquinas de la fila 1) se quedan si cumplen la distancia libre y, si no, se reparten parejas.
-    /// Fuera de la primera o la última fija (en las filas 2 y siguientes), el límite es la x de las esquinas de la fila 1.
-    /// Devuelve false si así no queda la distancia libre entre todas.
+    /// Pone las barras de <paramref name="fijas"/> en su x y acomoda las sueltas: entre dos fijas seguidas (las elegidas,
+    /// las ya alineadas y las esquinas de la fila 1) se quedan si cumplen la distancia libre y, si no, se reparten parejas
+    /// entre esas dos. Las de la punta de las filas 2 y siguientes, que no tienen esquinas fijas, se quedan donde están.
+    /// Devuelve false si así no queda la distancia libre entre todas, de izquierda a derecha.
     /// </summary>
-    private static bool Acomodar(EntradaSeccion e, Fila fila, bool esFila1, Dictionary<int, double> fijas, double minimo, double maximo)
+    private static bool Acomodar(EntradaSeccion e, Fila fila, bool esFila1, Dictionary<int, double> fijas)
     {
         double[] x = (double[])fila.X.Clone();
         int n = x.Length;
@@ -142,26 +148,17 @@ internal static class AlineadorEstribos
             .Where(i => fijas.ContainsKey(i) || fila.Alineada[i] || esFila1 && (i == 0 || i == n - 1))
             .ToList();
 
-        double Necesaria(int i) => (fila.Diametros[i] + fila.Diametros[i + 1]) / 2 + e.Reglas.DistanciaLibre;
-        bool Cumple(int desde, int hasta) =>
-            x[desde] >= minimo - Tolerancia && x[hasta] <= maximo + Tolerancia
-            && Enumerable.Range(desde, hasta - desde).All(i => x[i + 1] - x[i] >= Necesaria(i) - Tolerancia);
-
-        // Tramos entre anclas seguidas; -1 y n son los límites de la fila.
-        List<int> cortes = [-1, .. anclas, n];
-        for (int k = 0; k + 1 < cortes.Count; k++)
+        bool Libre(int a, int b) => x[b] - x[a] >= (fila.Diametros[a] + fila.Diametros[b]) / 2 + e.Reglas.DistanciaLibre - Tolerancia;
+        foreach ((int a, int b) in anclas.Zip(anclas.Skip(1)))
         {
-            int a = cortes[k], b = cortes[k + 1], sueltas = b - a - 1;
-            if (sueltas == 0 || Cumple(Math.Max(a, 0), Math.Min(b, n - 1)))
+            if (b - a < 2 || Enumerable.Range(a, b - a).All(i => Libre(i, i + 1)))
                 continue;
-            double izquierda = a < 0 ? minimo : x[a], derecha = b >= n ? maximo : x[b];
-            // Con dos fijas, las sueltas quedan entre ellas; contra un límite, la del extremo va en el límite.
-            int espacios = a >= 0 && b < n ? sueltas + 1 : sueltas;
-            int primera = a < 0 ? 0 : 1;
-            for (int t = 0; t < sueltas; t++)
-                x[a + 1 + t] = izquierda + (primera + t) * (derecha - izquierda) / espacios;
+            for (int i = a + 1; i < b; i++)
+                x[i] = x[a] + (x[b] - x[a]) * (i - a) / (b - a);
         }
-        if (!Cumple(0, n - 1))
+
+        int[] deIzquierdaADerecha = Enumerable.Range(0, n).OrderBy(i => x[i]).ToArray();
+        if (!deIzquierdaADerecha.Zip(deIzquierdaADerecha.Skip(1)).All(par => Libre(par.First, par.Second)))
             return false;
         Array.Copy(x, fila.X, n);
         return true;
@@ -169,20 +166,24 @@ internal static class AlineadorEstribos
 
     /// <summary>
     /// El estribo por sus caras exteriores. El cerrado abraza por fuera las barras de sus dos verticales, con el diámetro
-    /// mayor de las cuatro; el abierto es la rama en la x de su vertical. Los dos van de recubrimiento a recubrimiento.
+    /// mayor de las cuatro; el abierto es la rama en la x de su vertical. Como en la maqueta, de arriba abajo van pegados
+    /// a las barras que abrazan (en la fila 1, de recubrimiento a recubrimiento).
     /// </summary>
     private static EstriboEnSeccion Figura(EntradaSeccion e, Corte corte, string id, TipoEstribo tipo, List<PuntoBarra> mandan, List<PuntoBarra> elegidas)
     {
-        double abajo = e.Recubrimiento.Abajo, arriba = e.Alto - e.Recubrimiento.Arriba;
+        double estribo = RepartidorFilas.Diametro(e, e.DiametroEstribo);
+        double arriba = elegidas.Where(b => b.Cara == Posicion.Superior).Max(b => corte.Y(b) + corte.Diametro(b) / 2) + estribo;
+        double abajo = elegidas.Where(b => b.Cara == Posicion.Inferior).Min(b => corte.Y(b) - corte.Diametro(b) / 2) - estribo;
         if (tipo == TipoEstribo.Abierto)
             return new EstriboEnSeccion(id, tipo, corte.X(mandan[0]), corte.X(mandan[0]), abajo, arriba);
-        double afuera = elegidas.Max(corte.Diametro) / 2 + RepartidorFilas.Diametro(e, e.DiametroEstribo);
+        double afuera = elegidas.Max(corte.Diametro) / 2 + estribo;
         return new EstriboEnSeccion(id, tipo, corte.X(mandan[0]) - afuera, corte.X(mandan[1]) + afuera, abajo, arriba);
     }
 
     private static List<Fila> Filas(EntradaSeccion e, CaraSeccion c) =>
         c.Filas.Select(f => f.OrderBy(b => b.X).ToList())
-            .Select(f => new Fila(f.Select(b => b.X).ToArray(), f.Select(b => RepartidorFilas.Diametro(e, b.Diametro)).ToArray(), new bool[f.Count]))
+            .Select(f => new Fila(f.Select(b => b.X).ToArray(), f.Select(b => b.Y).ToArray(),
+                f.Select(b => RepartidorFilas.Diametro(e, b.Diametro)).ToArray(), new bool[f.Count]))
             .ToList();
 
     private static CaraSeccion ConX(CaraSeccion c, List<Fila> filas) => c with

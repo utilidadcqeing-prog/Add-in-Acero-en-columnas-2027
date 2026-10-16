@@ -56,8 +56,8 @@ public sealed record EntradaEstribos(
     IReadOnlyDictionary<string, ConfigEstribos>? PorTramo = null);
 
 /// <summary>
-/// Los estribos iguales de un tramo: <c>"E"</c> es el cerrado de las esquinas y <c>"EA1"</c>, <c>"EA2"</c>… los
-/// adicionales. <paramref name="Posiciones"/> son sus centros en mm desde el eje A; <paramref name="Largo"/> (mm, por el
+/// Los estribos iguales de un tramo: <c>"E"</c> es el cerrado de las esquinas y <c>"E1"</c>, <c>"E2"</c>… los
+/// adicionales, como en la lista de la maqueta. <paramref name="Posiciones"/> son sus centros en mm desde el eje A; <paramref name="Largo"/> (mm, por el
 /// eje del estribo) incluye los ganchos.
 /// </summary>
 public sealed record EstriboEnPortico(

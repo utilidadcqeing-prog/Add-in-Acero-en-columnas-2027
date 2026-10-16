@@ -37,7 +37,7 @@ public class AlineadorEstribosTests
     private static readonly double[] ArribaSinMover = [57.45, 103.725, 150, 196.275, 242.55];
     private static readonly double[] AbajoSinMover = [57.45, 119.15, 180.85, 242.55];
 
-    private static void NoSeAgrega(ResultadoEstribos r, TipoAviso tipo, string id = "EA1")
+    private static void NoSeAgrega(ResultadoEstribos r, TipoAviso tipo, string id = "E1")
     {
         Assert.Contains(new Aviso(tipo, id), r.Avisos);
         Assert.DoesNotContain(r.Estribos, e => e.Id == id);
@@ -51,11 +51,11 @@ public class AlineadorEstribosTests
 
         Assert.Equal([57.45, 103.725, 180.85, 242.55], Xs(r, Posicion.Inferior));
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
-        Assert.Equal(new EstriboEnSeccion("EA1", TipoEstribo.Abierto, 103.725, 103.725, 40, 460), Figura(r, "EA1"));
-        EstriboEnPortico ab = r.Estribos.Single(e => e.Id == "EA1" && e.Tramo == "A-B");
+        Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Abierto, 103.725, 103.725, 40, 460), Figura(r, "E1"));
+        EstriboEnPortico ab = r.Estribos.Single(e => e.Id == "E1" && e.Tramo == "A-B");
         Assert.Equal((TipoEstribo.Abierto, 28, 636.5), (ab.Tipo, ab.Posiciones.Count, Math.Round(ab.Largo, 6)));
         Assert.Equal(28 * 0.6365 * 0.560, ab.Kg, 6);
-        Assert.Equal(4, r.Estribos.Count(e => e.Id == "EA1"));
+        Assert.Equal(4, r.Estribos.Count(e => e.Id == "E1"));
         Assert.Empty(r.Avisos);
     }
 
@@ -66,9 +66,9 @@ public class AlineadorEstribosTests
 
         Assert.Equal([57.45, 103.725, 196.275, 242.55], Xs(r, Posicion.Inferior));
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
-        Assert.Equal(new EstriboEnSeccion("EA1", TipoEstribo.Cerrado, 86.275, 213.725, 40, 460), Figura(r, "EA1"));
+        Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Cerrado, 86.275, 213.725, 40, 460), Figura(r, "E1"));
         // 2 × (117.95 + 410.5) + 2 × 113.
-        Assert.Equal(1282.9, r.Estribos.First(e => e.Id == "EA1").Largo, 6);
+        Assert.Equal(1282.9, r.Estribos.First(e => e.Id == "E1").Largo, 6);
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public class AlineadorEstribosTests
 
         ResultadoEstribos r = MotorEstribos.Calcular(new EntradaEstribos(Datos.PorticoMaqueta(), Seccion(), General, porTramo));
 
-        EstriboEnPortico ea1 = Assert.Single(r.Estribos, e => e.Id == "EA1");
+        EstriboEnPortico ea1 = Assert.Single(r.Estribos, e => e.Id == "E1");
         Assert.Equal(("A-B", 28), (ea1.Tramo, ea1.Posiciones.Count));
         Assert.Equal([57.45, 103.725, 180.85, 242.55], Xs(r, Posicion.Inferior));
     }
@@ -141,9 +141,26 @@ public class AlineadorEstribosTests
 
         ResultadoEstribos r = MotorEstribos.Calcular(new EntradaEstribos(Datos.PorticoMaqueta(), Seccion(), general, porTramo));
 
-        Assert.Equal(4, r.Estribos.Count(e => e.Id == "EA1"));
-        Assert.DoesNotContain(r.Estribos, e => e.Id == "EA2");
-        Assert.Equal(26, r.Estribos.Single(e => e.Id == "EA1" && e.Tramo == "B-C").Posiciones.Count);
+        Assert.Equal(4, r.Estribos.Count(e => e.Id == "E1"));
+        Assert.DoesNotContain(r.Estribos, e => e.Id == "E2");
+        Assert.Equal(26, r.Estribos.Single(e => e.Id == "E1" && e.Tramo == "B-C").Posiciones.Count);
+    }
+
+    /// <summary>
+    /// Abajo 8 #5: la fila 2 lleva 3 (57.45, 150 y 242.55, a 73.35 de la cara). Como en la maqueta, las sueltas solo se
+    /// reparten entre dos fijas: en la punta de la fila 2 no se corren y basta con que quede la distancia libre.
+    /// </summary>
+    [Fact]
+    public void EnLaFila2_LasSueltasDeLaPuntaNoSeCorren()
+    {
+        ResultadoEstribos r = Calcular(Seccion(abajo: new GrupoBarras(8, 5)), Abierto(S(4), I(1, fila: 2)));
+
+        Assert.Empty(r.Avisos);
+        // La fila conserva el orden del reparto (la 1 sigue siendo la misma barra), aunque ahora quede a la derecha de la 2.
+        Assert.Equal([196.275, 150, 242.55], r.Seccion.Inferior.Filas[1].Select(b => Math.Round(b.X, 3)));
+        // La rama va pegada a las barras que abraza: de la de la fila 2 (73.35 - 7.95 - 9.5) a la de arriba.
+        EstriboEnSeccion f = Figura(r, "E1");
+        Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Abierto, 196.275, 196.275, 55.9, 460), f with { Abajo = Math.Round(f.Abajo, 3) });
     }
 
     [Fact]
@@ -158,7 +175,7 @@ public class AlineadorEstribosTests
 
         Assert.Equal([new Aviso(TipoAviso.EstriboValorNoValido, "B-C")], r.Avisos);
         Assert.Equal(AbajoSinMover, Xs(r, Posicion.Inferior));
-        Assert.DoesNotContain(r.EnSeccion, e => e.Id == "EA1");
+        Assert.DoesNotContain(r.EnSeccion, e => e.Id == "E1");
     }
 
     [Fact]
@@ -203,8 +220,8 @@ public class AlineadorEstribosTests
     {
         ResultadoEstribos r = Calcular(Abierto(S(2), I(2)), Abierto(S(4), I(2)));
 
-        NoSeAgrega(r, TipoAviso.NoSePuedeAlinear, "EA2");
-        Assert.Contains(r.EnSeccion, e => e.Id == "EA1");
+        NoSeAgrega(r, TipoAviso.NoSePuedeAlinear, "E2");
+        Assert.Contains(r.EnSeccion, e => e.Id == "E1");
         Assert.Equal([57.45, 103.725, 180.85, 242.55], Xs(r, Posicion.Inferior));
     }
 

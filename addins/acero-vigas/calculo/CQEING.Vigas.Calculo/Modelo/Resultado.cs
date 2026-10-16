@@ -69,7 +69,7 @@ public enum TipoAviso
     EstriboValorNoValido,
     /// <summary>
     /// Un estribo adicional no tiene las barras que pide: el cerrado, 2 arriba y 2 abajo; el abierto, 1 y 1. No se
-    /// agrega. <see cref="Aviso.Elemento"/> es su id (<c>"EA1"</c>), como en los avisos que siguen.
+    /// agrega. <see cref="Aviso.Elemento"/> es su id (<c>"E1"</c>), como en los avisos que siguen.
     /// </summary>
     EstriboIncompleto,
     /// <summary>Un estribo adicional nombra una fila o un número de barra que no hay en el corte. No se agrega.</summary>

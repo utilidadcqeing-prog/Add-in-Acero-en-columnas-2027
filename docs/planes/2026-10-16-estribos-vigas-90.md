@@ -140,7 +140,7 @@ Datos de prueba: `Datos.PorticoMaqueta()` y estribo #3 (9.5), así que el primer
 - Produce:
   - `public sealed record EntradaEstribos(Portico Portico, EntradaSeccion Seccion, ConfigEstribos General, IReadOnlyDictionary<string, ConfigEstribos>? PorTramo = null);`, donde las claves son los nombres de `Tramos`;
   - `public sealed record EstriboEnPortico(string Id, TipoEstribo Tipo, string Tramo, int Diametro, GanchoEstribo Gancho, IReadOnlyList<double> Posiciones, double Largo, double Kg);`
-    - `Id` es `"E"` para el cerrado de las esquinas y `"EA1"`, `"EA2"`… para los adicionales;
+    - `Id` es `"E"` para el cerrado de las esquinas y `"E1"`, `"E2"`… (como en la lista de la maqueta) para los adicionales;
     - hay uno por tramo y por estribo;
   - `public sealed record EstriboEnSeccion(string Id, TipoEstribo Tipo, double Izquierda, double Derecha, double Abajo, double Arriba);`, con las caras exteriores del estribo en el corte, en mm;
   - `public sealed record ResultadoEstribos(IReadOnlyList<EstriboEnPortico> Estribos, ResultadoSeccion Seccion, IReadOnlyList<EstriboEnSeccion> EnSeccion, IReadOnlyList<Aviso> Avisos) { public int Cantidad => Estribos.Sum(e => e.Posiciones.Count); public double Kg => Estribos.Sum(e => e.Kg); }`
@@ -175,7 +175,7 @@ Sección de la maqueta: 300 × 500, recubrimiento 40 y estribo #3.
 **Interfaces:**
 - Consume: `RepartidorFilas.Repartir` y `ConfigEstribos.Adicionales` (tarea 1), y `MotorEstribos` (tarea 2).
 - Produce: `internal static (ResultadoSeccion Seccion, IReadOnlyList<EstriboEnSeccion> Figuras) AlineadorEstribos.Alinear(EntradaSeccion e, IReadOnlyList<(string Id, EstriboAdicional Adicional)> adicionales, List<Aviso> avisos)`.
-  - Los adicionales se numeran `EA1, EA2…`: primero los de `General` y después los de `PorTramo`, en el orden de los tramos.
+  - Los adicionales se numeran `E1, E2…`: primero los de `General` y después los de `PorTramo`, en el orden de los tramos.
   - `MotorEstribos` agrega a `ResultadoEstribos.Estribos` uno por adicional válido y por tramo donde aplica, con las posiciones del cerrado de ese tramo. `ResultadoEstribos.Seccion` es la sección con las barras movidas.
 
 Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 103.725, 150, 196.275 y 242.55) y abajo `[4 #5]` (x 57.45, 119.15, 180.85 y 242.55). La distancia libre entre dos #5 pide 40.9 entre centros.
@@ -183,7 +183,7 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
 - [ ] **Paso 1: pruebas que fallan:**
   - `AbiertoMandaLaDeArriba_LaDeAbajoSeMueve`:
     - con `Abierto` y `[S·1·2, I·1·2]`, la barra de abajo 2 pasa a x = 103.725 y las demás no se mueven;
-    - la figura es `EstriboEnSeccion("EA1", Abierto, 103.725, 103.725, 40, 460)`;
+    - la figura es `EstriboEnSeccion("E1", Abierto, 103.725, 103.725, 40, 460)`;
     - el largo es 410.5 + 226 = 636.5.
   - `CerradoEnCadaVerticalMandaLaPrimera`:
     - con `Cerrado` y `[S·1·2, S·1·4, I·1·2, I·1·3]`, las verticales son (S2, I2) y (S4, I3); mandan las de arriba, así que las de abajo 2 y 3 pasan a 103.725 y 196.275;
@@ -195,14 +195,14 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
   - `CerradoConLasVecinasCorridas_ElCasoDeLaCaptura`: con `[S·1·2, S·1·3, I·1·2, I·1·3]`, la de abajo 2 pasa a 103.725 y la 3 a 150, sin que nada más se mueva. Antes la maqueta lo rechazaba por error, porque comparaba con la posición vieja de la otra barra que se movía.
   - `UnAbiertoSobreUnaRamaDelCerrado_EsElObligatorio`: `[S·1·1, I·1·1]` → `IgualAlCerrado`.
   - `UnCerradoConLasCuatroEsquinas_EsElObligatorio`: `[S·1·1, I·1·1, S·1·5, I·1·4]` → aviso `IgualAlCerrado` y no se agrega. Es el caso de la captura del 16-oct.
-  - `ElAdicionalVaSoloEnSuTramo`: con el abierto en `PorTramo["A-B"]`, hay un `EstriboEnPortico` "EA1" solo en A-B, con 28 posiciones. La barra movida sale en `ResultadoEstribos.Seccion`, que es una sola para todo el pórtico.
+  - `ElAdicionalVaSoloEnSuTramo`: con el abierto en `PorTramo["A-B"]`, hay un `EstriboEnPortico` "E1" solo en A-B, con 28 posiciones. La barra movida sale en `ResultadoEstribos.Seccion`, que es una sola para todo el pórtico.
   - `SinLasBarrasQuePide_EstriboIncompleto`: un abierto con `[S·1·2, S·1·3]`.
   - `LaMismaBarraDosVeces_EstriboIncompleto`: un abierto con `[S·1·2, S·1·2]`.
   - `UnaBarraQueNoExiste_BarraNoExiste`: con `[S·1·2, I·1·9]`.
   - `NoSeMueveUnaEsquina`: un abierto con `[S·1·2, I·1·1]` da `MueveUnaEsquina`, y la barra de abajo 1 sigue en 57.45.
   - `SiNoQuedaLaDistanciaLibre_NoSePuedeAlinear`: abajo `[3 #8]` (62.2, 150 y 237.8) y un abierto `[S·1·2, I·1·2]`. Moverla a 103.725 deja 41.525 < 50.4 de su vecina, así que da `NoSePuedeAlinear` y nada se mueve.
-  - `DosAdicionalesQueMuevenLaMismaBarra_ElSegundoNoSePuede`: el primero `[S·1·2, I·1·2]` y el segundo `[S·1·4, I·1·2]` → `NoSePuedeAlinear` para "EA2".
-  - `ConLaSeccionConError_NoHayAdicionalesPeroSiElCerrado`: abajo `[1 #5]` (`MenosDeDosBarras`) → `NoSePuedeAlinear` para "EA1", con el "E" del pórtico igual.
+  - `DosAdicionalesQueMuevenLaMismaBarra_ElSegundoNoSePuede`: el primero `[S·1·2, I·1·2]` y el segundo `[S·1·4, I·1·2]` → `NoSePuedeAlinear` para "E2".
+  - `ConLaSeccionConError_NoHayAdicionalesPeroSiElCerrado`: abajo `[1 #5]` (`MenosDeDosBarras`) → `NoSePuedeAlinear` para "E1", con el "E" del pórtico igual.
 - [ ] **Paso 2:** `--filter AlineadorEstribosTests` → FALLA.
 - [ ] **Paso 3:** implementar sin cambiar `RepartidorFilas`: se parte de su `ResultadoSeccion` y se devuelve otro con las x movidas.
 - [ ] **Paso 4:** `rtk dotnet test CQEING-Addins.sln -c Release` → en verde.
