@@ -45,6 +45,27 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
     /// <summary>Los que muestra la pantalla de Reglas (la maqueta va del #3 al #8). El #2 se guarda sin mostrarse.</summary>
     public static IReadOnlyList<int> DiametrosEnPantalla { get; } = [3, 4, 5, 6, 7, 8];
 
+    /// <summary>
+    /// Lo que impide guardarlas, un mensaje por problema: primero los valores generales y luego cada diámetro, de
+    /// menor a mayor. Vacía si son válidas. Un diámetro sin traslapo se permite: el motor avisa al calcular.
+    /// </summary>
+    public IReadOnlyList<string> Validar()
+    {
+        var errores = new List<string>();
+        if (Modulo <= 0) errores.Add("El múltiplo de corte debe ser mayor que 0.");
+        if (Varilla is not (6000 or 12000)) errores.Add("La varilla debe ser de 6 m o de 12 m.");
+        if (DistanciaLibre <= 0) errores.Add("La distancia libre entre barras debe ser mayor que 0.");
+        foreach ((int d, ReglaDiametro r) in PorDiametro.OrderBy(par => par.Key))
+        {
+            if (r.Traslapo <= 0) errores.Add($"El traslapo del #{d} debe ser mayor que 0.");
+            if (r.Gancho90.B <= 0) errores.Add($"El gancho de 90° del #{d} debe ser mayor que 0.");
+            if (r.Gancho180.B <= 0) errores.Add($"El gancho de 180° del #{d} debe ser mayor que 0.");
+            if (r.Estribo135.B <= 0) errores.Add($"El estribo de 135° del #{d} debe ser mayor que 0.");
+            if (r.KgPorMetro <= 0) errores.Add($"El peso por metro del #{d} debe ser mayor que 0.");
+        }
+        return errores;
+    }
+
     /// <summary>Si tienen los mismos valores (el diccionario se compara por contenido, no por referencia).</summary>
     public bool Equivale(Reglas otra) =>
         Modulo == otra.Modulo && Varilla == otra.Varilla && VarillaLarga == otra.VarillaLarga

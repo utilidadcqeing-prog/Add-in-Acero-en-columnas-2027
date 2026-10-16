@@ -56,4 +56,49 @@ public class ReglasTests
         Assert.True(Reglas.Generales.Equivale(copia));
         Assert.False(Reglas.Generales.Equivale(Reglas.Generales with { Modulo = 600 }));
     }
+
+    [Fact]
+    public void LasReglasGeneralesSonValidas()
+    {
+        Assert.Empty(Reglas.Generales.Validar());
+    }
+
+    [Fact]
+    public void UnMultiploEnCeroNoEsValido()
+    {
+        Assert.Equal(["El múltiplo de corte debe ser mayor que 0."], (Reglas.Generales with { Modulo = 0 }).Validar());
+    }
+
+    [Fact]
+    public void UnaVarillaDe9MetrosNoEsValida()
+    {
+        Assert.Equal(["La varilla debe ser de 6 m o de 12 m."], (Reglas.Generales with { Varilla = 9000 }).Validar());
+    }
+
+    [Fact]
+    public void UnTraslapoNegativoDelNumero5NoEsValido()
+    {
+        Assert.Equal(["El traslapo del #5 debe ser mayor que 0."], ConDiametro(5, r => r with { Traslapo = -1 }).Validar());
+    }
+
+    [Fact]
+    public void UnPesoEnCeroDelNumero4NoEsValido()
+    {
+        Assert.Equal(["El peso por metro del #4 debe ser mayor que 0."], ConDiametro(4, r => r with { KgPorMetro = 0 }).Validar());
+    }
+
+    [Fact]
+    public void UnDiametroSinTraslapoSiEsValido()
+    {
+        Assert.Empty(ConDiametro(5, r => r with { Traslapo = null }).Validar());
+    }
+
+    private static Reglas ConDiametro(int diametro, Func<ReglaDiametro, ReglaDiametro> cambio) =>
+        Reglas.Generales with
+        {
+            PorDiametro = new Dictionary<int, ReglaDiametro>(Reglas.Generales.PorDiametro)
+            {
+                [diametro] = cambio(Reglas.Generales.PorDiametro[diametro]),
+            },
+        };
 }
