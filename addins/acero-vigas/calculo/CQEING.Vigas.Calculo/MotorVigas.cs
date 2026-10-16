@@ -16,7 +16,7 @@ public static class MotorVigas
 
         List<Aviso> avisos = DiametrosSinTraslapo(entrada).Select(d => new Aviso(TipoAviso.SinTraslapoMinimo, $"#{d}")).ToList();
         if (avisos.Count > 0)
-            return new ResultadoVigas(null, null, capaDeLaCara, null, null, Cara.Inicio, Cara.Inicio, avisos);
+            return new ResultadoVigas(null, null, capaDeLaCara, null, null, Cara.Inicio, Cara.Inicio, avisos, []);
 
         var g = new GeometriaPortico(entrada.Portico, entrada.RecubrimientoPuntas);
         CapaCalculada? centro = Resolver(entrada, g, capaDelCentro, Cara.Inicio, avisos);
@@ -40,9 +40,10 @@ public static class MotorVigas
         if (capaCara is not null)
             avisos.AddRange(Avisos.De(capaCara, usada == Cara.Inicio ? solucionFinal : solucionInicio, otra, varilla));
 
+        IReadOnlyList<Baston> bastones = CalculadorBastones.Calcular(entrada, g, avisos);
         return capaDeLaCara == Posicion.Inferior
-            ? new ResultadoVigas(capaCentro, capaCara, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos)
-            : new ResultadoVigas(capaCara, capaCentro, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos);
+            ? new ResultadoVigas(capaCentro, capaCara, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos, bastones)
+            : new ResultadoVigas(capaCara, capaCentro, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos, bastones);
     }
 
     /// <summary>Cómo quedaría el pórtico si la barra <paramref name="id"/> pasa a <paramref name="nuevoLargo"/> (Subir / Bajar).</summary>
@@ -69,6 +70,23 @@ public static class MotorVigas
             return new Previsualizacion(false, MotivoBloqueo.SinCambio, null);
         var cambios = entrada.Cambios ?? new CambiosManuales();
         return Probar(entrada with { Cambios = cambios with { Traslapos = Con(cambios.Traslapos, id, largo) } }, id);
+    }
+
+    /// <summary>
+    /// Cómo quedaría el pórtico si el bastón <paramref name="id"/> se escribe con <paramref name="largo"/> (mm, sin
+    /// redondear). "Usar el largo general" no pasa por aquí: quita el id de <see cref="ArmadoBastones.Largos"/>.
+    /// </summary>
+    public static Previsualizacion PrevisualizarBaston(EntradaVigas entrada, string id, int largo)
+    {
+        if (Calcular(entrada).Bastones.All(b => b.Id != id))
+            return new Previsualizacion(false, MotivoBloqueo.NoExiste, null);
+        if (largo <= 0)
+            return new Previsualizacion(false, MotivoBloqueo.LargoNoValido, null);
+        ArmadoBastones armado = entrada.Bastones ?? new ArmadoBastones();
+        if (CalculadorBastones.LargoDe(armado, id) == largo)
+            return new Previsualizacion(false, MotivoBloqueo.SinCambio, null);
+        ResultadoVigas r = Calcular(entrada with { Bastones = armado with { Largos = Con(armado.Largos, id, largo) } });
+        return new Previsualizacion(true, MotivoBloqueo.Ninguno, r);
     }
 
     private static Previsualizacion Probar(EntradaVigas conCambio, string id)

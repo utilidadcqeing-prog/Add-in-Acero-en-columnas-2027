@@ -37,7 +37,7 @@ public class MotorVigasTests
         ResultadoVigas r = MotorVigas.Calcular(Aerea());
 
         Assert.All(r.Barras, b => Assert.Equal(b.Largo / 1000.0 * 3 * 1.552, b.Kg, precision: 6));
-        Assert.Equal(r.Barras.Sum(b => b.Kg), r.Kg, precision: 6);
+        Assert.Equal(r.Barras.Sum(b => b.Kg) + r.Bastones.Sum(b => b.Kg), r.Kg, precision: 6);
     }
 
     [Fact]

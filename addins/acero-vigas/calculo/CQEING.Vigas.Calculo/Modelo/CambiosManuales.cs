@@ -24,6 +24,8 @@ public enum MotivoBloqueo
     EntraAlNudo,
     /// <summary>Con ese largo no hay forma de acomodar las barras vecinas cumpliendo las reglas.</summary>
     SinSolucion,
+    /// <summary>El largo de un bastón es 0 o negativo.</summary>
+    LargoNoValido,
 }
 
 /// <summary>Resultado de una vista previa: si el botón Aplicar queda activo, por qué no, y cómo quedaría.</summary>

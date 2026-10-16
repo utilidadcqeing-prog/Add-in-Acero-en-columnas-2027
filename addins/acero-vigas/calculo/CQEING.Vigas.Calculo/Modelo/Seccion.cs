@@ -54,3 +54,12 @@ public sealed record CaraSeccion(
     double RecubrimientoAlEje);
 
 public sealed record ResultadoSeccion(CaraSeccion Superior, CaraSeccion Inferior);
+
+/// <summary>Una barra de bastón en el corte. <paramref name="Fila"/> empieza en 1, la fila junto a la cara.</summary>
+public sealed record BastonEnSeccion(int Fila, BarraEnSeccion Barra);
+
+/// <summary>
+/// Dónde van en el corte los bastones de una cara (#89). Si no hay lugar en el máximo de filas, o la cara ya tenía
+/// un error, <paramref name="Barras"/> queda vacía y <paramref name="Error"/> lo dice.
+/// </summary>
+public sealed record UbicacionBastones(IReadOnlyList<BastonEnSeccion> Barras, ErrorCara Error);
