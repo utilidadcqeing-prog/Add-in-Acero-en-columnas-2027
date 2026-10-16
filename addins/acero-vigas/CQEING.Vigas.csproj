@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
+  <PropertyGroup>
+    <AssemblyName>CQEING.Vigas</AssemblyName>
+    <RootNamespace>CQEING.Vigas</RootNamespace>
+    <Company>CQEING</Company>
+    <Product>CQEING - Acero en vigas</Product>
+    <Copyright>© CQEING</Copyright>
+    <!-- El motor de cálculo vive en calculo/ como proyecto aparte (sin Revit): no se compila dos veces. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);calculo\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="calculo\CQEING.Vigas.Calculo\CQEING.Vigas.Calculo.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="CQEING.Vigas.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
