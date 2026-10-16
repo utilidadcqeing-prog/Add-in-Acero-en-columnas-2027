@@ -55,8 +55,13 @@
    - **cada vertical es una barra de arriba con una de abajo**, emparejadas de izquierda a derecha (el cerrado tiene dos verticales; el abierto, una). **En cada vertical manda la que se eligió primero** y la otra se mueve a su x. Así da igual si se eligen primero las dos de arriba o una de arriba y otra de abajo (corregido el 16-oct con la captura de la maqueta: tomar "las 2 primeras" como las dos verticales fallaba cuando las dos primeras estaban en la misma vertical);
    - **un cerrado con las 4 esquinas** es el obligatorio: aviso `IgualAlCerrado` y no se agrega;
    - **la barra que se mueve lo hace en todo el pórtico**, porque es continua (Carlos: *"las barras… son continuas"*). El adicional va solo en el tramo de su configuración;
-   - **no se viola la distancia libre** (Carlos: *"vamos a respetar siempre la distancia"*): si la barra movida queda a menos de la distancia libre de su vecina, aviso `NoSePuedeAlinear` y ese adicional no se pone;
-   - **una barra de esquina de la fila 1 no se mueve**, porque la abraza el cerrado obligatorio: aviso `MueveUnaEsquina`;
+   - **las vecinas también se corren para que entre** (Carlos, min 1:05:17: *"estos señores se me van a mover para acá… vamos a respetar siempre la distancia"*):
+     - las barras elegidas, las esquinas y las ya alineadas por otro adicional quedan fijas;
+     - las sueltas que hay entre dos fijas se quedan donde están si cumplen la distancia libre; si no, se reparten parejas entre esas dos fijas;
+     - el orden de izquierda a derecha no cambia;
+     - solo si así tampoco caben, sale el aviso `NoSePuedeAlinear` y ese adicional no se pone;
+   - **una barra de esquina de la fila 1 no se mueve**, porque la abraza el cerrado obligatorio: aviso `MueveUnaEsquina`. *Carlos no habló de las esquinas; dijo "me vas a mover cualquiera" y también que el cerrado de las esquinas es "obligación absoluta". Mientras se le pregunta (#79), manda la regla absoluta;*
+   - **un abierto sobre una rama del cerrado** (las dos esquinas de una misma vertical): aviso `IgualAlCerrado`;
    - una barra que no existe (fila o número fuera de rango) da el aviso `BarraNoExiste`.
 8. **Forma y largo** (en mm, por el eje del estribo):
    - **cerrado:** `2 × (ancho + alto) + 2 × gancho`;
@@ -185,7 +190,10 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
     - la figura va de 86.275 a 213.725, entre 40 y 460;
     - el largo es 2 × (117.95 + 410.5) + 226 = 1282.9.
   - `AbiertoSiSeEligePrimeroLaDeAbajo_MandaLaDeAbajo`: arriba `[3 #5]` (57.45, 150 y 242.55) y un abierto con `[I·1·2, S·1·2]`. La de arriba 2 pasa de 150 a 119.15 (queda a 61.7 de S1 y a 123.4 de S3) y la de abajo no se mueve.
-  - `CerradoAlternado_SiLaQueSeMueveChoca_NoSePuedeAlinear`: con `[I·1·2, S·1·2, S·1·4, I·1·3]`, en la vertical izquierda manda I2. S2 tendría que pasar a 119.15 y quedaría a 30.85 < 40.9 de S3, así que da `NoSePuedeAlinear` y nada se mueve.
+  - `CerradoAlternado_SiNiCorriendoLaVecinaCabe_NoSePuedeAlinear`: con `[I·1·2, S·1·2, S·1·4, I·1·3]`, en la vertical izquierda manda I2, así que S2 pasa a 119.15. S3 (suelta, entre S2 en 119.15 y S4 en 196.275) quedaría a 30.85; repartida al medio, queda en 157.71, a 38.56 < 40.9. Da `NoSePuedeAlinear` y nada se mueve.
+  - `SiLaVecinaNoDa_SeCorreParaRespetarLaDistancia`: un abierto con `[S·1·3, I·1·3]`. La de abajo 3 pasa de 180.85 a 150 y la de abajo 2 (119.15) quedaría a 30.85 < 40.9. Se corre al medio entre la esquina (57.45) y la 3 (150), o sea a 103.725. Abajo queda en 57.45, 103.725, 150 y 242.55.
+  - `CerradoConLasVecinasCorridas_ElCasoDeLaCaptura`: con `[S·1·2, S·1·3, I·1·2, I·1·3]`, la de abajo 2 pasa a 103.725 y la 3 a 150, sin que nada más se mueva. Antes la maqueta lo rechazaba por error, porque comparaba con la posición vieja de la otra barra que se movía.
+  - `UnAbiertoSobreUnaRamaDelCerrado_EsElObligatorio`: `[S·1·1, I·1·1]` → `IgualAlCerrado`.
   - `UnCerradoConLasCuatroEsquinas_EsElObligatorio`: `[S·1·1, I·1·1, S·1·5, I·1·4]` → aviso `IgualAlCerrado` y no se agrega. Es el caso de la captura del 16-oct.
   - `ElAdicionalVaSoloEnSuTramo`: con el abierto en `PorTramo["A-B"]`, hay un `EstriboEnPortico` "EA1" solo en A-B, con 28 posiciones. La barra movida sale en `ResultadoEstribos.Seccion`, que es una sola para todo el pórtico.
   - `SinLasBarrasQuePide_EstriboIncompleto`: un abierto con `[S·1·2, S·1·3]`.
@@ -204,7 +212,7 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
 
 - [ ] **Paso 1:** en `traslapos-vigas-notas.md` §0 "Estribos", agregar las decisiones 1 a 10, con los minutos de Carlos.
 - [ ] **Paso 2:** marcar los criterios de aceptación de abajo con su prueba y hacer el commit `docs(vigas): criterios de los estribos cumplidos (#90)`.
-- [ ] **Paso 3 (con la PR):** actualizar la issue #90 con las decisiones.
+- [ ] **Paso 3 (con la PR):** actualizar la issue #90 con las decisiones y agregar a #79 la pregunta para Carlos: *"Al alinear un estribo adicional, ¿se puede mover una barra de esquina? Dijiste 'me vas a mover cualquiera', pero el cerrado de las esquinas es obligatorio. Por ahora las esquinas no se mueven."*
 
 ## Criterios de aceptación
 
