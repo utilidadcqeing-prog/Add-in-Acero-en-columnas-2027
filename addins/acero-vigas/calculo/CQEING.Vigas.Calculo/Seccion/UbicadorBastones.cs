@@ -35,7 +35,24 @@ public static class UbicadorBastones
             if (!EnLaFila1(e, filas[0], numero) && !EnOtraFila(e, filas, puestosLlenos, numero))
                 return new UbicacionBastones([], ErrorCara.NoCaben);
 
-        return new UbicacionBastones(ConAltura(e, cara, filas), ErrorCara.Ninguno);
+        List<BastonEnSeccion> ubicados = ConAltura(e, cara, filas);
+        CaraSeccion otra = cara == Posicion.Superior ? seccion.Inferior : seccion.Superior;
+        return ChocaConLaOtraCara(e, cara, ubicados, otra)
+            ? new UbicacionBastones([], ErrorCara.NoCabenEnElAlto)
+            : new UbicacionBastones(ubicados, ErrorCara.Ninguno);
+    }
+
+    /// <summary>Como en <see cref="RepartidorFilas"/>: entre las barras de las dos caras debe quedar la distancia libre.</summary>
+    private static bool ChocaConLaOtraCara(EntradaSeccion e, Posicion cara, List<BastonEnSeccion> ubicados, CaraSeccion otra)
+    {
+        List<BarraEnSeccion> deEnfrente = otra.Filas.SelectMany(f => f).ToList();
+        if (ubicados.Count == 0 || deEnfrente.Count == 0)
+            return false;
+        double Borde(BarraEnSeccion b, int signo) => b.Y + signo * Diametro(e, b.Diametro) / 2;
+        double libre = cara == Posicion.Inferior
+            ? deEnfrente.Min(b => Borde(b, -1)) - ubicados.Max(b => Borde(b.Barra, 1))
+            : ubicados.Min(b => Borde(b.Barra, -1)) - deEnfrente.Max(b => Borde(b, 1));
+        return libre < e.Reglas.DistanciaLibre;
     }
 
     private static bool EnLaFila1(EntradaSeccion e, List<Puesto> fila, int numero)

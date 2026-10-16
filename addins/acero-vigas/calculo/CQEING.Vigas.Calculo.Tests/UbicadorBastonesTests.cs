@@ -102,6 +102,21 @@ public class UbicadorBastonesTests
         Assert.Equal(103.725, b.Barra.X, Precision);
     }
 
+    /// <summary>
+    /// Alto 170: las corridas dejan 170 − 65.4 − 65.4 = 39.2 mm libres entre caras, pero el bastón abre la fila 2
+    /// abajo y deja 170 − 65.4 − 81.3 = 23.3 &lt; 25 mm.
+    /// </summary>
+    [Fact]
+    public void SiLaFilaNuevaChocaConLaOtraCara_ErrorNoCabenEnElAlto()
+    {
+        EntradaSeccion baja = Maqueta([new GrupoBarras(5, 5)]) with { Alto = 170 };
+
+        UbicacionBastones u = Abajo(baja, new GrupoBarras(1, 5));
+
+        Assert.Equal(ErrorCara.NoCabenEnElAlto, u.Error);
+        Assert.Empty(u.Barras);
+    }
+
     [Fact]
     public void UnBastonDel8EntreDosDel8NoCabe()
     {
