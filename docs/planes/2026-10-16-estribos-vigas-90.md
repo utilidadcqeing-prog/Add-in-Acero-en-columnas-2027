@@ -52,8 +52,8 @@
    - La sección usa el diámetro del pórtico; el de un tramo solo cambia el largo y los kilos de sus estribos.
 7. **Adicionales** (Carlos, min 1:02:16–1:06:16):
    - el **cerrado** necesita exactamente 2 barras arriba y 2 abajo; el **abierto**, 1 y 1. Si no, aviso `EstriboIncompleto`;
-   - **las primeras que se eligen mandan** (2 en el cerrado, 1 en el abierto): sus x son las verticales;
-   - las demás se ordenan por x y se mueven a esas verticales (si hay tantas como verticales, en orden; si no, a la más cercana);
+   - **cada vertical es una barra de arriba con una de abajo**, emparejadas de izquierda a derecha (el cerrado tiene dos verticales; el abierto, una). **En cada vertical manda la que se eligió primero** y la otra se mueve a su x. Así da igual si se eligen primero las dos de arriba o una de arriba y otra de abajo (corregido el 16-oct con la captura de la maqueta: tomar "las 2 primeras" como las dos verticales fallaba cuando las dos primeras estaban en la misma vertical);
+   - **un cerrado con las 4 esquinas** es el obligatorio: aviso `IgualAlCerrado` y no se agrega;
    - **la barra que se mueve lo hace en todo el pórtico**, porque es continua (Carlos: *"las barras… son continuas"*). El adicional va solo en el tramo de su configuración;
    - **no se viola la distancia libre** (Carlos: *"vamos a respetar siempre la distancia"*): si la barra movida queda a menos de la distancia libre de su vecina, aviso `NoSePuedeAlinear` y ese adicional no se pone;
    - **una barra de esquina de la fila 1 no se mueve**, porque la abraza el cerrado obligatorio: aviso `MueveUnaEsquina`;
@@ -164,7 +164,7 @@ Sección de la maqueta: 300 × 500, recubrimiento 40 y estribo #3.
 
 **Archivos:**
 - Crear: `.../CQEING.Vigas.Calculo/Estribos/AlineadorEstribos.cs`
-- Modificar: `.../Estribos/MotorEstribos.cs` y `.../Modelo/Resultado.cs`, para agregar `TipoAviso.EstriboIncompleto`, `BarraNoExiste`, `MueveUnaEsquina` y `NoSePuedeAlinear`
+- Modificar: `.../Estribos/MotorEstribos.cs` y `.../Modelo/Resultado.cs`, para agregar `TipoAviso.EstriboIncompleto`, `BarraNoExiste`, `MueveUnaEsquina`, `NoSePuedeAlinear` e `IgualAlCerrado`
 - Prueba: `.../CQEING.Vigas.Calculo.Tests/AlineadorEstribosTests.cs`
 
 **Interfaces:**
@@ -180,10 +180,13 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
     - con `Abierto` y `[S·1·2, I·1·2]`, la barra de abajo 2 pasa a x = 103.725 y las demás no se mueven;
     - la figura es `EstriboEnSeccion("EA1", Abierto, 103.725, 103.725, 40, 460)`;
     - el largo es 410.5 + 226 = 636.5.
-  - `CerradoMandanLasDosPrimeras`:
-    - con `Cerrado` y `[S·1·2, S·1·4, I·1·2, I·1·3]`, las de abajo 2 y 3 pasan a 103.725 y 196.275;
+  - `CerradoEnCadaVerticalMandaLaPrimera`:
+    - con `Cerrado` y `[S·1·2, S·1·4, I·1·2, I·1·3]`, las verticales son (S2, I2) y (S4, I3); mandan las de arriba, así que las de abajo 2 y 3 pasan a 103.725 y 196.275;
     - la figura va de 86.275 a 213.725, entre 40 y 460;
     - el largo es 2 × (117.95 + 410.5) + 226 = 1282.9.
+  - `AbiertoSiSeEligePrimeroLaDeAbajo_MandaLaDeAbajo`: arriba `[3 #5]` (57.45, 150 y 242.55) y un abierto con `[I·1·2, S·1·2]`. La de arriba 2 pasa de 150 a 119.15 (queda a 61.7 de S1 y a 123.4 de S3) y la de abajo no se mueve.
+  - `CerradoAlternado_SiLaQueSeMueveChoca_NoSePuedeAlinear`: con `[I·1·2, S·1·2, S·1·4, I·1·3]`, en la vertical izquierda manda I2. S2 tendría que pasar a 119.15 y quedaría a 30.85 < 40.9 de S3, así que da `NoSePuedeAlinear` y nada se mueve.
+  - `UnCerradoConLasCuatroEsquinas_EsElObligatorio`: `[S·1·1, I·1·1, S·1·5, I·1·4]` → aviso `IgualAlCerrado` y no se agrega. Es el caso de la captura del 16-oct.
   - `ElAdicionalVaSoloEnSuTramo`: con el abierto en `PorTramo["A-B"]`, hay un `EstriboEnPortico` "EA1" solo en A-B, con 28 posiciones. La barra movida sale en `ResultadoEstribos.Seccion`, que es una sola para todo el pórtico.
   - `SinLasBarrasQuePide_EstriboIncompleto`: un abierto con `[S·1·2, S·1·3]`.
   - `LaMismaBarraDosVeces_EstriboIncompleto`: un abierto con `[S·1·2, S·1·2]`.
