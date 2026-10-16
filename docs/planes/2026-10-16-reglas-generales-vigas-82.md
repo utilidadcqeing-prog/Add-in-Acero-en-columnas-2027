@@ -210,11 +210,11 @@ En #83, "Volver al pórtico" hace lo siguiente: si `HayCambiosSinGuardar`, muest
 
 Cada criterio cumplido lleva entre paréntesis la prueba que lo comprueba.
 
-- [ ] Valores por defecto: múltiplo 0.50 m, varilla de 6 m con 12 m automática, distancia libre de 2.5 cm y la tabla de Carlos.
-- [ ] Ganchos de 90° y 180° y estribo de 135° por diámetro, con E, D y A cuando el cuadro los trae.
-- [ ] Peso por metro por diámetro (el #4 en 0.994 hasta que se cierre #79).
-- [ ] Base para todos los proyectos: se guarda en el PC y se vuelve a leer.
-- [ ] Bloqueadas por defecto; para cambiarlas hay que desbloquear; al guardar quedan bloqueadas.
-- [ ] Aviso si se sale con cambios sin guardar.
-- [ ] Un diámetro sin traslapo mínimo se avisa antes de calcular (ya existe: `AvisosTests`).
-- [ ] `dotnet test CQEING-Addins.sln -c Release` en verde.
+- [x] Valores por defecto: múltiplo 0.50 m, varilla de 6 m con 12 m automática, distancia libre de 2.5 cm y la tabla de Carlos (`ReglasTests`, `SinArchivo_SeUsanLasReglasGenerales`).
+- [x] Ganchos de 90° y 180° y estribo de 135° por diámetro, con E, D y A cuando el cuadro los trae (`ElGanchoDe90DelNumero5EsElDelCuadroDeDimensiones`, `ElGanchoDe180DelNumero8EsElDelCuadroDeDimensiones`, `ElEstriboDe135DelNumero3SaleDelCuadroDeDimensiones`, `ElEstriboDe135DelNumero6SaleDelCuadroDeTraslaposSinEDA`).
+- [x] Peso por metro por diámetro; el #4 queda en 0.994 hasta que se cierre #79 (`UnPesoEnCeroDelNumero4NoEsValido`, `CapaCalculada.KgPorMetro`).
+- [x] Base para todos los proyectos: se guarda en el PC y se vuelve a leer (`LoQueSeGuardaSeVuelveALeer`, `GuardarYBloquear_GuardaParaTodosLosProyectos`, `LaRutaPorDefectoEstaEnAppDataCqeingVigas`).
+- [x] Bloqueadas por defecto; para cambiarlas hay que desbloquear; al guardar quedan bloqueadas (`AlAbrir_EstanBloqueadasYSinCambios`, `BloqueadasNoSePuedenCambiar`, `GuardarYBloquear_GuardaParaTodosLosProyectos`).
+- [x] Aviso si se sale con cambios sin guardar: `HayCambiosSinGuardar` ya está y la pantalla lo muestra en #83 (`DesbloqueadasSeCambianYHayCambiosSinGuardar`, `SiSeVuelveAlValorOriginal_NoHayCambios`).
+- [x] Un diámetro sin traslapo mínimo se avisa antes de calcular (ya existía: `AvisosTests`).
+- [x] `dotnet test CQEING-Addins.sln -c Release` en verde: 34 + 8 + 109.
