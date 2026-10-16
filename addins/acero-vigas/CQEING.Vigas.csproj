@@ -16,8 +16,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Solo para compilar: Revit ya trae WebView2 (Core, Wpf y WebView2Loader); no se copian a la salida. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" ExcludeAssets="runtime;native;build;buildTransitive" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
     <None Include="CQEING.Vigas.addin" CopyToOutputDirectory="PreserveNewest" />
+    <!-- La página del tablero (#83): se sirve desde bin\...\web con un host virtual de WebView2. -->
+    <Content Include="Tablero\web\**" CopyToOutputDirectory="PreserveNewest" Link="web\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

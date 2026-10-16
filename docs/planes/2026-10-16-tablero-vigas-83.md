@@ -59,6 +59,7 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
   - el runtime de Edge WebView2 instalado es el 155.0.4283.45.
   - Por eso el add-in compila contra el NuGet 1.0.2478.35 **sin copiar las DLL** y usa las que ya cargó Revit.
   - Revit 2027 no está instalado: su versión de WebView2 queda por medir (tarea 1, paso 6).
+  - **Probado en Revit 2026** (Juan, 16-oct, tarea 1): el botón Tablero abre la ventana y el eco va y vuelve entre la página y C#. No se copió la línea de diagnóstico (versión y DLL cargada); queda por anotar en la tarea 5.
 - **La maqueta** es un "Design Component":
   - la plantilla va en `<x-dc>`, con `{{huecos}}`, `<sc-if>`, `<sc-for>` y `<dc-import>`;
   - la lógica es una clase tipo React (`state`, `setState`, `renderVals()`);

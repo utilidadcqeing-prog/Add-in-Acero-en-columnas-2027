@@ -14,6 +14,12 @@
     -->
     <RevitApiVersion Condition="'$(RevitVersion)' == '2026'">2026.0.4</RevitApiVersion>
     <RevitApiVersion Condition="'$(RevitVersion)' == '2027'">2027.0.0</RevitApiVersion>
+    <!--
+      WebView2 que ya trae cada Revit (Microsoft.Web.WebView2.*.dll en su carpeta): se compila contra esa versión y no
+      se copia, para usar la que Revit cargó. 2026 medido el 16-oct-2026; 2027 pendiente de medir (plan del tablero #83).
+    -->
+    <WebView2Version Condition="'$(RevitVersion)' == '2026'">1.0.2478.35</WebView2Version>
+    <WebView2Version Condition="'$(RevitVersion)' == '2027'">1.0.2478.35</WebView2Version>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
