@@ -76,6 +76,18 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
   - `AlmacenReglas` lee y guarda en `%AppData%\CQEING\vigas\reglas.json`;
   - `LectorModelo.Leer(doc)` + `AgrupadorPorticos.Agrupar` dan `ResultadoLectura`, con los `PorticoLeido` y sus `TramoLeido` (sección en mm).
   - Los ids del motor son los mismos que pinta la maqueta.
+- **El motor es lento con muchas luces** (medido en la tarea 2, 16-oct). `MotorVigas.Calcular` con 3 #5 arriba y abajo y luces de 5 m tarda:
+
+  | Luces | Debug | Release |
+  |---|---|---|
+  | 4 | 1 s | 0.18 s |
+  | 5 | 3.8 s | — |
+  | 6 | 11.8 s | 3.8 s |
+  | 7 | 44.6 s | — |
+  | 8 | 135.5 s | 45.5 s |
+  | 10 | — | 288.5 s |
+
+  `MotorEstribos` tarda menos de 25 ms. La causa está en `ResolvedorLinea` (#80): la programación dinámica sobre módulos × milímetros de holgura se repite por cada total de acero que prueba (hasta 2 módulos de más por traslapo), y crece con las luces. El tablero recalcula en cada cambio, así que con pórticos largos no sirve hasta arreglarlo. La prueba del punto 2 de "Lo que más puede fallar" queda con 5 luces mientras tanto.
 - **Repo:**
   - `AppVigas.cs` hoy pone un botón temporal "Pórticos (diagnóstico)", con la nota de quitarlo cuando el tablero tenga "Seleccionar en Revit";
   - todos los add-ins usan WPF (`UseWPF` en `Directory.Build.props`);
