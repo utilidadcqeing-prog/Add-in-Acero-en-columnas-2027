@@ -198,11 +198,11 @@ Sección de la maqueta: 300 × 500, recubrimiento de 40 mm, estribo #3 y barras 
 
 ## Criterios de aceptación
 
-- [ ] Arriba van centrados en el eje de cada apoyo, incluidos los de borde; abajo, en el centro de cada luz libre.
-- [ ] El largo por defecto es 2.00 m y se puede cambiar uno por uno, siempre centrado y sin redondear.
-- [ ] El gancho lo elige el usuario; con gancho, solo lo llevan las puntas que llegan al borde.
-- [ ] El acero lo elige el usuario, aparte arriba y abajo; por defecto es 1 del diámetro de las esquinas.
-- [ ] En la sección van en la fila 1 si hay hueco; si no, en la fila siguiente, en el puesto libre del extremo. Ocupan puestos y cuentan para la capacidad.
-- [ ] En cimentación se invierten.
-- [ ] Los kilos suman al total.
-- [ ] `rtk dotnet test CQEING-Addins.sln -c Release` en verde.
+- [x] Arriba van centrados en el eje de cada apoyo, incluidos los de borde; abajo, en el centro de cada luz libre (`EnLaVigaAerea_ArribaVanEnTodosLosApoyos`, `ElDelApoyoDeBordeSeCortaEnLaPuntaDeLaViga`, `AbajoVanEnElCentroDeLaLuzLibre`, `ConVoladizoCorto_ElDelApoyoLlegaALaPuntaDelVoladizo`).
+- [x] El largo por defecto es 2.00 m y se puede cambiar uno por uno, siempre centrado y sin redondear (`UnLargoEscritoNoSeRedondea`, `UnLargoImparQuedaCompleto`, `PrevisualizarBaston_*`, `UnLargoGuardadoEnCero_SeIgnoraYAvisa`, `UnLargoGeneralEnCero_NoPoneBastonesYAvisa`).
+- [x] El gancho lo elige el usuario; con gancho, solo lo llevan las puntas que llegan al borde (`ConGancho_SoloLaPuntaQueLlegaAlBordeLoLleva`).
+- [x] El acero lo elige el usuario, aparte arriba y abajo; por defecto es 1 del diámetro de las esquinas (`PorDefecto_UnaBarraDelDiametroDeLasEsquinas`, `ElUsuarioEligeElAceroDeLosDeArriba`, `ConCantidadCero_EsaCapaNoLlevaBastones`, `UnDiametroSinReglas_AvisaYNoPoneEsosBastones`).
+- [x] En la sección van en la fila 1 si hay hueco; si no, en la fila siguiente, en el puesto libre del extremo. Ocupan puestos y cuentan para la capacidad (`UbicadorBastonesTests`, 10 pruebas).
+- [x] En cimentación se invierten (`EnCimentacion_SeInvierten`).
+- [x] Los kilos suman al total (`LosKilosDeLosBastonesSumanAlTotal`).
+- [x] `rtk dotnet test CQEING-Addins.sln -c Release` en verde: 188 pruebas, 0 advertencias.
