@@ -32,8 +32,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<Tramo> tramos = DistribuidorEstribos.Tramos(Datos.PorticoMaqueta());
 
         Assert.Equal(["A-B", "B-C", "C-D", "Voladizo D"], tramos.Select(t => t.Nombre));
-        Assert.Equal(new Tramo("Voladizo D", 12500, 14000, true), tramos[^1]);
-        Assert.All(tramos.Take(3), t => Assert.False(t.EsVoladizo));
+        Assert.Equal(new Tramo("Voladizo D", 12500, 14000, TipoTramo.VoladizoFinal), tramos[^1]);
+        Assert.All(tramos.Take(3), t => Assert.Equal(TipoTramo.Luz, t.Tipo));
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class DistribuidorEstribosTests
     {
         Portico p = Datos.PorticoMaqueta() with { VoladizoInicio = 1000 };
 
-        Assert.Equal(new Tramo("Voladizo A", -1200, -200, true), DistribuidorEstribos.Tramos(p)[0]);
+        Assert.Equal(new Tramo("Voladizo A", -1200, -200, TipoTramo.VoladizoInicial), DistribuidorEstribos.Tramos(p)[0]);
     }
 
     [Fact]
@@ -64,13 +64,53 @@ public class DistribuidorEstribosTests
         VanCada(p.Skip(7).Take(9).ToList(), 5354.75, 6945.25, 1590.5 / 8);
     }
 
+    /// <summary>
+    /// Carlos (min 1:21:21): las zonas de confinamiento "son las que están pegadas a las columnas". El voladizo tiene
+    /// columna de un solo lado: zona junto a ella y el resto con la separación del centro, hasta 5 cm de la punta.
+    /// </summary>
     [Fact]
-    public void ElVoladizoVaTodoConLaSeparacionDeColumnas()
+    public void ElVoladizoLlevaZonaJuntoALaColumnaYElRestoComoCentro()
     {
         IReadOnlyList<double> p = Posiciones("Voladizo D");
 
-        Assert.Equal(15, p.Count);
-        VanCada(p, 12554.75, 13945.25, 1390.5 / 14);
+        Assert.Equal(12, p.Count);
+        VanCada(p.Take(8).ToList(), 12554.75, 13254.75, 100);
+        VanCada(p.Skip(7).ToList(), 13254.75, 13945.25, 690.5 / 4);
+    }
+
+    [Fact]
+    public void UnVoladizoAlInicio_LlevaLaZonaJuntoALaColumnaDeLaDerecha()
+    {
+        Portico portico = Datos.PorticoMaqueta() with { VoladizoInicio = 1500 };
+
+        IReadOnlyList<double> p = Posiciones("Voladizo A", p: portico);
+
+        Assert.Equal(12, p.Count);
+        VanCada(p.Take(5).ToList(), -1645.25, -954.75, 690.5 / 4);
+        VanCada(p.Skip(4).ToList(), -954.75, -254.75, 100);
+    }
+
+    /// <summary>Como la luz corta (min 1:22:43): si no alcanza para la zona, todo el voladizo va como zona.</summary>
+    [Fact]
+    public void UnVoladizoMasCortoQueLaZona_VaTodoComoZona()
+    {
+        Portico portico = Datos.PorticoMaqueta() with { VoladizoFinal = 700 };
+
+        IReadOnlyList<double> p = Posiciones("Voladizo D", p: portico);
+
+        Assert.Equal(7, p.Count);
+        VanCada(p, 12554.75, 13145.25, 590.5 / 6);
+    }
+
+    [Fact]
+    public void UnVoladizoIgualALaZona_VaTodoComoZona()
+    {
+        Portico portico = Datos.PorticoMaqueta() with { VoladizoFinal = 800 };
+
+        IReadOnlyList<double> p = Posiciones("Voladizo D", p: portico);
+
+        Assert.Equal(8, p.Count);
+        VanCada(p, 12554.75, 13245.25, 690.5 / 7);
     }
 
     [Fact]

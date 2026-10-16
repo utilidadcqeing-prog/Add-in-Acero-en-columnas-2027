@@ -38,11 +38,24 @@ public sealed record ConfigEstribos(
     int SeparacionCentro = 200,
     IReadOnlyList<EstriboAdicional>? Adicionales = null);
 
+/// <summary>Una luz entre dos apoyos, o un voladizo antes del primer apoyo o después del último.</summary>
+public enum TipoTramo
+{
+    Luz,
+    /// <summary>Antes del primer apoyo: la columna queda a la derecha.</summary>
+    VoladizoInicial,
+    /// <summary>Después del último apoyo: la columna queda a la izquierda.</summary>
+    VoladizoFinal,
+}
+
 /// <summary>
 /// Una luz libre (<c>"A-B"</c>) o un voladizo (<c>"Voladizo D"</c>), en mm desde el eje A. En un voladizo, una de las
 /// "caras" es la punta del concreto.
 /// </summary>
-public sealed record Tramo(string Nombre, double CaraIzquierda, double CaraDerecha, bool EsVoladizo);
+public sealed record Tramo(string Nombre, double CaraIzquierda, double CaraDerecha, TipoTramo Tipo)
+{
+    public bool EsVoladizo => Tipo != TipoTramo.Luz;
+}
 
 /// <summary>
 /// Lo que necesita el motor de estribos: el pórtico, la sección (sus barras y recubrimientos) y la configuración del

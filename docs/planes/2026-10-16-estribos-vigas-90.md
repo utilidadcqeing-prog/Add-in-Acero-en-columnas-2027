@@ -45,7 +45,7 @@
    - en cada zona van a la separación exacta, desde el primero hasta el final de la zona;
    - en el centro se reparten a la misma distancia entre el último de cada zona, sin pasar de `SeparacionCentro`.
 3. **Luz corta** (Carlos, min 1:22:43): si la luz libre es menor que `2 × LargoZona`, toda la luz va a la misma distancia, sin pasar de `SeparacionZona`, entre el primero y el último (cada uno a 5 cm de su cara).
-4. **Voladizo** (recomendación, con el visto bueno de Juan): todo con `SeparacionZona`, desde 5 cm de la cara del apoyo hasta 5 cm de la punta del concreto.
+4. **Voladizo**: las zonas de confinamiento "son las que están pegadas a las columnas" (Carlos, min 1:21:21), y el voladizo tiene columna de un solo lado. Lleva una zona junto a su apoyo y el resto con `SeparacionCentro`, hasta 5 cm de la punta del concreto. Si no alcanza para la zona, todo va como zona, igual que la luz corta (min 1:22:43). *Corregido el 16-oct: antes iba todo con `SeparacionZona`, una recomendación que no salía de Carlos.*
 5. **Diámetro y gancho:** por defecto #3 con 135°; se puede elegir 90° (Carlos, min 1:23:18). Gancho de 135° = `Estribo135.B`; de 90° = `Gancho90.B`. **Los ganchos van corridos**, todos en la misma esquina (min 1:24:02); eso es de #85.
 6. **Por tramo** (Carlos, min 1:08:34): hay una configuración del pórtico y otra opcional por tramo (`"A-B"`, `"Voladizo D"`).
    - Cada una tiene zonas, diámetro, gancho y adicionales.
@@ -101,7 +101,7 @@
   - `public sealed record PuntoBarra(Posicion Cara, int Fila, int Numero);`, donde `Fila` y `Numero` empiezan en 1 y `Numero` va de izquierda a derecha dentro de la fila;
   - `public sealed record EstriboAdicional(TipoEstribo Tipo, IReadOnlyList<PuntoBarra> Barras);`, con las barras en el orden en que se eligieron;
   - `public sealed record ConfigEstribos(int Diametro = 3, GanchoEstribo Gancho = GanchoEstribo.De135, int LargoZona = 800, int SeparacionZona = 100, int SeparacionCentro = 200, IReadOnlyList<EstriboAdicional>? Adicionales = null);`
-  - `public sealed record Tramo(string Nombre, double CaraIzquierda, double CaraDerecha, bool EsVoladizo);`, donde en un voladizo una de las "caras" es la punta del concreto;
+  - `public sealed record Tramo(string Nombre, double CaraIzquierda, double CaraDerecha, TipoTramo Tipo)` (con `EsVoladizo`) y `TipoTramo { Luz, VoladizoInicial, VoladizoFinal }`, para saber de qué lado está la columna; en un voladizo una de las "caras" es la punta del concreto;
   - `internal static IReadOnlyList<Tramo> DistribuidorEstribos.Tramos(Portico p)`: las luces (`"A-B"`) y los voladizos (`"Voladizo A"`, `"Voladizo D"`), de izquierda a derecha;
   - `internal static IReadOnlyList<double> DistribuidorEstribos.Posiciones(Tramo t, ConfigEstribos c, double diametroEstribo)`: el centro de cada estribo, en mm desde el eje A.
 
@@ -110,13 +110,13 @@ Datos de prueba: `Datos.PorticoMaqueta()` y estribo #3 (9.5), así que el primer
 - Voladizo D: de 12500 a 14000.
 
 - [ ] **Paso 1: pruebas que fallan:**
-  - `LosTramosDelPorticoSonSusLucesYSuVoladizo`: `["A-B", "B-C", "C-D", "Voladizo D"]`. El voladizo va de 12500 a 14000, con `EsVoladizo` true.
+  - `LosTramosDelPorticoSonSusLucesYSuVoladizo`: `["A-B", "B-C", "C-D", "Voladizo D"]`. El voladizo va de 12500 a 14000, con `TipoTramo.VoladizoFinal`.
   - `EnLaLuzAB_OchoPorZonaYDoceEnElCentro`: 28 estribos.
     - El primero en 254.75 y el último en 4145.25.
     - La zona izquierda va de 254.75 a 954.75, cada 100.
     - El centro, entre 954.75 y 3445.25, lleva 12 cada 2490.5 / 13.
   - `EnLaLuzBC_SieteEnElCentro`: 23 estribos, con el centro cada 1590.5 / 8.
-  - `ElVoladizoVaTodoConLaSeparacionDeColumnas`: 15 estribos de 12554.75 a 13945.25, cada 1390.5 / 14.
+  - `ElVoladizoLlevaZonaJuntoALaColumnaYElRestoComoCentro`: 12 estribos, 8 cada 100 de 12554.75 a 13254.75 y el resto hasta 13945.25, cada 690.5 / 4.
   - `UnaLuzCortaVaTodaConLaSeparacionDeColumnas`: con un pórtico A 0 y B 1900 (columnas de 400), la luz es de 1500 < 1600. Lleva 15 estribos de 254.75 a 1645.25, cada 1390.5 / 14.
   - `UnaLuzIgualADosZonas_NoEsCorta`: en una luz de 1600 con zona de 800, cada zona lleva 8 y el centro, entre 954.75 y 1045.25, no lleva ninguno. Total 16.
   - `SinZona_TodaLaLuzVaConLaSeparacionDelCentro`: con `LargoZona` 0, A-B lleva 21 estribos, cada 3890.5 / 20.
@@ -151,12 +151,12 @@ Sección de la maqueta: 300 × 500, recubrimiento 40 y estribo #3.
 - Perímetro: 1242. Con los ganchos de 135° (2 × 113), el largo es **1468**.
 
 - [ ] **Paso 1: pruebas que fallan:**
-  - `ElCerradoDeLasEsquinasSaleSoloEnCadaTramo`: 4 `EstriboEnPortico` con `Id` "E" (A-B, B-C, C-D y Voladizo D), con `Cantidad` 94.
+  - `ElCerradoDeLasEsquinasSaleSoloEnCadaTramo`: 4 `EstriboEnPortico` con `Id` "E" (A-B, B-C, C-D y Voladizo D), con `Cantidad` 91.
   - `ElLargoDelCerradoEsElPerimetroMasDosGanchos`: `Largo` 1468.
   - `ConGanchoDe90_UsaElGancho90DeLasReglas`: `Largo` = 1242 + 2 × 166 = 1574.
   - `LosKilosSonCantidadPorLargoPorPeso`: el `Kg` de A-B es 28 × 1.468 × 0.560 y `ResultadoEstribos.Kg` es la suma de los cuatro.
   - `EnLaSeccionElCerradoVaDelRecubrimientoHaciaAdentro`: `EstriboEnSeccion("E", Cerrado, 40, 260, 40, 460)`.
-  - `UnTramoConSuPropiaConfiguracion`: con `PorTramo["B-C"]` = `General with { SeparacionCentro = 150 }`, B-C lleva 26 y los demás siguen igual.
+  - `UnTramoConSuPropiaConfiguracion`: con `PorTramo["B-C"]` = `General with { SeparacionCentro = 150 }`, B-C lleva 26 y los demás siguen igual (28, 28 y 12).
   - `UnTramoConOtroDiametro_SoloCambiaSuLargoYSusKilos`: con `PorTramo["A-B"]` = `General with { Diametro = 4 }`, A-B va con #4. La sección sigue con #3: el principal en el corte sigue en 40..260.
   - `UnaSeparacionEnCero_AvisaYEseTramoQuedaSinEstribos`: con `PorTramo["B-C"]` y `SeparacionZona` 0, sale el aviso `EstriboValorNoValido` con "B-C" y no hay estribos en B-C.
   - `UnDiametroSinReglas_Avisa`: con `General` y `Diametro` 9, sale el aviso `DiametroSinReglas` con "#9" y no hay estribos.
@@ -218,7 +218,7 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
 
 - [x] El cerrado de las esquinas sale solo en todos los tramos. (`ElCerradoDeLasEsquinasSaleSoloEnCadaTramo`, `EnLaSeccionElCerradoVaDelRecubrimientoHaciaAdentro`)
 - [x] Zonas junto a las columnas y centro, con el primero a 5 cm de la cara, medido hasta la cara del estribo. (`EnLaLuzAB_OchoPorZonaYDoceEnElCentro`, `EnLaLuzBC_SieteEnElCentro`, `UnaLuzIgualADosZonas_NoEsCorta`, `SinZona_TodaLaLuzVaConLaSeparacionDelCentro`)
-- [x] Luz corta y voladizo, todo con la separación de columnas. (`UnaLuzCortaVaTodaConLaSeparacionDeColumnas`, `ElVoladizoVaTodoConLaSeparacionDeColumnas`, `UnaLuzMenorQueDosPrimeros_UnSoloEstriboAlCentro`)
+- [x] Luz corta toda con la separación de columnas; voladizo con zona junto a su columna y el resto como centro. (`UnaLuzCortaVaTodaConLaSeparacionDeColumnas`, `ElVoladizoLlevaZonaJuntoALaColumnaYElRestoComoCentro`, `UnaLuzMenorQueDosPrimeros_UnSoloEstriboAlCentro`)
 - [x] #3 con 135° por defecto; se puede cambiar el diámetro y el gancho (90°). (`ElLargoDelCerradoEsElPerimetroMasDosGanchos`, `ConGanchoDe90_UsaElGancho90DeLasReglas`, `UnDiametroSinReglas_Avisa`)
 - [x] Configuración por pórtico y por tramo. (`UnTramoConSuPropiaConfiguracion`, `UnTramoConOtroDiametro_SoloCambiaSuLargoYSusKilos`, `UnaSeparacionEnCero_AvisaYEseTramoQuedaSinEstribos`, `ElAdicionalVaSoloEnSuTramo`)
 - [x] Adicionales cerrados (2 + 2) y abiertos (1 + 1): mandan las primeras barras elegidas, las demás se alinean en todo el pórtico, sin violar la distancia libre ni mover esquinas. (`AlineadorEstribosTests`: `CerradoEnCadaVerticalMandaLaPrimera`, `SiLaVecinaNoDa_SeCorreParaRespetarLaDistancia`, `CerradoConLasVecinasCorridas_ElCasoDeLaCaptura`, `NoSeMueveUnaEsquina`, `SiNoQuedaLaDistanciaLibre_NoSePuedeAlinear`…)

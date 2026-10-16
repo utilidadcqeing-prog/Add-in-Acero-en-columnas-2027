@@ -27,7 +27,7 @@ public class MotorEstribosTests
 
         Assert.Equal(["A-B", "B-C", "C-D", "Voladizo D"], r.Estribos.Where(e => e.Id == "E").Select(e => e.Tramo));
         Assert.All(r.Estribos, e => Assert.Equal((TipoEstribo.Cerrado, 3, GanchoEstribo.De135), (e.Tipo, e.Diametro, e.Gancho)));
-        Assert.Equal(94, r.Cantidad);
+        Assert.Equal(91, r.Cantidad);
         Assert.Empty(r.Avisos);
     }
 
@@ -51,7 +51,7 @@ public class MotorEstribosTests
         ResultadoEstribos r = Calcular();
 
         Assert.Equal(28 * 1.468 * 0.560, Cerrado(r, "A-B").Kg, 6);
-        Assert.Equal(94 * 1.468 * 0.560, r.Kg, 6);
+        Assert.Equal(91 * 1.468 * 0.560, r.Kg, 6);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class MotorEstribosTests
     {
         ResultadoEstribos r = Calcular(porTramo: new() { ["B-C"] = General with { SeparacionCentro = 150 } });
 
-        Assert.Equal([28, 26, 28, 15], r.Estribos.Select(e => e.Posiciones.Count));
+        Assert.Equal([28, 26, 28, 12], r.Estribos.Select(e => e.Posiciones.Count));
     }
 
     [Fact]

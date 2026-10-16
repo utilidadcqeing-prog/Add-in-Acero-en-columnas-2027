@@ -8,9 +8,10 @@ namespace CQEING.Vigas.Calculo.Estribos;
 /// docs/planes/2026-10-16-estribos-vigas-90.md):
 /// <list type="bullet">
 /// <item>el primero va a 5 cm de la cara del apoyo, medidos hasta la cara del estribo;</item>
-/// <item>en cada luz, una zona junto a cada columna a la separación exacta y el centro repartido a la misma distancia,
-/// sin pasar de la separación del centro;</item>
-/// <item>la luz corta (menor que dos zonas) y el voladizo van todos con la separación de la zona.</item>
+/// <item>una zona junto a cada columna a la separación exacta y el resto repartido a la misma distancia, sin pasar de
+/// la separación del centro. Las zonas "son las que están pegadas a las columnas" (Carlos, min 1:21:21): la luz lleva
+/// dos y el voladizo una, junto a su columna;</item>
+/// <item>si el tramo no alcanza para sus zonas (la luz corta, min 1:22:43), todo va como zona.</item>
 /// </list>
 /// </summary>
 internal static class DistribuidorEstribos
@@ -26,10 +27,12 @@ internal static class DistribuidorEstribos
         Apoyo primero = p.Apoyos[0], ultimo = p.Apoyos[^1];
         var tramos = new List<Tramo>();
         if (p.VoladizoInicio > 0)
-            tramos.Add(new Tramo($"Voladizo {primero.Eje}", primero.CaraIzquierda - p.VoladizoInicio, primero.CaraIzquierda, true));
-        tramos.AddRange(new GeometriaPortico(p, 0).Luces.Select(l => new Tramo(l.Nombre, l.CaraIzquierda, l.CaraDerecha, false)));
+            tramos.Add(new Tramo($"Voladizo {primero.Eje}", primero.CaraIzquierda - p.VoladizoInicio, primero.CaraIzquierda,
+                TipoTramo.VoladizoInicial));
+        tramos.AddRange(new GeometriaPortico(p, 0).Luces.Select(l => new Tramo(l.Nombre, l.CaraIzquierda, l.CaraDerecha, TipoTramo.Luz)));
         if (p.VoladizoFinal > 0)
-            tramos.Add(new Tramo($"Voladizo {ultimo.Eje}", ultimo.CaraDerecha, ultimo.CaraDerecha + p.VoladizoFinal, true));
+            tramos.Add(new Tramo($"Voladizo {ultimo.Eje}", ultimo.CaraDerecha, ultimo.CaraDerecha + p.VoladizoFinal,
+                TipoTramo.VoladizoFinal));
         return tramos;
     }
 
@@ -41,23 +44,31 @@ internal static class DistribuidorEstribos
         double desde = t.CaraIzquierda + alPrimero, hasta = t.CaraDerecha - alPrimero;
         if (hasta - desde <= Tolerancia)
             return [(t.CaraIzquierda + t.CaraDerecha) / 2];
-        if (t.EsVoladizo || t.CaraDerecha - t.CaraIzquierda < 2 * c.LargoZona)
+        // La zona va junto a cada columna: en la luz, a los dos lados; en el voladizo, solo del lado de su apoyo.
+        bool zonaIzquierda = t.Tipo != TipoTramo.VoladizoInicial, zonaDerecha = t.Tipo != TipoTramo.VoladizoFinal;
+        int zonas = (zonaIzquierda ? 1 : 0) + (zonaDerecha ? 1 : 0);
+        if (t.CaraDerecha - t.CaraIzquierda < zonas * c.LargoZona)
             return Repartir(desde, hasta, c.SeparacionZona);
 
         int enZona = c.LargoZona < alPrimero ? 0 : (int)Math.Floor((c.LargoZona - alPrimero) / c.SeparacionZona + Tolerancia) + 1;
         if (enZona == 0)
             return Repartir(desde, hasta, c.SeparacionCentro);
 
-        double finZonaIzquierda = desde + (enZona - 1) * c.SeparacionZona;
-        double finZonaDerecha = hasta - (enZona - 1) * c.SeparacionZona;
-        List<double> posiciones = Enumerable.Range(0, enZona).Select(i => desde + i * c.SeparacionZona).ToList();
-        IEnumerable<double> zonaDerecha = Enumerable.Range(0, enZona).Reverse().Select(i => hasta - i * c.SeparacionZona);
+        int izquierda = zonaIzquierda ? enZona : 1, derecha = zonaDerecha ? enZona : 1;
+        double finZonaIzquierda = desde + (izquierda - 1) * c.SeparacionZona;
+        double finZonaDerecha = hasta - (derecha - 1) * c.SeparacionZona;
+        // Si la zona llega hasta el último estribo (un voladizo apenas del largo de la zona), todo va como zona.
+        if (finZonaDerecha - finZonaIzquierda < -Tolerancia)
+            return Repartir(desde, hasta, c.SeparacionZona);
+
+        List<double> posiciones = Enumerable.Range(0, izquierda).Select(i => desde + i * c.SeparacionZona).ToList();
+        IEnumerable<double> alFinal = Enumerable.Range(0, derecha).Reverse().Select(i => hasta - i * c.SeparacionZona);
         // El centro reparte entre el último de cada zona; si las dos zonas se tocan, ese estribo es uno solo.
         if (finZonaDerecha - finZonaIzquierda > Tolerancia)
             posiciones.AddRange(Repartir(finZonaIzquierda, finZonaDerecha, c.SeparacionCentro).Skip(1).SkipLast(1));
         else
-            zonaDerecha = zonaDerecha.Skip(1);
-        posiciones.AddRange(zonaDerecha);
+            alFinal = alFinal.Skip(1);
+        posiciones.AddRange(alFinal);
         return posiciones;
     }
 
