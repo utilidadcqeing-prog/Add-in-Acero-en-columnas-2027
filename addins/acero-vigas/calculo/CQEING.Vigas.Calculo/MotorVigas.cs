@@ -91,7 +91,7 @@ public static class MotorVigas
         int diametro = grupos.Max(gr => gr.Diametro);
         ReglaDiametro regla = e.Reglas.PorDiametro[diametro];
         var parametros = new ParametrosCapa(GeometriaPortico.ReferenciaDe(e.Tipo, capa, cara), regla.Traslapo!.Value,
-            regla.Gancho90, e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga);
+            regla.Gancho90.B, e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga);
 
         CapaResuelta? resuelta = ResolvedorCapa.Resolver(g, parametros);
         if (resuelta is not null)
