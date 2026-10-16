@@ -62,6 +62,27 @@ public enum TipoAviso
     DiametroSinReglas,
     /// <summary>El largo general de los bastones es 0 o negativo; el pórtico queda sin bastones.</summary>
     BastonLargoNoValido,
+    /// <summary>
+    /// Una separación de los estribos es 0 o negativa, o el largo de la zona es negativo; ese tramo (o el pórtico, con
+    /// <c>"general"</c>) queda sin estribos.
+    /// </summary>
+    EstriboValorNoValido,
+    /// <summary>
+    /// Un estribo adicional no tiene las barras que pide: el cerrado, 2 arriba y 2 abajo; el abierto, 1 y 1. No se
+    /// agrega. <see cref="Aviso.Elemento"/> es su id (<c>"E1"</c>), como en los avisos que siguen.
+    /// </summary>
+    EstriboIncompleto,
+    /// <summary>Un estribo adicional nombra una fila o un número de barra que no hay en el corte. No se agrega.</summary>
+    BarraNoExiste,
+    /// <summary>Alinear el adicional movería una barra de esquina, que abraza el cerrado obligatorio. No se agrega.</summary>
+    MueveUnaEsquina,
+    /// <summary>
+    /// Ni corriendo las barras vecinas queda la distancia libre (o la barra ya la alineó otro adicional, o la sección
+    /// tiene un error). No se agrega.
+    /// </summary>
+    NoSePuedeAlinear,
+    /// <summary>El adicional abraza las mismas barras que el cerrado de las esquinas (o una de sus ramas). No se agrega.</summary>
+    IgualAlCerrado,
 }
 
 /// <summary>Por qué un traslapo quedó largo.</summary>
