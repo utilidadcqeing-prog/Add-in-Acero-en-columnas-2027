@@ -60,7 +60,7 @@
      - las sueltas que hay entre dos fijas se quedan donde están si cumplen la distancia libre; si no, se reparten parejas entre esas dos fijas;
      - el orden de izquierda a derecha no cambia;
      - solo si así tampoco caben, sale el aviso `NoSePuedeAlinear` y ese adicional no se pone;
-   - **una barra de esquina de la fila 1 no se mueve**, porque la abraza el cerrado obligatorio: aviso `MueveUnaEsquina`. *Carlos no habló de las esquinas; dijo "me vas a mover cualquiera" y también que el cerrado de las esquinas es "obligación absoluta". Mientras se le pregunta (#79), manda la regla absoluta;*
+   - **una barra de esquina de la fila 1 no se mueve**, porque la abraza el cerrado obligatorio: aviso `MueveUnaEsquina`. Sale de Carlos: el cerrado obligatorio "es el que abraza las cuatro barras de las esquinas" (min 1:23:18) y es "una obligación absoluta" (min 1:02:59); si la esquina se moviera, dejaría de abrazarla. Su "me vas a mover cualquiera" se refiere a las demás barras.
    - **un abierto sobre una rama del cerrado** (las dos esquinas de una misma vertical): aviso `IgualAlCerrado`;
    - una barra que no existe (fila o número fuera de rango) da el aviso `BarraNoExiste`.
 8. **Forma y largo** (en mm, por el eje del estribo):
@@ -212,7 +212,7 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
 
 - [ ] **Paso 1:** en `traslapos-vigas-notas.md` §0 "Estribos", agregar las decisiones 1 a 10, con los minutos de Carlos.
 - [ ] **Paso 2:** marcar los criterios de aceptación de abajo con su prueba y hacer el commit `docs(vigas): criterios de los estribos cumplidos (#90)`.
-- [ ] **Paso 3 (con la PR):** actualizar la issue #90 con las decisiones y agregar a #79 la pregunta para Carlos: *"Al alinear un estribo adicional, ¿se puede mover una barra de esquina? Dijiste 'me vas a mover cualquiera', pero el cerrado de las esquinas es obligatorio. Por ahora las esquinas no se mueven."*
+- [ ] **Paso 3 (con la PR):** actualizar la issue #90 con las decisiones.
 
 ## Criterios de aceptación
 
