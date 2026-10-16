@@ -16,7 +16,7 @@ public static class MotorVigas
 
         List<Aviso> avisos = DiametrosSinTraslapo(entrada).Select(d => new Aviso(TipoAviso.SinTraslapoMinimo, $"#{d}")).ToList();
         if (avisos.Count > 0)
-            return new ResultadoVigas(null, null, capaDeLaCara, null, null, Cara.Inicio, Cara.Inicio, avisos);
+            return new ResultadoVigas(null, null, capaDeLaCara, null, null, Cara.Inicio, Cara.Inicio, avisos, []);
 
         var g = new GeometriaPortico(entrada.Portico, entrada.RecubrimientoPuntas);
         CapaCalculada? centro = Resolver(entrada, g, capaDelCentro, Cara.Inicio, avisos);
@@ -40,9 +40,10 @@ public static class MotorVigas
         if (capaCara is not null)
             avisos.AddRange(Avisos.De(capaCara, usada == Cara.Inicio ? solucionFinal : solucionInicio, otra, varilla));
 
+        IReadOnlyList<Baston> bastones = CalculadorBastones.Calcular(entrada, g, avisos);
         return capaDeLaCara == Posicion.Inferior
-            ? new ResultadoVigas(capaCentro, capaCara, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos)
-            : new ResultadoVigas(capaCara, capaCentro, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos);
+            ? new ResultadoVigas(capaCentro, capaCara, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos, bastones)
+            : new ResultadoVigas(capaCara, capaCentro, capaDeLaCara, solucionInicio, solucionFinal, usada, masEconomica, avisos, bastones);
     }
 
     /// <summary>Cómo quedaría el pórtico si la barra <paramref name="id"/> pasa a <paramref name="nuevoLargo"/> (Subir / Bajar).</summary>

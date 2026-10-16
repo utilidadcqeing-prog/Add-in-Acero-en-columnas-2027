@@ -58,6 +58,8 @@ public enum TipoAviso
     VarillaLarga,
     /// <summary>Un cambio manual guardado ya no se puede aplicar; se ignora (ver <see cref="Aviso.Motivo"/>).</summary>
     CambioNoAplicado,
+    /// <summary>El diámetro de los bastones de una cara no está en las reglas; esa cara queda sin bastones.</summary>
+    DiametroSinReglas,
 }
 
 /// <summary>Por qué un traslapo quedó largo.</summary>
@@ -87,7 +89,8 @@ public sealed record Aviso(
 /// <summary>
 /// Lo que devuelve el motor. <paramref name="Superior"/> e <paramref name="Inferior"/> son las capas en uso (la de
 /// la cara, con <paramref name="CaraUsada"/>). <paramref name="CaraInicio"/> y <paramref name="CaraFinal"/> son las
-/// dos opciones completas de la capa de la cara, para la tarjeta "¿Dónde traslapan…?".
+/// dos opciones completas de la capa de la cara, para la tarjeta "¿Dónde traslapan…?". <paramref name="Kg"/> suma las
+/// barras corridas y los bastones.
 /// </summary>
 public sealed record ResultadoVigas(
     SolucionCapa? Superior,
@@ -97,11 +100,12 @@ public sealed record ResultadoVigas(
     SolucionCapa? CaraFinal,
     Cara CaraUsada,
     Cara CaraMasEconomica,
-    IReadOnlyList<Aviso> Avisos)
+    IReadOnlyList<Aviso> Avisos,
+    IReadOnlyList<Baston> Bastones)
 {
     public IEnumerable<Barra> Barras => Capas.SelectMany(c => c.Barras);
     public IEnumerable<Traslapo> Traslapos => Capas.SelectMany(c => c.Traslapos);
-    public double Kg => Capas.Sum(c => c.Kg);
+    public double Kg => Capas.Sum(c => c.Kg) + Bastones.Sum(b => b.Kg);
 
     /// <summary>Tramos con traslapo (de las dos capas en uso), donde el corte 1-1 no se puede ubicar (#91).</summary>
     public IReadOnlyList<(int Desde, int Hasta)> ZonasTraslapo => Traslapos.Select(t => (t.Desde, t.Hasta)).ToList();
