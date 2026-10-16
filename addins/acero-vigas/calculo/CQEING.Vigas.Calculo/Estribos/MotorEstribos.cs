@@ -4,8 +4,9 @@ using CQEING.Vigas.Calculo.Seccion;
 namespace CQEING.Vigas.Calculo.Estribos;
 
 /// <summary>
-/// Los estribos de un pórtico (#90, plan docs/planes/2026-10-16-estribos-vigas-90.md): el cerrado de las esquinas en
-/// cada tramo, con su largo y sus kilos. Va aparte de <see cref="MotorVigas"/> porque necesita la sección.
+/// Los estribos de un pórtico (#90, plan docs/planes/2026-10-16-estribos-vigas-90.md): el cerrado de las esquinas y
+/// los adicionales en cada tramo, con su largo y sus kilos, y la sección con las barras que alinean los adicionales
+/// (<see cref="AlineadorEstribos"/>). Va aparte de <see cref="MotorVigas"/> porque necesita la sección.
 /// </summary>
 public static class MotorEstribos
 {
@@ -30,20 +31,58 @@ public static class MotorEstribos
         var principal = new EstriboEnSeccion(IdCerrado, TipoEstribo.Cerrado, rec.Lados, seccion.Ancho - rec.Lados, rec.Abajo, seccion.Alto - rec.Arriba);
 
         bool generalValida = EsValida(e.General, General, avisos);
+        IReadOnlyList<Tramo> tramos = DistribuidorEstribos.Tramos(e.Portico);
+        List<ConfigEstribos?> propias = tramos.Select(t => e.PorTramo?.GetValueOrDefault(t.Nombre)).ToList();
+        IReadOnlyList<(string Id, EstriboAdicional Adicional)> adicionales = Numerar(e.General, propias);
+        (ResultadoSeccion corte, IReadOnlyList<EstriboEnSeccion> figuras) = AlineadorEstribos.Alinear(seccion, adicionales, avisos);
+        var figuraDe = new Dictionary<EstriboAdicional, EstriboEnSeccion>(ReferenceEqualityComparer.Instance);
+        foreach ((string id, EstriboAdicional a) in adicionales)
+            if (figuras.FirstOrDefault(f => f.Id == id) is { } f)
+                figuraDe[a] = f;
+
+        double estriboSeccion = RepartidorFilas.Diametro(seccion, seccion.DiametroEstribo);
         var estribos = new List<EstriboEnPortico>();
-        foreach (Tramo t in DistribuidorEstribos.Tramos(e.Portico))
+        for (int k = 0; k < tramos.Count; k++)
         {
-            ConfigEstribos? propia = e.PorTramo?.GetValueOrDefault(t.Nombre);
+            Tramo t = tramos[k];
+            ConfigEstribos? propia = propias[k];
             ConfigEstribos c = propia ?? e.General;
             if (!(propia is null ? generalValida : EsValida(propia, t.Nombre, avisos)) || ReglaDe(seccion, c, avisos) is not { } regla)
                 continue;
 
             IReadOnlyList<double> posiciones = DistribuidorEstribos.Posiciones(t, c, regla.Diametro);
-            double largo = Largo(TipoEstribo.Cerrado, seccion.Ancho - 2 * rec.Lados - regla.Diametro, AltoAlEje(seccion, regla), Gancho(regla, c.Gancho));
-            estribos.Add(new EstriboEnPortico(IdCerrado, TipoEstribo.Cerrado, t.Nombre, c.Diametro, c.Gancho, posiciones, largo,
-                Kg(posiciones.Count, largo, regla)));
+            double alto = AltoAlEje(seccion, regla);
+            int gancho = Gancho(regla, c.Gancho);
+            EstriboEnPortico Estribo(string id, TipoEstribo tipo, double largo) =>
+                new(id, tipo, t.Nombre, c.Diametro, c.Gancho, posiciones, largo, Kg(posiciones.Count, largo, regla));
+
+            estribos.Add(Estribo(IdCerrado, TipoEstribo.Cerrado, Largo(TipoEstribo.Cerrado, seccion.Ancho - 2 * rec.Lados - regla.Diametro, alto, gancho)));
+            // Los adicionales van solo en los tramos de su configuración, con las posiciones del cerrado de ese tramo.
+            foreach (EstriboAdicional a in c.Adicionales ?? [])
+            {
+                if (!figuraDe.TryGetValue(a, out EstriboEnSeccion? f))
+                    continue;
+                // Por dentro, el cerrado abraza siempre las mismas barras; por el eje, crece con el estribo del tramo.
+                double ancho = f.Derecha - f.Izquierda - 2 * estriboSeccion + regla.Diametro;
+                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, ancho, alto, gancho)));
+            }
         }
-        return new ResultadoEstribos(estribos, RepartidorFilas.Repartir(seccion), [principal], avisos);
+        return new ResultadoEstribos(estribos, corte, [principal, .. figuras], avisos);
+    }
+
+    /// <summary>
+    /// <c>EA1</c>, <c>EA2</c>…: primero los adicionales del pórtico y después los de cada tramo, en el orden de los
+    /// tramos. Un tramo que copia la configuración del pórtico (<c>General with { … }</c>) trae los mismos adicionales:
+    /// conservan su id y no se repiten.
+    /// </summary>
+    private static IReadOnlyList<(string Id, EstriboAdicional Adicional)> Numerar(ConfigEstribos general, IEnumerable<ConfigEstribos?> propias)
+    {
+        var vistos = new HashSet<EstriboAdicional>(ReferenceEqualityComparer.Instance);
+        return new[] { general }.Concat(propias.OfType<ConfigEstribos>())
+            .SelectMany(c => c.Adicionales ?? [])
+            .Where(vistos.Add)
+            .Select((a, i) => ($"EA{i + 1}", a))
+            .ToList();
     }
 
     /// <summary>Decisión 10: separaciones mayores que 0 y largo de zona no negativo (0 = sin zona).</summary>
