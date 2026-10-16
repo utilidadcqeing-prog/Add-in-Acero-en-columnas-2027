@@ -216,11 +216,11 @@ Sección: 300 × 500, recubrimiento 40, estribo #3, arriba `[5 #5]` (x 57.45, 10
 
 ## Criterios de aceptación
 
-- [ ] El cerrado de las esquinas sale solo en todos los tramos.
-- [ ] Zonas junto a las columnas y centro, con el primero a 5 cm de la cara, medido hasta la cara del estribo.
-- [ ] Luz corta y voladizo, todo con la separación de columnas.
-- [ ] #3 con 135° por defecto; se puede cambiar el diámetro y el gancho (90°).
-- [ ] Configuración por pórtico y por tramo.
-- [ ] Adicionales cerrados (2 + 2) y abiertos (1 + 1): mandan las primeras barras elegidas, las demás se alinean en todo el pórtico, sin violar la distancia libre ni mover esquinas.
-- [ ] Largo y kilos de cada estribo; suman al total.
-- [ ] `rtk dotnet test CQEING-Addins.sln -c Release` en verde.
+- [x] El cerrado de las esquinas sale solo en todos los tramos. (`ElCerradoDeLasEsquinasSaleSoloEnCadaTramo`, `EnLaSeccionElCerradoVaDelRecubrimientoHaciaAdentro`)
+- [x] Zonas junto a las columnas y centro, con el primero a 5 cm de la cara, medido hasta la cara del estribo. (`EnLaLuzAB_OchoPorZonaYDoceEnElCentro`, `EnLaLuzBC_SieteEnElCentro`, `UnaLuzIgualADosZonas_NoEsCorta`, `SinZona_TodaLaLuzVaConLaSeparacionDelCentro`)
+- [x] Luz corta y voladizo, todo con la separación de columnas. (`UnaLuzCortaVaTodaConLaSeparacionDeColumnas`, `ElVoladizoVaTodoConLaSeparacionDeColumnas`, `UnaLuzMenorQueDosPrimeros_UnSoloEstriboAlCentro`)
+- [x] #3 con 135° por defecto; se puede cambiar el diámetro y el gancho (90°). (`ElLargoDelCerradoEsElPerimetroMasDosGanchos`, `ConGanchoDe90_UsaElGancho90DeLasReglas`, `UnDiametroSinReglas_Avisa`)
+- [x] Configuración por pórtico y por tramo. (`UnTramoConSuPropiaConfiguracion`, `UnTramoConOtroDiametro_SoloCambiaSuLargoYSusKilos`, `UnaSeparacionEnCero_AvisaYEseTramoQuedaSinEstribos`, `ElAdicionalVaSoloEnSuTramo`)
+- [x] Adicionales cerrados (2 + 2) y abiertos (1 + 1): mandan las primeras barras elegidas, las demás se alinean en todo el pórtico, sin violar la distancia libre ni mover esquinas. (`AlineadorEstribosTests`: `CerradoEnCadaVerticalMandaLaPrimera`, `SiLaVecinaNoDa_SeCorreParaRespetarLaDistancia`, `CerradoConLasVecinasCorridas_ElCasoDeLaCaptura`, `NoSeMueveUnaEsquina`, `SiNoQuedaLaDistanciaLibre_NoSePuedeAlinear`…)
+- [x] Largo y kilos de cada estribo; suman al total. (`LosKilosSonCantidadPorLargoPorPeso`, `AbiertoMandaLaDeArriba_LaDeAbajoSeMueve`; el tablero suma `ResultadoVigas.Kg + ResultadoEstribos.Kg`)
+- [x] `rtk dotnet test CQEING-Addins.sln -c Release` en verde (225/225).
