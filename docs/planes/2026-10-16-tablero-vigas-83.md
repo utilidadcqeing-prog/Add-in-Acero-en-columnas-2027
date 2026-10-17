@@ -496,3 +496,15 @@ python tools/comparar-capturas.py <referencia.png> <actual.png> <diferencia.png>
 - **Pendiente:**
   - un pórtico **con voladizo** en Revit real: el modelo de prueba no tiene, y está probado solo con la demostración de la maqueta;
   - la versión de WebView2 de **Revit 2027** (no está instalado; tarea 1, paso 6).
+- **Revisión final de la rama** (16-oct): la hizo el mismo autor, porque se detuvo el subagente revisor. Arregló 4 puntos importantes, cada uno en `31a9661`:
+  - el zoom en 0 con el navegador sin alto (`UnAreaSinTamanoNoDaUnZoomInvalido`);
+  - la ventana encajada en el monitor principal aunque Revit esté en otro (`LaVentanaSeEncajaEnElAreaDeSuMonitor`);
+  - la página que se podía cambiar al soltar un archivo, y los mensajes de cualquier origen (sin prueba automática: WebView2);
+  - la barra de selección cerrada con Alt+F4 (sin prueba automática: WPF).
+- **Menores pendientes** (de la revisión final):
+  - un error de "Ver en Revit" o "3D" sale en el aviso del tablero, que en ese momento está minimizado;
+  - "Ver: tramo" en un pórtico corto casi no acerca, porque el ajuste queda limitado por el alto del recuadro;
+  - el rótulo del traslapo largo de la capa de arriba (y = 82) pisa la línea de los bastones de arriba;
+  - en la demostración, el aviso de la maqueta dice 0.40 y el rótulo calcula +0.50 (la maqueta ya traía esa diferencia);
+  - si una plantilla de vista 3D se llama "CQEING Vigas 3D", el 3D falla (con aviso);
+  - en teoría, una acción podría usar ids de vigas del documento anterior si llega justo antes de recargar al cambiar de documento.
