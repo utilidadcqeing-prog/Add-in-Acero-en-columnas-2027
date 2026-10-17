@@ -70,11 +70,15 @@ public static class ArmadorVista
 
         bool seccionSinError = re.Seccion.Superior.Error == ErrorCara.Ninguno && re.Seccion.Inferior.Error == ErrorCara.Ninguno;
         bool sePuede = rv.Superior is not null && rv.Inferior is not null && seccionSinError && !avisos.Any(a => Bloquean.Contains(a.Tipo));
+        OpcionesCorte oc = o.Corte ?? new OpcionesCorte();
+        CorteEnPunto corte = CalculadoraCorte.En(portico, rv, re, oc);
+        (SeccionVista enCorte, IReadOnlyList<BarraSeccion> proyeccion, string? avisoBastones) = SeccionDe(p, r, re, seccion, corte);
         return new VistaPortico(p.Nombre, NombreTipo(tipo), inicio, fin, apoyos, barras, traslapos, bastones,
             Zonas(portico, o, porTramo, r, re), Cara(re.Seccion.Superior), Cara(re.Seccion.Inferior),
             Opcion(rv.CaraInicio), Opcion(rv.CaraFinal), Lado(rv.CaraUsada), Lado(rv.CaraMasEconomica),
-            SeccionDe(p, r, re), ListaEstribos(p, o, re), Textos(avisos, rv),
-            rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, sePuede);
+            enCorte, ListaEstribos(p, o, re), Textos(avisos, rv),
+            rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, sePuede,
+            CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones));
     }
 
     /// <summary>La pantalla Reglas: los valores en m y kg/m con los decimales de <c>RULES0</c> de la maqueta.</summary>
@@ -188,9 +192,17 @@ public static class ArmadorVista
         return zonas;
     }
 
-    private static SeccionVista SeccionDe(PorticoLeido p, Reglas r, ResultadoEstribos re)
+    /// <summary>
+    /// La sección en el corte (#91): las barras corridas, los bastones que pasan por ahí y los estribos del tramo del
+    /// corte. Aparte, los bastones de la proyección y el aviso si los bastones del corte no caben (decisión 6 del plan
+    /// docs/planes/2026-10-17-corte-vigas-91.md).
+    /// </summary>
+    private static (SeccionVista Seccion, IReadOnlyList<BarraSeccion> Proyeccion, string? Aviso) SeccionDe(PorticoLeido p, Reglas r,
+        ResultadoEstribos re, EntradaSeccion e, CorteEnPunto corte)
     {
         double alto = Alto(p);
+        BarraSeccion Barra(string id, string nombre, bool arriba, int fila, BarraEnSeccion b, bool esquina, bool baston) =>
+            new(id, nombre, arriba, fila, Cm(b.X), Cm(alto - b.Y), Cm(r.PorDiametro[b.Diametro].Diametro), esquina, baston);
         IEnumerable<BarraSeccion> Cara(CaraSeccion c, bool arriba)
         {
             string letra = arriba ? "a" : "b", nombre = arriba ? "arriba" : "abajo";
@@ -201,16 +213,53 @@ public static class ArmadorVista
                 for (int i = 0; i < orden.Count; i++)
                 {
                     n++;
-                    BarraEnSeccion b = orden[i];
-                    yield return new BarraSeccion($"{letra}{n}", $"{nombre} {n}", arriba, fila, Cm(b.X), Cm(alto - b.Y),
-                        Cm(r.PorDiametro[b.Diametro].Diametro), fila == 0 && (i == 0 || i == orden.Count - 1));
+                    yield return Barra($"{letra}{n}", $"{nombre} {n}", arriba, fila, orden[i], fila == 0 && (i == 0 || i == orden.Count - 1), false);
                 }
             }
         }
-        var figuras = re.EnSeccion.Select(f => new FiguraSeccion(f.Id, f.Tipo.ToString(), Cm(f.Izquierda), Cm(f.Derecha),
-            Cm(alto - f.Arriba), Cm(alto - f.Abajo))).ToList();
-        return new SeccionVista(Cm(Ancho(p)), Cm(alto), Cara(re.Seccion.Superior, true).Concat(Cara(re.Seccion.Inferior, false)).ToList(), figuras);
+
+        var bastones = new List<BarraSeccion>();
+        var proyeccion = new List<BarraSeccion>();
+        string? aviso = null;
+        foreach (Posicion cara in new[] { Posicion.Superior, Posicion.Inferior })
+        {
+            // Si las barras corridas de la cara ya no caben, el error lo muestra el paso 1.
+            if ((cara == Posicion.Superior ? re.Seccion.Superior : re.Seccion.Inferior).Error != ErrorCara.Ninguno)
+                continue;
+            List<GrupoBarras> cortados = corte.Cortados.Where(b => b.Capa == cara).Select(b => b.Grupo).ToList();
+            List<GrupoBarras> proyectados = corte.Proyectados.Where(b => b.Capa == cara).Select(b => b.Grupo).ToList();
+            if (cortados.Count + proyectados.Count == 0)
+                continue;
+            bool arriba = cara == Posicion.Superior;
+            string letra = arriba ? "bs" : "bi", nombre = arriba ? "bastón arriba" : "bastón abajo";
+            UbicacionBastones enElCorte = UbicadorBastones.Ubicar(e, cara, cortados);
+            if (enElCorte.Error != ErrorCara.Ninguno)
+            {
+                aviso ??= TextoBastones(arriba, enElCorte.Error);
+                continue;
+            }
+            bastones.AddRange(enElCorte.Barras.Select((b, i) => Barra($"{letra}{i + 1}", $"{nombre} {i + 1}", arriba, b.Fila - 1, b.Barra, false, true)));
+            // Ubicar es determinista: con los proyectados al final, los cortados quedan donde estaban (hallazgo 5).
+            UbicacionBastones conProyeccion = UbicadorBastones.Ubicar(e, cara, [.. cortados, .. proyectados]);
+            if (conProyeccion.Error == ErrorCara.Ninguno)
+                proyeccion.AddRange(conProyeccion.Barras.Where(b => !enElCorte.Barras.Contains(b))
+                    .Select((b, i) => Barra($"p{letra}{i + 1}", $"{nombre} {i + 1} (detrás)", arriba, b.Fila - 1, b.Barra, false, true)));
+        }
+
+        HashSet<string> delTramo = re.Estribos.Where(x => x.Tramo == corte.Tramo).Select(x => x.Id).ToHashSet();
+        var figuras = re.EnSeccion.Where(f => delTramo.Contains(f.Id)).Select(f => new FiguraSeccion(f.Id, f.Tipo.ToString(),
+            Cm(f.Izquierda), Cm(f.Derecha), Cm(alto - f.Arriba), Cm(alto - f.Abajo))).ToList();
+        var barras = Cara(re.Seccion.Superior, true).Concat(Cara(re.Seccion.Inferior, false)).Concat(bastones).ToList();
+        return (new SeccionVista(Cm(Ancho(p)), Cm(alto), barras, figuras), proyeccion, aviso);
     }
+
+    private static string TextoBastones(bool arriba, ErrorCara error) => error == ErrorCara.NoCabenEnElAlto
+        ? $"Los bastones de {(arriba ? "arriba" : "abajo")} chocan con las barras de {(arriba ? "abajo" : "arriba")}."
+        : $"Los bastones de {(arriba ? "arriba" : "abajo")} no caben en el corte.";
+
+    private static CorteVista CorteDe(CorteEnPunto c, OpcionesCorte o, IReadOnlyList<BarraSeccion> proyeccion, string? aviso) =>
+        new(M(c.X), c.EsTipo, c.Ajustado, M(Math.Max(0, o.Profundidad)), o.Mirando == MiraCorte.Derecha ? "derecha" : "izquierda",
+            c.Tramo, c.Permitidos.Select(i => new Rango(M(i.Desde), M(i.Hasta))).ToList(), proyeccion, aviso);
 
     /// <summary>Una fila por estribo de la lista: los del mismo id, diámetro y largo se suman en todo el pórtico.</summary>
     private static IReadOnlyList<FilaEstribos> ListaEstribos(PorticoLeido p, OpcionesTablero o, ResultadoEstribos re)

@@ -12,6 +12,7 @@ namespace CQEING.Vigas.Calculo.Tablero;
 /// <param name="SeparacionFilasCm">Separación libre entre filas; null = filas pegadas.</param>
 /// <param name="Cara">Dónde traslapa la capa de la cara; null = la más económica.</param>
 /// <param name="EstribosMarcados">Los estribos de los tramos marcados en la lista; null = los de todo el pórtico.</param>
+/// <param name="Corte">El corte 1-1 del paso 4 (#91), en mm; null = la vista tipo con la profundidad de base.</param>
 public sealed record OpcionesTablero(
     TipoViga? Tipo,
     IReadOnlyList<GrupoBarras> Superior,
@@ -27,7 +28,8 @@ public sealed record OpcionesTablero(
     ConfigEstribos Estribos,
     IReadOnlyList<string> TramosMarcados,
     ConfigEstribos? EstribosMarcados,
-    CambiosManuales? Cambios)
+    CambiosManuales? Cambios,
+    OpcionesCorte? Corte = null)
 {
     /// <summary>El <c>state</c> inicial de la maqueta: 3 #5 arriba y abajo, recubrimiento 4, filas pegadas, 3 filas.</summary>
     public static OpcionesTablero PorDefecto { get; } = new(
