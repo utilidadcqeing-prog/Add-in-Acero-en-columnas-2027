@@ -85,13 +85,15 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
 
     /// <summary>
     /// La vista <see cref="Nombre3d"/>, aislada temporalmente en las vigas y con la caja de sección ajustada a ellas, en
-    /// una transacción corta (decisión 11 del plan).
+    /// una transacción corta (decisión 11 del plan). Al abrirla se acerca a las vigas: si no, queda con el zoom de todo
+    /// el modelo y las vigas se ven diminutas (Juan, 16-oct: "lo deja super lejos").
     /// </summary>
     private static void Abrir3d(UIDocument uidoc, List<ElementId> ids)
     {
         Document doc = uidoc.Document;
         View3D? vista = new FilteredElementCollector(doc).OfClass(typeof(View3D)).Cast<View3D>()
             .FirstOrDefault(v => !v.IsTemplate && v.Name == Nombre3d);
+        BoundingBoxXYZ? caja = Caja(doc, ids);
         using (var t = new Transaction(doc, "Tablero de vigas: 3D"))
         {
             t.Start();
@@ -105,7 +107,7 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
             if (vista.IsInTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate))
                 vista.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
             vista.IsolateElementsTemporary(ids);
-            if (Caja(doc, ids) is BoundingBoxXYZ caja)
+            if (caja is not null)
             {
                 vista.SetSectionBox(caja);
                 vista.IsSectionBoxActive = true;
@@ -113,6 +115,8 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
             t.Commit();
         }
         uidoc.ActiveView = vista;
+        if (caja is not null && uidoc.GetOpenUIViews().FirstOrDefault(u => u.ViewId == vista.Id) is UIView abierta)
+            abierta.ZoomAndCenterRectangle(caja.Min, caja.Max);
     }
 
     /// <summary>La caja que encierra las vigas, con <see cref="Margen"/> a cada lado.</summary>
