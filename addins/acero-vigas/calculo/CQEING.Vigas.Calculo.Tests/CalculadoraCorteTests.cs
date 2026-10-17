@@ -113,6 +113,20 @@ public class CalculadoraCorteTests
     }
 
     [Fact]
+    public void PegarseAUnEstriboNoEsAjustar()
+    {
+        // En Revit (17-oct): la línea soltada en 4.75 quedó en el estribo de 4.745 y el paso 4 avisaba "ahí no se puede
+        // cortar". Solo se ajusta si el punto pedido cae en un traslapo, un apoyo o fuera de la viga.
+        IReadOnlyList<double> puntos = En(new OpcionesCorte()).Puntos;
+        double estribo = puntos.First(x => x > 300 && x % 10 != 0 && Permitidos().Any(i => i.Desde <= x + 5 && x + 5 <= i.Hasta));
+
+        CorteEnPunto c = En(new OpcionesCorte(X: (int)Math.Round(estribo + 5)));
+
+        Assert.Contains(c.X, puntos);
+        Assert.False(c.Ajustado);
+    }
+
+    [Fact]
     public void EnUnEmpateEntreEstribosGanaLaDerecha()
     {
         Assert.Equal(300, CalculadoraCorte.AlPunto(200, [100, 300]));

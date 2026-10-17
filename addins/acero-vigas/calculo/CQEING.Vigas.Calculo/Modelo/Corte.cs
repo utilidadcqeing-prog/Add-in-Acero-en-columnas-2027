@@ -17,7 +17,8 @@ public sealed record OpcionesCorte(int? X = null, int Profundidad = 100, MiraCor
 public sealed record Intervalo(double Desde, double Hasta);
 
 /// <summary>
-/// El corte resuelto, en mm: dónde quedó, si es la vista tipo, si se movió de donde lo pidió el usuario, el tramo
+/// El corte resuelto, en mm: dónde quedó, si es la vista tipo, si lo pedido cayó donde no se puede cortar (traslapo,
+/// apoyo o fuera de la viga; pegarse al estribo más cercano no cuenta), el tramo
 /// (<c>"A-B"</c>, <c>"Voladizo D"</c>; vacío si no cae en ninguno), los bastones que pasan por ahí, los que se ven en
 /// la franja de la profundidad y los tramos donde se puede poner. <paramref name="Puntos"/> son los centros de los
 /// estribos que caen en esos tramos: el corte va de estribo en estribo (vacío = sin estribos, el corte es continuo).

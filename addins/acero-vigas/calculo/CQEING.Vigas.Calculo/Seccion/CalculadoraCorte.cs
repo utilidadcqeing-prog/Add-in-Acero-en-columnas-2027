@@ -126,7 +126,8 @@ public static class CalculadoraCorte
         double x = sinLugar ? o.X ?? Centro(p)
             : o.X is int pedido ? (puntos.Count > 0 ? AlPunto(pedido, puntos) : Ajustar(pedido, permitidos))
             : VistaTipo(p, rv, re, permitidos);
-        bool ajustado = !sinLugar && o.X is int pedidoX && Math.Abs(x - pedidoX) > 0.5;
+        // Pegarse al estribo más cercano no cuenta: solo se ajusta si lo pedido cae en un traslapo, un apoyo o fuera de la viga.
+        bool ajustado = !sinLugar && o.X is int pedidoX && !permitidos.Any(i => i.Desde - Tolerancia <= pedidoX && pedidoX <= i.Hasta + Tolerancia);
 
         List<Baston> cortados = rv.Bastones.Where(b => Pasa(b, x)).ToList();
         double profundidad = o.Profundidad;

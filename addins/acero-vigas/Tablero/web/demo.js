@@ -236,7 +236,7 @@
         if (d < dist - 1e-9 || (Math.abs(d - dist) <= 1e-9 && p > cx)) { cx = p; dist = d; }
       });
       const tramoCorte = G.luces.find(([, a, b, vol]) => a - 1e-9 <= cx && cx <= (vol ? G.fin : b) + 1e-9);
-      const corte = { x: cx, esTipo: oc.x == null, ajustado: oc.x != null && Math.abs(cx - pedido) > 1e-6,
+      const corte = { x: cx, esTipo: oc.x == null, ajustado: oc.x != null && !permitidos.some((i) => i.desde - 1e-9 <= pedido && pedido <= i.hasta + 1e-9),
         profundidad: Math.max(0, (oc.profundidad ?? 100) / 1000), mirando: oc.mirando === 'Izquierda' ? 'izquierda' : 'derecha',
         tramo: tramoCorte ? tramoCorte[0] : '', permitidos, proyeccion: [], aviso: null, puntos };
 
