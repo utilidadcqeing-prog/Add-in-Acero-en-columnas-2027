@@ -42,14 +42,14 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
 
 ## Criterios de aceptación
 
-- [ ] El botón "Tablero" de la pestaña CQEING › Vigas abre la ventana en Revit 2026.
-- [ ] Con los datos de demostración, cada estado se ve igual que su tablero en la maqueta: normal, reglas, cimentación, aviso, varias y vacío. Se comprueba con la comparación de capturas de la tarea 4.
-- [ ] Con un modelo real, la lista muestra sus pórticos y tramos, y al elegir uno se ven sus barras, traslapos, bastones, estribos, kilos y avisos, calculados por el motor.
-- [ ] Cambiar algo en los pasos 1 a 3 (barras, recubrimiento, tipo, bastones, estribos) recalcula al momento.
-- [ ] La pantalla Reglas lee y guarda las reglas del PC (`AlmacenReglas`), con el candado de la maqueta.
-- [ ] "En vivo con Revit", "Seleccionar en Revit", "Ver en Revit" y "3D" funcionan.
-- [ ] Ningún texto se corta ni se parte en dos líneas, ni en pantallas más chicas que 1440 × 900 ni con escala de Windows al 125 % o al 150 %.
-- [ ] `rtk dotnet test CQEING-Addins.sln -c Release` en verde.
+- [x] El botón "Tablero" de la pestaña CQEING › Vigas abre la ventana en Revit 2026. *Juan, 16-oct; `imagenes/tablero-83/revit-tablero.png`.*
+- [x] Con los datos de demostración, cada estado se ve igual que su tablero en la maqueta: normal, reglas, cimentación, aviso, varias y vacío. Se comprueba con la comparación de capturas de la tarea 4. *Entre 0.000 % y 0.175 % de píxeles distintos; solo los textos de los SVG (decisión 13).*
+- [x] Con un modelo real, la lista muestra sus pórticos y tramos, y al elegir uno se ven sus barras, traslapos, bastones, estribos, kilos y avisos, calculados por el motor. *Juan, 16-oct, modelo de 3 niveles; `revit-ver-tramo.png`, `revit-corte-cimentacion.png`, `revit-caras-y-aviso.png`.*
+- [x] Cambiar algo en los pasos 1 a 3 (barras, recubrimiento, tipo, bastones, estribos) recalcula al momento. *Juan, 16-oct (11 #8 en 3 filas, gancho en bastones, centro a 0.133).*
+- [x] La pantalla Reglas lee y guarda las reglas del PC (`AlmacenReglas`), con el candado de la maqueta. *Juan, 16-oct.*
+- [x] "En vivo con Revit", "Seleccionar en Revit", "Ver en Revit" y "3D" funcionan. *Juan, 16-oct; "Seleccionar en Revit" con la barra del add-in (decisión 16).*
+- [x] Ningún texto se corta ni se parte en dos líneas, ni en pantallas más chicas que 1440 × 900 ni con escala de Windows al 125 % o al 150 %. *Juan, 16-oct.*
+- [x] `rtk dotnet test CQEING-Addins.sln -c Release` en verde. *483 pruebas.*
 
 ## Hallazgos del código y de Revit real
 
@@ -59,7 +59,7 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
   - el runtime de Edge WebView2 instalado es el 155.0.4283.45.
   - Por eso el add-in compila contra el NuGet 1.0.2478.35 **sin copiar las DLL** y usa las que ya cargó Revit.
   - Revit 2027 no está instalado: su versión de WebView2 queda por medir (tarea 1, paso 6).
-  - **Probado en Revit 2026** (Juan, 16-oct, tarea 1): el botón Tablero abre la ventana y el eco va y vuelve entre la página y C#. No se copió la línea de diagnóstico (versión y DLL cargada); queda por anotar en la tarea 6.
+  - **Probado en Revit 2026** (Juan, 16-oct, tarea 1): el botón Tablero abre la ventana y el eco va y vuelve entre la página y C#. En la tarea 6, el título de la ventana (Debug) dio: *"WebView2 155.0.4283.60 · C:\Program Files\Autodesk\Revit 2026\Microsoft.Web.WebView2.Core.dll · datos en %LocalAppData%\CQEING\vigas\WebView2"*: usa la DLL de Revit y crea su carpeta de datos (`revit-tablero.png`).
 - **La maqueta** es un "Design Component":
   - la plantilla va en `<x-dc>`, con `{{huecos}}`, `<sc-if>`, `<sc-for>` y `<dc-import>`;
   - la lógica es una clase tipo React (`state`, `setState`, `renderVals()`);
@@ -162,6 +162,14 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
     - la recarga es solo cuando cambia el documento activo (`ViewActivated` con otro documento) o se cierra el leído (`DocumentClosing`), no en cada cambio de vista, porque leer el modelo es caro;
     - el zoom usa el área del navegador (sin el borde de la ventana) y el área de trabajo de la pantalla principal;
     - en Debug, el título de la ventana muestra la versión de WebView2 y la DLL cargada, para anotarlas en la tarea 6.
+16. **Lo que salió de la prueba en Revit** (Juan, 16-oct, tareas 5 y 6):
+    - *"no se usa el espacio bien"*: la página llena la ventana; mide como mínimo 1440 × 900 y lo de más va a la columna del centro, al alzado y al corte. A 1440 × 900 sigue igual a la maqueta;
+    - la ventana es de Revit y queda encima: "Ver en Revit" y "3D" la minimizan, y el botón Tablero la devuelve como estaba. El 3D se acerca a la caja de sección;
+    - *"quiero un propio del addin"*: "Seleccionar en Revit" ya no usa `PickObjects` (su Finalizar/Cancelar). Una barra del add-in queda arriba del dibujo, con la selección normal de Revit y los botones "Todas", "Terminar" y "Cancelar". Con varios pórticos, la lista muestra solo esos ("N de M · Ver todos") y abre el primero;
+    - *"los datos salen duplicados"*: el mismo eje se repite en cada nivel. Si el nombre se repite, el id es "nombre · nivel" y el subtítulo lleva el nivel, cortado con "…" si no entra;
+    - *"seria bueno que haga autoscroll"*: al abrir un pórtico desde Revit, la lista baja hasta él;
+    - el gancho del bastón se dibuja 6 unidades adentro, para que no se confunda con el de la corrida (solo el dibujo);
+    - "Cambiar" solo sale si la otra cara evita el traslapo largo (`AvisoVista.CambiarCara`).
 
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 
@@ -474,6 +482,17 @@ python tools/comparar-capturas.py <referencia.png> <actual.png> <diferencia.png>
 
 ## Estado
 
-- [ ] Plan revisado con el usuario.
-- [ ] Pasos implementados.
-- [ ] Probado en Revit.
+- [x] Plan revisado con el usuario (16-oct; tarea 3 nueva a pedido de Juan).
+- [x] Pasos implementados (tareas 1 a 6).
+- [x] Probado en Revit 2026 (Juan, 16-oct), en un modelo de 3 niveles (N+0.00 Piso 1 como cimentación, N+3.50 Piso 2 y N+7.00 Cubierta), recorriendo:
+  - la lista y elegir pórtico y tramo; "Ver: tramo"; pan y zoom;
+  - los pasos 1 a 4, con 2 y 3 filas;
+  - Reglas: desbloquear, cambiar, guardar y ver que recalcula;
+  - las dos opciones de la cara y la lista de barras;
+  - En vivo en los dos sentidos; Seleccionar en Revit (barra), Ver en Revit y 3D;
+  - los botones de #84, #85 y #91 con su aviso;
+  - la escala de Windows al 125 % y al 150 %, y la ventana achicada;
+  - cerrar el documento con la ventana abierta y abrir otro, y cerrar Revit con la ventana abierta.
+- **Pendiente:**
+  - un pórtico **con voladizo** en Revit real: el modelo de prueba no tiene, y está probado solo con la demostración de la maqueta;
+  - la versión de WebView2 de **Revit 2027** (no está instalado; tarea 1, paso 6).
