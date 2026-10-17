@@ -206,7 +206,7 @@
       const kgFace = { izq: G.sumF.izq * kgRow(fRows), der: G.sumF.der * kgRow(fRows) };
       const cheaper = kgFace.izq <= kgFace.der ? 'izq' : 'der';
       const avisos = estado === 'aviso' && side === 'der' && !isCim
-        ? [{ tipo: 'TraslapoLargo', elemento: pf + '3–' + pf + '4', texto: 'El traslapo ' + pf + '3–' + pf + '4 queda en 1.40, 0.40 por encima del mínimo. ' + pf + '4 termina en el voladizo y solo puede crecer. Si el traslapo va al inicio de la luz no pasa, y además se ahorran 7 kg.' }]
+        ? [{ tipo: 'TraslapoLargo', elemento: pf + '3–' + pf + '4', texto: 'El traslapo ' + pf + '3–' + pf + '4 queda en 1.40, 0.40 por encima del mínimo. ' + pf + '4 termina en el voladizo y solo puede crecer. Si el traslapo va al inicio de la luz no pasa, y además se ahorran 7 kg.', cambiarCara: true }]
         : [];
       const kg = barras.reduce((s, b) => s + b.kg, 0) + bastones.reduce((s, b) => s + b.kg, 0) + kgE;
       return {

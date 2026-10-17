@@ -162,7 +162,7 @@ public static class ArmadorVista
     }
 
     private static List<AvisoVista> Textos(IEnumerable<Aviso> avisos, ResultadoVigas? r) =>
-        avisos.Select(a => new AvisoVista(a.Tipo.ToString(), a.Elemento, TextoAviso(a, r))).ToList();
+        avisos.Select(a => new AvisoVista(a.Tipo.ToString(), a.Elemento, TextoAviso(a, r), a.Alternativa is { LoEvita: true })).ToList();
 
     private static EntradaSeccion Seccion(PorticoLeido p, OpcionesTablero o, Reglas r)
     {

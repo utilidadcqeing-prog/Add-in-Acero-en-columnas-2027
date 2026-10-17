@@ -148,7 +148,9 @@
       const TRAMOS = por ? por.tramos : [];
       const step = s.step || 'barras';
       const tramosSel = s.tramosSel;
-      const avisoLargo = P ? P.avisos.find((a) => a.tipo === 'TraslapoLargo') : null;
+      // Primero el traslapo largo que se evita cambiando de cara: es el que trae "Cambiar".
+      const largos = P ? P.avisos.filter((a) => a.tipo === 'TraslapoLargo') : [];
+      const avisoLargo = largos.find((a) => a.cambiarCara) || largos[0] || null;
       const avisoOtro = P ? P.avisos.find((a) => a.tipo !== 'TraslapoLargo') : null;
       const selEl = s.sel || (avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : { k: 'bar', id: 'S1' });
       const tipo = P ? P.tipo : 'Aérea';
@@ -350,7 +352,7 @@
         pors, porCount: elegidos ? enLista.length + ' de ' + PORS.length : PORS.length + ' en el modelo', filtrado: !!elegidos,
         verTodos: () => enviar({ tipo: 'verTodos' }), q: s.q, proyecto: vista.proyecto, por: por ? { name: por.nombre, sub: por.sub } : { name: '', sub: '' }, hasPor: !!P, noPor: !P,
         tipo, isCim, isAviso, summary: (bars.length + BAST.length) + ' barras · ' + nEstAll + ' estribos · ' + lapsAll.length + ' traslapos · ' + (P ? P.kg : 0).toFixed(1) + ' kg',
-        avisoNegrita: corte > 0 ? avisoTexto.slice(0, corte + 1) : avisoTexto, avisoResto: corte > 0 ? avisoTexto.slice(corte + 1) : '', avisoCambiar: !!avisoLargo,
+        avisoNegrita: corte > 0 ? avisoTexto.slice(0, corte + 1) : avisoTexto, avisoResto: corte > 0 ? avisoTexto.slice(corte + 1) : '', avisoCambiar: !!avisoLargo && avisoLargo.cambiarCara,
         warnLap: avisoLargo ? avisoLargo.elemento : '',
         ver: s.ver, tramos: TRAMOS, rangeFrom: verT ? verT.desde : (P ? P.inicio : 0), rangeTo: verT ? verT.hasta : (P ? P.fin : 0),
         isAlzado: s.tab === 'alzado', isCorte: s.tab === 'corte', tabA: s.tab === 'alzado' ? on : off, tabC: s.tab === 'corte' ? on : off,

@@ -57,13 +57,17 @@
         return { isC: arribaAntes(t.capa), x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel ? 0.28 : 0.16, sw: isSel ? 2.6 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id) };
       });
 
-      // bastones: los de arriba en y = 70 y los de abajo en y = 100, con el gancho hacia adentro de la viga
+      // bastones: los de arriba en y = 70 y los de abajo en y = 100, con el gancho hacia adentro de la viga. Una punta
+      // con gancho se dibuja 6 unidades más adentro: si no, su gancho cae en la misma vertical que el de la corrida y se
+      // ven como una sola raya (Juan, 16-oct). Solo es el dibujo; el largo no cambia.
+      const ADENTRO = 6;
       const t = p.bastones.map((bs) => {
         const top = (bs.id.indexOf('BS') === 0) !== inv;
         const y = top ? 70 : 100, dir = top ? 1 : -1;
-        let pts = X(bs.desde) + ',' + y + ' ' + X(bs.hasta) + ',' + y;
-        if (bs.ganchoInicio) pts = X(bs.desde) + ',' + (y + dir * 16) + ' ' + pts;
-        if (bs.ganchoFin) pts = pts + ' ' + X(bs.hasta) + ',' + (y + dir * 16);
+        const xa = X(bs.desde) + (bs.ganchoInicio ? ADENTRO : 0), xz = X(bs.hasta) - (bs.ganchoFin ? ADENTRO : 0);
+        let pts = xa + ',' + y + ' ' + xz + ',' + y;
+        if (bs.ganchoInicio) pts = xa + ',' + (y + dir * 16) + ' ' + pts;
+        if (bs.ganchoFin) pts = pts + ' ' + xz + ',' + (y + dir * 16);
         const isSel = bs.id === sel && !selLap;
         return { top, pts, col: isSel ? '#1F5FAF' : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
       });

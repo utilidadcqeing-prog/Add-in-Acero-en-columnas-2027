@@ -65,8 +65,11 @@ public sealed record SeccionVista(double AnchoCm, double AltoCm, IReadOnlyList<B
 /// <summary>Una fila de estribos en la lista: el cerrado <c>"E"</c> o un adicional <c>"E1"</c>…</summary>
 public sealed record FilaEstribos(string Id, string Tipo, int Cantidad, string Diametro, double Largo, string Detalle, double Kg);
 
-/// <summary>Un aviso del motor con su texto para la pantalla. <paramref name="Tipo"/> es el nombre de <see cref="Modelo.TipoAviso"/>.</summary>
-public sealed record AvisoVista(string Tipo, string Elemento, string Texto);
+/// <summary>
+/// Un aviso del motor con su texto para la pantalla. <paramref name="Tipo"/> es el nombre de <see cref="Modelo.TipoAviso"/>.
+/// <paramref name="CambiarCara"/>: pasar a la otra cara evita el traslapo largo (la tarjeta muestra "Cambiar").
+/// </summary>
+public sealed record AvisoVista(string Tipo, string Elemento, string Texto, bool CambiarCara = false);
 
 /// <summary>Un tramo del pórtico, en m.</summary>
 public sealed record Rango(double Desde, double Hasta);

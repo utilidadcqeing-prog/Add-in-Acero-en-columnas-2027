@@ -130,6 +130,23 @@ public class ArmadorVistaTests
             + "Si el traslapo va al inicio de la luz no pasa, y además se ahorran 5 kg.", a.Texto);
     }
 
+    /// <summary>
+    /// "Cambiar" (la otra cara) solo sale si la otra cara evita el traslapo largo (Juan, 16-oct: el aviso de S1–S2 traía
+    /// "Cambiar", que mueve la capa de abajo y no lo arregla).
+    /// </summary>
+    [Fact]
+    public void CambiarSoloSaleSiLaOtraCaraEvitaElTraslapoLargo()
+    {
+        var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 7900), Datos.Columna("D", 11550)],
+            VoladizoFinal: 1500);
+
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico));
+
+        Assert.True(Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('I')).CambiarCara);
+        AvisoVista arriba = Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('S'));
+        Assert.False(arriba.CambiarCara);
+    }
+
     [Fact]
     public void LaListaDeEstribosTraeElCerradoYSusKilos()
     {
