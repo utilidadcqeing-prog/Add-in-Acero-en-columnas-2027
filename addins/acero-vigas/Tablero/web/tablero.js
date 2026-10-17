@@ -57,9 +57,27 @@
     constructor(props) {
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
-        cutX: '1.00', depth: '0.10', draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false },
+        cutX: '1.00', depth: '0.10', draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
+        vw: window.innerWidth, vh: window.innerHeight },
       OPCIONES0, props.inicial || {});
       this.opcionesPorPortico = {};
+      this.alCambiarTamano = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    }
+
+    componentDidMount() {
+      window.addEventListener('resize', this.alCambiarTamano);
+    }
+
+    componentWillUnmount() {
+      window.removeEventListener('resize', this.alCambiarTamano);
+    }
+
+    // La página mide como mínimo 1440 × 900, como la maqueta (más chica, C# la achica con el zoom). Si la ventana es
+    // más grande, la llena: la columna del centro crece y el alzado y el corte toman el espacio de más (Juan, 16-oct:
+    // "no se usa el espacio bien").
+    medidas() {
+      const W = Math.max(1440, this.state.vw), H = Math.max(900, this.state.vh);
+      return { pageW: W + 'px', pageH: H + 'px', dibujoW: 788 + W - 1440, dibujoH: 300 + H - 900 };
     }
 
     say(t) {
@@ -403,11 +421,12 @@
     }
 
     render() {
-      if (!this.props.vista) return html`<div style="width: 1440px; height: 900px; background: #EEF0F2"></div>`;
+      const m = this.medidas();
+      if (!this.props.vista) return html`<div style="width: ${m.pageW}; height: ${m.pageH}; background: #EEF0F2"></div>`;
       const v = this.valores();
       const P = this.props.vista.actual;
       return html`
-<div style="position: relative; width: 1440px; height: 900px; display: flex; flex-direction: column; background: #EEF0F2; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; font-size: 13px; color: #16191D; overflow: hidden">
+<div style="position: relative; width: ${m.pageW}; height: ${m.pageH}; display: flex; flex-direction: column; background: #EEF0F2; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; font-size: 13px; color: #16191D; overflow: hidden">
 
   <div style="height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: #FFFFFF; border-bottom: 1px solid #D9DDE2; white-space: nowrap">
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14M5 3v4M13 11v4" stroke="#1F5FAF" stroke-width="1.8" fill="none" stroke-linecap="round"></path></svg>
@@ -445,7 +464,7 @@
                 <span style="font-weight: 600">${p.name}</span>
                 <span style="flex-shrink: 0; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: #EEF0F2; color: #3F4A57">${p.tipo}</span>
               </span>
-              <span style="font-size: 12px; color: #5E6670">${p.sub}</span>
+              <span title=${p.sub} style="font-size: 12px; color: #5E6670; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${p.sub}</span>
             </button>
             ${p.open ? html`
               <div style="display: flex; flex-direction: column; padding: 0 6px 6px">
@@ -488,9 +507,9 @@
         </div>
 
         ${v.isAlzado ? html`
-          <${Alzado} portico=${P} w=${788} h=${300} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} cutX=${v.cutX} cutBad=${v.cutBad} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />` : null}
+          <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} cutX=${v.cutX} cutBad=${v.cutBad} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />` : null}
         ${v.isCorte ? html`
-          <div style="width: 788px; height: 300px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 48px; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px">
+          <div style="width: ${m.dibujoW}px; height: ${m.dibujoH}px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 48px; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px">
             <div style="position: relative; width: ${v.sec.wpx}; height: ${v.sec.hpx}; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
               <div style="position: absolute; left: ${v.sec.stL}; top: ${v.sec.stT}; right: ${v.sec.stR}; bottom: ${v.sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
               ${v.sec.adds.map((sh) => html`

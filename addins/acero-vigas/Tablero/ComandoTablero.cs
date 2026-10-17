@@ -21,9 +21,7 @@ public sealed class ComandoTablero : IExternalCommand
     {
         if (abierta is not null)
         {
-            if (abierta.WindowState == WindowState.Minimized)
-                abierta.WindowState = WindowState.Normal;
-            abierta.Activate();
+            abierta.Volver();
             return Result.Succeeded;
         }
 

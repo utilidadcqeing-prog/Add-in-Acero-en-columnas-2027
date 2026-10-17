@@ -50,6 +50,29 @@ internal sealed partial class VentanaTablero : Window
     public string Diagnostico { get; private set; } = string.Empty;
 
     /// <summary>Manda <paramref name="json"/> a la página (llega como objeto en <c>chrome.webview</c> "message").</summary>
+    private WindowState estadoAntes = WindowState.Normal;
+
+    /// <summary>
+    /// Se minimiza para dejar ver Revit: la ventana pertenece a Revit y siempre queda encima ("Ver en Revit", "3D",
+    /// "Seleccionar en Revit"). <see cref="Volver"/> la deja como estaba.
+    /// </summary>
+    public void Apartar()
+    {
+        if (cerrada || WindowState == WindowState.Minimized)
+            return;
+        estadoAntes = WindowState;
+        WindowState = WindowState.Minimized;
+    }
+
+    public void Volver()
+    {
+        if (cerrada)
+            return;
+        if (WindowState == WindowState.Minimized)
+            WindowState = estadoAntes;
+        Activate();
+    }
+
     /// <remarks>Después de cerrar la ventana no hace nada: puede quedar un trabajo de Revit en cola.</remarks>
     public void Enviar(string json)
     {

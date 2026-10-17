@@ -32,6 +32,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
 {
     private readonly Dictionary<string, OpcionesTablero> opciones = [];
     private ResultadoLectura lectura = new([], []);
+    private List<PorticoConId> porticos = [];
     private ReglasCargadas reglas = new(Reglas.Generales, null);
     private string? actual;
     private bool enVivo = true;
@@ -85,14 +86,29 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     {
         proyecto = proyectoNuevo ?? proyecto;
         lectura = leer();
+        porticos = ConId(lectura.Porticos);
         foreach (string nombre in opciones.Keys.Where(n => Buscar(n) is null).ToList())
             opciones.Remove(nombre);
         if (actual is null || Buscar(actual) is null)
-            actual = lectura.Porticos.FirstOrDefault()?.Nombre;
+            actual = porticos.FirstOrDefault()?.Id;
     }
 
     /// <summary>El pórtico al que pertenece la viga <paramref name="idViga"/>, para "En vivo"; null si ninguno.</summary>
-    public string? PorticoDeViga(string idViga) => lectura.Porticos.FirstOrDefault(p => p.Vigas.Contains(idViga))?.Nombre;
+    public string? PorticoDeViga(string idViga) => porticos.FirstOrDefault(p => p.Portico.Vigas.Contains(idViga))?.Id;
+
+    /// <summary>
+    /// El id de cada pórtico en el tablero: su nombre, o "nombre · nivel" si el mismo eje se repite en varios niveles
+    /// ("Pórtico 1" de Piso 1, Piso 2 y Cubierta).
+    /// </summary>
+    private static List<PorticoConId> ConId(IReadOnlyList<PorticoLeido> leidos)
+    {
+        HashSet<string> repetidos = leidos.GroupBy(p => p.Nombre).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+        return leidos.Select(p => new PorticoConId(repetidos.Contains(p.Nombre) && p.Nivel is not null ? $"{p.Nombre} · {p.Nivel}" : p.Nombre, p,
+            repetidos.Contains(p.Nombre) ? p.Nivel : null)).ToList();
+    }
+
+    /// <param name="Nivel">El nivel que se muestra en la lista, solo cuando el nombre se repite.</param>
+    private sealed record PorticoConId(string Id, PorticoLeido Portico, string? Nivel);
 
     private IReadOnlyList<Salida> Guardar(VistaReglas pantalla)
     {
@@ -112,7 +128,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         return [Vista()];
     }
 
-    private PorticoLeido? Buscar(string id) => lectura.Porticos.FirstOrDefault(p => p.Nombre == id);
+    private PorticoLeido? Buscar(string id) => porticos.FirstOrDefault(p => p.Id == id)?.Portico;
 
     /// <summary>La vista de todo el tablero para la página, por ejemplo después de <see cref="Recargar"/>.</summary>
     public AJs Vista()
@@ -120,8 +136,10 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         PorticoLeido? abierto = actual is null ? null : Buscar(actual);
         VistaPortico? vista = abierto is null
             ? null
-            : ArmadorVista.Armar(abierto, opciones.GetValueOrDefault(abierto.Nombre) ?? OpcionesTablero.PorDefecto, reglas.Reglas);
-        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lectura.Porticos.Select(ArmadorVista.EnLista).ToList(), vista,
-            ArmadorVista.Reglas(reglas), enVivo)));
+            : ArmadorVista.Armar(abierto, opciones.GetValueOrDefault(actual!) ?? OpcionesTablero.PorDefecto, reglas.Reglas) with { Id = actual! };
+        var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
+            ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
+            : l with { Id = p.Id }).ToList();
+        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo)));
     }
 }

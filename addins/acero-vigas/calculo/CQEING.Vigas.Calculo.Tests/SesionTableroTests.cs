@@ -40,6 +40,33 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Equal("Proyecto de prueba", v.GetProperty("proyecto").GetString());
     }
 
+    /// <summary>
+    /// El mismo eje se repite en cada nivel ("Pórtico 1" de Piso 1, Piso 2 y Cubierta): cada uno tiene su id y su nivel
+    /// en la lista, y elegir uno no abre los otros (Juan, 16-oct: "los datos salen duplicados").
+    /// </summary>
+    [Fact]
+    public void ElMismoEjeEnVariosNivelesTieneUnIdPorNivel()
+    {
+        PorticoLeido piso2 = ArmadorVistaTests.Portico1() with { Nivel = "Piso 2", Vigas = ["201", "202", "203", "204"] };
+        PorticoLeido piso3 = ArmadorVistaTests.Portico1() with { Nivel = "Cubierta", Vigas = ["301", "302", "303", "304"] };
+        PorticoLeido otro = ArmadorVistaTests.Portico1() with { Nombre = "Pórtico 2", Vigas = ["401"] };
+        lectura = new ResultadoLectura([piso2, piso3, otro], []);
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+
+        JsonElement v = VistaDe(s.Manejar(new ElegirPortico("Pórtico 1 · Cubierta")));
+
+        JsonElement lista = v.GetProperty("porticos");
+        Assert.Equal(["Pórtico 1 · Piso 2", "Pórtico 1 · Cubierta", "Pórtico 2"], lista.EnumerateArray().Select(p => p.GetProperty("id").GetString()));
+        Assert.Equal(["Pórtico 1", "Pórtico 1", "Pórtico 2"], lista.EnumerateArray().Select(p => p.GetProperty("nombre").GetString()));
+        Assert.EndsWith(" · Cubierta", lista[1].GetProperty("sub").GetString());
+        Assert.DoesNotContain("Nivel", lista[2].GetProperty("sub").GetString());
+        Assert.Equal("Pórtico 1 · Cubierta", v.GetProperty("actual").GetProperty("id").GetString());
+        Assert.Equal("Pórtico 1 · Piso 2", s.PorticoDeViga("202"));
+        ARevit a = Assert.Single(s.Manejar(new VerEnRevit("Pórtico 1 · Cubierta")).OfType<ARevit>());
+        Assert.Equal(["301", "302", "303", "304"], a.Vigas);
+    }
+
     /// <summary>La maqueta abre con "En vivo con Revit" encendido.</summary>
     [Fact]
     public void ArrancaEnVivoComoLaMaqueta()

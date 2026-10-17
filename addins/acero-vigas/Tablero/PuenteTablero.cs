@@ -52,7 +52,20 @@ internal sealed class PuenteTablero
 
     private void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {
-        IReadOnlyList<string> elegidas = AccionesRevit.Hacer(app, accion, vigas);
+        // La ventana siempre queda encima de Revit: se aparta para que se vea lo que pasa allá. Al elegir vigas vuelve
+        // sola al terminar (o al cancelar); después de "Ver en Revit" y "3D" vuelve con el botón Tablero.
+        if (accion != AccionRevit.Seleccionar)
+            ventana.Apartar();
+        IReadOnlyList<string> elegidas;
+        try
+        {
+            elegidas = AccionesRevit.Hacer(app, accion, vigas);
+        }
+        finally
+        {
+            if (accion == AccionRevit.PedirSeleccion)
+                ventana.Volver();
+        }
         if (accion != AccionRevit.PedirSeleccion || elegidas.Count == 0)
             return;
         // "Seleccionar en Revit": se abre el pórtico de la primera viga elegida que esté en alguno.
