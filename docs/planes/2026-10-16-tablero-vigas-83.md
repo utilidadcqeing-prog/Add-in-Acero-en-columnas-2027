@@ -154,6 +154,14 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
     - la sección se dibuja a 5 px por cm como la maqueta, y más chica si la viga no entra en el recuadro;
     - `demo.js` imita a `SesionTablero` (responde "calcular", "elegirPortico", "guardarReglas"…) con las cuentas de la maqueta, para que la demostración responda igual que allá;
     - la licencia de htm es Apache 2.0, no MIT (`vendor/LICENCIAS.txt`).
+15. **El puente con Revit** (mi decisión, tarea 5):
+    - todos los mensajes de la página se atienden por el `ExternalEvent` de `AccionesRevit`, no solo las acciones: la sesión lee el modelo, y eso solo es válido en el hilo de Revit con la API activa;
+    - "En vivo" desde Revit abre el pórtico de la viga elegida, pero no vuelve a seleccionar todas sus vigas: así no se pisa lo que el usuario eligió;
+    - "En vivo" arranca encendido, como la maqueta;
+    - "Ver en Revit" selecciona las vigas y las muestra (`ShowElements`);
+    - la recarga es solo cuando cambia el documento activo (`ViewActivated` con otro documento) o se cierra el leído (`DocumentClosing`), no en cada cambio de vista, porque leer el modelo es caro;
+    - el zoom usa el área del navegador (sin el borde de la ventana) y el área de trabajo de la pantalla principal;
+    - en Debug, el título de la ventana muestra la versión de WebView2 y la DLL cargada, para anotarlas en la tarea 6.
 
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 

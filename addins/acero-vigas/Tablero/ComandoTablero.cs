@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Windows;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
@@ -39,22 +37,13 @@ public sealed class ComandoTablero : IExternalCommand
             return Result.Cancelled;
         }
 
-        var ventana = new VentanaTablero(commandData.Application.MainWindowHandle);
-        ventana.MensajeRecibido += json => Responder(ventana, json);
+        UIApplication uiapp = commandData.Application;
+        var ventana = new VentanaTablero(uiapp.MainWindowHandle);
+        // El puente se crea aquí, con la API válida: su ExternalEvent no se puede crear desde la ventana.
+        _ = new PuenteTablero(ventana, uiapp);
         ventana.Closed += (_, _) => abierta = null;
         abierta = ventana;
         ventana.Show();
         return Result.Succeeded;
-    }
-
-    /// <summary>Temporal (tarea 1 del plan): devuelve el eco y, al cargar, el diagnóstico de WebView2.</summary>
-    private static void Responder(VentanaTablero ventana, string json)
-    {
-        JsonNode? mensaje = JsonNode.Parse(json);
-        string? tipo = mensaje?["tipo"]?.GetValue<string>();
-        if (tipo == "eco")
-            ventana.Enviar(json);
-        else if (tipo == "listo")
-            ventana.Enviar(JsonSerializer.Serialize(new { tipo = "diagnostico", texto = ventana.Diagnostico }));
     }
 }

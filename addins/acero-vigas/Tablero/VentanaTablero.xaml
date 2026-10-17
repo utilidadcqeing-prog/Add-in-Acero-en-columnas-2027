@@ -4,9 +4,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Acero en vigas"
-        Width="1456" Height="939"
+        SizeToContent="WidthAndHeight"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="#EEF0F2">
-    <wv2:WebView2 x:Name="Navegador" DefaultBackgroundColor="#EEF0F2" />
+    <!-- Abre a 1440 × 900, el tamaño de la maqueta; al cargar se recorta al área de trabajo (decisión 6 del plan). -->
+    <wv2:WebView2 x:Name="Navegador" Width="1440" Height="900" DefaultBackgroundColor="#EEF0F2" />
 </Window>

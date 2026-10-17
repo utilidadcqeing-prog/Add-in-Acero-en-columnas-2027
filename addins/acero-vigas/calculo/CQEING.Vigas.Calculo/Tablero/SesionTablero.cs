@@ -34,8 +34,14 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     private ResultadoLectura lectura = new([], []);
     private ReglasCargadas reglas = new(Reglas.Generales, null);
     private string? actual;
-    private bool enVivo;
+    private bool enVivo = true;
     private string proyecto = proyecto;
+
+    /// <summary>Si el tablero sigue la selección de Revit y la marca en Revit ("En vivo con Revit").</summary>
+    public bool EnVivo => enVivo;
+
+    /// <summary>El pórtico abierto; null si ninguno.</summary>
+    public string? Actual => actual;
 
     public IReadOnlyList<Salida> Manejar(MensajeTablero m)
     {
@@ -108,7 +114,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
 
     private PorticoLeido? Buscar(string id) => lectura.Porticos.FirstOrDefault(p => p.Nombre == id);
 
-    private AJs Vista()
+    /// <summary>La vista de todo el tablero para la página, por ejemplo después de <see cref="Recargar"/>.</summary>
+    public AJs Vista()
     {
         PorticoLeido? abierto = actual is null ? null : Buscar(actual);
         VistaPortico? vista = abierto is null

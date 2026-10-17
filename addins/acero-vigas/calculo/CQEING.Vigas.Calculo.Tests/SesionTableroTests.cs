@@ -40,6 +40,37 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Equal("Proyecto de prueba", v.GetProperty("proyecto").GetString());
     }
 
+    /// <summary>La maqueta abre con "En vivo con Revit" encendido.</summary>
+    [Fact]
+    public void ArrancaEnVivoComoLaMaqueta()
+    {
+        SesionTablero s = Sesion();
+
+        JsonElement v = VistaDe(s.Manejar(new Listo()));
+
+        Assert.True(s.EnVivo);
+        Assert.True(v.GetProperty("enVivo").GetBoolean());
+    }
+
+    /// <summary>Para "En vivo" y para cambiar o cerrar el documento en Revit (tarea 5 del plan).</summary>
+    [Fact]
+    public void RecargarOtroDocumentoDaSuVista()
+    {
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+        s.Manejar(new CambiarEnVivo(true));
+        Assert.True(s.EnVivo);
+        Assert.Equal("Pórtico 1", s.Actual);
+
+        lectura = new ResultadoLectura([], []);
+        s.Recargar("Otro proyecto");
+        JsonElement v = VistaDe([s.Vista()]);
+
+        Assert.Null(s.Actual);
+        Assert.Equal(JsonValueKind.Null, v.GetProperty("actual").ValueKind);
+        Assert.Equal("Otro proyecto", v.GetProperty("proyecto").GetString());
+    }
+
     [Fact]
     public void ListoAbreElPrimerPortico()
     {
@@ -69,6 +100,7 @@ public sealed class SesionTableroTests : IDisposable
     {
         SesionTablero s = Sesion();
         s.Manejar(new Listo());
+        s.Manejar(new CambiarEnVivo(false));
 
         Assert.Empty(s.Manejar(new ElegirPortico("Pórtico 1")).OfType<ARevit>());
         s.Manejar(new CambiarEnVivo(true));

@@ -17,14 +17,6 @@ public class AppVigas : IExternalApplication
             "Abre el tablero de acero en vigas: pórticos, barras, traslapos, bastones, estribos y kilos.",
             "iconoCQ"));
 
-        // Temporal (#81): se quita cuando el tablero (#83) tenga "Seleccionar en Revit".
-        panel.AddItem(CintaCqeing.CrearBoton(
-            "ComandoDiagnosticoPorticos",
-            "Pórticos\n(diagnóstico)",
-            "CQEING.Vigas.Revit.ComandoDiagnosticoPorticos",
-            "Lee vigas, ejes, apoyos y niveles del modelo y escribe un informe para verificar la lectura de pórticos.",
-            "iconoCQ"));
-
         return Result.Succeeded;
     }
 
