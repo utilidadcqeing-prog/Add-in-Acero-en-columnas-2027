@@ -49,6 +49,12 @@ public enum TipoTramo
 }
 
 /// <summary>
+/// Una zona de estribos de un tramo, en mm desde el eje A: <paramref name="Junta"/> = la de confinamiento, junto a una
+/// columna; si no, el centro.
+/// </summary>
+public sealed record ZonaTramo(double Desde, double Hasta, bool Junta);
+
+/// <summary>
 /// Una luz libre (<c>"A-B"</c>) o un voladizo (<c>"Voladizo D"</c>), en mm desde el eje A. En un voladizo, una de las
 /// "caras" es la punta del concreto.
 /// </summary>

@@ -40,36 +40,72 @@ internal static class DistribuidorEstribos
     /// <param name="diametroEstribo">Diámetro real del estribo, en mm.</param>
     internal static IReadOnlyList<double> Posiciones(Tramo t, ConfigEstribos c, double diametroEstribo)
     {
+        // Donde dos tramos se tocan (el último de una zona y el primero del centro) el estribo es uno solo.
+        var posiciones = new List<double>();
+        foreach (Segmento s in Segmentos(t, c, diametroEstribo))
+            foreach (double x in EnSegmento(s))
+                if (posiciones.Count == 0 || x - posiciones[^1] > Tolerancia)
+                    posiciones.Add(x);
+        return posiciones;
+    }
+
+    /// <summary>
+    /// Las zonas de <paramref name="t"/> en mm, de izquierda a derecha, para el alzado del tablero (#83): las de
+    /// confinamiento junto a las columnas (<see cref="ZonaTramo.Junta"/>) y el centro.
+    /// </summary>
+    internal static IReadOnlyList<ZonaTramo> Zonas(Tramo t, ConfigEstribos c, double diametroEstribo) =>
+        Segmentos(t, c, diametroEstribo).Select(s => new ZonaTramo(s.Desde, s.Hasta, s.Junta)).ToList();
+
+    /// <summary>
+    /// Un trozo del tramo: una zona va a la separación exacta desde su columna (<paramref name="DesdeLaDerecha"/> si
+    /// la columna está a la derecha); el centro se reparte a la misma distancia sin pasar de la separación.
+    /// </summary>
+    private sealed record Segmento(double Desde, double Hasta, double Separacion, bool Junta, bool Exacta, bool DesdeLaDerecha = false);
+
+    private static IReadOnlyList<Segmento> Segmentos(Tramo t, ConfigEstribos c, double diametroEstribo)
+    {
         double alPrimero = DistanciaACara + diametroEstribo / 2;
         double desde = t.CaraIzquierda + alPrimero, hasta = t.CaraDerecha - alPrimero;
         if (hasta - desde <= Tolerancia)
-            return [(t.CaraIzquierda + t.CaraDerecha) / 2];
+        {
+            double centro = (t.CaraIzquierda + t.CaraDerecha) / 2;
+            return [new Segmento(centro, centro, c.SeparacionZona, true, false)];
+        }
         // La zona va junto a cada columna: en la luz, a los dos lados; en el voladizo, solo del lado de su apoyo.
         bool zonaIzquierda = t.Tipo != TipoTramo.VoladizoInicial, zonaDerecha = t.Tipo != TipoTramo.VoladizoFinal;
         int zonas = (zonaIzquierda ? 1 : 0) + (zonaDerecha ? 1 : 0);
+        var todoComoZona = new Segmento(desde, hasta, c.SeparacionZona, true, false);
         if (t.CaraDerecha - t.CaraIzquierda < zonas * c.LargoZona)
-            return Repartir(desde, hasta, c.SeparacionZona);
+            return [todoComoZona];
 
         int enZona = c.LargoZona < alPrimero ? 0 : (int)Math.Floor((c.LargoZona - alPrimero) / c.SeparacionZona + Tolerancia) + 1;
         if (enZona == 0)
-            return Repartir(desde, hasta, c.SeparacionCentro);
+            return [new Segmento(desde, hasta, c.SeparacionCentro, false, false)];
 
         int izquierda = zonaIzquierda ? enZona : 1, derecha = zonaDerecha ? enZona : 1;
         double finZonaIzquierda = desde + (izquierda - 1) * c.SeparacionZona;
         double finZonaDerecha = hasta - (derecha - 1) * c.SeparacionZona;
         // Si la zona llega hasta el último estribo (un voladizo apenas del largo de la zona), todo va como zona.
         if (finZonaDerecha - finZonaIzquierda < -Tolerancia)
-            return Repartir(desde, hasta, c.SeparacionZona);
+            return [todoComoZona];
 
-        List<double> posiciones = Enumerable.Range(0, izquierda).Select(i => desde + i * c.SeparacionZona).ToList();
-        IEnumerable<double> alFinal = Enumerable.Range(0, derecha).Reverse().Select(i => hasta - i * c.SeparacionZona);
-        // El centro reparte entre el último de cada zona; si las dos zonas se tocan, ese estribo es uno solo.
+        var segmentos = new List<Segmento>();
+        if (zonaIzquierda)
+            segmentos.Add(new Segmento(desde, finZonaIzquierda, c.SeparacionZona, true, true));
+        // El centro reparte entre el último de cada zona; si las dos zonas se tocan, no hay centro.
         if (finZonaDerecha - finZonaIzquierda > Tolerancia)
-            posiciones.AddRange(Repartir(finZonaIzquierda, finZonaDerecha, c.SeparacionCentro).Skip(1).SkipLast(1));
-        else
-            alFinal = alFinal.Skip(1);
-        posiciones.AddRange(alFinal);
-        return posiciones;
+            segmentos.Add(new Segmento(finZonaIzquierda, finZonaDerecha, c.SeparacionCentro, false, false));
+        if (zonaDerecha)
+            segmentos.Add(new Segmento(finZonaDerecha, hasta, c.SeparacionZona, true, true, DesdeLaDerecha: true));
+        return segmentos;
+    }
+
+    private static IEnumerable<double> EnSegmento(Segmento s)
+    {
+        if (!s.Exacta)
+            return Repartir(s.Desde, s.Hasta, s.Separacion);
+        int n = (int)Math.Round((s.Hasta - s.Desde) / s.Separacion) + 1;
+        return Enumerable.Range(0, n).Select(i => s.DesdeLaDerecha ? s.Hasta - (n - 1 - i) * s.Separacion : s.Desde + i * s.Separacion);
     }
 
     /// <summary>De <paramref name="desde"/> a <paramref name="hasta"/>, a la misma distancia y sin pasar de <paramref name="separacion"/>.</summary>

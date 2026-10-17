@@ -10,12 +10,11 @@ public class AppVigas : IExternalApplication
     {
         RibbonPanel panel = CintaCqeing.ObtenerPanel(app, "Vigas");
 
-        // Temporal (#81): se quita cuando el tablero (#83) tenga "Seleccionar en Revit".
         panel.AddItem(CintaCqeing.CrearBoton(
-            "ComandoDiagnosticoPorticos",
-            "Pórticos\n(diagnóstico)",
-            "CQEING.Vigas.Revit.ComandoDiagnosticoPorticos",
-            "Lee vigas, ejes, apoyos y niveles del modelo y escribe un informe para verificar la lectura de pórticos.",
+            "ComandoTablero",
+            "Tablero",
+            "CQEING.Vigas.Tablero.ComandoTablero",
+            "Abre el tablero de acero en vigas: pórticos, barras, traslapos, bastones, estribos y kilos.",
             "iconoCQ"));
 
         return Result.Succeeded;

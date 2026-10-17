@@ -1,0 +1,189 @@
+// Alzado del pórtico, con pan y zoom: el port de Beam.dc.html de la maqueta (versión 19) para el tablero (#83).
+// Mismo DOM y mismos estilos que la maqueta (decisión 1 del plan docs/planes/2026-10-16-tablero-vigas-83.md); donde la
+// maqueta tiene lugares fijos (C1…C4, T1…T4, a1…v2, colA…colD) se pinta un elemento igual por cada dato de `portico`.
+(function () {
+  'use strict';
+  const { html, Component } = window.htmPreact;
+  const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
+
+  class Alzado extends Component {
+    constructor(props) {
+      super(props);
+      this.state = { z: null, tx: 0, ty: 0, drag: null, selLocal: 'S1', selLapLocal: '', rk: '' };
+    }
+
+    valores() {
+      const p = this.props.portico;
+      const W = this.props.w ?? 820, H = this.props.h ?? 300;
+      const inv = !!this.props.invert, warn = !!this.props.warn;
+      const showSt = this.props.showStirrups ?? true;
+      const X = (m) => 30 + 52 * (m - p.inicio);
+      const CH = 204;
+      const r0 = this.props.rangeFrom ?? p.inicio, r1 = this.props.rangeTo ?? p.fin;
+      const x0 = X(r0 - 0.3), x1 = X(r1 + 0.3), dx = x1 - x0;
+      const fitZ = Math.min((W - 24) / dx, (H - 60) / CH);
+      const fit = { z: fitZ, tx: (W - dx * fitZ) / 2 - x0 * fitZ, ty: 30 + (H - 56 - CH * fitZ) / 2 };
+      const rk = r0 + ':' + r1;
+      const v = (this.state.z == null || this.state.rk !== rk) ? fit : this.state;
+      const sel = this.props.sel ?? this.state.selLocal;
+      const selLap = this.props.selLap ?? this.state.selLapLocal;
+      const manualLaps = String(this.props.lapsManual || '').split(',');
+      // Antes de voltear (cimentación), la maqueta pinta arriba ("C") la capa que traslapa al centro de la luz.
+      const arribaAntes = (capa) => (capa === 'arriba') !== inv;
+
+      const pickBar = (id) => () => { if (this.props.onPick) this.props.onPick(id); else this.setState({ selLocal: id, selLapLocal: '' }); };
+      const pickLapFn = (id) => () => { if (this.props.onPickLap) this.props.onPickLap(id); else this.setState({ selLapLocal: id }); };
+
+      // barras: la y alterna 52/58 (C) y 118/112 (F) según el índice en su capa, como la maqueta
+      const enCapa = { C: 0, F: 0 };
+      const b = p.barras.map((bar) => {
+        const isC = arribaAntes(bar.capa);
+        const i = enCapa[isC ? 'C' : 'F']++;
+        const y = isC ? (i % 2 ? 58 : 52) : (i % 2 ? 112 : 118);
+        const dir = isC ? 1 : -1;
+        let pts = X(bar.desde) + ',' + y + ' ' + X(bar.hasta) + ',' + y;
+        if (bar.ganchoInicio) pts = X(bar.desde) + ',' + (y + dir * 22) + ' ' + pts;
+        if (bar.ganchoFin) pts = pts + ' ' + X(bar.hasta) + ',' + (y + dir * 22);
+        const isSel = bar.id === sel && !selLap;
+        return { isC, pts, col: isSel ? '#1F5FAF' : '#3F4A57', sw: isSel ? 4.2 : 2.6, pick: pickBar(bar.id),
+          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: bar.capa === 'arriba' ? 33 : 150, lt: bar.id + ' · ' + f2(bar.largo) };
+      });
+
+      const warnLap = warn ? this.props.warnLap : '';
+      const l = p.traslapos.map((t) => {
+        const isSel = t.id === selLap, isMan = manualLaps.includes(t.id);
+        const isWarn = t.id === warnLap && !isMan;
+        const c = isSel || isMan ? '#1F5FAF' : (isWarn ? '#B26B00' : '#C77A12');
+        return { isC: arribaAntes(t.capa), x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel ? 0.28 : 0.16, sw: isSel ? 2.6 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id) };
+      });
+
+      // bastones: los de arriba en y = 70 y los de abajo en y = 100, con el gancho hacia adentro de la viga. Una punta
+      // con gancho se dibuja 6 unidades más adentro: si no, su gancho cae en la misma vertical que el de la corrida y se
+      // ven como una sola raya (Juan, 16-oct). Solo es el dibujo; el largo no cambia.
+      const ADENTRO = 6;
+      const t = p.bastones.map((bs) => {
+        const top = (bs.id.indexOf('BS') === 0) !== inv;
+        const y = top ? 70 : 100, dir = top ? 1 : -1;
+        const xa = X(bs.desde) + (bs.ganchoInicio ? ADENTRO : 0), xz = X(bs.hasta) - (bs.ganchoFin ? ADENTRO : 0);
+        let pts = xa + ',' + y + ' ' + xz + ',' + y;
+        if (bs.ganchoInicio) pts = xa + ',' + (y + dir * 16) + ' ' + pts;
+        if (bs.ganchoFin) pts = pts + ' ' + xz + ',' + (y + dir * 16);
+        const isSel = bs.id === sel && !selLap;
+        return { top, pts, col: isSel ? '#1F5FAF' : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
+      });
+
+      const st = p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
+
+      const ap = p.apoyos;
+      const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda) }));
+      const luces = ap.slice(1).map((a, i) => ({ x: X((ap[i].x + a.x) / 2), lt: 'luz ' + f2(a.caraIzquierda - ap[i].caraDerecha) }));
+      const vols = [];
+      if (ap.length && p.inicio < ap[0].caraIzquierda - 1e-9) vols.push({ a: p.inicio, z: ap[0].caraIzquierda });
+      if (ap.length && p.fin > ap[ap.length - 1].caraDerecha + 1e-9) vols.push({ a: ap[ap.length - 1].caraDerecha, z: p.fin });
+      const vol = vols.map((o) => ({ x: X(o.a), w: X(o.z) - X(o.a), lx: X((o.a + o.z) / 2), lt: 'voladizo ' + f2(o.z - o.a) }));
+      const ejes = ap.map((a) => ({ x: X(a.x), eje: a.eje }));
+
+      const cutM = parseFloat(this.props.cutX);
+      const cut = { x: X(Number.isFinite(cutM) ? cutM : 1.0), c: this.props.cutBad ? '#B42318' : '#1F5FAF' };
+      const wl = p.traslapos.find((x) => x.id === warnLap);
+
+      const scaleOf = (el) => { const r = el.getBoundingClientRect(); return { r, k: r.width ? W / r.width : 1 }; };
+      const zoomAt = (mx, my, f) => {
+        const z = Math.min(Math.max(v.z * f, fitZ * 0.4), fitZ * 12);
+        const s = z / v.z;
+        this.setState({ z, rk, tx: mx - (mx - v.tx) * s, ty: my - (my - v.ty) * s });
+      };
+      return {
+        w: W, h: H, wpx: W + 'px', hpx: H + 'px',
+        cursor: this.state.drag ? 'grabbing' : 'grab',
+        view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
+        flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
+        caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
+        b, l, t, st, cols, luces, vol, ejes, cut,
+        beamX: X(p.inicio), beamW: X(p.fin) - X(p.inicio),
+        stVis: showSt ? 'visible' : 'hidden',
+        warnText: wl ? 'traslapo ' + f2(wl.hasta - wl.desde) + ' · +' + f2(wl.hasta - wl.desde - wl.minimo) : '',
+        warnX: wl ? X((wl.desde + wl.hasta) / 2) : 0, warnY: inv ? 100 : 82,
+        zoomPct: Math.round((v.z / fitZ) * 100) + '%',
+        stop: (e) => e.stopPropagation(),
+        down: (e) => {
+          if (e.button !== 0 && e.button !== 1) return;
+          if (e.button === 1) e.preventDefault();
+          const { k } = scaleOf(e.currentTarget);
+          this.setState({ drag: { x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty, z: v.z, k } });
+        },
+        move: (e) => {
+          const d = this.state.drag;
+          if (!d) return;
+          this.setState({ z: d.z, rk, tx: d.tx + (e.clientX - d.x) * d.k, ty: d.ty + (e.clientY - d.y) * d.k });
+        },
+        up: () => { if (this.state.drag) this.setState({ drag: null }); },
+        wheel: (e) => {
+          const { r, k } = scaleOf(e.currentTarget);
+          zoomAt((e.clientX - r.left) * k, (e.clientY - r.top) * k, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+        },
+        zoomIn: () => zoomAt(W / 2, H / 2, 1.25),
+        zoomOut: () => zoomAt(W / 2, H / 2, 1 / 1.25),
+        fitView: () => this.setState({ z: null, drag: null }),
+      };
+    }
+
+    render() {
+      const v = this.valores();
+      const lap = (x) => html`<rect x="${x.x}" y="${x.isC ? 45 : 106}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" style="cursor: pointer" onClick=${x.pick}></rect>`;
+      const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick}></polyline>`;
+      const rotulo = (x) => html`<text x="${x.lx}" y="${x.ly}" text-anchor="middle" font-size="10" font-family="IBM Plex Mono, monospace" fill="${x.col}">${x.lt}</text>`;
+      return html`
+<div style="position: relative; width: ${v.wpx}; height: ${v.hpx}; overflow: hidden; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #16191D; cursor: ${v.cursor}; user-select: none; touch-action: none" onPointerDown=${v.down} onPointerMove=${v.move} onPointerUp=${v.up} onPointerLeave=${v.up} onWheel=${v.wheel} onDblClick=${v.fitView}>
+  <svg width="${v.w}" height="${v.h}" style="display: block" role="img" aria-label="Alzado del pórtico con barras, traslapos, bastones y estribos">
+    <g transform="${v.view}">
+      <rect x="${v.beamX}" y="40" width="${v.beamW}" height="90" fill="#F1F3F5" stroke="#9AA3AD" stroke-width="1"></rect>
+      ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="90" fill="#E9ECEF" stroke="none"></rect>`)}
+      <g visibility="${v.stVis}">
+        ${v.st.map((z) => html`<line x1="${z.x1}" y1="85" x2="${z.x2}" y2="85" stroke="#C3CAD2" stroke-width="80" stroke-dasharray="${z.da}"></line>`)}
+      </g>
+      ${v.cols.map((c) => html`<rect x="${c.x}" y="14" width="${c.w}" height="152" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1"></rect>`)}
+      ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3"></line>`)}
+      <g transform="${v.flip}">
+        ${v.l.filter((x) => x.isC).map(lap)}
+        ${v.l.filter((x) => !x.isC).map(lap)}
+        ${v.b.filter((x) => x.isC).map(barra)}
+        ${v.b.filter((x) => !x.isC).map(barra)}
+        ${v.t.filter((x) => x.top).map(barra)}
+        ${v.t.filter((x) => !x.top).map(barra)}
+      </g>
+      ${v.b.filter((x) => x.isC).map(rotulo)}
+      ${v.b.filter((x) => !x.isC).map(rotulo)}
+      <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
+      <line x1="${v.cut.x}" y1="18" x2="${v.cut.x}" y2="152" stroke="${v.cut.c}" stroke-width="1.6" stroke-dasharray="6 3"></line>
+      <text x="${v.cut.x}" y="15" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}">1-1</text>
+      ${v.luces.map((m) => html`<text x="${m.x}" y="178" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#5E6670">${m.lt}</text>`)}
+      ${v.vol.map((o) => html`<text x="${o.lx}" y="178" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#5E6670">${o.lt}</text>`)}
+      ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="192" r="8" fill="#FFFFFF" stroke="#9AA3AD"></circle><text x="${e.x}" y="195.5" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}
+    </g>
+  </svg>
+  <div style="position: absolute; top: 8px; left: 10px; display: flex; gap: 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
+    <span>${v.caption}</span>
+    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #3F4A57"></span>corrida</span>
+    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #0F7B6C"></span>bastón</span>
+    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(199,122,18,0.25); border: 1px solid #C77A12"></span>traslapo</span>
+  </div>
+  <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 2px; align-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; padding: 2px" onPointerDown=${v.stop} onDblClick=${v.stop}>
+    <button type="button" aria-label="Alejar" onClick=${v.zoomOut} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>
+    </button>
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; min-width: 40px; text-align: center; color: #3F4A57">${v.zoomPct}</span>
+    <button type="button" aria-label="Acercar" onClick=${v.zoomIn} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8M7 3v8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>
+    </button>
+    <button type="button" aria-label="Ajustar a la vista" onClick=${v.fitView} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+  </div>
+  <div style="position: absolute; bottom: 6px; left: 10px; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">Arrastra para mover · rueda para zoom · doble clic para ajustar · clic en una barra, bastón o traslapo para editarlo</div>
+</div>`;
+    }
+  }
+
+  window.Alzado = Alzado;
+})();

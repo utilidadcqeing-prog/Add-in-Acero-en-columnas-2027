@@ -1,0 +1,72 @@
+<Window x:Class="CQEING.Vigas.Tablero.BarraSeleccion"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Seleccionar vigas"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        FontFamily="IBM Plex Sans, Segoe UI"
+        FontSize="13"
+        Foreground="#16191D">
+    <!-- La barra del add-in para "Seleccionar en Revit" (#83): reemplaza a Finalizar/Cancelar de Revit. Mismos colores que
+         la maqueta del tablero. -->
+    <Window.Resources>
+        <Style x:Key="Boton" TargetType="Button">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="Foreground" Value="#1F5FAF" />
+            <Setter Property="BorderBrush" Value="#1F5FAF" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Principal" TargetType="Button" BasedOn="{StaticResource Boton}">
+            <Setter Property="Background" Value="#1F5FAF" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#9AA3AD" />
+                    <Setter Property="BorderBrush" Value="#9AA3AD" />
+                    <Setter Property="Cursor" Value="No" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="Texto" TargetType="Button" BasedOn="{StaticResource Boton}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Padding" Value="8,0" />
+        </Style>
+    </Window.Resources>
+    <Border Margin="8" Background="#FFFFFF" BorderBrush="#D9DDE2" BorderThickness="1" CornerRadius="8" Padding="14,8">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.18" />
+        </Border.Effect>
+        <StackPanel Orientation="Horizontal">
+            <Path Data="M3 2l9 5-4 1.2L6.5 13z" Stroke="#1F5FAF" StrokeThickness="1.5" StrokeLineJoin="Round" Width="16" Height="16"
+                  VerticalAlignment="Center" Margin="0,0,10,0" />
+            <StackPanel VerticalAlignment="Center" Margin="0,0,24,0">
+                <TextBlock Text="Selecciona vigas en Revit" FontWeight="SemiBold" />
+                <TextBlock Text="Clic, Ctrl + clic o una ventana de selección" FontSize="12" Foreground="#5E6670" />
+            </StackPanel>
+            <TextBlock x:Name="Conteo" VerticalAlignment="Center" Margin="0,0,24,0" MinWidth="150" Foreground="#3F4A57" />
+            <Button Content="Todas" Style="{StaticResource Boton}" Margin="0,0,8,0" Click="AlPulsarTodas" />
+            <Button x:Name="BotonTerminar" Content="Terminar" Style="{StaticResource Principal}" Margin="0,0,4,0" Click="AlPulsarTerminar" />
+            <Button Content="Cancelar" Style="{StaticResource Texto}" Click="AlPulsarCancelar" />
+        </StackPanel>
+    </Border>
+</Window>

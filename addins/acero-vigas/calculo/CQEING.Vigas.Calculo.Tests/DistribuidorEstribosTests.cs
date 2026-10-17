@@ -153,4 +153,35 @@ public class DistribuidorEstribosTests
 
         Assert.Equal([250.0], Posiciones("A-B", p: portico));
     }
+
+    private static IReadOnlyList<ZonaTramo> Zonas(string nombre, ConfigEstribos? c = null, Portico? p = null) =>
+        DistribuidorEstribos.Zonas(TramoDe(p ?? Datos.PorticoMaqueta(), nombre), c ?? General, Estribo3);
+
+    /// <summary>Las zonas que pinta el alzado (#83): las de columna a la separación exacta y el centro, en mm.</summary>
+    [Fact]
+    public void LaLuzTieneSuZonaEnCadaColumnaYElCentro()
+    {
+        Assert.Equal([new ZonaTramo(254.75, 954.75, true), new ZonaTramo(954.75, 3445.25, false), new ZonaTramo(3445.25, 4145.25, true)],
+            Zonas("A-B"));
+    }
+
+    [Fact]
+    public void ElVoladizoTieneZonaSoloJuntoASuColumna()
+    {
+        Assert.Equal([new ZonaTramo(12554.75, 13254.75, true), new ZonaTramo(13254.75, 13945.25, false)], Zonas("Voladizo D"));
+    }
+
+    [Fact]
+    public void UnaLuzCortaEsUnaSolaZona()
+    {
+        var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 1900)]);
+
+        Assert.Equal([new ZonaTramo(254.75, 1645.25, true)], Zonas("A-B", p: portico));
+    }
+
+    [Fact]
+    public void SinZonaTodoEsCentro()
+    {
+        Assert.Equal([new ZonaTramo(254.75, 4145.25, false)], Zonas("A-B", General with { LargoZona = 0 }));
+    }
 }
