@@ -9,6 +9,8 @@ namespace CQEING.Vigas.Calculo.Seccion;
 /// <item>solo en los tramos, fuera de los apoyos y de los traslapos de cualquier capa (Carlos: "que no se deje colocar
 /// en una zona de traslapo"), con <see cref="MargenMm"/> de margen en cada punta;</item>
 /// <item>fuera de ahí salta al punto permitido más cercano ("estamos más cercanos acá, se pone para acá");</item>
+/// <item>va de estribo en estribo, no de forma continua (Juan, 17-oct: "el arrastre debe ser no lineal sino por
+/// estribo"; decisión 9): solo en los centros de los estribos cerrados que caen en lo permitido;</item>
 /// <item>por defecto, en la sección que más largo ocupa: la vista tipo;</item>
 /// <item>la proyección son los bastones que no pasan por el corte pero tocan la franja de la profundidad.</item>
 /// </list>
@@ -56,11 +58,30 @@ public static class CalculadoraCorte
         return mejor;
     }
 
+    /// <summary>Los centros de los estribos cerrados que caen en lo permitido, de izquierda a derecha.</summary>
+    public static IReadOnlyList<double> Puntos(ResultadoEstribos re, IReadOnlyList<Intervalo> permitidos) =>
+        re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones)
+            .Where(x => permitidos.Any(i => i.Desde - Tolerancia <= x && x <= i.Hasta + Tolerancia))
+            .Distinct().Order().ToList();
+
+    /// <summary>El punto más cercano a <paramref name="x"/> (en un empate, el de la derecha); sin puntos, <paramref name="x"/>.</summary>
+    public static double AlPunto(double x, IReadOnlyList<double> puntos)
+    {
+        double mejor = x, distancia = double.MaxValue;
+        foreach (double punto in puntos)
+        {
+            double d = Math.Abs(punto - x);
+            if (d < distancia - Tolerancia || (Math.Abs(d - distancia) <= Tolerancia && punto > mejor))
+                (mejor, distancia) = (punto, d);
+        }
+        return mejor;
+    }
+
     /// <summary>
     /// La vista tipo (Carlos: "en una viga el 80 % del largo tiene la sección… el add-in elige solo esta sección"). Los
     /// tramos permitidos se parten en las puntas de los bastones y en los límites de los tramos; gana la firma (bastones
     /// de arriba, de abajo y estribos del tramo) que más largo suma, y en un empate la que aparece primero. El corte va
-    /// al centro de su pedazo más largo, redondeado a 10 mm.
+    /// al estribo de esa firma más cercano al centro de su pedazo más largo; sin estribos, a ese centro redondeado a 10 mm.
     /// </summary>
     public static double VistaTipo(Portico p, ResultadoVigas rv, ResultadoEstribos re, IReadOnlyList<Intervalo> permitidos)
     {
@@ -85,6 +106,13 @@ public static class CalculadoraCorte
         string ganadora = pedazos.GroupBy(x => x.Firma).OrderByDescending(g => g.Sum(x => Largo(x.Pedazo))).First().Key;
         Intervalo elegido = pedazos.Where(x => x.Firma == ganadora).MaxBy(x => Largo(x.Pedazo)).Pedazo;
         double centro = (elegido.Desde + elegido.Hasta) / 2;
+        IReadOnlyList<double> puntos = Puntos(re, permitidos);
+        if (puntos.Count > 0)
+        {
+            List<double> deLaFirma = puntos.Where(x => pedazos.Any(q => q.Firma == ganadora
+                && q.Pedazo.Desde - Tolerancia <= x && x <= q.Pedazo.Hasta + Tolerancia)).ToList();
+            return AlPunto(centro, deLaFirma.Count > 0 ? deLaFirma : puntos);
+        }
         double minimo = Math.Ceiling(elegido.Desde / 10) * 10, maximo = Math.Floor(elegido.Hasta / 10) * 10;
         return minimo <= maximo ? Math.Clamp(Math.Round(centro / 10) * 10, minimo, maximo) : centro;
     }
@@ -93,9 +121,10 @@ public static class CalculadoraCorte
     public static CorteEnPunto En(Portico p, ResultadoVigas rv, ResultadoEstribos re, OpcionesCorte o)
     {
         IReadOnlyList<Intervalo> permitidos = Permitidos(p, rv);
+        IReadOnlyList<double> puntos = Puntos(re, permitidos);
         bool sinLugar = permitidos.Count == 0;
         double x = sinLugar ? o.X ?? Centro(p)
-            : o.X is int pedido ? Ajustar(pedido, permitidos)
+            : o.X is int pedido ? (puntos.Count > 0 ? AlPunto(pedido, puntos) : Ajustar(pedido, permitidos))
             : VistaTipo(p, rv, re, permitidos);
         bool ajustado = !sinLugar && o.X is int pedidoX && Math.Abs(x - pedidoX) > 0.5;
 
@@ -107,7 +136,7 @@ public static class CalculadoraCorte
                 ? b.Desde <= x + profundidad && b.Hasta > x
                 : b.Hasta >= x - profundidad && b.Desde < x)).ToList();
         string tramo = TramoEn(x, DistribuidorEstribos.Tramos(p))?.Nombre ?? "";
-        return new CorteEnPunto(x, o.X is null, ajustado, sinLugar, tramo, cortados, proyectados, permitidos);
+        return new CorteEnPunto(x, o.X is null, ajustado, sinLugar, tramo, cortados, proyectados, permitidos, puntos);
     }
 
     private static void Agregar(List<Intervalo> permitidos, double desde, double hasta)

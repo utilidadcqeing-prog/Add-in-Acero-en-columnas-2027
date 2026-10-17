@@ -19,8 +19,9 @@ public sealed record Intervalo(double Desde, double Hasta);
 /// <summary>
 /// El corte resuelto, en mm: dónde quedó, si es la vista tipo, si se movió de donde lo pidió el usuario, el tramo
 /// (<c>"A-B"</c>, <c>"Voladizo D"</c>; vacío si no cae en ninguno), los bastones que pasan por ahí, los que se ven en
-/// la franja de la profundidad y los tramos donde se puede poner. <paramref name="SinLugar"/> = el pórtico no tiene
-/// ningún punto permitido y el corte se quedó donde estaba.
+/// la franja de la profundidad y los tramos donde se puede poner. <paramref name="Puntos"/> son los centros de los
+/// estribos que caen en esos tramos: el corte va de estribo en estribo (vacío = sin estribos, el corte es continuo).
+/// <paramref name="SinLugar"/> = el pórtico no tiene ningún punto permitido y el corte se quedó donde estaba.
 /// </summary>
 public sealed record CorteEnPunto(
     double X,
@@ -30,4 +31,5 @@ public sealed record CorteEnPunto(
     string Tramo,
     IReadOnlyList<Baston> Cortados,
     IReadOnlyList<Baston> Proyectados,
-    IReadOnlyList<Intervalo> Permitidos);
+    IReadOnlyList<Intervalo> Permitidos,
+    IReadOnlyList<double> Puntos);

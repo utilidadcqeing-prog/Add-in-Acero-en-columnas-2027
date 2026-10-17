@@ -23,8 +23,8 @@
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
   };
-  // Ancho del panel del corte, al lado del alzado (decisión 8 del plan docs/planes/2026-10-17-corte-vigas-91.md).
-  const ANCHO_CORTE = 300;
+  // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
+  const ANCHO_CORTE = 260;
   const CLAVES_OPCIONES = Object.keys(OPCIONES0);
 
   // Las opciones de la página con la forma de OpcionesTablero (tarea 2); null si algún campo no es número: así no se
@@ -59,11 +59,58 @@
     }
   }
 
+  // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
+  const dibujoSeccion = (sec) => html`
+    <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
+      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
+      ${sec.adds.map((sh) => html`
+        <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
+      ${sec.proy.map((d) => html`
+        <div role="img" aria-label=${d.label} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; border: 1.5px dashed #5E6670; border-radius: 50%; box-sizing: border-box"></div>`)}
+      ${sec.dots.map((d) => html`
+        <button type="button" aria-label=${d.label} onClick=${d.pick} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; padding: 0; border: 0; border-radius: 50%; background: ${d.c}; outline: ${d.ring}; outline-offset: 2px; cursor: ${d.cur}"></button>`)}
+    </div>`;
+
+  // La ventana del corte que sale encima del alzado al tomar la línea 1-1 (decisión 10): se mueve por su barra, sin
+  // salirse del alzado, y se oculta con ×.
+  class VentanaCorte extends Component {
+    render() {
+      const { v, W, H } = this.props;
+      const pos = v.cutWinPos || { x: W - ANCHO_CORTE - 12, y: 40 };
+      const x = Math.max(0, Math.min(pos.x, W - ANCHO_CORTE)), y = Math.max(0, Math.min(pos.y, H - 40));
+      const down = (e) => {
+        if (e.button !== 0 || e.target.closest('button')) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        this.drag = { cx: e.clientX, cy: e.clientY, x, y };
+      };
+      const move = (e) => { const d = this.drag; if (d) v.moveCutWin({ x: d.x + e.clientX - d.cx, y: d.y + e.clientY - d.cy }); };
+      const up = () => { this.drag = null; };
+      return html`
+<div role="dialog" aria-label="Corte 1-1" style="position: absolute; left: ${x}px; top: ${y}px; width: ${ANCHO_CORTE}px; display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #C9CFD6; border-radius: 6px; box-shadow: 0 6px 18px rgba(22, 25, 29, 0.18); z-index: 5">
+  <div onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up} style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px; border-bottom: 1px solid #D9DDE2; cursor: move; user-select: none; touch-action: none; white-space: nowrap">
+    <span style="font-weight: 600">Corte 1-1</span>
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">${v.cutPos} m</span>
+    <span style="font-size: 12px; color: #5E6670">${v.cutTramo}</span>
+    <div style="flex: 1"></div>
+    ${v.cutTipo ? html`<span title="La sección que más se repite en el pórtico" style="font-size: 11px; font-weight: 600; color: #1E7A46">Más común</span>` : null}
+    <button type="button" aria-label="Ocultar el corte" onClick=${v.hideCutWin} style="width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #3F4A57; cursor: pointer; display: grid; place-items: center">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+    </button>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px">
+    ${dibujoSeccion(v.secMini)}
+    <span style="font-size: 12px; color: #5E6670">Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
+    ${v.cutAviso ? html`<span role="status" style="font-size: 12px; color: #B42318">${v.cutAviso}</span>` : null}
+  </div>
+</div>`;
+    }
+  }
+
   class Tablero extends Component {
     constructor(props) {
       super(props);
-      this.state = Object.assign({ toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
-        cutLive: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
+      this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
+        cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
         vw: window.innerWidth, vh: window.innerHeight },
       OPCIONES0, props.inicial || {});
       this.opcionesPorPortico = {};
@@ -297,23 +344,26 @@
       const estRows = (P ? P.listaEstribos : []).map((e) => ({ id: e.id, kind: e.tipo, qty: e.cantidad + ' ' + e.diametro, len: f2(e.largo) + ' m', lap: e.detalle,
         kg: e.kg.toFixed(1) + ' kg', bg: '#FFFFFF', pick: () => this.setState({ step: 'estribos' }) }));
 
-      // corte 1-1 (#91): la sección en el corte la arma C# (barras, bastones que pasan por ahí y estribos del tramo); se
-      // pinta en el panel de al lado del alzado, a 5 px por cm como la maqueta o más chica si no entra.
+      // corte 1-1 (#91): la sección en el corte la arma C# (barras, bastones que pasan por ahí y estribos del tramo). Se
+      // pinta en la pestaña Corte 1-1, a 5 px por cm como la maqueta, y más chica en la ventana que sale al arrastrar la
+      // línea 1-1 en el alzado (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
       const C = P ? P.corte : null;
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
-      const K = Math.min(5, (this.medidas().dibujoH - 130) / secc.altoCm, (ANCHO_CORTE - 40) / secc.anchoCm);
       const cerrado = secc.figuras.find((f) => f.id === 'E');
       const recCm = num(s.rec, 4);
-      const dots = secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
-        c: b.baston ? '#0F7B6C' : (b.arriba ? '#1F5FAF' : '#3F4A57'), ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} }));
-      // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
-      const proy = (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre }));
-      const adds = secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
-        ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
-        : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' }));
-      const sec = { wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px', dots, adds, proy,
+      const seccionA = (K) => ({
+        wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
+        dots: secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
+          c: b.baston ? '#0F7B6C' : (b.arriba ? '#1F5FAF' : '#3F4A57'), ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
+        // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
+        proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
+        adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
+          ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
+          : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' })),
         stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
-        stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px' };
+        stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px' });
+      const sec = seccionA(Math.min(5, 270 / secc.altoCm, 340 / secc.anchoCm));
+      const secMini = seccionA(Math.min(4, 180 / secc.altoCm, (ANCHO_CORTE - 40) / secc.anchoCm));
       const adicionales = P ? P.listaEstribos.filter((e) => e.id !== 'E') : [];
 
       // estribos: con tramos marcados, los campos son los de esos tramos (EstribosMarcados)
@@ -364,6 +414,7 @@
         avisoNegrita: corte > 0 ? avisoTexto.slice(0, corte + 1) : avisoTexto, avisoResto: corte > 0 ? avisoTexto.slice(corte + 1) : '', avisoCambiar: !!avisoLargo && avisoLargo.cambiarCara,
         warnLap: avisoLargo ? avisoLargo.elemento : '',
         ver: s.ver, tramos: TRAMOS, rangeFrom: verT ? verT.desde : (P ? P.inicio : 0), rangeTo: verT ? verT.hasta : (P ? P.fin : 0),
+        isAlzado: s.tab === 'alzado', isCorte: s.tab === 'corte', tabA: s.tab === 'alzado' ? on : off, tabC: s.tab === 'corte' ? on : off,
         side, faceQuestion: '¿Dónde traslapan las barras de ' + faceName + '?', izq: sideBtn('izq', P && P.izquierda), der: sideBtn('der', P && P.derecha),
         barSel: kind === 'lap' ? '' : selEl.id, lapSel: kind === 'lap' ? selEl.id : '', lapsManual: lapsAll.filter((l) => l.manual).map((l) => l.id).join(','),
         isSelBar: kind === 'bar' && !!SB, isSelLap: kind === 'lap' && !!SL, isSelBast: kind === 'bast' && !!SBa, sb, sl, st: stv, draft: s.draft,
@@ -379,7 +430,9 @@
         corte: C, cutLive: s.cutLive, cutX: s.cutX !== '' ? s.cutX : (C ? f2(C.x) : ''), cutPos: C ? f2(s.cutLive ?? C.x) : '',
         cutAjustado: !!C && C.ajustado, cutBd: C && C.ajustado ? '#B26B00' : '#C9CFD6', cutTipo: !!C && C.esTipo,
         cutTramo: C ? C.tramo : '', cutAviso: C ? C.aviso : null,
-        cutMira: C ? C.mirando : s.mira, cutProf: C ? f2(C.profundidad) : s.depth, depth: s.depth, sec,
+        cutMira: C ? C.mirando : s.mira, cutProf: C ? f2(C.profundidad) : s.depth, depth: s.depth, sec, secMini,
+        cutWin: s.cutWin && !!C, cutWinPos: s.cutWinPos, hideCutWin: () => this.setState({ cutWin: false }),
+        moveCutWin: (pos) => this.setState({ cutWinPos: pos }),
         segMiraIzq: s.mira === 'izquierda' ? on : off, segMiraDer: s.mira === 'izquierda' ? off : on,
         secTop: qtyOf(s.sup) + (supI.filas > 1 ? ' en ' + supI.filas + ' filas' : ''), secBot: qtyOf(s.inf) + (infI.filas > 1 ? ' en ' + infI.filas + ' filas' : ''),
         estD: est.estD, estG: est.estG, conf: est.conf, s1: est.s1, s2: est.s2, secEstD: s.est.estD,
@@ -406,6 +459,7 @@
         pickEl: (id) => selectBar(id), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
         setQ: (e) => this.setState({ q: e.target.value }), setVer: (e) => this.setState({ ver: e.target.value }),
         setDraft: (e) => this.setState({ draft: e.target.value }),
+        showAlzado: () => this.setState({ tab: 'alzado' }), showCorte: () => this.setState({ tab: 'corte', step: 'corte', cutWin: false }),
         useIzq: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'izq' }); },
         useDer: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'der' }); },
         toggleList: () => this.setState({ listOpen: !s.listOpen }), toggleMore: () => this.setState({ more: !s.more }),
@@ -422,11 +476,11 @@
         setCutX: (e) => this.cambiar({ cutX: e.target.value }, true), setDepth: (e) => this.cambiar({ depth: e.target.value }, true),
         miraIzq: () => this.cambiar({ mira: 'izquierda' }), miraDer: () => this.cambiar({ mira: 'derecha' }),
         useTypical: () => this.cambiar({ cutX: '', cutLive: null }),
-        // La línea 1-1 arrastrada en el alzado, ya pegada a lo permitido: mientras se mueve pide el cálculo con la
-        // espera de los campos de texto; al soltarla, enseguida.
+        // La línea 1-1 arrastrada en el alzado, ya pegada a un estribo: abre la ventana del corte; mientras se mueve
+        // pide el cálculo con la espera de los campos de texto, y al soltarla, enseguida.
         onCut: (x, soltado) => {
           this.arrastrandoCorte = !soltado;
-          this.cambiar({ cutX: f2(x), cutLive: x }, !soltado);
+          this.cambiar({ cutX: f2(x), cutLive: x, cutWin: true }, !soltado);
         },
         openRules: () => this.setState({ step: 'reglas' }),
         closeRules: () => (rulesDirty ? this.setState({ rulesWarn: true }) : leaveRules({})),
@@ -519,6 +573,10 @@
           <select id="ver-main" value=${v.ver} onChange=${v.setVer} style="flex-shrink: 0; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; color: #16191D; background: #FFFFFF">
             <option value="todo">Todo el pórtico</option>${v.tramos.map((t) => html`<option value=${t.id}>${t.nombre}</option>`)}
           </select>
+          <div style="flex-shrink: 0; display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+            <button type="button" onClick=${v.showAlzado} style="height: 30px; padding: 0 12px; border: 0; font: inherit; cursor: pointer; ${v.tabA}">Alzado</button>
+            <button type="button" onClick=${v.showCorte} style="height: 30px; padding: 0 12px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.tabC}">Corte 1-1</button>
+          </div>
           <button type="button" onClick=${v.showInRevit} style="flex-shrink: 0; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">
             <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.4" fill="none"></circle><path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"></path></svg>
             Ver en Revit
@@ -529,35 +587,30 @@
           </button>
         </div>
 
-        <div style="display: flex; gap: 12px">
-          <${Alzado} portico=${P} w=${m.dibujoW - ANCHO_CORTE - 12} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />
-          <div style="width: ${ANCHO_CORTE}px; height: ${m.dibujoH}px; flex-shrink: 0; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 12px; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
-            <div style="align-self: stretch; display: flex; align-items: baseline; gap: 8px; white-space: nowrap">
-              <span style="font-weight: 600; font-size: 14px">Corte 1-1</span>
-              <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">${v.cutPos} m</span>
-              <span style="font-size: 12px; color: #5E6670; overflow: hidden; text-overflow: ellipsis">${v.cutTramo}</span>
-              <div style="flex: 1"></div>
-              ${v.cutTipo ? html`<span title="La sección que más se repite en el pórtico" style="font-size: 11px; font-weight: 600; color: #1E7A46">Más común</span>` : null}
-            </div>
-            <div style="position: relative; width: ${v.sec.wpx}; height: ${v.sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-              <div style="position: absolute; left: ${v.sec.stL}; top: ${v.sec.stT}; right: ${v.sec.stR}; bottom: ${v.sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
-              ${v.sec.adds.map((sh) => html`
-                <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
-              ${v.sec.proy.map((d) => html`
-                <div role="img" aria-label=${d.label} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; border: 1.5px dashed #5E6670; border-radius: 50%; box-sizing: border-box"></div>`)}
-              ${v.sec.dots.map((d) => html`
-                <button type="button" aria-label=${d.label} onClick=${d.pick} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; padding: 0; border: 0; border-radius: 50%; background: ${d.c}; outline: ${d.ring}; outline-offset: 2px; cursor: ${d.cur}"></button>`)}
-            </div>
-            <div style="align-self: stretch; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.35">
-              <span style="color: #5E6670">Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
-              <span><b>Arriba</b> · ${v.secTop} · <b>Abajo</b> · ${v.secBot}</span>
+        ${v.isAlzado ? html`
+          <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
+            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />
+            ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
+          </div>` : null}
+        ${v.isCorte ? html`
+          <div style="width: ${m.dibujoW}px; height: ${m.dibujoH}px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 48px; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px">
+            ${dibujoSeccion(v.sec)}
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; max-width: 320px">
+              <span style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap">
+                <span style="font-weight: 600; font-size: 15px">Corte 1-1</span>
+                ${v.cutTipo ? html`<span style="font-size: 11px; font-weight: 600; color: #1E7A46">Sección más común</span>` : null}
+              </span>
+              <span>A ${v.cutPos} m del eje A · ${v.cutTramo}</span>
+              <span>Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
+              <span><b>Arriba</b> · ${v.secTop}</span>
+              <span><b>Abajo</b> · ${v.secBot}</span>
               <span>Estribo cerrado ${v.secEstD} en las esquinas${v.secAddText}</span>
               ${v.isPicking ? html`
                 <span style="color: #9A5B00; line-height: 1.45">${v.pickMsg}</span>` : null}
+              <span style="color: #5E6670">Recubrimiento ${v.rec} cm · al eje de la barra ${v.alEje} cm</span>
               ${v.cutAviso ? html`<span role="status" style="color: #B42318">${v.cutAviso}</span>` : null}
             </div>
-          </div>
-        </div>
+          </div>` : null}
 
         ${v.isAviso ? html`
           <div role="status" style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid #E8C88F; border-radius: 6px; background: #FDF6EA; font-size: 12px; line-height: 1.45">
@@ -896,7 +949,7 @@
 
         ${v.isCorteStep ? html`
           <div style="display: flex; flex-direction: column; gap: 14px">
-            <span style="color: #3F4A57; line-height: 1.5">El corte 1-1 muestra la sección de la viga en ese punto. Por defecto se ubica donde la sección es la más común. Arrastra la línea 1-1 en el alzado para moverlo: salta los traslapos y los apoyos.</span>
+            <span style="color: #3F4A57; line-height: 1.5">El corte 1-1 muestra la sección de la viga en ese punto. Por defecto se ubica donde la sección es la más común. Arrastra la línea 1-1 en el alzado para moverlo de estribo en estribo, sin pasar por traslapos ni apoyos: el corte se ve en una ventana que puedes ocultar.</span>
             <div style="display: flex; align-items: center; gap: 8px">
               <label for="cut-x" style="font-weight: 600; flex: 1">Distancia desde el eje A</label>
               <input id="cut-x" type="text" inputmode="decimal" value=${v.cutX} onInput=${v.setCutX} style="width: 70px; height: 32px; padding: 0 8px; border: 1px solid ${v.cutBd}; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />

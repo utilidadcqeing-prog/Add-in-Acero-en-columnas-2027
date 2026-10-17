@@ -220,20 +220,25 @@
         enTraslapo.filter(([p, q]) => q > a && p < z).forEach(([p, q]) => { agregar(d, Math.min(p, z)); d = Math.max(d, q); });
         agregar(d, z);
       });
+      // los estribos donde puede ir el corte: en la demostración, cada 0.10 desde 5 cm de la cara (en C# salen del motor)
+      const puntos = [];
+      G.luces.forEach(([, a, b, vol]) => {
+        for (let x = a + 0.05; x <= (vol ? G.fin : b) - 0.05 + 1e-9; x += 0.10) {
+          const r = Math.round(x * 1000) / 1000;
+          if (permitidos.some((i) => i.desde - 1e-9 <= r && r <= i.hasta + 1e-9)) puntos.push(r);
+        }
+      });
       const oc = o.corte || {};
       const pedido = oc.x == null ? 2.20 : oc.x / 1000;
-      let cx = pedido;
-      if (permitidos.length && !permitidos.some((i) => i.desde - 1e-9 <= cx && cx <= i.hasta + 1e-9)) {
-        let dist = Infinity;
-        permitidos.forEach((i) => [i.desde, i.hasta].forEach((borde) => {
-          const d = Math.abs(borde - pedido);
-          if (d < dist - 1e-9 || (Math.abs(d - dist) <= 1e-9 && borde > cx)) { cx = borde; dist = d; }
-        }));
-      }
+      let cx = pedido, dist = Infinity;
+      puntos.forEach((p) => {
+        const d = Math.abs(p - pedido);
+        if (d < dist - 1e-9 || (Math.abs(d - dist) <= 1e-9 && p > cx)) { cx = p; dist = d; }
+      });
       const tramoCorte = G.luces.find(([, a, b, vol]) => a - 1e-9 <= cx && cx <= (vol ? G.fin : b) + 1e-9);
       const corte = { x: cx, esTipo: oc.x == null, ajustado: oc.x != null && Math.abs(cx - pedido) > 1e-6,
         profundidad: Math.max(0, (oc.profundidad ?? 100) / 1000), mirando: oc.mirando === 'Izquierda' ? 'izquierda' : 'derecha',
-        tramo: tramoCorte ? tramoCorte[0] : '', permitidos, proyeccion: [], aviso: null };
+        tramo: tramoCorte ? tramoCorte[0] : '', permitidos, proyeccion: [], aviso: null, puntos };
 
       const kg = barras.reduce((s, b) => s + b.kg, 0) + bastones.reduce((s, b) => s + b.kg, 0) + kgE;
       return {

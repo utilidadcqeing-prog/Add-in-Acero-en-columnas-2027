@@ -79,10 +79,11 @@ public sealed record Rango(double Desde, double Hasta);
 /// <summary>
 /// El corte 1-1 (#91), en m: dónde quedó, si es la vista tipo, si se movió de donde lo pidió el usuario, la profundidad,
 /// hacia dónde mira (<c>"derecha"</c> o <c>"izquierda"</c>), el tramo, los tramos donde se puede poner, los bastones en
-/// proyección (en cm, como la sección) y un aviso (null = ninguno).
+/// proyección (en cm, como la sección) y un aviso (null = ninguno). <paramref name="Puntos"/> son los estribos donde
+/// puede ir: la línea 1-1 salta de uno a otro (vacío = sin estribos, se mueve por <paramref name="Permitidos"/>).
 /// </summary>
 public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Profundidad, string Mirando, string Tramo,
-    IReadOnlyList<Rango> Permitidos, IReadOnlyList<BarraSeccion> Proyeccion, string? Aviso);
+    IReadOnlyList<Rango> Permitidos, IReadOnlyList<BarraSeccion> Proyeccion, string? Aviso, IReadOnlyList<double> Puntos);
 
 /// <summary>
 /// El pórtico abierto, calculado. <paramref name="Inicio"/> y <paramref name="Fin"/> son las puntas del concreto.

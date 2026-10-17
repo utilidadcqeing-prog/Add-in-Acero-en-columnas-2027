@@ -91,15 +91,21 @@
       const cut = { x: X(cutM), c: '#1F5FAF', bandX: Math.min(X(cutM), X(cutM + dirC * prof)), bandW: 52 * prof,
         arrow: (y) => 'M' + X(cutM) + ' ' + y + 'h' + (8 * dirC) + 'm' + (-3 * dirC) + ' -3l' + (3 * dirC) + ' 3l' + (-3 * dirC) + ' 3' };
       const permitidos = corte ? corte.permitidos : [];
-      // como CalculadoraCorte.Ajustar en C#: el punto permitido más cercano; en un empate, el de la derecha
-      const pegar = (m) => {
-        if (!permitidos.length || permitidos.some((i) => i.desde - 1e-9 <= m && m <= i.hasta + 1e-9)) return m;
+      const puntos = corte && corte.puntos ? corte.puntos : [];
+      // como CalculadoraCorte en C#: de estribo en estribo (AlPunto); sin estribos, el punto permitido más cercano
+      // (Ajustar). En un empate, el de la derecha.
+      const cercano = (m, candidatos) => {
         let mejor = m, dist = Infinity;
-        permitidos.forEach((i) => [i.desde, i.hasta].forEach((b) => {
+        candidatos.forEach((b) => {
           const d = Math.abs(b - m);
           if (d < dist - 1e-9 || (Math.abs(d - dist) <= 1e-9 && b > mejor)) { mejor = b; dist = d; }
-        }));
+        });
         return mejor;
+      };
+      const pegar = (m) => {
+        if (puntos.length) return cercano(m, puntos);
+        if (!permitidos.length || permitidos.some((i) => i.desde - 1e-9 <= m && m <= i.hasta + 1e-9)) return m;
+        return cercano(m, permitidos.flatMap((i) => [i.desde, i.hasta]));
       };
       const cutAt = (e) => {
         const { r, k } = scaleOf(this.base);

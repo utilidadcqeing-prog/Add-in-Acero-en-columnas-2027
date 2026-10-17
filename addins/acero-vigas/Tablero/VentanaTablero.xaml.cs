@@ -144,6 +144,9 @@ internal sealed partial class VentanaTablero : Window
         core.SetVirtualHostNameToFolderMapping(Host, CarpetaWeb, CoreWebView2HostResourceAccessKind.Deny);
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = false;
+        // Tampoco con el gesto de pellizcar del touchpad (Juan, 17-oct: "puedo hacer zoom sobre el add-in"); el zoom
+        // que se ajusta a la pantalla (ZoomFactor) no depende de esto.
+        core.Settings.IsPinchZoomEnabled = false;
 #if !DEBUG
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;

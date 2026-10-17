@@ -259,7 +259,8 @@ public static class ArmadorVista
 
     private static CorteVista CorteDe(CorteEnPunto c, OpcionesCorte o, IReadOnlyList<BarraSeccion> proyeccion, string? aviso) =>
         new(M(c.X), c.EsTipo, c.Ajustado, M(Math.Max(0, o.Profundidad)), o.Mirando == MiraCorte.Derecha ? "derecha" : "izquierda",
-            c.Tramo, c.Permitidos.Select(i => new Rango(M(i.Desde), M(i.Hasta))).ToList(), proyeccion, aviso);
+            c.Tramo, c.Permitidos.Select(i => new Rango(M(i.Desde), M(i.Hasta))).ToList(), proyeccion, aviso,
+            c.Puntos.Select(M).ToList());
 
     /// <summary>Una fila por estribo de la lista: los del mismo id, diámetro y largo se suman en todo el pórtico.</summary>
     private static IReadOnlyList<FilaEstribos> ListaEstribos(PorticoLeido p, OpcionesTablero o, ResultadoEstribos re)

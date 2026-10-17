@@ -268,6 +268,7 @@ public class ArmadorVistaTests
         Assert.False(c.Ajustado);
         Assert.Equal(("derecha", 0.10), (c.Mirando, c.Profundidad));
         Assert.Contains(c.Permitidos, r => r.Desde <= c.X && c.X <= r.Hasta);
+        Assert.Contains(c.X, c.Puntos);
         Assert.Null(c.Aviso);
     }
 
@@ -279,7 +280,7 @@ public class ArmadorVistaTests
 
         VistaPortico v = Armar(o);
 
-        Assert.False(v.Corte!.Ajustado);
+        // El corte se pega al estribo más cercano (decisión 9), que sigue dentro del bastón.
         BarraSeccion baston = Assert.Single(v.Seccion.Barras, b => b.Baston);
         Assert.Equal(("bs1", "bastón arriba 1", true), (baston.Id, baston.Nombre, baston.Arriba));
     }

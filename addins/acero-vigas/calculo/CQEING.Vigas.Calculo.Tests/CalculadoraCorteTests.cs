@@ -80,7 +80,58 @@ public class CalculadoraCorteTests
 
         Assert.True(c.Ajustado);
         Assert.False(c.EsTipo);
-        Assert.Equal(c.Permitidos[^1].Hasta, c.X);
+        Assert.Equal(c.Puntos[^1], c.X);
+    }
+
+    private static IReadOnlyList<double> CentrosDeEstribos(Portico p) =>
+        Estribos(p).Estribos.Where(e => e.Id == "E").SelectMany(e => e.Posiciones).ToList();
+
+    [Fact]
+    public void LosPuntosSonLosEstribosQueCaenEnLoPermitido()
+    {
+        Portico p = Datos.PorticoMaqueta();
+        CorteEnPunto c = En(new OpcionesCorte());
+
+        Assert.NotEmpty(c.Puntos);
+        Assert.All(c.Puntos, x => Assert.Contains(x, CentrosDeEstribos(p)));
+        Assert.All(c.Puntos, x => Assert.Contains(c.Permitidos, i => i.Desde <= x && x <= i.Hasta));
+        Assert.Equal(c.Puntos.Order(), c.Puntos);
+    }
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(2200)]
+    [InlineData(4300)]
+    [InlineData(6000)]
+    [InlineData(13000)]
+    public void ElCorteVaSiempreAUnEstribo(int x)
+    {
+        CorteEnPunto c = En(new OpcionesCorte(X: x));
+
+        Assert.Contains(c.X, c.Puntos);
+        Assert.All(c.Puntos, punto => Assert.True(Math.Abs(c.X - x) <= Math.Abs(punto - x) + 1e-6));
+    }
+
+    [Fact]
+    public void EnUnEmpateEntreEstribosGanaLaDerecha()
+    {
+        Assert.Equal(300, CalculadoraCorte.AlPunto(200, [100, 300]));
+        Assert.Equal(150, CalculadoraCorte.AlPunto(150, []));
+    }
+
+    [Fact]
+    public void SinEstribosElCorteEsContinuo()
+    {
+        Portico p = Datos.PorticoMaqueta();
+        ResultadoVigas rv = Vigas(p);
+        Intervalo i = CalculadoraCorte.Permitidos(p, rv)[0];
+        int medio = (int)Math.Round((i.Desde + i.Hasta) / 2);
+
+        CorteEnPunto c = CalculadoraCorte.En(p, rv, new ResultadoEstribos([], null!, [], []), new OpcionesCorte(X: medio));
+
+        Assert.Empty(c.Puntos);
+        Assert.Equal(medio, c.X);
+        Assert.False(c.Ajustado);
     }
 
     [Fact]
@@ -97,17 +148,21 @@ public class CalculadoraCorteTests
         Assert.Empty(c.Cortados);
         Assert.Contains(c.Permitidos, i => i.Desde <= c.X && c.X <= i.Hasta);
         Assert.All(p.Apoyos, a => Assert.True(Math.Abs(c.X - a.PosicionEje) > 1000));
-        Assert.Equal(0, c.X % 10);
+        Assert.Contains(c.X, c.Puntos);
     }
 
     [Fact]
     public void LosBastonesQuePasanSeCortanYLosCercanosSeProyectan()
     {
         Baston b = Vigas(Datos.PorticoMaqueta()).Bastones.First(x => x.Capa == Posicion.Inferior);
+        IReadOnlyList<double> puntos = En(new OpcionesCorte()).Puntos;
+        int antesDe = (int)Math.Round(puntos.Last(x => x < b.Desde)), despuesDe = (int)Math.Round(puntos.First(x => x > b.Desde));
+        // El bastón empieza entre dos estribos: mirando hacia él, con la profundidad hasta su punta, se ve detrás.
+        int profundidad = b.Desde - antesDe + 10;
 
-        CorteEnPunto antes = En(new OpcionesCorte(X: b.Desde - 50));
-        CorteEnPunto alOtroLado = En(new OpcionesCorte(X: b.Desde - 50, Mirando: MiraCorte.Izquierda));
-        CorteEnPunto adentro = En(new OpcionesCorte(X: b.Desde + 50));
+        CorteEnPunto antes = En(new OpcionesCorte(X: antesDe, Profundidad: profundidad));
+        CorteEnPunto alOtroLado = En(new OpcionesCorte(X: antesDe, Profundidad: profundidad, Mirando: MiraCorte.Izquierda));
+        CorteEnPunto adentro = En(new OpcionesCorte(X: despuesDe));
 
         Assert.False(antes.Ajustado);
         Assert.DoesNotContain(antes.Cortados, x => x.Id == b.Id);
@@ -122,9 +177,10 @@ public class CalculadoraCorteTests
     public void ProfundidadNegativaNoProyecta()
     {
         Baston b = Vigas(Datos.PorticoMaqueta()).Bastones.First(x => x.Capa == Posicion.Inferior);
+        int antesDe = (int)Math.Round(En(new OpcionesCorte()).Puntos.Last(x => x < b.Desde));
 
-        Assert.Empty(En(new OpcionesCorte(X: b.Desde - 50, Profundidad: -100)).Proyectados);
-        Assert.Empty(En(new OpcionesCorte(X: b.Desde - 50, Profundidad: 0)).Proyectados);
+        Assert.Empty(En(new OpcionesCorte(X: antesDe, Profundidad: -100)).Proyectados);
+        Assert.Empty(En(new OpcionesCorte(X: antesDe, Profundidad: 0)).Proyectados);
     }
 
     [Fact]
