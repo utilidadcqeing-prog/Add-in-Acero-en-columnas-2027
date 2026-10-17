@@ -22,6 +22,7 @@ internal sealed class PuenteTablero
     private readonly AccionesRevit acciones = new();
     private readonly SesionTablero sesion;
     private Document? leido;
+    private BarraSeleccion? barra;
 
     public PuenteTablero(VentanaTablero ventana, UIApplication uiapp)
     {
@@ -52,28 +53,61 @@ internal sealed class PuenteTablero
 
     private void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {
-        // La ventana siempre queda encima de Revit: se aparta para que se vea lo que pasa allá. Al elegir vigas vuelve
-        // sola al terminar (o al cancelar); después de "Ver en Revit" y "3D" vuelve con el botón Tablero.
+        if (accion == AccionRevit.PedirSeleccion)
+        {
+            EmpezarSeleccion(app);
+            return;
+        }
+        // La ventana siempre queda encima de Revit: se aparta para que se vea lo que pasa allá; vuelve con el botón
+        // Tablero de la cinta.
         if (accion != AccionRevit.Seleccionar)
             ventana.Apartar();
-        IReadOnlyList<string> elegidas;
-        try
-        {
-            elegidas = AccionesRevit.Hacer(app, accion, vigas);
-        }
-        finally
-        {
-            if (accion == AccionRevit.PedirSeleccion)
-                ventana.Volver();
-        }
-        if (accion != AccionRevit.PedirSeleccion || elegidas.Count == 0)
-            return;
-        // "Seleccionar en Revit": se abre el pórtico de la primera viga elegida que esté en alguno.
-        if (elegidas.Select(sesion.PorticoDeViga).FirstOrDefault(p => p is not null) is string portico)
-            Atender(app, new ElegirPortico(portico), desdeRevit: true);
-        else
-            ventana.Enviar(ProtocoloTablero.Aviso("Esas vigas no están en ningún pórtico del tablero."));
+        AccionesRevit.Hacer(app, accion, vigas);
     }
+
+    /// <summary>
+    /// "Seleccionar en Revit" (Juan, 16-oct): el tablero se aparta y la barra del add-in queda arriba del dibujo mientras
+    /// el usuario elige vigas con la selección normal de Revit. "Terminar" deja en la lista solo sus pórticos.
+    /// </summary>
+    private void EmpezarSeleccion(UIApplication app)
+    {
+        if (barra is not null)
+        {
+            barra.Activate();
+            return;
+        }
+        ventana.Apartar();
+        Rectangle area = app.DrawingAreaExtents;
+        barra = new BarraSeleccion(app.MainWindowHandle, (area.Left, area.Top, area.Right, area.Bottom));
+        barra.Todas += () => acciones.Encolar(x => AccionesRevit.Hacer(x, AccionRevit.Seleccionar, sesion.Vigas));
+        barra.Terminar += () => acciones.Encolar(x =>
+        {
+            List<string> elegidas = Seleccion(x);
+            TerminarSeleccion();
+            foreach (AJs js in sesion.ElegirVigas(elegidas).OfType<AJs>())
+                ventana.Enviar(js.Json);
+        });
+        barra.Cancelar += TerminarSeleccion;
+        Contar(Seleccion(app));
+        barra.Show();
+    }
+
+    private void TerminarSeleccion()
+    {
+        barra?.Close();
+        barra = null;
+        ventana.Volver();
+    }
+
+    /// <summary>Lo que dice la barra: cuántas de las vigas elegidas están en un pórtico, y en cuántos pórticos.</summary>
+    private void Contar(IEnumerable<string> ids)
+    {
+        List<string> porticos = ids.Select(sesion.PorticoDeViga).OfType<string>().ToList();
+        barra?.Mostrar(porticos.Count, porticos.Distinct().Count());
+    }
+
+    private static List<string> Seleccion(UIApplication app) =>
+        app.ActiveUIDocument?.Selection.GetElementIds().Select(id => id.ToString()).ToList() ?? [];
 
     /// <summary>Lee los pórticos del documento activo; sin documento, ninguno.</summary>
     private ResultadoLectura Leer()
@@ -96,9 +130,17 @@ internal sealed class PuenteTablero
     {
         try
         {
-            if (!sesion.EnVivo || !e.GetDocument().Equals(leido))
+            if (!e.GetDocument().Equals(leido))
                 return;
             List<string> ids = e.GetSelectedElements().Select(id => id.ToString()).ToList();
+            // Con la barra de selección abierta, solo se cuenta: el tablero espera a "Terminar".
+            if (barra is not null)
+            {
+                Contar(ids);
+                return;
+            }
+            if (!sesion.EnVivo)
+                return;
             acciones.Encolar(app =>
             {
                 if (ids.Select(sesion.PorticoDeViga).FirstOrDefault(p => p is not null) is string portico && portico != sesion.Actual)
@@ -144,6 +186,8 @@ internal sealed class PuenteTablero
 
     private void Soltar()
     {
+        barra?.Close();
+        barra = null;
         try
         {
             uiapp.SelectionChanged -= AlCambiarSeleccion;

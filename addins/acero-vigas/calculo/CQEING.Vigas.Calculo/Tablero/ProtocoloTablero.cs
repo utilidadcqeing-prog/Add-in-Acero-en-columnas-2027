@@ -26,6 +26,9 @@ public sealed record Abrir3d(string Id) : MensajeTablero;
 
 public sealed record CambiarEnVivo(bool Activo) : MensajeTablero;
 
+/// <summary>"Ver todos": la lista vuelve a mostrar todos los pórticos después de elegir vigas en Revit.</summary>
+public sealed record VerTodos() : MensajeTablero;
+
 /// <summary>"Guardar y bloquear" en la pantalla Reglas, con los textos de sus campos.</summary>
 public sealed record GuardarReglas(VistaReglas Reglas) : MensajeTablero;
 
@@ -72,6 +75,7 @@ public static class ProtocoloTablero
                 "verEnRevit" => new VerEnRevit(Texto(nodo, "id")),
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
                 "cambiarEnVivo" => new CambiarEnVivo(nodo["activo"]?.GetValue<bool>() ?? false),
+                "verTodos" => new VerTodos(),
                 "guardarReglas" => nodo["reglas"]?.Deserialize<VistaReglas>(Json) is { PorDiametro: not null } r
                     ? new GuardarReglas(r) : new Desconocido(tipo),
                 _ => new Desconocido(tipo),

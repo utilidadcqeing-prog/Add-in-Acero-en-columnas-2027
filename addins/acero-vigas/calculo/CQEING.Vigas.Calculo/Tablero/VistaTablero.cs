@@ -3,8 +3,12 @@ namespace CQEING.Vigas.Calculo.Tablero;
 // Lo que la página del tablero (#83) pinta, en las unidades de la maqueta: el alzado y los largos en m, la sección en
 // cm y los kilos en kg (decisión 4 del plan docs/planes/2026-10-16-tablero-vigas-83.md). Viaja como JSON en camelCase.
 
-/// <summary>Todo el tablero: la lista de pórticos, el abierto (null = ninguno) y las reglas.</summary>
-public sealed record VistaTablero(string Proyecto, IReadOnlyList<PorticoEnLista> Porticos, VistaPortico? Actual, VistaReglas Reglas, bool EnVivo);
+/// <summary>
+/// Todo el tablero: la lista de pórticos, el abierto (null = ninguno) y las reglas. <paramref name="Elegidos"/> son los
+/// ids de los pórticos elegidos con "Seleccionar en Revit": la lista muestra solo esos (null = todos).
+/// </summary>
+public sealed record VistaTablero(string Proyecto, IReadOnlyList<PorticoEnLista> Porticos, VistaPortico? Actual, VistaReglas Reglas, bool EnVivo,
+    IReadOnlyList<string>? Elegidos = null);
 
 /// <summary>Un pórtico en la columna izquierda. <paramref name="Sub"/> es como <c>"Eje 1 · A a D + voladizo"</c>.</summary>
 public sealed record PorticoEnLista(string Id, string Nombre, string Sub, string Tipo, IReadOnlyList<TramoEnLista> Tramos);

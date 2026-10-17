@@ -67,6 +67,57 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Equal(["301", "302", "303", "304"], a.Vigas);
     }
 
+    /// <summary>
+    /// "Seleccionar en Revit" con la barra del add-in (Juan, 16-oct): con vigas de varios pórticos, la lista muestra solo
+    /// esos y abre el primero; "Ver todos" vuelve a la lista completa.
+    /// </summary>
+    [Fact]
+    public void ElegirVigasDeVariosPorticosListaSoloEsos()
+    {
+        PorticoLeido piso2 = ArmadorVistaTests.Portico1() with { Nivel = "Piso 2", Vigas = ["201", "202"] };
+        PorticoLeido piso3 = ArmadorVistaTests.Portico1() with { Nivel = "Cubierta", Vigas = ["301"] };
+        PorticoLeido otro = ArmadorVistaTests.Portico1() with { Nombre = "Pórtico 2", Vigas = ["401"] };
+        lectura = new ResultadoLectura([piso2, piso3, otro], []);
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+
+        JsonElement v = VistaDe(s.ElegirVigas(["401", "999", "202"]));
+
+        Assert.Equal(["Pórtico 1 · Piso 2", "Pórtico 2"], v.GetProperty("elegidos").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal("Pórtico 1 · Piso 2", v.GetProperty("actual").GetProperty("id").GetString());
+        Assert.Equal(["201", "202", "301", "401"], s.Vigas);
+
+        JsonElement todos = VistaDe(s.Manejar(new VerTodos()));
+        Assert.Equal(JsonValueKind.Null, todos.GetProperty("elegidos").ValueKind);
+    }
+
+    [Fact]
+    public void ElegirVigasFueraDeLosPorticosAvisaYNoCambia()
+    {
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+
+        AJs js = Assert.Single(s.ElegirVigas(["999"]).OfType<AJs>());
+
+        Assert.Contains("\"tipo\":\"aviso\"", js.Json);
+        Assert.Equal("Pórtico 1", s.Actual);
+    }
+
+    /// <summary>Abrir un pórtico que no está entre los elegidos (por ejemplo, En vivo) vuelve a la lista completa.</summary>
+    [Fact]
+    public void AbrirOtroPorticoQuitaElFiltro()
+    {
+        PorticoLeido otro = ArmadorVistaTests.Portico1() with { Nombre = "Pórtico 2", Vigas = ["401"] };
+        lectura = new ResultadoLectura([ArmadorVistaTests.Portico1(), otro], []);
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+        s.ElegirVigas(["101"]);
+
+        JsonElement v = VistaDe(s.Manejar(new ElegirPortico("Pórtico 2")));
+
+        Assert.Equal(JsonValueKind.Null, v.GetProperty("elegidos").ValueKind);
+    }
+
     /// <summary>La maqueta abre con "En vivo con Revit" encendido.</summary>
     [Fact]
     public void ArrancaEnVivoComoLaMaqueta()

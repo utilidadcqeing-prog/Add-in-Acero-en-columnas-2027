@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using Autodesk.Revit.UI.Selection;
 using CQEING.Vigas.Calculo.Tablero;
 
 namespace CQEING.Vigas.Tablero;
@@ -59,13 +58,13 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
 
     /// <summary>
     /// Hace <paramref name="accion"/> sobre <paramref name="vigas"/>. Ya corre en el hilo de Revit (dentro de un trabajo).
-    /// <see cref="AccionRevit.PedirSeleccion"/> devuelve las vigas que eligió el usuario; las demás, ninguna.
+    /// <see cref="AccionRevit.PedirSeleccion"/> no se hace aquí: la atiende <see cref="PuenteTablero"/> con su barra.
     /// </summary>
-    public static IReadOnlyList<string> Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
+    public static void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {
         UIDocument? uidoc = app.ActiveUIDocument;
         if (uidoc is null)
-            return [];
+            return;
         List<ElementId> ids = vigas.Select(v => new ElementId(long.Parse(v))).Where(id => uidoc.Document.GetElement(id) is not null).ToList();
         switch (accion)
         {
@@ -81,11 +80,7 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
                 if (ids.Count > 0)
                     Abrir3d(uidoc, ids);
                 break;
-            case AccionRevit.PedirSeleccion:
-                return uidoc.Selection.PickObjects(ObjectType.Element, new SoloVigas(), "Selecciona vigas del pórtico y pulsa Terminar")
-                    .Select(r => r.ElementId.ToString()).ToList();
         }
-        return [];
     }
 
     /// <summary>
@@ -131,13 +126,5 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
             Min = new XYZ(cajas.Min(c => c.Min.X) - Margen, cajas.Min(c => c.Min.Y) - Margen, cajas.Min(c => c.Min.Z) - Margen),
             Max = new XYZ(cajas.Max(c => c.Max.X) + Margen, cajas.Max(c => c.Max.Y) + Margen, cajas.Max(c => c.Max.Z) + Margen),
         };
-    }
-
-    /// <summary>Solo deja elegir vigas estructurales.</summary>
-    private sealed class SoloVigas : ISelectionFilter
-    {
-        public bool AllowElement(Element elem) => elem.Category?.BuiltInCategory == BuiltInCategory.OST_StructuralFraming;
-
-        public bool AllowReference(Reference reference, XYZ position) => false;
     }
 }

@@ -76,6 +76,7 @@
     const TRAMOS = G.tramos.map(([id, nombre, desde, hasta]) => ({ id, nombre, desde, hasta }));
     let actual = estado === 'vacio' ? null : (estado === 'cimentacion' ? 'Pórtico C1' : PORS[0].id);
     let enVivo = true;
+    let elegidos = null;
     let reglas = { porDiametro: RULES0, multiplo: '0.50', distanciaLibreCm: '2.5', varilla12: false, problema: null };
     const opciones = {};
     const inicial = estado === 'reglas' ? { step: 'reglas' }
@@ -224,7 +225,7 @@
 
     function vista() {
       return {
-        proyecto: '[Nombre del proyecto]', enVivo, reglas,
+        proyecto: '[Nombre del proyecto]', enVivo, reglas, elegidos,
         porticos: PORS.map((p) => ({ ...p, tramos: TRAMOS })),
         actual: actual ? armar(actual, opciones[actual] || OPCIONES0) : null,
       };
@@ -237,14 +238,22 @@
     function manejar(m) {
       switch (m.tipo) {
         case 'listo': return [msgVista()];
-        case 'elegirPortico': actual = m.id; return [msgVista()];
+        case 'elegirPortico':
+          actual = m.id;
+          if (elegidos && !elegidos.includes(m.id)) elegidos = null;
+          return [msgVista()];
         case 'calcular': opciones[m.id] = m.opciones; actual = m.id; return [msgVista()];
         case 'cambiarEnVivo': enVivo = m.activo; return [msgVista()];
+        case 'verTodos': elegidos = null; return [msgVista()];
         case 'guardarReglas':
           if (!(num(m.reglas.multiplo, 0) > 0)) return [aviso('El múltiplo de corte debe ser mayor que 0.')];
           reglas = { ...m.reglas, problema: null };
           return [msgVista()];
-        case 'seleccionarEnRevit': return [aviso('Selecciona vigas en Revit y pulsa Terminar')];
+        // En Revit, la barra del add-in deja elegir vigas; aquí se simula que eligió vigas del primer y del último pórtico.
+        case 'seleccionarEnRevit':
+          elegidos = [PORS[0].id, PORS[PORS.length - 1].id];
+          actual = elegidos[0];
+          return [msgVista()];
         case 'verEnRevit': return [aviso(nombre(m.id) + ' seleccionado y centrado en Revit')];
         case 'abrir3d': return [aviso('Vista 3D aislada de ' + nombre(m.id) + ' abierta en Revit')];
         default: return [];

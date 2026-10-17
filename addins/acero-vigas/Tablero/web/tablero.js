@@ -104,6 +104,9 @@
         } else if (guardadas) {
           this.setState(guardadas);
         }
+        // Si el pórtico se abrió desde Revit (En vivo o "Seleccionar en Revit"), la lista baja hasta él (Juan, 16-oct).
+        const tarjeta = ahora && document.querySelector('[data-portico="' + CSS.escape(ahora) + '"]');
+        if (tarjeta) tarjeta.scrollIntoView({ block: 'nearest' });
       }
       if (this.state.guardando && prev.vista !== this.props.vista) {
         this.say('Reglas guardadas para todos los proyectos');
@@ -318,9 +321,12 @@
         style: step === k ? 'color: #1F5FAF; font-weight: 600; box-shadow: inset 0 -2px 0 #1F5FAF' : 'color: #5E6670' }));
 
       const q = s.q.trim().toLowerCase();
-      const pors = PORS.filter((p) => !q || (p.nombre + ' ' + p.sub).toLowerCase().includes(q)).map((p) => {
+      // Con pórticos elegidos en Revit, la lista muestra solo esos; "Ver todos" vuelve a la completa.
+      const elegidos = vista.elegidos;
+      const enLista = elegidos ? PORS.filter((p) => elegidos.includes(p.id)) : PORS;
+      const pors = enLista.filter((p) => !q || (p.nombre + ' ' + p.sub).toLowerCase().includes(q)).map((p) => {
         const active = p.id === porId;
-        return { name: p.nombre, sub: p.sub, tipo: p.tipo, open: active, bg: active ? '#F3F7FC' : '#FFFFFF', bd: active ? '#1F5FAF' : '#FFFFFF',
+        return { id: p.id, name: p.nombre, sub: p.sub, tipo: p.tipo, open: active, bg: active ? '#F3F7FC' : '#FFFFFF', bd: active ? '#1F5FAF' : '#FFFFFF',
           pick: () => { this.setState({ ver: 'todo', sel: undefined }); enviar({ tipo: 'elegirPortico', id: p.id }); },
           tramos: (active ? p.tramos : []).map((t) => {
             const on2 = tramosSel.includes(t.id);
@@ -341,7 +347,8 @@
       const avisoTexto = (avisoLargo || avisoOtro || { texto: '' }).texto;
       const corte = avisoTexto.indexOf('. ');
       return {
-        pors, porCount: PORS.length + ' en el modelo', q: s.q, proyecto: vista.proyecto, por: por ? { name: por.nombre, sub: por.sub } : { name: '', sub: '' }, hasPor: !!P, noPor: !P,
+        pors, porCount: elegidos ? enLista.length + ' de ' + PORS.length : PORS.length + ' en el modelo', filtrado: !!elegidos,
+        verTodos: () => enviar({ tipo: 'verTodos' }), q: s.q, proyecto: vista.proyecto, por: por ? { name: por.nombre, sub: por.sub } : { name: '', sub: '' }, hasPor: !!P, noPor: !P,
         tipo, isCim, isAviso, summary: (bars.length + BAST.length) + ' barras · ' + nEstAll + ' estribos · ' + lapsAll.length + ' traslapos · ' + (P ? P.kg : 0).toFixed(1) + ' kg',
         avisoNegrita: corte > 0 ? avisoTexto.slice(0, corte + 1) : avisoTexto, avisoResto: corte > 0 ? avisoTexto.slice(corte + 1) : '', avisoCambiar: !!avisoLargo,
         warnLap: avisoLargo ? avisoLargo.elemento : '',
@@ -448,7 +455,7 @@
     <div style="width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #FFFFFF; border-right: 1px solid #D9DDE2; box-sizing: border-box">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
         <span style="font-weight: 600">Pórticos</span>
-        <span style="color: #5E6670; font-size: 12px">${v.porCount}</span>
+        <span style="color: #5E6670; font-size: 12px">${v.porCount}${v.filtrado ? html` · <button type="button" onClick=${v.verTodos} style="padding: 0; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">Ver todos</button>` : null}</span>
       </div>
       <button type="button" onClick=${v.pickInRevit} style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 36px; border: 1px solid #1F5FAF; border-radius: 6px; background: #FFFFFF; color: #1F5FAF; font: inherit; font-weight: 600; cursor: pointer">
         <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2l9 5-4 1.2L6.5 13z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"></path></svg>
@@ -458,7 +465,7 @@
       <input id="q-main" type="search" value=${v.q} onInput=${v.setQ} placeholder="Buscar por nombre o eje" style="height: 32px; padding: 0 10px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; color: #16191D; background: #FAFBFC" />
       <div style="display: flex; flex-direction: column; gap: 4px; overflow: auto; flex: 1; min-height: 0">
         ${v.pors.map((p) => html`
-          <div style="display: flex; flex-direction: column; border: 1px solid ${p.bd}; border-radius: 6px; background: ${p.bg}">
+          <div data-portico=${p.id} style="display: flex; flex-direction: column; border: 1px solid ${p.bd}; border-radius: 6px; background: ${p.bg}">
             <button type="button" onClick=${p.pick} style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 0; background: transparent; font: inherit; color: #16191D; text-align: left; cursor: pointer">
               <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; white-space: nowrap">
                 <span style="font-weight: 600">${p.name}</span>

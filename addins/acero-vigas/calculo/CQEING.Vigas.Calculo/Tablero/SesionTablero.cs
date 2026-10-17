@@ -33,6 +33,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     private readonly Dictionary<string, OpcionesTablero> opciones = [];
     private ResultadoLectura lectura = new([], []);
     private List<PorticoConId> porticos = [];
+    private List<string>? elegidos;
     private ReglasCargadas reglas = new(Reglas.Generales, null);
     private string? actual;
     private bool enVivo = true;
@@ -56,6 +57,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 if (Buscar(id) is not { } elegido)
                     return [Vista()];
                 actual = id;
+                if (elegidos is not null && !elegidos.Contains(id))
+                    elegidos = null;
                 return enVivo ? [Vista(), new ARevit(AccionRevit.Seleccionar, elegido.Vigas)] : [Vista()];
             case Calcular(string id, OpcionesTablero o):
                 if (Buscar(id) is null)
@@ -70,6 +73,9 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 return Buscar(id) is { } en3d ? [new ARevit(AccionRevit.Abrir3d, en3d.Vigas)] : [];
             case CambiarEnVivo(bool activo):
                 enVivo = activo;
+                return [Vista()];
+            case VerTodos:
+                elegidos = null;
                 return [Vista()];
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
@@ -91,6 +97,24 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             opciones.Remove(nombre);
         if (actual is null || Buscar(actual) is null)
             actual = porticos.FirstOrDefault()?.Id;
+        elegidos = elegidos?.Where(id => Buscar(id) is not null).ToList() is { Count: > 0 } siguen ? siguen : null;
+    }
+
+    /// <summary>Todas las vigas de los pórticos leídos (el botón "Todas" de la barra de selección).</summary>
+    public IReadOnlyList<string> Vigas => porticos.SelectMany(p => p.Portico.Vigas).ToList();
+
+    /// <summary>
+    /// "Seleccionar en Revit" con la barra del add-in: la lista muestra solo los pórticos de <paramref name="vigas"/> y
+    /// se abre el primero. Si ninguna está en un pórtico, avisa y no cambia nada.
+    /// </summary>
+    public IReadOnlyList<Salida> ElegirVigas(IEnumerable<string> vigas)
+    {
+        var elegidas = vigas.ToHashSet();
+        List<string> ids = porticos.Where(p => p.Portico.Vigas.Any(elegidas.Contains)).Select(p => p.Id).ToList();
+        if (ids.Count == 0)
+            return [new AJs(ProtocoloTablero.Aviso("Esas vigas no están en ningún pórtico del tablero."))];
+        (elegidos, actual) = (ids, ids[0]);
+        return [Vista()];
     }
 
     /// <summary>El pórtico al que pertenece la viga <paramref name="idViga"/>, para "En vivo"; null si ninguno.</summary>
@@ -140,6 +164,6 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
             ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
             : l with { Id = p.Id }).ToList();
-        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo)));
+        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos)));
     }
 }
