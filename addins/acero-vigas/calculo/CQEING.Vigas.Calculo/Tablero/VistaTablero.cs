@@ -90,6 +90,7 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// <paramref name="CaraUsada"/> y <paramref name="CaraMasEconomica"/> valen <c>"izq"</c> (al inicio de la luz) o
 /// <c>"der"</c> (al final). <paramref name="Kg"/> suma barras, bastones y estribos. <paramref name="Seccion"/> es la
 /// sección en el corte 1-1: barras corridas, bastones que pasan por ahí y estribos de ese tramo (<paramref name="Corte"/>).
+/// <paramref name="PosicionesEstribos"/> es el centro de cada estribo cerrado, en m, para dibujarlos en el alzado donde van.
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -114,7 +115,8 @@ public sealed record VistaPortico(
     double Kg,
     int Estribos,
     bool SePuedeGenerar,
-    CorteVista? Corte = null);
+    CorteVista? Corte = null,
+    IReadOnlyList<double>? PosicionesEstribos = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).

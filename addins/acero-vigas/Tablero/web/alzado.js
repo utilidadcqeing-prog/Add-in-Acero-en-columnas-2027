@@ -72,7 +72,11 @@
         return { top, pts, col: isSel ? '#1F5FAF' : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
       });
 
-      const st = p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
+      // estribos: una raya por cada estribo real, donde va (Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba y la
+      // línea 1-1, que va de estribo en estribo, no caía en las rayas). Sin posiciones, el rayado de zonas de la maqueta.
+      const posEst = p.posicionesEstribos || null;
+      const st = posEst ? [] : p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
+      const stx = posEst ? posEst.map(X) : [];
 
       const ap = p.apoyos;
       const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda) }));
@@ -125,7 +129,7 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, cols, luces, vol, ejes, cut,
+        b, l, t, st, stx, cols, luces, vol, ejes, cut,
         beamX: X(p.inicio), beamW: X(p.fin) - X(p.inicio),
         stVis: showSt ? 'visible' : 'hidden',
         warnText: wl ? 'traslapo ' + f2(wl.hasta - wl.desde) + ' · +' + f2(wl.hasta - wl.desde - wl.minimo) : '',
@@ -179,6 +183,7 @@
       ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="90" fill="#E9ECEF" stroke="none"></rect>`)}
       <g visibility="${v.stVis}">
         ${v.st.map((z) => html`<line x1="${z.x1}" y1="85" x2="${z.x2}" y2="85" stroke="#C3CAD2" stroke-width="80" stroke-dasharray="${z.da}"></line>`)}
+        ${v.stx.map((x) => html`<line x1="${x}" y1="45" x2="${x}" y2="125" stroke="#C3CAD2" stroke-width="1"></line>`)}
       </g>
       ${v.cols.map((c) => html`<rect x="${c.x}" y="14" width="${c.w}" height="152" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1"></rect>`)}
       ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3"></line>`)}

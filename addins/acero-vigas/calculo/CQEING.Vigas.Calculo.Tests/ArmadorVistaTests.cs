@@ -329,6 +329,20 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void ElAlzadoTraeCadaEstriboEnSuPosicion()
+    {
+        // Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba, y la línea 1-1 (que va de estribo en estribo) no caía
+        // sobre las rayas del alzado.
+        VistaPortico cada20 = Armar();
+        VistaPortico cada15 = Armar(OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(SeparacionCentro: 150) });
+
+        Assert.Equal(cada20.Estribos, cada20.PosicionesEstribos!.Count);
+        Assert.Equal(cada20.PosicionesEstribos.Order(), cada20.PosicionesEstribos);
+        Assert.True(cada15.PosicionesEstribos!.Count > cada20.PosicionesEstribos.Count);
+        Assert.All(cada20.Corte!.Puntos, x => Assert.Contains(x, cada20.PosicionesEstribos));
+    }
+
+    [Fact]
     public void SinBastonesLaSeccionEsLaDeSiempre()
     {
         // Con 0, la cara no lleva bastones (#89); null sería 1 barra del diámetro de las esquinas.

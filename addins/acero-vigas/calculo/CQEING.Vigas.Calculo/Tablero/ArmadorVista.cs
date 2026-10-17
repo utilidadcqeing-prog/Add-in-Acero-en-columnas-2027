@@ -78,7 +78,8 @@ public static class ArmadorVista
             Opcion(rv.CaraInicio), Opcion(rv.CaraFinal), Lado(rv.CaraUsada), Lado(rv.CaraMasEconomica),
             enCorte, ListaEstribos(p, o, re), Textos(avisos, rv),
             rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, sePuede,
-            CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones));
+            CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
+            re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList());
     }
 
     /// <summary>La pantalla Reglas: los valores en m y kg/m con los decimales de <c>RULES0</c> de la maqueta.</summary>

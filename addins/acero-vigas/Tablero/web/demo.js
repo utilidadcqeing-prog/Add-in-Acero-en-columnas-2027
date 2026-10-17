@@ -220,14 +220,13 @@
         enTraslapo.filter(([p, q]) => q > a && p < z).forEach(([p, q]) => { agregar(d, Math.min(p, z)); d = Math.max(d, q); });
         agregar(d, z);
       });
-      // los estribos donde puede ir el corte: en la demostración, cada 0.10 desde 5 cm de la cara (en C# salen del motor)
-      const puntos = [];
+      // los estribos: en la demostración, cada 0.10 desde 5 cm de la cara (en C# salen del motor); el corte puede ir en
+      // los que caen en lo permitido
+      const posicionesEstribos = [];
       G.luces.forEach(([, a, b, vol]) => {
-        for (let x = a + 0.05; x <= (vol ? G.fin : b) - 0.05 + 1e-9; x += 0.10) {
-          const r = Math.round(x * 1000) / 1000;
-          if (permitidos.some((i) => i.desde - 1e-9 <= r && r <= i.hasta + 1e-9)) puntos.push(r);
-        }
+        for (let x = a + 0.05; x <= (vol ? G.fin : b) - 0.05 + 1e-9; x += 0.10) posicionesEstribos.push(Math.round(x * 1000) / 1000);
       });
+      const puntos = posicionesEstribos.filter((r) => permitidos.some((i) => i.desde - 1e-9 <= r && r <= i.hasta + 1e-9));
       const oc = o.corte || {};
       const pedido = oc.x == null ? 2.20 : oc.x / 1000;
       let cx = pedido, dist = Infinity;
@@ -251,7 +250,7 @@
         seccion: { anchoCm: 30, altoCm: 50, barras: barrasSec,
           figuras: [{ id: 'E', tipo: 'Cerrado', izquierda: recSide, derecha: 30 - recSide, arriba: recUp, abajo: 50 - recDown }] },
         listaEstribos, avisos, zonasTraslapo: traslapos.map((t) => ({ desde: t.desde, hasta: t.hasta })),
-        kg, estribos: nMain, sePuedeGenerar: sup.error === 'Ninguno' && inf.error === 'Ninguno', corte,
+        kg, estribos: nMain, sePuedeGenerar: sup.error === 'Ninguno' && inf.error === 'Ninguno', corte, posicionesEstribos,
       };
     }
 
