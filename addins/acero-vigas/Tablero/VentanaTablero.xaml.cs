@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using CQEING.Vigas.Calculo.Tablero;
@@ -81,20 +82,58 @@ internal sealed partial class VentanaTablero : Window
     }
 
     /// <summary>
-    /// La ventana abrió a su tamaño natural (1440 × 900 más el borde): se recorta al área de trabajo de la pantalla y
-    /// el navegador pasa a llenar la ventana, que desde ahí se puede cambiar de tamaño.
+    /// La ventana abrió a su tamaño natural (1440 × 900 más el borde), centrada sobre Revit: se encaja en el área de
+    /// trabajo de ese monitor y el navegador pasa a llenar la ventana, que desde ahí se puede cambiar de tamaño.
     /// </summary>
     private void AjustarAlArea()
     {
-        Rect area = SystemParameters.WorkArea;
-        double ancho = Math.Min(ActualWidth, area.Width), alto = Math.Min(ActualHeight, area.Height);
+        Caja c = CalculadoraZoom.Encajar(new Caja(Left, Top, ActualWidth, ActualHeight), AreaDeTrabajo());
         SizeToContent = SizeToContent.Manual;
         Navegador.Width = double.NaN;
         Navegador.Height = double.NaN;
-        Width = ancho;
-        Height = alto;
-        Left = Math.Max(area.Left, Math.Min(Left, area.Right - ancho));
-        Top = Math.Max(area.Top, Math.Min(Top, area.Bottom - alto));
+        (Left, Top, Width, Height) = (c.X, c.Y, c.Ancho, c.Alto);
+    }
+
+    /// <summary>
+    /// El área de trabajo del monitor donde está la ventana, en DIP. Con Revit en el segundo monitor no es la del
+    /// principal (<see cref="SystemParameters.WorkArea"/>), que se usa solo si Windows no la da.
+    /// </summary>
+    private Caja AreaDeTrabajo()
+    {
+        IntPtr monitor = MonitorFromWindow(new WindowInteropHelper(this).Handle, MonitorMasCercano);
+        var info = new InfoMonitor { Tamano = Marshal.SizeOf<InfoMonitor>() };
+        if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref info) || PresentationSource.FromVisual(this) is not { CompositionTarget: { } destino })
+        {
+            Rect a = SystemParameters.WorkArea;
+            return new Caja(a.X, a.Y, a.Width, a.Height);
+        }
+        Point arriba = destino.TransformFromDevice.Transform(new Point(info.Trabajo.Izquierda, info.Trabajo.Arriba));
+        Point abajo = destino.TransformFromDevice.Transform(new Point(info.Trabajo.Derecha, info.Trabajo.Abajo));
+        return new Caja(arriba.X, arriba.Y, abajo.X - arriba.X, abajo.Y - arriba.Y);
+    }
+
+    private const uint MonitorMasCercano = 2;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr ventana, uint opciones);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref InfoMonitor info);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rectangulo
+    {
+        public int Izquierda, Arriba, Derecha, Abajo;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct InfoMonitor
+    {
+        public int Tamano;
+        public Rectangulo Monitor;
+        public Rectangulo Trabajo;
+        public uint Opciones;
     }
 
     private async Task IniciarAsync()
@@ -109,7 +148,15 @@ internal sealed partial class VentanaTablero : Window
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = false;
 #endif
-        core.WebMessageReceived += (_, e) => MensajeRecibido?.Invoke(e.WebMessageAsJson);
+        // Solo la página del tablero: soltar un archivo o un enlace sobre la ventana no la cambia por otra, y nada de
+        // afuera puede mandarle mensajes a C#.
+        core.NavigationStarting += (_, e) => e.Cancel = !EsDelTablero(e.Uri);
+        core.NewWindowRequested += (_, e) => e.Handled = true;
+        core.WebMessageReceived += (_, e) =>
+        {
+            if (EsDelTablero(e.Source))
+                MensajeRecibido?.Invoke(e.WebMessageAsJson);
+        };
         Diagnostico = $"WebView2 {entorno.BrowserVersionString} · {typeof(CoreWebView2).Assembly.Location} · datos en {CarpetaDatos}";
 #if DEBUG
         // Para anotar en la tarea 6 del plan qué WebView2 cargó Revit.
@@ -117,4 +164,6 @@ internal sealed partial class VentanaTablero : Window
 #endif
         core.Navigate($"https://{Host}/index.html");
     }
+
+    private static bool EsDelTablero(string? uri) => uri?.StartsWith($"https://{Host}/", StringComparison.OrdinalIgnoreCase) == true;
 }

@@ -78,26 +78,30 @@ internal sealed class PuenteTablero
         }
         ventana.Apartar();
         Rectangle area = app.DrawingAreaExtents;
-        barra = new BarraSeleccion(app.MainWindowHandle, (area.Left, area.Top, area.Right, area.Bottom));
-        barra.Todas += () => acciones.Encolar(x => AccionesRevit.Hacer(x, AccionRevit.Seleccionar, sesion.Vigas));
-        barra.Terminar += () => acciones.Encolar(x =>
+        var nueva = new BarraSeleccion(app.MainWindowHandle, (area.Left, area.Top, area.Right, area.Bottom));
+        nueva.Todas += () => acciones.Encolar(x => AccionesRevit.Hacer(x, AccionRevit.Seleccionar, sesion.Vigas));
+        nueva.Terminar += () => acciones.Encolar(x =>
         {
             List<string> elegidas = Seleccion(x);
             TerminarSeleccion();
             foreach (AJs js in sesion.ElegirVigas(elegidas).OfType<AJs>())
                 ventana.Enviar(js.Json);
         });
-        barra.Cancelar += TerminarSeleccion;
+        nueva.Cancelar += TerminarSeleccion;
+        // Se cierre como se cierre (Terminar, Cancelar, Alt+F4 o el tablero), se suelta y el tablero vuelve.
+        nueva.Closed += (_, _) =>
+        {
+            if (barra != nueva)
+                return;
+            barra = null;
+            ventana.Volver();
+        };
+        barra = nueva;
         Contar(Seleccion(app));
-        barra.Show();
+        nueva.Show();
     }
 
-    private void TerminarSeleccion()
-    {
-        barra?.Close();
-        barra = null;
-        ventana.Volver();
-    }
+    private void TerminarSeleccion() => barra?.Close();
 
     /// <summary>Lo que dice la barra: cuántas de las vigas elegidas están en un pórtico, y en cuántos pórticos.</summary>
     private void Contar(IEnumerable<string> ids)
@@ -187,7 +191,6 @@ internal sealed class PuenteTablero
     private void Soltar()
     {
         barra?.Close();
-        barra = null;
         try
         {
             uiapp.SelectionChanged -= AlCambiarSeleccion;
