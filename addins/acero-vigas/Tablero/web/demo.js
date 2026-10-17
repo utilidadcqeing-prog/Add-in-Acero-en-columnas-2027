@@ -208,6 +208,37 @@
       const avisos = estado === 'aviso' && side === 'der' && !isCim
         ? [{ tipo: 'TraslapoLargo', elemento: pf + '3–' + pf + '4', texto: 'El traslapo ' + pf + '3–' + pf + '4 queda en 1.40, 0.40 por encima del mínimo. ' + pf + '4 termina en el voladizo y solo puede crecer. Si el traslapo va al inicio de la luz no pasa, y además se ahorran 7 kg.', cambiarCara: true }]
         : [];
+      // corte 1-1 (#91): lo de CalculadoraCorte en C#, simplificado (sin vista tipo ni proyección). Se puede en los tramos,
+      // sin apoyos ni traslapos y con 0.01 de margen; fuera de ahí salta al punto permitido más cercano (empate: derecha).
+      const MARGEN = 0.01;
+      const enTraslapo = traslapos.map((t) => [t.desde, t.hasta]).sort((p, q) => p[0] - q[0]);
+      const permitidos = [];
+      const agregar = (d, h) => { if (h - d > 2 * MARGEN) permitidos.push({ desde: d + MARGEN, hasta: h - MARGEN }); };
+      G.luces.forEach(([, a, b, vol]) => {
+        const z = vol ? G.fin : b;
+        let d = a;
+        enTraslapo.filter(([p, q]) => q > a && p < z).forEach(([p, q]) => { agregar(d, Math.min(p, z)); d = Math.max(d, q); });
+        agregar(d, z);
+      });
+      // los estribos: en la demostración, cada 0.10 desde 5 cm de la cara (en C# salen del motor); el corte puede ir en
+      // los que caen en lo permitido
+      const posicionesEstribos = [];
+      G.luces.forEach(([, a, b, vol]) => {
+        for (let x = a + 0.05; x <= (vol ? G.fin : b) - 0.05 + 1e-9; x += 0.10) posicionesEstribos.push(Math.round(x * 1000) / 1000);
+      });
+      const puntos = posicionesEstribos.filter((r) => permitidos.some((i) => i.desde - 1e-9 <= r && r <= i.hasta + 1e-9));
+      const oc = o.corte || {};
+      const pedido = oc.x == null ? 2.20 : oc.x / 1000;
+      let cx = pedido, dist = Infinity;
+      puntos.forEach((p) => {
+        const d = Math.abs(p - pedido);
+        if (d < dist - 1e-9 || (Math.abs(d - dist) <= 1e-9 && p > cx)) { cx = p; dist = d; }
+      });
+      const tramoCorte = G.luces.find(([, a, b, vol]) => a - 1e-9 <= cx && cx <= (vol ? G.fin : b) + 1e-9);
+      const corte = { x: cx, esTipo: oc.x == null, ajustado: oc.x != null && !permitidos.some((i) => i.desde - 1e-9 <= pedido && pedido <= i.hasta + 1e-9),
+        profundidad: Math.max(0, (oc.profundidad ?? 100) / 1000), mirando: oc.mirando === 'Izquierda' ? 'izquierda' : 'derecha',
+        tramo: tramoCorte ? tramoCorte[0] : '', permitidos, proyeccion: [], aviso: null, puntos };
+
       const kg = barras.reduce((s, b) => s + b.kg, 0) + bastones.reduce((s, b) => s + b.kg, 0) + kgE;
       return {
         id, tipo, inicio: G.inicio, fin: G.fin,
@@ -219,7 +250,7 @@
         seccion: { anchoCm: 30, altoCm: 50, barras: barrasSec,
           figuras: [{ id: 'E', tipo: 'Cerrado', izquierda: recSide, derecha: 30 - recSide, arriba: recUp, abajo: 50 - recDown }] },
         listaEstribos, avisos, zonasTraslapo: traslapos.map((t) => ({ desde: t.desde, hasta: t.hasta })),
-        kg, estribos: nMain, sePuedeGenerar: sup.error === 'Ninguno' && inf.error === 'Ninguno',
+        kg, estribos: nMain, sePuedeGenerar: sup.error === 'Ninguno' && inf.error === 'Ninguno', corte, posicionesEstribos,
       };
     }
 

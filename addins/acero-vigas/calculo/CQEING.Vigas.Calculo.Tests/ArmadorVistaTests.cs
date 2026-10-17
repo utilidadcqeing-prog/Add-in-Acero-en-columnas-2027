@@ -1,6 +1,7 @@
 using CQEING.Vigas.Calculo.Estribos;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
+using CQEING.Vigas.Calculo.Seccion;
 using CQEING.Vigas.Calculo.Tablero;
 
 namespace CQEING.Vigas.Calculo.Tests;
@@ -85,7 +86,7 @@ public class ArmadorVistaTests
     {
         VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(5, 5)] });
 
-        List<BarraSeccion> arriba = v.Seccion.Barras.Where(b => b.Arriba).ToList();
+        List<BarraSeccion> arriba = v.Seccion.Barras.Where(b => b.Arriba && !b.Baston).ToList();
         Assert.Equal([5.745, 10.3725, 15, 19.6275, 24.255], arriba.Select(b => Math.Round(b.X, 4)));
         Assert.Equal(["a1", "a2", "a3", "a4", "a5"], arriba.Select(b => b.Id));
         Assert.Equal([true, false, false, false, true], arriba.Select(b => b.Esquina));
@@ -242,5 +243,115 @@ public class ArmadorVistaTests
         VistaReglas pantalla = ArmadorVista.Reglas(new ReglasCargadas(Reglas.Generales, null)) with { Multiplo = "abc" };
 
         Assert.Equal("El múltiplo de corte debe ser mayor que 0.", ArmadorVista.ReglasDe(pantalla, Reglas.Generales).Validar()[0]);
+    }
+
+    // Corte 1-1 (#91, tarea 2 del plan docs/planes/2026-10-17-corte-vigas-91.md).
+
+    private static readonly ArmadoBastones BastonArriba = new(new GrupoBarras(1, 5));
+
+    /// <summary>Un x permitido dentro del bastón de arriba del eje B, con las mismas opciones que usa el armador.</summary>
+    private static int DentroDelBastonDeB(OpcionesTablero o, PorticoLeido p)
+    {
+        ResultadoVigas rv = MotorVigas.Calcular(new EntradaVigas(p.Portico, p.Tipo, o.Superior, o.Inferior, Reglas.Generales, o.Cara,
+            Cambios: o.Cambios, Bastones: o.Bastones));
+        Baston b = rv.Bastones.Single(x => x.Capa == Posicion.Superior && x.Donde == "B");
+        Intervalo i = CalculadoraCorte.Permitidos(p.Portico, rv).First(i => i.Hasta > b.Desde && i.Desde < b.Hasta);
+        return (int)Math.Round((Math.Max(i.Desde, b.Desde) + Math.Min(i.Hasta, b.Hasta)) / 2);
+    }
+
+    [Fact]
+    public void ElCorteArrancaEnLaVistaTipo()
+    {
+        CorteVista c = Armar().Corte!;
+
+        Assert.True(c.EsTipo);
+        Assert.False(c.Ajustado);
+        Assert.Equal(("derecha", 0.10), (c.Mirando, c.Profundidad));
+        Assert.Contains(c.Permitidos, r => r.Desde <= c.X && c.X <= r.Hasta);
+        Assert.Contains(c.X, c.Puntos);
+        Assert.Null(c.Aviso);
+    }
+
+    [Fact]
+    public void ElCorteTraeLosBastonesQuePasanPorAhi()
+    {
+        var o = OpcionesTablero.PorDefecto with { Bastones = BastonArriba };
+        o = o with { Corte = new OpcionesCorte(X: DentroDelBastonDeB(o, Portico1())) };
+
+        VistaPortico v = Armar(o);
+
+        // El corte se pega al estribo más cercano (decisión 9), que sigue dentro del bastón.
+        BarraSeccion baston = Assert.Single(v.Seccion.Barras, b => b.Baston);
+        Assert.Equal(("bs1", "bastón arriba 1", true), (baston.Id, baston.Nombre, baston.Arriba));
+    }
+
+    [Fact]
+    public void LosAdicionalesSoloSeVenEnSuTramo()
+    {
+        var adicional = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)]);
+        var o = OpcionesTablero.PorDefecto with
+        {
+            TramosMarcados = ["B-C"],
+            EstribosMarcados = new ConfigEstribos(Adicionales: [adicional]),
+        };
+
+        VistaPortico enAB = Armar(o with { Corte = new OpcionesCorte(X: 2200) });
+        VistaPortico enBC = Armar(o with { Corte = new OpcionesCorte(X: 6150) });
+
+        Assert.Equal(("A-B", "B-C"), (enAB.Corte!.Tramo, enBC.Corte!.Tramo));
+        Assert.Equal(["E"], enAB.Seccion.Figuras.Select(f => f.Id));
+        Assert.Equal(["E", "E1"], enBC.Seccion.Figuras.Select(f => f.Id));
+    }
+
+    [Fact]
+    public void UnCorteQueQuedaEnUnTraslapoAlRecalcularSeAjusta()
+    {
+        Rango z = Armar().ZonasTraslapo[0];
+        int enMedio = (int)Math.Round((z.Desde + z.Hasta) / 2 * 1000);
+
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Corte = new OpcionesCorte(X: enMedio) });
+
+        Assert.True(v.Corte!.Ajustado);
+        Assert.All(v.ZonasTraslapo, r => Assert.True(v.Corte.X < r.Desde || v.Corte.X > r.Hasta));
+    }
+
+    [Fact]
+    public void LosBastonesQueNoCabenAvisan()
+    {
+        PorticoLeido angosto = Portico1() is var p ? p with { Tramos = p.Tramos.Select(t => t with { Ancho = 200 }).ToList() } : null!;
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(5, 5)], Bastones = new ArmadoBastones(new GrupoBarras(5, 8)) };
+        o = o with { Corte = new OpcionesCorte(X: DentroDelBastonDeB(o, angosto)) };
+
+        VistaPortico v = Armar(o, angosto);
+
+        Assert.Equal("Los bastones de arriba no caben en el corte.", v.Corte!.Aviso);
+        Assert.DoesNotContain(v.Seccion.Barras, b => b.Baston);
+    }
+
+    [Fact]
+    public void ElAlzadoTraeCadaEstriboEnSuPosicion()
+    {
+        // Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba, y la línea 1-1 (que va de estribo en estribo) no caía
+        // sobre las rayas del alzado.
+        VistaPortico cada20 = Armar();
+        VistaPortico cada15 = Armar(OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(SeparacionCentro: 150) });
+
+        Assert.Equal(cada20.Estribos, cada20.PosicionesEstribos!.Count);
+        Assert.Equal(cada20.PosicionesEstribos.Order(), cada20.PosicionesEstribos);
+        Assert.True(cada15.PosicionesEstribos!.Count > cada20.PosicionesEstribos.Count);
+        Assert.All(cada20.Corte!.Puntos, x => Assert.Contains(x, cada20.PosicionesEstribos));
+    }
+
+    [Fact]
+    public void SinBastonesLaSeccionEsLaDeSiempre()
+    {
+        // Con 0, la cara no lleva bastones (#89); null sería 1 barra del diámetro de las esquinas.
+        var sinBastones = new ArmadoBastones(new GrupoBarras(0, 5), new GrupoBarras(0, 5));
+
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Bastones = sinBastones });
+
+        Assert.Equal(["a1", "a2", "a3", "b1", "b2", "b3"], v.Seccion.Barras.Select(b => b.Id));
+        Assert.DoesNotContain(v.Seccion.Barras, b => b.Baston);
+        Assert.Empty(v.Corte!.Proyeccion);
     }
 }

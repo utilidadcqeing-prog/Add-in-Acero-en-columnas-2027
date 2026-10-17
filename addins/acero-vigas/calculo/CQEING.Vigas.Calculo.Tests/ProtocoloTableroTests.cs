@@ -36,6 +36,34 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LasOpcionesTraenElCorte()
+    {
+        string opciones = OpcionesJson(OpcionesTablero.PorDefecto).TrimEnd('}') + ""","corte":{"x":2200,"profundidad":150,"mirando":"Izquierda"}}""";
+
+        var m = Assert.IsType<Calcular>(ProtocoloTablero.Leer($$"""{"tipo":"calcular","id":"P1","opciones":{{opciones}}}"""));
+
+        Assert.Equal(new OpcionesCorte(2200, 150, MiraCorte.Izquierda), m.Opciones.Corte);
+    }
+
+    [Fact]
+    public void SinCorteEsLaVistaTipo()
+    {
+        var m = Assert.IsType<Calcular>(ProtocoloTablero.Leer($$"""{"tipo":"calcular","id":"P1","opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}"""));
+
+        Assert.Null(m.Opciones.Corte);
+    }
+
+    [Fact]
+    public void ElCorteSinProfundidadUsaLaDeBase()
+    {
+        string opciones = OpcionesJson(OpcionesTablero.PorDefecto).TrimEnd('}') + ""","corte":{"x":null}}""";
+
+        var m = Assert.IsType<Calcular>(ProtocoloTablero.Leer($$"""{"tipo":"calcular","id":"P1","opciones":{{opciones}}}"""));
+
+        Assert.Equal(new OpcionesCorte(), m.Opciones.Corte);
+    }
+
+    [Fact]
     public void LosEnumsVanComoTexto()
     {
         string json = OpcionesJson(OpcionesTablero.PorDefecto with { Cara = Cara.Final });

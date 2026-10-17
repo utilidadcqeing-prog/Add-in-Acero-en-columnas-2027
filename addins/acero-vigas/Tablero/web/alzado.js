@@ -9,7 +9,7 @@
   class Alzado extends Component {
     constructor(props) {
       super(props);
-      this.state = { z: null, tx: 0, ty: 0, drag: null, selLocal: 'S1', selLapLocal: '', rk: '' };
+      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', rk: '' };
     }
 
     valores() {
@@ -72,7 +72,11 @@
         return { top, pts, col: isSel ? '#1F5FAF' : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
       });
 
-      const st = p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
+      // estribos: una raya por cada estribo real, donde va (Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba y la
+      // línea 1-1, que va de estribo en estribo, no caía en las rayas). Sin posiciones, el rayado de zonas de la maqueta.
+      const posEst = p.posicionesEstribos || null;
+      const st = posEst ? [] : p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
+      const stx = posEst ? posEst.map(X) : [];
 
       const ap = p.apoyos;
       const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda) }));
@@ -83,8 +87,34 @@
       const vol = vols.map((o) => ({ x: X(o.a), w: X(o.z) - X(o.a), lx: X((o.a + o.z) / 2), lt: 'voladizo ' + f2(o.z - o.a) }));
       const ejes = ap.map((a) => ({ x: X(a.x), eje: a.eje }));
 
-      const cutM = parseFloat(this.props.cutX);
-      const cut = { x: X(Number.isFinite(cutM) ? cutM : 1.0), c: this.props.cutBad ? '#B42318' : '#1F5FAF' };
+      // corte 1-1 (#91): la línea se arrastra y se pega a los tramos permitidos que manda C#; la franja muestra la
+      // profundidad hacia el lado que mira y las flechas, hacia dónde mira.
+      const corte = this.props.corte;
+      const cutM = this.props.cutLive ?? (corte ? corte.x : p.inicio);
+      const prof = corte ? corte.profundidad : 0, dirC = corte && corte.mirando === 'izquierda' ? -1 : 1;
+      const cut = { x: X(cutM), c: '#1F5FAF', bandX: Math.min(X(cutM), X(cutM + dirC * prof)), bandW: 52 * prof,
+        arrow: (y) => 'M' + X(cutM) + ' ' + y + 'h' + (8 * dirC) + 'm' + (-3 * dirC) + ' -3l' + (3 * dirC) + ' 3l' + (-3 * dirC) + ' 3' };
+      const permitidos = corte ? corte.permitidos : [];
+      const puntos = corte && corte.puntos ? corte.puntos : [];
+      // como CalculadoraCorte en C#: de estribo en estribo (AlPunto); sin estribos, el punto permitido más cercano
+      // (Ajustar). En un empate, el de la derecha.
+      const cercano = (m, candidatos) => {
+        let mejor = m, dist = Infinity;
+        candidatos.forEach((b) => {
+          const d = Math.abs(b - m);
+          if (d < dist - 1e-9 || (Math.abs(d - dist) <= 1e-9 && b > mejor)) { mejor = b; dist = d; }
+        });
+        return mejor;
+      };
+      const pegar = (m) => {
+        if (puntos.length) return cercano(m, puntos);
+        if (!permitidos.length || permitidos.some((i) => i.desde - 1e-9 <= m && m <= i.hasta + 1e-9)) return m;
+        return cercano(m, permitidos.flatMap((i) => [i.desde, i.hasta]));
+      };
+      const cutAt = (e) => {
+        const { r, k } = scaleOf(this.base);
+        return pegar((((e.clientX - r.left) * k - v.tx) / v.z - 30) / 52 + p.inicio);
+      };
       const wl = p.traslapos.find((x) => x.id === warnLap);
 
       const scaleOf = (el) => { const r = el.getBoundingClientRect(); return { r, k: r.width ? W / r.width : 1 }; };
@@ -99,13 +129,25 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, cols, luces, vol, ejes, cut,
+        b, l, t, st, stx, cols, luces, vol, ejes, cut,
         beamX: X(p.inicio), beamW: X(p.fin) - X(p.inicio),
         stVis: showSt ? 'visible' : 'hidden',
         warnText: wl ? 'traslapo ' + f2(wl.hasta - wl.desde) + ' · +' + f2(wl.hasta - wl.desde - wl.minimo) : '',
         warnX: wl ? X((wl.desde + wl.hasta) / 2) : 0, warnY: inv ? 100 : 82,
         zoomPct: Math.round((v.z / fitZ) * 100) + '%',
         stop: (e) => e.stopPropagation(),
+        cutDown: (e) => {
+          if (e.button !== 0 || !this.props.onCut) return;
+          e.stopPropagation();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          this.setState({ cutDrag: true });
+        },
+        cutMove: (e) => { if (this.state.cutDrag) this.props.onCut(cutAt(e), false); },
+        cutUp: (e) => {
+          if (!this.state.cutDrag) return;
+          this.setState({ cutDrag: false });
+          this.props.onCut(cutAt(e), true);
+        },
         down: (e) => {
           if (e.button !== 0 && e.button !== 1) return;
           if (e.button === 1) e.preventDefault();
@@ -141,6 +183,7 @@
       ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="90" fill="#E9ECEF" stroke="none"></rect>`)}
       <g visibility="${v.stVis}">
         ${v.st.map((z) => html`<line x1="${z.x1}" y1="85" x2="${z.x2}" y2="85" stroke="#C3CAD2" stroke-width="80" stroke-dasharray="${z.da}"></line>`)}
+        ${v.stx.map((x) => html`<line x1="${x}" y1="45" x2="${x}" y2="125" stroke="#C3CAD2" stroke-width="1"></line>`)}
       </g>
       ${v.cols.map((c) => html`<rect x="${c.x}" y="14" width="${c.w}" height="152" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1"></rect>`)}
       ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3"></line>`)}
@@ -155,14 +198,18 @@
       ${v.b.filter((x) => x.isC).map(rotulo)}
       ${v.b.filter((x) => !x.isC).map(rotulo)}
       <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
-      <line x1="${v.cut.x}" y1="18" x2="${v.cut.x}" y2="152" stroke="${v.cut.c}" stroke-width="1.6" stroke-dasharray="6 3"></line>
-      <text x="${v.cut.x}" y="15" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}">1-1</text>
+      <rect x="${v.cut.bandX}" y="40" width="${v.cut.bandW}" height="90" fill="${v.cut.c}" fill-opacity="0.08" pointer-events="none"></rect>
+      <line x1="${v.cut.x}" y1="18" x2="${v.cut.x}" y2="152" stroke="${v.cut.c}" stroke-width="1.6" stroke-dasharray="6 3" pointer-events="none"></line>
+      <path d="${v.cut.arrow(18)}" stroke="${v.cut.c}" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
+      <path d="${v.cut.arrow(152)}" stroke="${v.cut.c}" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
+      <text x="${v.cut.x}" y="12" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}" pointer-events="none">1-1</text>
+      <rect x="${v.cut.x - 7}" y="2" width="14" height="158" fill="transparent" style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>
       ${v.luces.map((m) => html`<text x="${m.x}" y="178" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#5E6670">${m.lt}</text>`)}
       ${v.vol.map((o) => html`<text x="${o.lx}" y="178" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#5E6670">${o.lt}</text>`)}
       ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="192" r="8" fill="#FFFFFF" stroke="#9AA3AD"></circle><text x="${e.x}" y="195.5" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}
     </g>
   </svg>
-  <div style="position: absolute; top: 8px; left: 10px; display: flex; gap: 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
+  <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 160}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
     <span>${v.caption}</span>
     <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #3F4A57"></span>corrida</span>
     <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #0F7B6C"></span>bastón</span>
@@ -180,7 +227,7 @@
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
     </button>
   </div>
-  <div style="position: absolute; bottom: 6px; left: 10px; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">Arrastra para mover · rueda para zoom · doble clic para ajustar · clic en una barra, bastón o traslapo para editarlo</div>
+  <div style="position: absolute; bottom: 6px; left: 10px; right: 10px; font-size: 11px; line-height: 1.35; color: #5E6670; pointer-events: none">Arrastra para mover · rueda para zoom · doble clic para ajustar · clic en una barra, bastón o traslapo para editarlo · arrastra la línea 1-1 para mover el corte</div>
 </div>`;
     }
   }

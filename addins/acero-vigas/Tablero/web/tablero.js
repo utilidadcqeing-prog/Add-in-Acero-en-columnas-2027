@@ -20,7 +20,11 @@
     rec: '4', recUp: '', recDown: '', recSide: '', sepMode: 'pegada', sepCm: '1', maxCapas: '3',
     bastDef: '2.00', bastHook: false, bastLen: {}, bastSupN: '1', bastSupD: '', bastInfN: '1', bastInfD: '',
     est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20' }, estMarc: null, tramosSel: [],
+    // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
+    cutX: '', depth: '0.10', mira: 'derecha',
   };
+  // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
+  const ANCHO_CORTE = 260;
   const CLAVES_OPCIONES = Object.keys(OPCIONES0);
 
   // Las opciones de la página con la forma de OpcionesTablero (tarea 2); null si algún campo no es número: así no se
@@ -47,9 +51,58 @@
         tramosMarcados: s.tramosSel.slice(),
         estribosMarcados: s.tramosSel.length && s.estMarc ? estribos(s.estMarc) : null,
         cambios: null,
+        corte: { x: String(s.cutX).trim() === '' ? null : mm(n(s.cutX)), profundidad: mm(n(s.depth)),
+          mirando: s.mira === 'izquierda' ? 'Izquierda' : 'Derecha' },
       };
     } catch (e) {
       return null;
+    }
+  }
+
+  // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
+  const dibujoSeccion = (sec) => html`
+    <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
+      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
+      ${sec.adds.map((sh) => html`
+        <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
+      ${sec.proy.map((d) => html`
+        <div role="img" aria-label=${d.label} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; border: 1.5px dashed #5E6670; border-radius: 50%; box-sizing: border-box"></div>`)}
+      ${sec.dots.map((d) => html`
+        <button type="button" aria-label=${d.label} onClick=${d.pick} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; padding: 0; border: 0; border-radius: 50%; background: ${d.c}; outline: ${d.ring}; outline-offset: 2px; cursor: ${d.cur}"></button>`)}
+    </div>`;
+
+  // La ventana del corte que sale encima del alzado al tomar la línea 1-1 (decisión 10): se mueve por su barra, sin
+  // salirse del alzado, y se oculta con ×.
+  class VentanaCorte extends Component {
+    render() {
+      const { v, W, H } = this.props;
+      const pos = v.cutWinPos || { x: W - ANCHO_CORTE - 12, y: 40 };
+      const x = Math.max(0, Math.min(pos.x, W - ANCHO_CORTE)), y = Math.max(0, Math.min(pos.y, H - 40));
+      const down = (e) => {
+        if (e.button !== 0 || e.target.closest('button')) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        this.drag = { cx: e.clientX, cy: e.clientY, x, y };
+      };
+      const move = (e) => { const d = this.drag; if (d) v.moveCutWin({ x: d.x + e.clientX - d.cx, y: d.y + e.clientY - d.cy }); };
+      const up = () => { this.drag = null; };
+      return html`
+<div role="dialog" aria-label="Corte 1-1" style="position: absolute; left: ${x}px; top: ${y}px; width: ${ANCHO_CORTE}px; display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid #C9CFD6; border-radius: 6px; box-shadow: 0 6px 18px rgba(22, 25, 29, 0.18); z-index: 5">
+  <div onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up} style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px; border-bottom: 1px solid #D9DDE2; cursor: move; user-select: none; touch-action: none; white-space: nowrap">
+    <span style="font-weight: 600">Corte 1-1</span>
+    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px">${v.cutPos} m</span>
+    <span style="font-size: 12px; color: #5E6670">${v.cutTramo}</span>
+    <div style="flex: 1"></div>
+    ${v.cutTipo ? html`<span title="La sección que más se repite en el pórtico" style="font-size: 11px; font-weight: 600; color: #1E7A46">Más común</span>` : null}
+    <button type="button" aria-label="Ocultar el corte" onClick=${v.hideCutWin} style="width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #3F4A57; cursor: pointer; display: grid; place-items: center">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+    </button>
+  </div>
+  <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px">
+    ${dibujoSeccion(v.secMini)}
+    <span style="font-size: 12px; color: #5E6670">Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
+    ${v.cutAviso ? html`<span role="status" style="font-size: 12px; color: #B42318">${v.cutAviso}</span>` : null}
+  </div>
+</div>`;
     }
   }
 
@@ -57,7 +110,7 @@
     constructor(props) {
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
-        cutX: '1.00', depth: '0.10', draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
+        cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
         vw: window.innerWidth, vh: window.innerHeight },
       OPCIONES0, props.inicial || {});
       this.opcionesPorPortico = {};
@@ -108,6 +161,8 @@
         const tarjeta = ahora && document.querySelector('[data-portico="' + CSS.escape(ahora) + '"]');
         if (tarjeta) tarjeta.scrollIntoView({ block: 'nearest' });
       }
+      // Al soltar la línea 1-1, se sigue viendo donde quedó hasta que llega el cálculo de C#.
+      if (prev.vista !== this.props.vista && !this.arrastrandoCorte && this.state.cutLive != null) this.setState({ cutLive: null });
       if (this.state.guardando && prev.vista !== this.props.vista) {
         this.say('Reglas guardadas para todos los proyectos');
         this.setState({ guardando: false, locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null,
@@ -289,22 +344,26 @@
       const estRows = (P ? P.listaEstribos : []).map((e) => ({ id: e.id, kind: e.tipo, qty: e.cantidad + ' ' + e.diametro, len: f2(e.largo) + ' m', lap: e.detalle,
         kg: e.kg.toFixed(1) + ' kg', bg: '#FFFFFF', pick: () => this.setState({ step: 'estribos' }) }));
 
-      // corte: la sección del motor, en cm, a 5 px por cm como la maqueta (más chica si no entra en el recuadro)
-      const cutX = s.cutX;
-      const cx = num(cutX, NaN);
-      const cutBad = !!P && Number.isFinite(cx) && P.zonasTraslapo.some((z) => cx >= z.desde - 1e-9 && cx <= z.hasta + 1e-9);
+      // corte 1-1 (#91): la sección en el corte la arma C# (barras, bastones que pasan por ahí y estribos del tramo). Se
+      // pinta en la pestaña Corte 1-1, a 5 px por cm como la maqueta, y más chica en la ventana que sale al arrastrar la
+      // línea 1-1 en el alzado (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
+      const C = P ? P.corte : null;
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
-      const K = Math.min(5, 270 / secc.altoCm, 340 / secc.anchoCm);
       const cerrado = secc.figuras.find((f) => f.id === 'E');
       const recCm = num(s.rec, 4);
-      const dots = secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', c: b.arriba ? '#1F5FAF' : '#3F4A57',
-        ring: 'none', cur: 'default', label: 'Barra ' + b.nombre, pick: () => {} }));
-      const adds = secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
-        ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
-        : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' }));
-      const sec = { wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px', dots, adds,
+      const seccionA = (K) => ({
+        wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
+        dots: secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
+          c: b.baston ? '#0F7B6C' : (b.arriba ? '#1F5FAF' : '#3F4A57'), ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
+        // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
+        proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
+        adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
+          ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
+          : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' })),
         stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
-        stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px' };
+        stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px' });
+      const sec = seccionA(Math.min(5, 270 / secc.altoCm, 340 / secc.anchoCm));
+      const secMini = seccionA(Math.min(4, 180 / secc.altoCm, (ANCHO_CORTE - 40) / secc.anchoCm));
       const adicionales = P ? P.listaEstribos.filter((e) => e.id !== 'E') : [];
 
       // estribos: con tramos marcados, los campos son los de esos tramos (EstribosMarcados)
@@ -368,7 +427,13 @@
         confTxt: est.conf + ' m', s1Txt: 'cada ' + est.s1, s2Txt: 'cada ' + est.s2, bastTxt: s.bastDef + ' m',
         secAddText: adicionales.length ? ' · ' + adicionales.length + (adicionales.length === 1 ? ' adicional' : ' adicionales') : '',
         startCerrado: () => this.say(LLEGA(91)), startAbierto: () => this.say(LLEGA(91)), cancelPick: () => {}, addPick: () => {},
-        cutX, cutBad, cutBd: cutBad ? '#B42318' : '#C9CFD6', depth: s.depth, sec,
+        corte: C, cutLive: s.cutLive, cutX: s.cutX !== '' ? s.cutX : (C ? f2(C.x) : ''), cutPos: C ? f2(s.cutLive ?? C.x) : '',
+        cutAjustado: !!C && C.ajustado, cutBd: C && C.ajustado ? '#B26B00' : '#C9CFD6', cutTipo: !!C && C.esTipo,
+        cutTramo: C ? C.tramo : '', cutAviso: C ? C.aviso : null,
+        cutMira: C ? C.mirando : s.mira, cutProf: C ? f2(C.profundidad) : s.depth, depth: s.depth, sec, secMini,
+        cutWin: s.cutWin && !!C, cutWinPos: s.cutWinPos, hideCutWin: () => this.setState({ cutWin: false }),
+        moveCutWin: (pos) => this.setState({ cutWinPos: pos }),
+        segMiraIzq: s.mira === 'izquierda' ? on : off, segMiraDer: s.mira === 'izquierda' ? off : on,
         secTop: qtyOf(s.sup) + (supI.filas > 1 ? ' en ' + supI.filas + ' filas' : ''), secBot: qtyOf(s.inf) + (infI.filas > 1 ? ' en ' + infI.filas + ' filas' : ''),
         estD: est.estD, estG: est.estG, conf: est.conf, s1: est.s1, s2: est.s2, secEstD: s.est.estD,
         estScope: nSel ? 'Se aplica a ' + nSel + (nSel === 1 ? ' tramo marcado' : ' tramos marcados') + ' en la lista.' : 'Se aplica a todo el pórtico. Marca tramos en la lista para darles otros valores.',
@@ -394,7 +459,7 @@
         pickEl: (id) => selectBar(id), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
         setQ: (e) => this.setState({ q: e.target.value }), setVer: (e) => this.setState({ ver: e.target.value }),
         setDraft: (e) => this.setState({ draft: e.target.value }),
-        showAlzado: () => this.setState({ tab: 'alzado' }), showCorte: () => this.setState({ tab: 'corte', step: 'corte' }),
+        showAlzado: () => this.setState({ tab: 'alzado' }), showCorte: () => this.setState({ tab: 'corte', step: 'corte', cutWin: false }),
         useIzq: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'izq' }); },
         useDer: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'der' }); },
         toggleList: () => this.setState({ listOpen: !s.listOpen }), toggleMore: () => this.setState({ more: !s.more }),
@@ -408,8 +473,15 @@
         setBastSupD: (e) => this.cambiar({ bastSupD: e.target.value }), setBastInfD: (e) => this.cambiar({ bastInfD: e.target.value }),
         setBastDef: (e) => this.cambiar({ bastDef: e.target.value }, true), hookNo: () => this.cambiar({ bastHook: false }), hookYes: () => this.cambiar({ bastHook: true }),
         setEstD: setEst('estD'), setEstG: setEst('estG'), setConf: setEst('conf', true), setS1: setEst('s1', true), setS2: setEst('s2', true),
-        setCutX: (e) => this.setState({ cutX: e.target.value }), setDepth: (e) => this.setState({ depth: e.target.value }),
-        useTypical: () => this.say(LLEGA(91)),
+        setCutX: (e) => this.cambiar({ cutX: e.target.value }, true), setDepth: (e) => this.cambiar({ depth: e.target.value }, true),
+        miraIzq: () => this.cambiar({ mira: 'izquierda' }), miraDer: () => this.cambiar({ mira: 'derecha' }),
+        useTypical: () => this.cambiar({ cutX: '', cutLive: null }),
+        // La línea 1-1 arrastrada en el alzado, ya pegada a un estribo: abre la ventana del corte; mientras se mueve
+        // pide el cálculo con la espera de los campos de texto, y al soltarla, enseguida.
+        onCut: (x, soltado) => {
+          this.arrastrandoCorte = !soltado;
+          this.cambiar({ cutX: f2(x), cutLive: x, cutWin: true }, !soltado);
+        },
         openRules: () => this.setState({ step: 'reglas' }),
         closeRules: () => (rulesDirty ? this.setState({ rulesWarn: true }) : leaveRules({})),
         toggleLock: () => {
@@ -516,25 +588,27 @@
         </div>
 
         ${v.isAlzado ? html`
-          <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} cutX=${v.cutX} cutBad=${v.cutBad} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />` : null}
+          <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
+            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />
+            ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
+          </div>` : null}
         ${v.isCorte ? html`
           <div style="width: ${m.dibujoW}px; height: ${m.dibujoH}px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 48px; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px">
-            <div style="position: relative; width: ${v.sec.wpx}; height: ${v.sec.hpx}; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-              <div style="position: absolute; left: ${v.sec.stL}; top: ${v.sec.stT}; right: ${v.sec.stR}; bottom: ${v.sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
-              ${v.sec.adds.map((sh) => html`
-                <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
-              ${v.sec.dots.map((d) => html`
-                <button type="button" aria-label=${d.label} onClick=${d.pick} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; padding: 0; border: 0; border-radius: 50%; background: ${d.c}; outline: ${d.ring}; outline-offset: 2px; cursor: ${d.cur}"></button>`)}
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; max-width: 300px">
-              <span style="font-weight: 600; font-size: 15px">Corte 1-1</span>
-              <span>A ${v.cutX} m del eje A · proyección ${v.depth} m</span>
+            ${dibujoSeccion(v.sec)}
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px; max-width: 320px">
+              <span style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap">
+                <span style="font-weight: 600; font-size: 15px">Corte 1-1</span>
+                ${v.cutTipo ? html`<span style="font-size: 11px; font-weight: 600; color: #1E7A46">Sección más común</span>` : null}
+              </span>
+              <span>A ${v.cutPos} m del eje A · ${v.cutTramo}</span>
+              <span>Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
               <span><b>Arriba</b> · ${v.secTop}</span>
               <span><b>Abajo</b> · ${v.secBot}</span>
               <span>Estribo cerrado ${v.secEstD} en las esquinas${v.secAddText}</span>
               ${v.isPicking ? html`
                 <span style="color: #9A5B00; line-height: 1.45">${v.pickMsg}</span>` : null}
               <span style="color: #5E6670">Recubrimiento ${v.rec} cm · al eje de la barra ${v.alEje} cm</span>
+              ${v.cutAviso ? html`<span role="status" style="color: #B42318">${v.cutAviso}</span>` : null}
             </div>
           </div>` : null}
 
@@ -875,14 +949,21 @@
 
         ${v.isCorteStep ? html`
           <div style="display: flex; flex-direction: column; gap: 14px">
-            <span style="color: #3F4A57; line-height: 1.5">El corte 1-1 muestra la sección de la viga. Por defecto se ubica donde la sección es la más común.</span>
+            <span style="color: #3F4A57; line-height: 1.5">El corte 1-1 muestra la sección de la viga en ese punto. Por defecto se ubica donde la sección es la más común. Arrastra la línea 1-1 en el alzado para moverlo de estribo en estribo, sin pasar por traslapos ni apoyos: el corte se ve en una ventana que puedes ocultar.</span>
             <div style="display: flex; align-items: center; gap: 8px">
               <label for="cut-x" style="font-weight: 600; flex: 1">Distancia desde el eje A</label>
               <input id="cut-x" type="text" inputmode="decimal" value=${v.cutX} onInput=${v.setCutX} style="width: 70px; height: 32px; padding: 0 8px; border: 1px solid ${v.cutBd}; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />
               <span style="color: #5E6670">m</span>
             </div>
-            ${v.cutBad ? html`
-              <span role="status" style="font-size: 12px; color: #B42318">Ahí hay un traslapo. Elige un punto fuera de él para ver la sección real.</span>` : null}
+            ${v.cutAjustado ? html`
+              <span role="status" style="font-size: 12px; color: #9A5B00; line-height: 1.45">Ahí no se puede cortar (traslapo o apoyo): el corte se muestra en ${v.cutPos} m.</span>` : null}
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span style="font-weight: 600; flex: 1">Mirando hacia</span>
+              <div style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                <button type="button" onClick=${v.miraIzq} style="height: 30px; padding: 0 12px; border: 0; font: inherit; cursor: pointer; ${v.segMiraIzq}">Izquierda</button>
+                <button type="button" onClick=${v.miraDer} style="height: 30px; padding: 0 12px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segMiraDer}">Derecha</button>
+              </div>
+            </div>
             <div style="display: flex; align-items: center; gap: 8px">
               <label for="cut-d" style="font-weight: 600; flex: 1">Profundidad de la vista</label>
               <input id="cut-d" type="text" inputmode="decimal" value=${v.depth} onInput=${v.setDepth} style="width: 70px; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />

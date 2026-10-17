@@ -53,9 +53,11 @@ public sealed record OpcionCaraVista(double Kg, bool Existe);
 
 /// <summary>
 /// Una barra en el corte, en cm: x desde la cara izquierda e y desde la cara de arriba, como la maqueta.
-/// <paramref name="Id"/> es <c>"a1"</c>… arriba y <c>"b1"</c>… abajo, por fila y de izquierda a derecha.
+/// <paramref name="Id"/> es <c>"a1"</c>… arriba y <c>"b1"</c>… abajo, por fila y de izquierda a derecha; los bastones
+/// (<paramref name="Baston"/>) son <c>"bs1"</c>… arriba y <c>"bi1"</c>… abajo, y no se eligen para estribos (#91).
 /// </summary>
-public sealed record BarraSeccion(string Id, string Nombre, bool Arriba, int Fila, double X, double Y, double D, bool Esquina);
+public sealed record BarraSeccion(string Id, string Nombre, bool Arriba, int Fila, double X, double Y, double D, bool Esquina,
+    bool Baston = false);
 
 /// <summary>Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba.</summary>
 public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo);
@@ -75,9 +77,20 @@ public sealed record AvisoVista(string Tipo, string Elemento, string Texto, bool
 public sealed record Rango(double Desde, double Hasta);
 
 /// <summary>
+/// El corte 1-1 (#91), en m: dónde quedó, si es la vista tipo, si se movió de donde lo pidió el usuario, la profundidad,
+/// hacia dónde mira (<c>"derecha"</c> o <c>"izquierda"</c>), el tramo, los tramos donde se puede poner, los bastones en
+/// proyección (en cm, como la sección) y un aviso (null = ninguno). <paramref name="Puntos"/> son los estribos donde
+/// puede ir: la línea 1-1 salta de uno a otro (vacío = sin estribos, se mueve por <paramref name="Permitidos"/>).
+/// </summary>
+public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Profundidad, string Mirando, string Tramo,
+    IReadOnlyList<Rango> Permitidos, IReadOnlyList<BarraSeccion> Proyeccion, string? Aviso, IReadOnlyList<double> Puntos);
+
+/// <summary>
 /// El pórtico abierto, calculado. <paramref name="Inicio"/> y <paramref name="Fin"/> son las puntas del concreto.
 /// <paramref name="CaraUsada"/> y <paramref name="CaraMasEconomica"/> valen <c>"izq"</c> (al inicio de la luz) o
-/// <c>"der"</c> (al final). <paramref name="Kg"/> suma barras, bastones y estribos.
+/// <c>"der"</c> (al final). <paramref name="Kg"/> suma barras, bastones y estribos. <paramref name="Seccion"/> es la
+/// sección en el corte 1-1: barras corridas, bastones que pasan por ahí y estribos de ese tramo (<paramref name="Corte"/>).
+/// <paramref name="PosicionesEstribos"/> es el centro de cada estribo cerrado, en m, para dibujarlos en el alzado donde van.
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -101,7 +114,9 @@ public sealed record VistaPortico(
     IReadOnlyList<Rango> ZonasTraslapo,
     double Kg,
     int Estribos,
-    bool SePuedeGenerar);
+    bool SePuedeGenerar,
+    CorteVista? Corte = null,
+    IReadOnlyList<double>? PosicionesEstribos = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).
