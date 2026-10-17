@@ -3,32 +3,21 @@
 <head>
 <meta charset="utf-8">
 <title>Acero en vigas · Tablero</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<!-- El <style> del helmet de Main.dc.html de la maqueta, tal cual (#83). -->
 <style>
-body{margin:0;font-family:'Segoe UI',sans-serif;font-size:13px;color:#16191D;background:#EEF0F2}
-main{padding:24px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+body{margin:0}
+a{color:#1F5FAF}a:hover{color:#174A8A}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #1F5FAF;outline-offset:1px}
+button:disabled{cursor:not-allowed}
+input:disabled,select:disabled{background:#F4F6F8;color:#5E6670}
 </style>
 </head>
 <body>
-<!-- Temporal (tarea 1 del plan #83): comprueba que la página carga y habla con C#. La tarea 3 la reemplaza. -->
-<main>
-  <strong>Tablero de vigas · prueba de WebView2</strong>
-  <span id="diagnostico">Esperando a Revit…</span>
-  <button type="button" id="eco">Mandar eco</button>
-  <span id="respuesta"></span>
-</main>
-<script>
-  const webview = window.chrome && window.chrome.webview;
-  if (webview) {
-    webview.addEventListener('message', (e) => {
-      const m = e.data;
-      if (m.tipo === 'diagnostico') document.getElementById('diagnostico').textContent = m.texto;
-      if (m.tipo === 'eco') document.getElementById('respuesta').textContent = 'Volvió el eco: ' + m.texto;
-    });
-    document.getElementById('eco').addEventListener('click', () => webview.postMessage({ tipo: 'eco', texto: new Date().toLocaleTimeString() }));
-    webview.postMessage({ tipo: 'listo' });
-  } else {
-    document.getElementById('diagnostico').textContent = 'Fuera de Revit: no hay chrome.webview.';
-  }
-</script>
+<div id="tablero"></div>
+<script src="vendor/htm-preact-standalone.umd.js"></script>
+<script src="alzado.js"></script>
+<!-- Fuera de Revit, tablero.js carga demo.js con los datos de la maqueta (?estado=normal|reglas|cimentacion|aviso|varias|vacio|largo). -->
+<script src="tablero.js"></script>
 </body>
 </html>

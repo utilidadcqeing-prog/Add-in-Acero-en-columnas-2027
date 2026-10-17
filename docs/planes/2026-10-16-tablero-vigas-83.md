@@ -97,6 +97,20 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
   | 8 | 45.5 s | 12 ms |
   | 10 | 288.5 s | 11 ms |
   | 15 | — | 223 ms |
+- **La página, comparada al píxel** (tarea 4, 16-oct). Las referencias salen de la maqueta corriendo en local con su propio runtime (`artifact-type/dc-runtime.js` como `support.js`), capturadas con Edge headless a 1440 × 900, igual que las capturas `actual-*`. Así la comparación es 1:1 sin depender del lienzo de claude.ai. Píxeles distintos (tolerancia 16 por canal):
+
+  | Estado | Distinto |
+  |---|---|
+  | normal | 0.117 % |
+  | reglas | 0.083 % |
+  | cimentación | 0.117 % |
+  | aviso | 0.175 % |
+  | varias | 0.149 % |
+  | vacío | 0.000 % |
+
+  - **Lo único distinto son textos dentro de los SVG** que la maqueta calcula pero no se ven: los rótulos de las barras (`S1 · 3.00`), el del traslapo largo (`traslapo 1.40 · +0.40`), "al eje 5.75 cm" / "libre 4 cm", el largo de los bastones y "0.80 m · cada 0.10 · cada 0.20" de los estribos. El runtime de la maqueta mete cada `{{hueco}}` como un `<span>` HTML dentro de `<text>`, y el navegador no pinta HTML dentro de un SVG. La página sí los pinta (decisión 13).
+  - **Fuentes:** Google Fonts sirve IBM Plex Sans **v23 variable** e IBM Plex Mono v20. `@fontsource` 5.1.0 trae la Plex Sans estática vieja, que cambia el suavizado de todas las letras (0.4–1.2 % distinto). Se guardaron los mismos archivos que usa la maqueta (`web/fonts/`, OFL).
+  - `?estado=largo` (8 luces de 5 m): el alzado entra con el ajuste, la lista de tramos y la de barras no se enciman y ningún texto se parte en dos líneas (`actual-largo.png`).
 - **Repo:**
   - `AppVigas.cs` hoy pone un botón temporal "Pórticos (diagnóstico)", con la nota de quitarlo cuando el tablero tenga "Seleccionar en Revit";
   - todos los add-ins usan WPF (`UseWPF` en `Directory.Build.props`);
@@ -131,6 +145,15 @@ Las opciones 2 y 3 (`Panel`, `Minima`) **no** se hacen.
 10. **En vivo con Revit:** con el enlace activo, si en Revit se selecciona una viga de un pórtico, el tablero abre ese pórtico (`UIApplication.SelectionChanged`); elegir un pórtico en el tablero lo selecciona en Revit. Sin enlace, no hace ninguna de las dos cosas.
 11. **"3D"** abre la vista 3D `CQEING Vigas 3D`, que se crea la primera vez, aislada temporalmente en las vigas del pórtico y con caja de sección ajustada. Es una transacción corta.
 12. **El resolvedor se acelera antes de seguir con la página** (Juan, 16-oct: *"la tarea 3 que sea el acelerador"*), por el hallazgo de la tarea 2. Va como tarea 3 de este plan y no cambia ningún resultado del motor: la misma solución, más rápido.
+13. **Los textos de los SVG se pintan** (mi decisión, tarea 4): la maqueta los calcula para mostrarlos, pero su runtime no los pinta (ver "Hallazgos"). Es la única diferencia con las capturas de referencia. Si se prefieren ocultos, se quitan sus `<text>` de `alzado.js` y `tablero.js`.
+14. **Detalles del port** (mi decisión, tarea 4):
+    - cada pórtico guarda sus opciones en la página, como `SesionTablero` en C#: al cambiar de pórtico se recuperan las suyas;
+    - con tramos marcados, los campos del paso 3 editan `EstribosMarcados` (al marcar el primero se copian los del pórtico);
+    - el aviso de la maqueta muestra cualquier aviso del motor; "Cambiar" sale solo en el del traslapo largo, y el primer elemento elegido es ese traslapo, como en el estado "aviso";
+    - "Generar en Revit" queda desactivado también cuando `SePuedeGenerar` es false (punto 4 de "Lo que más puede fallar");
+    - la sección se dibuja a 5 px por cm como la maqueta, y más chica si la viga no entra en el recuadro;
+    - `demo.js` imita a `SesionTablero` (responde "calcular", "elegirPortico", "guardarReglas"…) con las cuentas de la maqueta, para que la demostración responda igual que allá;
+    - la licencia de htm es Apache 2.0, no MIT (`vendor/LICENCIAS.txt`).
 
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 
