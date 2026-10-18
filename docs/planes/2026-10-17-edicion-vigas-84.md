@@ -515,4 +515,9 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - `opcionesDe` ahora manda `cambios.movidos` y `bastones.puntas` (en mm), que antes no viajaban a C#.
     - Mientras se arrastra, el dibujo mueve las barras vecinas y el traslapo con el Δ del salto (solo el dibujo), deja el elemento original punteado y pinta el rótulo encima; en ámbar si cae en el voladizo. Los botones de gancho se esconden.
 - [ ] Fase D (tareas 8–9).
+  - [x] Tarea 8: `GrupoBarras.Fila` (null = Auto) y `RepartidorFilas.EnFilas`: primero los grupos con fila fija, en su fila; los Auto llenan lo libre desde la fila 1. `rtk dotnet test CQEING-Addins.sln -c Release` → 575 en verde, sin avisos de compilación.
+    - Las esquinas (y la distancia al eje) son del primer grupo que queda en la fila 1, fijo o Auto, no del primero de la lista.
+    - Errores: fila menor que 1 o mayor que `MaximoFilas`, o una fila fija con más barras de las que caben → `NoCaben`; la fila 1 con menos de 2 → `MenosDeDosBarras`. Una fila fija que se pasa se dibuja igual, con sus puestos, para que se vea el error.
+    - Ruling: una fila que queda vacía entre dos (por ejemplo, la 1 y la 3 fijas y la 2 vacía) no se dibuja: la 3 sube. Si la fila 1 queda vacía, es `MenosDeDosBarras`.
+    - Corregido de paso un aviso de xUnit en `EditorArrastreTests` (tarea 6).
 - [ ] Probado en Revit (tarea 10).

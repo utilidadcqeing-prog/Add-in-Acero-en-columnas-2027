@@ -96,7 +96,7 @@ public class EditorArrastreTests
         Assert.True(alVoladizo.EnVoladizo);
         Assert.True(alVoladizo.Cambios[0].EnVoladizo);
         Assert.DoesNotContain(saltos, s => s.X is > 5.5 and < 7.0);
-        Assert.Empty(Soltar(e, alVoladizo).Avisos.Where(a => a.Tipo == TipoAviso.CambioNoAplicado));
+        Assert.DoesNotContain(Soltar(e, alVoladizo).Avisos, a => a.Tipo == TipoAviso.CambioNoAplicado);
     }
 
     [Fact]

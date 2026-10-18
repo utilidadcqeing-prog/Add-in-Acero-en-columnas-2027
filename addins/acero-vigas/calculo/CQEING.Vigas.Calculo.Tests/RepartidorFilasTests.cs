@@ -139,4 +139,43 @@ public class RepartidorFilasTests
         Assert.Equal(ErrorCara.NoCabenEnElAlto, r.Inferior.Error);
         Assert.Equal(ErrorCara.NoCabenEnElAlto, r.Superior.Error);
     }
+
+    // Filas a mano (#84, decisión 11): primero los grupos con fila fija, en su fila; los Auto llenan lo libre desde la 1.
+
+    [Fact]
+    public void TresDe5EnLaFila1YTresDe4EnLa2()
+    {
+        CaraSeccion c = Abajo(Maqueta([new GrupoBarras(3, 5, 1), new GrupoBarras(3, 4, 2)]));
+
+        Assert.Equal(ErrorCara.Ninguno, c.Error);
+        Assert.Equal([[5, 5, 5], [4, 4, 4]], c.Filas.Select(f => f.Select(b => b.Diametro).ToArray()));
+    }
+
+    [Fact]
+    public void LosAutoLlenanLosPuestosLibresDesdeLaFila1()
+    {
+        CaraSeccion c = Abajo(Maqueta([new GrupoBarras(2, 5, 2), new GrupoBarras(4, 4)]));
+
+        Assert.Equal([[4, 4, 4, 4], [5, 5]], c.Filas.Select(f => f.Select(b => b.Diametro).ToArray()));
+        // la esquina es del primer grupo de la fila 1: el #4
+        Assert.Equal(40 + 9.5 + 12.7 / 2, c.Filas[0][0].X, 3);
+    }
+
+    [Fact]
+    public void UnaFilaFijaConMasDeLasQueCabenEsNoCaben()
+    {
+        Assert.Equal(ErrorCara.NoCaben, Abajo(Maqueta([new GrupoBarras(6, 5, 1)])).Error);
+    }
+
+    [Fact]
+    public void UnaFilaMayorQueElMaximoEsNoCaben()
+    {
+        Assert.Equal(ErrorCara.NoCaben, Abajo(Maqueta([new GrupoBarras(3, 5), new GrupoBarras(2, 5, 4)])).Error);
+    }
+
+    [Fact]
+    public void LaFila1ConMenosDeDosEsMenosDeDosBarras()
+    {
+        Assert.Equal(ErrorCara.MenosDeDosBarras, Abajo(Maqueta([new GrupoBarras(1, 5, 1), new GrupoBarras(3, 5, 2)])).Error);
+    }
 }
