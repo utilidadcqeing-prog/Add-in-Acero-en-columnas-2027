@@ -131,6 +131,16 @@
         Object.assign(t, { desde: t.desde - inc, manual: true });
         Object.assign(b, { desde: b.desde - inc, kg: b.kg / b.largo * (b.largo + inc), largo: b.largo + inc });
       });
+      // traslapos arrastrados: se corren enteros; crece la barra de su izquierda y se acorta la de su derecha
+      Object.keys(cm.movidos || {}).forEach((id) => {
+        const t = traslapos.find((x) => x.id === id);
+        if (!t) return;
+        const d = cm.movidos[id].desde / 1000 - t.desde;
+        const izq = barras.find((x) => x.id === t.barraIzquierda), der = barras.find((x) => x.id === t.barraDerecha);
+        Object.assign(t, { desde: t.desde + d, hasta: t.hasta + d, manual: true });
+        Object.assign(izq, { hasta: izq.hasta + d, kg: izq.kg / izq.largo * (izq.largo + d), largo: izq.largo + d, manual: true });
+        Object.assign(der, { desde: der.desde + d, kg: der.kg / der.largo * (der.largo - d), largo: der.largo - d, manual: true });
+      });
 
       // bastones: arriba en todos los apoyos y abajo en el centro de cada luz; se cortan en la punta del pórtico
       const ob = o.bastones;
@@ -144,8 +154,11 @@
         .concat(G.centros.map(([x, t], i) => ({ id: bBot + (i + 1), eje: x, donde: 'Centro de la luz ' + t })))
         .map((b) => {
           const L = (ob.largos && ob.largos[b.id] != null ? ob.largos[b.id] : ob.largo) / 1000, st = acero(b.id.slice(0, 2));
-          let a = Math.max(a0, b.eje - L / 2), z = Math.min(z0, b.eje + L / 2);
-          const cutA = a > b.eje - L / 2, cutZ = z < b.eje + L / 2;
+          // arrastrado (#84): sus puntas; si no, centrado en su eje
+          const pu = ob.puntas && ob.puntas[b.id];
+          let a = pu ? Math.max(a0, pu.desde / 1000) : Math.max(a0, b.eje - L / 2);
+          let z = pu ? Math.min(z0, pu.hasta / 1000) : Math.min(z0, b.eje + L / 2);
+          const cutA = pu ? a <= a0 + 1e-9 : a > b.eje - L / 2, cutZ = pu ? z >= z0 - 1e-9 : z < b.eje + L / 2;
           // gancho por punta (#84): el elegido con los botones o el general del paso 2; con uno elegido, el total sube al
           // múltiplo y el sobrante va a la otra punta (como CalculadorBastones en C#)
           const punta = (clave, borde) => (!borde ? 'Sin' : gch[clave] || (ob.conGancho ? 'De90' : 'Sin'));
@@ -328,7 +341,80 @@
             : op('aplicar', v, true, b.cortado ? 'Llega al borde de la viga y se corta en la punta. No se redondea.' : 'Queda ' + f2(v / 2) + ' m a cada lado de su eje. No se redondea.')];
         }
       }
-      return { tipo: 'previa', previa: { n: pe.n, elemento: id, opciones, saltos: [] } };
+      const saltos = pe.accion === 'Arrastre' ? saltosDe(P, m.opciones, id, pe.punto, M, varilla) : [];
+      return { tipo: 'previa', previa: { n: pe.n, elemento: id, opciones, saltos } };
+    }
+
+    // Los saltos del arrastre (#84) con módulo fijo; en Revit los arma EditorArrastre en C#. Un traslapo se queda en su
+    // luz, a 5 cm de las caras, o pasa al voladizo que toca su luz (pide confirmar); ninguna barra pasa de la varilla.
+    function saltosDe(P, o, id, punto, M, varilla) {
+      const r3 = (x) => Math.round(x * 1000) / 1000;
+      const rotulo = (cant, recto, total) => cant.split(' + ').map((c) => c.replace(' ', '')).join('+') + 'L= ' + f2(recto)
+        + (Math.abs(total - recto) > 1e-6 ? '/' + f2(total) : '');
+      const salto = (x, recto, total, cant, enVoladizo, cambios) => ({ x: r3(x), recto: r3(recto), total: r3(total), rotulo: rotulo(cant, recto, total), enVoladizo, cambios });
+      const b = P.barras.find((x) => x.id === id);
+      if (b) {
+        const laps = P.traslapos.filter((t) => t.capa === b.capa);
+        const izq = laps.find((t) => t.barraDerecha === id), der = laps.find((t) => t.barraIzquierda === id);
+        const mueve = punto === 'Izquierda' ? [izq] : punto === 'Derecha' ? [der] : izq && der ? [izq, der] : [];
+        if (!mueve.length || !mueve[0]) return [];
+        const luces = G.luces.filter((l) => !l[3]), vol = G.luces.find((l) => l[3]);
+        // la luz donde está un traslapo (índice), 'V' en el voladizo o −1 en ninguna
+        const zona = (lo, hi) => {
+          const i = luces.findIndex((l) => lo >= l[1] + 0.05 - 1e-9 && hi <= l[2] - 0.05 + 1e-9);
+          return i >= 0 ? i : vol && lo >= vol[1] + 0.05 - 1e-9 && hi < vol[2] - 1e-9 ? 'V' : -1;
+        };
+        const casa = (t) => { const z = zona(t.desde, t.hasta); return z === 'V' ? luces.length - 1 : z; };
+        const crece = P.barras.find((x) => x.id === mueve[0].barraIzquierda), acorta = P.barras.find((x) => x.id === mueve[mueve.length - 1].barraDerecha);
+        const ganchos = b.largo - (b.hasta - b.desde), out = [];
+        for (let k = -30; k <= 30; k++) {
+          const d = k * M;
+          if (crece.largo + d > varilla + 1e-9 || acorta.largo - d > varilla + 1e-9) continue;
+          const zonas = mueve.map((t) => zona(t.desde + d, t.hasta + d));
+          if (zonas.some((z, j) => z !== casa(mueve[j]) && !(z === 'V' && casa(mueve[j]) === luces.length - 1))) continue;
+          const enVol = zonas.includes('V'), pregunta = mueve.some((t, j) => zonas[j] === 'V' && zona(t.desde, t.hasta) !== 'V');
+          const desde = b.desde + (punto === 'Derecha' ? 0 : d), hasta = b.hasta + (punto === 'Izquierda' ? 0 : d);
+          const x = punto === 'Izquierda' ? desde : punto === 'Derecha' ? hasta : (desde + hasta) / 2;
+          const cambios = k === 0 ? [] : mueve.map((t) => ({ tipo: 'movido', id: t.id, desde: Math.round((t.desde + d) * 1000), hasta: 0, enVoladizo: enVol }));
+          out.push(salto(x, hasta - desde, hasta - desde + ganchos, b.cantidad, pregunta, cambios));
+        }
+        return out;
+      }
+      const bs = P.bastones.find((x) => x.id === id);
+      if (!bs) return [];
+      const a0 = G.inicio + 0.05, z0 = G.fin - 0.05, d = parseInt(bs.cantidad.split('#')[1], 10);
+      const gch = (o.cambios && o.cambios.ganchos) || {};
+      // gancho en una punta pegada al borde (en la demostración, siempre con el largo del de 90°)
+      const gancho = (punta, enBorde) => (enBorde && ((gch[id + '.' + punta] && gch[id + '.' + punta] !== 'Sin') || (!gch[id + '.' + punta] && o.bastones.conGancho)) ? num(regla(d).g, 0) : 0);
+      const total = (a, z) => z - a + gancho('inicio', a <= a0 + 1e-9) + gancho('fin', z >= z0 - 1e-9);
+      const en = (a, z, x) => salto(x, z - a, total(a, z), bs.cantidad, false,
+        Math.abs(a - bs.desde) < 1e-9 && Math.abs(z - bs.hasta) < 1e-9 ? [] : [{ tipo: 'puntas', id, desde: Math.round(a * 1000), hasta: Math.round(z * 1000), enVoladizo: false }]);
+      if (punto === 'Centro') {
+        const out = [];
+        for (let c = Math.ceil((a0 - bs.desde) / 0.05 - 1e-9); bs.hasta + c * 0.05 <= z0 + 1e-9; c++) {
+          const a = bs.desde + c * 0.05, z = bs.hasta + c * 0.05;
+          out.push(en(a, z, (a + z) / 2));
+        }
+        return out;
+      }
+      const izqP = punto === 'Izquierda', fija = izqP ? bs.hasta : bs.desde;
+      const gFija = izqP ? gancho('fin', bs.hasta >= z0 - 1e-9) : gancho('inicio', bs.desde <= a0 + 1e-9);
+      const puntas = [[bs.desde, bs.hasta]];
+      for (let t = M; ; t += M) {
+        const recto = t - gFija;
+        if (recto < M - 1e-9) continue;
+        const suelta = izqP ? fija - recto : fija + recto;
+        if (izqP ? suelta <= a0 + 0.05 + 1e-9 : suelta >= z0 - 0.05 - 1e-9) {
+          // imán: se pega al borde, el total sube al módulo y el sobrante va a la otra punta
+          let a = izqP ? a0 : bs.desde, z = izqP ? bs.hasta : z0;
+          const sobra = Math.ceil(total(a, z) / M - 1e-9) * M - total(a, z);
+          if (izqP) z = Math.min(z0, z + sobra); else a = Math.max(a0, a - sobra);
+          puntas.push([a, z]);
+          break;
+        }
+        puntas.push(izqP ? [suelta, fija] : [fija, suelta]);
+      }
+      return puntas.sort((p, q) => (izqP ? p[0] - q[0] : p[1] - q[1])).map(([a, z]) => en(a, z, izqP ? a : z));
     }
     const aviso = (texto) => ({ tipo: 'aviso', texto });
     const nombre = (id) => (PORS.find((p) => p.id === id) || { nombre: '' }).nombre;

@@ -48,11 +48,11 @@
         separacionFilasCm: s.sepMode === 'pegada' ? null : n(s.sepCm), maximoFilas: Math.max(1, Math.round(n(s.maxCapas))),
         cara: s.side ? (s.side === 'izq' ? 'Inicio' : 'Final') : null,
         bastones: { superior: baston(s.bastSupN, s.bastSupD, s.sup), inferior: baston(s.bastInfN, s.bastInfD, s.inf),
-          largo: mm(n(s.bastDef)), conGancho: s.bastHook, largos },
+          largo: mm(n(s.bastDef)), conGancho: s.bastHook, largos, puntas: s.bastPuntas },
         estribos: estribos(s.est),
         tramosMarcados: s.tramosSel.slice(),
         estribosMarcados: s.tramosSel.length && s.estMarc ? estribos(s.estMarc) : null,
-        cambios: { barras: s.cambios.barras, traslapos: s.cambios.traslapos, ganchos: s.cambios.ganchos },
+        cambios: { barras: s.cambios.barras, traslapos: s.cambios.traslapos, ganchos: s.cambios.ganchos, movidos: s.cambios.movidos },
         corte: { x: String(s.cutX).trim() === '' ? null : mm(n(s.cutX)), profundidad: mm(n(s.depth)),
           mirando: s.mira === 'izquierda' ? 'Izquierda' : 'Derecha' },
       };
@@ -60,6 +60,20 @@
       return null;
     }
   }
+
+  // El texto de la confirmación del voladizo (#84): dónde quedaría cada traslapo corrido y en qué voladizo.
+  const confirmVolTexto = (salto, P) => {
+    if (!salto || !P) return '';
+    const ap = P.apoyos;
+    const partes = salto.cambios.filter((c) => c.tipo === 'movido').map((c) => {
+      const t = P.traslapos.find((x) => x.id === c.id), desde = c.desde / 1000;
+      return { id: c.id, desde, hasta: desde + (t ? t.hasta - t.desde : 0) };
+    });
+    if (!partes.length) return '';
+    const eje = partes[0].desde > ap[ap.length - 1].x ? ap[ap.length - 1].eje : ap[0].eje;
+    return 'El traslapo ' + partes.map((x) => x.id + ' quedaría de ' + f2(x.desde) + ' a ' + f2(x.hasta) + ' m').join(' y ')
+      + ', dentro del voladizo ' + eje + '. El add-in nunca lo pone ahí: solo queda si lo confirmas.';
+  };
 
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
@@ -152,13 +166,47 @@
       const sel = this.seleccion();
       const valor = num(this.state.draft, NaN);
       const accion = sel.k === 'lap' ? 'Traslapo' : sel.k === 'bast' ? 'Baston' : 'Barra';
-      this.n = (this.n || 0) + 1;
+      this.n = this.siguiente();
       this.props.enviar({ tipo: 'previsualizar', id: v.actual.id, opciones,
         pedido: { n: this.n, elemento: sel.id, accion, valor: accion === 'Barra' || !Number.isFinite(valor) ? null : valor } });
     }
 
+    // Pide a C# los saltos de los 3 puntos de la barra o el bastón elegido (#84, tarea 7). Van con su propio número,
+    // así no pisan la vista previa del panel.
+    pedirSaltos() {
+      const v = this.props.vista, opciones = opcionesDe(this.state), sel = this.seleccion();
+      this.saltosPedidos = {};
+      if (!v || !v.actual || !opciones || sel.k === 'lap') return;
+      ['Izquierda', 'Centro', 'Derecha'].forEach((punto) => {
+        const n = this.siguiente();
+        this.saltosPedidos[n] = punto;
+        this.props.enviar({ tipo: 'previsualizar', id: v.actual.id, opciones, pedido: { n, elemento: sel.id, accion: 'Arrastre', punto } });
+      });
+    }
+
+    siguiente() {
+      this.pedidos = (this.pedidos || 0) + 1;
+      return this.pedidos;
+    }
+
     previa(p) {
-      if (p && p.n === this.n) this.setState({ previa: p });
+      if (!p) return;
+      if (p.n === this.n) this.setState({ previa: p });
+      const punto = this.saltosPedidos && this.saltosPedidos[p.n];
+      if (punto) {
+        this.setState((st) => ({ saltos: { ...(st.saltos && st.saltos.elemento === p.elemento ? st.saltos : { elemento: p.elemento }), [punto]: p.saltos } }));
+      }
+    }
+
+    // Al soltar un punto en un salto: los traslapos corridos van a cambios.movidos y las puntas del bastón a bastPuntas,
+    // en mm, como los manda C#.
+    aplicarSalto(salto) {
+      const s = this.state, movidos = { ...s.cambios.movidos }, puntas = { ...s.bastPuntas };
+      salto.cambios.forEach((c) => {
+        if (c.tipo === 'movido') movidos[c.id] = { desde: c.desde, enVoladizo: c.enVoladizo };
+        else puntas[c.id] = { desde: c.desde, hasta: c.hasta };
+      });
+      this.cambiar({ cambios: { ...s.cambios, movidos }, bastPuntas: puntas, confirmVol: null });
     }
 
     say(t) {
@@ -185,6 +233,10 @@
       if (prev.vista !== this.props.vista || prevState.sel !== s.sel || prevState.draft !== s.draft) {
         clearTimeout(this._previa);
         this._previa = setTimeout(() => this.pedirPrevia(), prevState.draft !== s.draft ? 150 : 0);
+      }
+      if (prev.vista !== this.props.vista || prevState.sel !== s.sel) {
+        clearTimeout(this._saltos);
+        this._saltos = setTimeout(() => this.pedirSaltos(), 0);
       }
       const antes = prev.vista && prev.vista.actual ? prev.vista.actual.id : null;
       const ahora = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
@@ -524,6 +576,11 @@
           const de = quien.length > 1 ? quien : 'las barras de ' + (quien === 'S' ? 'arriba' : 'abajo');
           this.say((valor === 'Sin' ? 'Sin gancho' : 'Gancho de ' + texto) + ' en la punta ' + (punta === 'inicio' ? 'izquierda' : 'derecha') + ' de ' + de);
         },
+        // arrastre (#84): los saltos de los 3 puntos y, en el voladizo, la confirmación dentro de la página (decisión 7)
+        arrastre: s.saltos, onDrop: (salto) => { if (salto.enVoladizo) this.setState({ confirmVol: salto }); else this.aplicarSalto(salto); },
+        hasConfirm: !!s.confirmVol, confirmText: confirmVolTexto(s.confirmVol, P),
+        confirmYes: () => { if (s.confirmVol) this.aplicarSalto(s.confirmVol); },
+        confirmNo: () => this.setState({ confirmVol: null }),
         setQ: (e) => this.setState({ q: e.target.value }), setVer: (e) => this.setState({ ver: e.target.value }),
         setDraft: (e) => this.setState({ draft: e.target.value }),
         showAlzado: () => this.setState({ tab: 'alzado' }), showCorte: () => this.setState({ tab: 'corte', step: 'corte', cutWin: false }),
@@ -656,7 +713,7 @@
 
         ${v.isAlzado ? html`
           <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
-            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} />
+            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} />
             ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
           </div>` : null}
         ${v.isCorte ? html`
@@ -1098,6 +1155,22 @@
     </div>
   </div>
 
+  ${v.hasConfirm ? html`
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(22, 25, 29, 0.32)">
+      <div role="alertdialog" aria-labelledby="vol-t" aria-describedby="vol-d" style="width: 440px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 12px 32px rgba(22, 25, 29, 0.22)">
+        <div style="display: flex; gap: 10px; align-items: flex-start">
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><path d="M8 2l6.5 11.5h-13z" stroke="#B26B00" stroke-width="1.4" fill="none" stroke-linejoin="round"></path><path d="M8 6.5v3.2M8 11.6v.1" stroke="#B26B00" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <span id="vol-t" style="font-weight: 600; font-size: 15px">En un voladizo nunca se traslapa. ¿Ponerlo igual?</span>
+            <span id="vol-d" style="font-size: 12px; color: #5E6670; line-height: 1.5">${v.confirmText}</span>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" onClick=${v.confirmNo} style="height: 32px; padding: 0 14px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">Cancelar</button>
+          <button type="button" onClick=${v.confirmYes} style="height: 32px; padding: 0 14px; border: 1px solid #9A5B00; border-radius: 6px; background: #9A5B00; font: inherit; font-weight: 600; color: #FFFFFF; cursor: pointer">Ponerlo igual</button>
+        </div>
+      </div>
+    </div>` : null}
   ${v.hasToast ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">${v.toast}</div>` : null}
 </div>`;

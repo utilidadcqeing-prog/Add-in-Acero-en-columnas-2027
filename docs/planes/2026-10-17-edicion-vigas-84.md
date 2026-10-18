@@ -508,5 +508,11 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - Bastón: la punta suelta no lleva gancho; al llegar a 5 cm del borde se pega, toma el gancho que le toca ahí (`CalculadorBastones.GanchoDe`), el total sube al módulo y el sobrante va a la otra punta. El centro corre de 5 cm en 5 cm desde donde está, más los dos lugares pegados a los bordes.
     - `Reglas.VarillaPara` reemplaza las tres copias de "normal o larga".
     - El rótulo con varios tipos de barra los junta con `+` (`"2#5+1#4L= 3.00"`).
+  - [x] Tarea 7: los 3 puntos en el alzado (`alzado.js`), los saltos pedidos a C# y lo soltado a `cambios.movidos` / `bastPuntas` con la confirmación del voladizo dentro de la página (`tablero.js`), y los saltos en la demostración (`demo.js`). `node --check` de los tres sin errores.
+    - **No se probó en Chrome** (Juan, 18-oct: *"esto se prueba es en revit"*): queda para la tarea 10.
+    - Ruling: los saltos de los 3 puntos se piden al elegir la barra o el bastón (y con cada vista nueva), no al pasar el mouse: así el punto que no se puede arrastrar ya sale gris, como en la maqueta. Van con su propio número para no pisar la vista previa del panel.
+    - Ruling: el `title` de un punto gris dice por qué con lo que ya trae la vista (punta del borde, barra de borde); si C# no manda otro salto, un texto general. Los topes con el nombre de la columna de la maqueta (*"se metería en el nudo de la columna D"*) no están: C# no los manda.
+    - `opcionesDe` ahora manda `cambios.movidos` y `bastones.puntas` (en mm), que antes no viajaban a C#.
+    - Mientras se arrastra, el dibujo mueve las barras vecinas y el traslapo con el Δ del salto (solo el dibujo), deja el elemento original punteado y pinta el rótulo encima; en ámbar si cae en el voladizo. Los botones de gancho se esconden.
 - [ ] Fase D (tareas 8–9).
 - [ ] Probado en Revit (tarea 10).
