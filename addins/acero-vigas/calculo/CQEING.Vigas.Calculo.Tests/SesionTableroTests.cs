@@ -29,6 +29,32 @@ public sealed class SesionTableroTests : IDisposable
     }
 
     [Fact]
+    public void LaPreviaDevuelveElNumeroDelPedido()
+    {
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+        string antes = s.Vista().Json;
+
+        AJs js = Assert.Single(s.Manejar(new Previsualizar("Pórtico 1", OpcionesTablero.PorDefecto with { MaximoFilas = 2 },
+            new PedidoEdicion(7, "S1", AccionEdicion.Barra))).OfType<AJs>());
+
+        JsonElement raiz = JsonDocument.Parse(js.Json).RootElement;
+        Assert.Equal("previa", raiz.GetProperty("tipo").GetString());
+        Assert.Equal(7, raiz.GetProperty("previa").GetProperty("n").GetInt32());
+        // la vista previa no guarda las opciones que trae
+        Assert.Equal(antes, s.Vista().Json);
+    }
+
+    [Fact]
+    public void LaPreviaDeUnPorticoQueNoEstaNoContesta()
+    {
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+
+        Assert.Empty(s.Manejar(new Previsualizar("Otro", OpcionesTablero.PorDefecto, new PedidoEdicion(1, "S1", AccionEdicion.Barra))));
+    }
+
+    [Fact]
     public void SinPorticos_LaVistaVaVacia()
     {
         lectura = new ResultadoLectura([], []);

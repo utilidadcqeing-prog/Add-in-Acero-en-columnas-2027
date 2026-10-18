@@ -17,6 +17,9 @@ public sealed record ElegirPortico(string Id) : MensajeTablero;
 /// <summary>Cambió algo de los pasos 1 a 3: recalcular <paramref name="Id"/> con <paramref name="Opciones"/>.</summary>
 public sealed record Calcular(string Id, OpcionesTablero Opciones) : MensajeTablero;
 
+/// <summary>Ver un cambio de la edición (#84) antes de aplicarlo, con las opciones que tiene ahora la página.</summary>
+public sealed record Previsualizar(string Id, OpcionesTablero Opciones, PedidoEdicion Pedido) : MensajeTablero;
+
 /// <summary>"Seleccionar en Revit": elegir vigas en el modelo para abrir su pórtico.</summary>
 public sealed record SeleccionarEnRevit() : MensajeTablero;
 
@@ -71,6 +74,8 @@ public static class ProtocoloTablero
                 "listo" => new Listo(),
                 "elegirPortico" => new ElegirPortico(Texto(nodo, "id")),
                 "calcular" => Opciones(nodo["opciones"]) is { } o ? new Calcular(Texto(nodo, "id"), o) : new Desconocido(tipo),
+                "previsualizar" => Opciones(nodo["opciones"]) is { } po && nodo["pedido"]?.Deserialize<PedidoEdicion>(Json) is { Elemento: not null } p
+                    ? new Previsualizar(Texto(nodo, "id"), po, p) : new Desconocido(tipo),
                 "seleccionarEnRevit" => new SeleccionarEnRevit(),
                 "verEnRevit" => new VerEnRevit(Texto(nodo, "id")),
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
@@ -92,6 +97,9 @@ public static class ProtocoloTablero
 
     /// <summary><c>{"tipo":"aviso","texto":…}</c>: la página lo muestra como el aviso de la maqueta.</summary>
     public static string Aviso(string texto) => JsonSerializer.Serialize(new { tipo = "aviso", texto }, Json);
+
+    /// <summary><c>{"tipo":"previa","previa":…}</c>: la respuesta a <see cref="Previsualizar"/>.</summary>
+    public static string Previa(PreviaVista p) => JsonSerializer.Serialize(new { tipo = "previa", previa = p }, Json);
 
     private static string Texto(JsonObject nodo, string clave) => nodo[clave]?.GetValue<string>() ?? "";
 

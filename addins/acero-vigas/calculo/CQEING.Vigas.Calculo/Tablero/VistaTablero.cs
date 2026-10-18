@@ -126,3 +126,30 @@ public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string M
 
 /// <summary>Una fila de la tabla de reglas: traslapo, gancho de 90°, estribo de 135° y peso por metro.</summary>
 public sealed record ReglaVista(string D, string T, string G, string E, string K);
+
+// La edición (#84): la página pide ver un cambio antes de aplicarlo y C# contesta con lo que pasaría.
+
+public enum AccionEdicion { Barra, Traslapo, Baston, Arrastre }
+
+public enum PuntoArrastre { Izquierda, Centro, Derecha }
+
+/// <summary>
+/// Lo que la página quiere ver antes de aplicar. <paramref name="Valor"/> va en m (el largo escrito del traslapo o del
+/// bastón); <paramref name="N"/> vuelve en la respuesta, para que la página descarte las viejas.
+/// </summary>
+public sealed record PedidoEdicion(int N, string Elemento, AccionEdicion Accion, double? Valor = null, PuntoArrastre? Punto = null);
+
+/// <summary>Una opción del panel: <paramref name="Accion"/> es <c>"subir"</c>, <c>"bajar"</c> o <c>"aplicar"</c>; <paramref name="Valor"/> en m.</summary>
+public sealed record OpcionEdicion(string Accion, double Valor, bool SePuede, string Texto);
+
+/// <summary>
+/// Un cambio que deja el arrastre al soltar. <paramref name="Tipo"/> es <c>"movido"</c> (<paramref name="Id"/> del
+/// traslapo y su <paramref name="Desde"/>) o <c>"puntas"</c> (el bastón, <paramref name="Desde"/> y <paramref name="Hasta"/>), en mm.
+/// </summary>
+public sealed record CambioArrastre(string Tipo, string Id, int Desde, int Hasta = 0, bool EnVoladizo = false);
+
+/// <summary>Un lugar donde puede caer el punto arrastrado: <paramref name="X"/> en m, los largos del elemento en m y su rótulo.</summary>
+public sealed record Salto(double X, double Recto, double Total, string Rotulo, bool EnVoladizo, IReadOnlyList<CambioArrastre> Cambios);
+
+/// <summary>La respuesta a <see cref="PedidoEdicion"/>: las opciones del panel o, al arrastrar, los saltos posibles.</summary>
+public sealed record PreviaVista(int N, string Elemento, IReadOnlyList<OpcionEdicion> Opciones, IReadOnlyList<Salto> Saltos);

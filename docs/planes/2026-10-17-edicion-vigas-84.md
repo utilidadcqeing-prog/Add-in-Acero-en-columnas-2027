@@ -463,8 +463,12 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
 ## Estado
 
 - [ ] Plan revisado con Juan.
-- [ ] Tarea 0: maqueta aprobada.
+- [x] Tarea 0: maqueta aprobada (versión 22; Juan pidió seguir con la tarea 1).
 - [ ] Fase A (tareas 1–2).
+  - [x] Tarea 1: `EditorTablero`, mensaje `previsualizar` / `previa` y `ArmadorVista.EntradaDe`. `rtk dotnet test CQEING-Addins.sln -c Release` → 536 en verde.
+    - Ruling: `Salto` y `CambioArrastre` se declararon ya en la tarea 1 (los usa `PreviaVista`); su lógica sigue siendo de la tarea 6.
+    - Ruling: el caso "no sale de la varilla" se prueba con I1, que en la maqueta ya mide 6.00; el bastón centrado, con BS2, porque BS1 se corta en el borde.
+    - `UnCambioDeUnIdQueYaNoExisteAvisaYSigue` pasó al primer intento: el motor ya lo hacía. Queda como prueba de que no se rompa.
 - [ ] Fase B (tareas 3–4).
 - [ ] Fase C (tareas 5–7).
 - [ ] Fase D (tareas 8–9).

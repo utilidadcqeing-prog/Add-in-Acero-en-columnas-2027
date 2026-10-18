@@ -65,6 +65,9 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                     return [Vista()];
                 (opciones[id], actual) = (o, id);
                 return [Vista()];
+            case Previsualizar(string id, OpcionesTablero o, PedidoEdicion pedido):
+                // no guarda las opciones: es solo ver qué pasaría (#84)
+                return Buscar(id) is { } p ? [new AJs(ProtocoloTablero.Previa(EditorTablero.Previsualizar(p, o, reglas.Reglas, pedido)))] : [];
             case SeleccionarEnRevit:
                 return [new ARevit(AccionRevit.PedirSeleccion, [])];
             case VerEnRevit(string id):

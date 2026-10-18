@@ -111,6 +111,35 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LeePrevisualizar()
+    {
+        string json = $$$"""{"tipo":"previsualizar","id":"P1","opciones":{{{OpcionesJson(OpcionesTablero.PorDefecto)}}},"pedido":{"n":7,"elemento":"S1–S2","accion":"Traslapo","valor":1.2}}""";
+
+        var m = Assert.IsType<Previsualizar>(ProtocoloTablero.Leer(json));
+
+        Assert.Equal("P1", m.Id);
+        Assert.Equal(new PedidoEdicion(7, "S1–S2", AccionEdicion.Traslapo, 1.2), m.Pedido);
+    }
+
+    [Fact]
+    public void PrevisualizarSinPedidoEsDesconocido()
+    {
+        string json = $$"""{"tipo":"previsualizar","id":"P1","opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";
+
+        Assert.Equal(new Desconocido("previsualizar"), ProtocoloTablero.Leer(json));
+    }
+
+    [Fact]
+    public void EscribePrevia()
+    {
+        var p = new PreviaVista(7, "S1", [new OpcionEdicion("subir", 3.5, true, "S1 pasa a 3.50 m.")], []);
+
+        string json = ProtocoloTablero.Previa(p);
+
+        Assert.Equal("""{"tipo":"previa","previa":{"n":7,"elemento":"S1","opciones":[{"accion":"subir","valor":3.5,"sePuede":true,"texto":"S1 pasa a 3.50 m."}],"saltos":[]}}""", json);
+    }
+
+    [Fact]
     public void ElAvisoLlevaSuTexto()
     {
         Assert.Equal("""{"tipo":"aviso","texto":"Hola \"tú\""}""", ProtocoloTablero.Aviso("Hola \"tú\""));

@@ -118,4 +118,14 @@ public class CambiosManualesTests
         Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "S1", Motivo: MotivoBloqueo.SinSolucion });
         Assert.Equal((3000, false), (r.Superior!.Barras[0].Largo, r.Superior.Barras[0].Manual));
     }
+
+    [Fact]
+    public void UnCambioDeUnIdQueYaNoExisteAvisaYSigue()
+    {
+        // de 4 barras arriba se pasó a menos y S9 ya no existe: se avisa, y el cambio de S1 se aplica igual
+        ResultadoVigas r = MotorVigas.Calcular(Maqueta(new CambiosManuales(Barras: new Dictionary<string, int> { ["S9"] = 3000, ["S1"] = 3500 })));
+
+        Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "S9", Motivo: MotivoBloqueo.NoExiste });
+        Assert.Equal((3500, true), (r.Superior!.Barras[0].Largo, r.Superior.Barras[0].Manual));
+    }
 }
