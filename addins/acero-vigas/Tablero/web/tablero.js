@@ -34,7 +34,8 @@
   function opcionesDe(s) {
     const n = (x) => { const v = num(x, NaN); if (!Number.isFinite(v)) throw new Error(x); return v; };
     const opcional = (x) => (String(x).trim() === '' ? null : n(x));
-    const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d) }));
+    // la fila a mano de cada tipo (#84): '' = Auto
+    const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
     const estribos = (e) => ({ diametro: diametro(e.estD), gancho: e.estG === '135°' ? 'De135' : 'De90',
       largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
@@ -340,8 +341,11 @@
         return { total, per, filas, msg, col, filasVis };
       };
       const supI = layerInfo(s.sup, P && P.superior), infI = layerInfo(s.inf, P && P.inferior);
+      // Fila: Auto · 1 … el máximo de filas del paso 1 (decisión 11 del plan de #84)
+      const filasOpc = Array.from({ length: Math.max(1, Math.round(num(s.maxCapas, 3))) }, (_, i) => String(i + 1));
       const mkRows = (key, rows, label) => rows.map((r, i) => ({
-        n: r.n, d: r.d, canRemove: rows.length > 1,
+        n: r.n, d: r.d, f: r.f || '', filasOpc, canRemove: rows.length > 1, filaLabel: 'Fila de las ' + r.n + ' ' + r.d + ' ' + label,
+        setF: (e) => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, f: e.target.value } : x)) }),
         minusLabel: 'Quitar barra ' + label, plusLabel: 'Añadir barra ' + label, selLabel: 'Diámetro ' + label, removeLabel: 'Quitar este diámetro',
         minus: () => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, n: Math.max(1, x.n - 1) } : x)) }),
         plus: () => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, n: Math.min(20, x.n + 1) } : x)) }),
@@ -863,6 +867,7 @@
                   <span style="font-size: 12px; color: #5E6670">caben ${ly.per} por fila</span>
                 </div>
                 ${ly.rows.map((r) => html`
+                  <div style="display: flex; flex-direction: column; gap: 6px">
                   <div style="display: flex; align-items: center; gap: 8px">
                     <div style="display: flex; align-items: center; border: 1px solid #C9CFD6; border-radius: 6px; height: 32px">
                       <button type="button" aria-label=${r.minusLabel} onClick=${r.minus} style="width: 30px; height: 30px; border: 0; background: transparent; font: inherit; cursor: pointer">−</button>
@@ -875,6 +880,13 @@
                     </select>
                     ${r.canRemove ? html`
                       <button type="button" aria-label=${r.removeLabel} onClick=${r.remove} style="width: 28px; height: 28px; border: 0; background: transparent; font: inherit; color: #5E6670; cursor: pointer">✕</button>` : null}
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; padding-left: 2px">
+                    <span style="font-size: 12px; color: #5E6670">Van en</span>
+                    <select aria-label=${r.filaLabel} value=${r.f} onChange=${r.setF} style="height: 28px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; font-size: 12px; background: #FFFFFF; color: #16191D; padding: 0 6px">
+                      <option value="">Auto</option>${r.filasOpc.map((x) => html`<option value=${x}>Fila ${x}</option>`)}
+                    </select>
+                  </div>
                   </div>`)}
                 <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #F4F6F8; border-radius: 6px">
                   ${ly.filas.map((fi) => html`

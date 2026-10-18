@@ -520,4 +520,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - Errores: fila menor que 1 o mayor que `MaximoFilas`, o una fila fija con más barras de las que caben → `NoCaben`; la fila 1 con menos de 2 → `MenosDeDosBarras`. Una fila fija que se pasa se dibuja igual, con sus puestos, para que se vea el error.
     - Ruling: una fila que queda vacía entre dos (por ejemplo, la 1 y la 3 fijas y la 2 vacía) no se dibuja: la 3 sube. Si la fila 1 queda vacía, es `MenosDeDosBarras`.
     - Corregido de paso un aviso de xUnit en `EditorArrastreTests` (tarea 6).
+  - [x] Tarea 9: debajo de cada tipo de barra del paso 1, *"Van en"* con el selector **Auto · Fila 1 … Fila N** de la maqueta (N = el máximo de filas del paso 1); `grupos()` manda `fila` (null = Auto). La demostración reparte las filas como `RepartidorFilas`. `node --check` sin errores.
+    - **No se probó en Chrome** (Juan, 18-oct): queda para la prueba en Revit de la tarea 10.
+    - El texto "Fila 1: … · Fila 2: …" sigue saliendo de `CaraVista.PorFila`, que calcula C#.
 - [ ] Probado en Revit (tarea 10).

@@ -182,29 +182,40 @@
       const dE = DIAM[o.estribos.diametro];
       const gap = num(reglas.distanciaLibreCm, 2.5);
       const maxCapas = o.maximoFilas;
+      // los diámetros de cada fila, como RepartidorFilas en C#: primero los tipos con fila fija (#84), en su fila; los
+      // Auto llenan lo libre desde la fila 1
+      const enFilas = (rows, per) => {
+        const filas = [], at = (i) => { while (filas.length <= i) filas.push([]); return filas[i]; };
+        rows.filter((r) => r.fila >= 1).forEach((r) => { for (let i = 0; i < r.cantidad; i++) at(r.fila - 1).push(r.diametro); });
+        let f = 0;
+        rows.filter((r) => !(r.fila >= 1)).forEach((r) => {
+          for (let i = 0; i < r.cantidad; i++) { while (at(f).length >= per) f++; at(f).push(r.diametro); }
+        });
+        return filas;
+      };
       const cara = (rows) => {
         const total = rows.reduce((a, r) => a + r.cantidad, 0);
         const dmax = Math.max(...rows.map((r) => DIAM[r.diametro]));
         const per = Math.max(0, Math.floor((30 - 2 * recSide - 2 * dE + gap) / (dmax + gap)));
-        const filas = per ? Math.ceil(total / per) : 99;
-        const porFila = [];
-        let left = total;
-        while (left > 0 && per && porFila.length < maxCapas) { porFila.push(Math.min(per, left)); left -= Math.min(per, left); }
-        const error = total < 2 ? 'MenosDeDosBarras' : (filas > maxCapas ? 'NoCaben' : 'Ninguno');
-        return { cabenPorFila: per, porFila: error === 'Ninguno' ? porFila : [], error, maximo: per * maxCapas, dmax };
+        const lista = per ? enFilas(rows, per) : [];
+        const fijas = rows.some((r) => r.fila != null);
+        const error = total < 2 ? 'MenosDeDosBarras'
+          : !per || lista.length > maxCapas || lista.some((x) => x.length > per) || rows.some((r) => r.fila != null && r.fila < 1) ? 'NoCaben'
+          : fijas && lista[0].length < 2 ? 'MenosDeDosBarras' : 'Ninguno';
+        const filas = lista.filter((x) => x.length);
+        return { cabenPorFila: per, porFila: error === 'Ninguno' ? filas.map((x) => x.length) : [], error, maximo: per * maxCapas, dmax, filas };
       };
       const sup = cara(o.superior), inf = cara(o.inferior);
       const barrasSec = [];
       const place = (rows, info, fromTop) => {
-        const list = [];
-        rows.forEach((r) => { for (let i = 0; i < r.cantidad; i++) list.push(r.diametro); });
+        const enFila = info.filas, list = [].concat(...enFila);
         const per = Math.max(1, info.cabenPorFila);
         const sepV = o.separacionFilasCm ?? 0;
         const recV = fromTop ? recUp : recDown;
         let idx = 0, fila = 0;
         const salen = [];
-        while (idx < list.length && fila < 4) {
-          const n = Math.min(per, list.length - idx);
+        while (fila < enFila.length && fila < 4) {
+          const n = enFila[fila].length;
           const d = DIAM[list[idx]];
           const yc = recV + dE + d / 2 + fila * (info.dmax + sepV);
           const xL = recSide + dE + d / 2, xR = 30 - xL;
@@ -212,7 +223,7 @@
           for (let i = 0; i < per; i++) slotsAll.push(per === 1 ? 15 : xL + i * (xR - xL) / (per - 1));
           let order;
           if (fila === 0) order = n === per ? slotsAll : Array.from({ length: n }, (_, i) => (n === 1 ? 15 : xL + i * (xR - xL) / (n - 1)));
-          else { order = []; let a = 0, z = per - 1; while (order.length < n) { order.push(slotsAll[a++]); if (order.length < n) order.push(slotsAll[z--]); } }
+          else { order = []; let a = 0, z = per - 1; while (order.length < n && a <= z) { order.push(slotsAll[a++]); if (order.length < n && a <= z) order.push(slotsAll[z--]); } }
           order.forEach((xc, j) => salen.push({ fila, x: xc, y: fromTop ? yc : 50 - yc, d: DIAM[list[idx + j]] }));
           idx += n; fila++;
         }
