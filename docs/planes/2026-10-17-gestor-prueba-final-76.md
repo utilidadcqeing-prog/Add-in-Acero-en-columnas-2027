@@ -95,7 +95,7 @@ Copiados de la issue #76:
       `armado-columnas-v1.0.1`, `gestor-v0.1.1`.
 - [x] Paso 4: prueba automática contra GitHub real (abajo).
 - [x] Paso 5: ramas revisadas (Hallazgo 4); el borrado lo hace el usuario.
-- [ ] Paso 6 (usuario).
+- [x] Paso 6 (usuario): hecho con Revit 2027 (abajo).
 
 ### Publicación (2026-10-17)
 
@@ -122,10 +122,36 @@ Captura de la ventana real leyendo las releases reales: `imagenes/2026-10-17-ges
 del gestor nuevo en esa captura viene de un actualizador simulado, porque la ventana no estaba instalada con
 `Setup.exe`; la versión 0.1.1 que muestra sí es la publicada).
 
-### Qué falta (lo hace el usuario con `Guia_Prueba_Equipo_Limpio_76.md`)
+### Prueba manual del usuario (2026-10-17)
 
-- Instalar con `Setup.exe` en un equipo limpio con Revit 2026 y la autoactualización real a 0.1.1 (Velopack).
-- Pestaña CQEING con «Estructural», «Herramientas» e «Imágenes» y botones funcionando en Revit.
-- Actualizar con Revit abierto y ver la versión nueva al reiniciar Revit.
-- Aviso de ClientId duplicado en un Revit real con la instalación vieja.
-- Borrar en GitHub las ramas viejas.
+Hecha con la guía `Guia_Prueba_Equipo_Limpio_76.md` en el equipo del usuario, que **solo tiene Revit 2027**
+(no había un equipo con Revit 2026; Revit es de licencia y lo instala quien maneja las licencias). Se usaron los
+mismos pasos con 2027 en lugar de 2026:
+
+| Paso | Resultado |
+|---|---|
+| 1. Instalar el gestor con `Setup.exe` de `gestor-v0.1.0`; aparecen los dos add-ins | ✔ |
+| 2. Instalar Armado 1.0.0 (desde «⋯») e Imágenes 1.0.0 | ✔ (`.addin` de 2027 apuntan a `%LOCALAPPDATA%\CQEING\Addins\<id>\1.0.0\2027`) |
+| 3. Revit 2027: pestaña CQEING con «Estructural», «Herramientas» e «Imágenes»; botones abren | ✔ |
+| 4. Actualizar Armado a 1.0.1 con Revit abierto; funciona al reiniciar Revit | ✔ |
+| 5. Volver a la 1.0.0 sin internet | ✔ |
+| 6. «Actualizar y reiniciar»: el gestor queda en 0.1.1 | ✔ (Windows lo registra como 0.1.1; `current\CQEING.Gestor.exe` = `0.1.1+e0bd560`) |
+| 7. Equipo con la instalación vieja en un Revit real | No aplica: no había equipo con Revit 2026 y `Instalar.bat` (el retiro de `practicacq.addin` y la ausencia de ClientId repetidos sí se comprobaron contra GitHub real) |
+
+### Pendiente
+
+- Repetir los pasos 0 a 7 en un equipo con **Revit 2026** cuando haya uno (paquete `net8.0-windows`).
+- Borrar en GitHub las ramas viejas (lo hace el usuario; ver Hallazgo 4).
+- Fuera de la #76: iniciar sesión con la plataforma y configurar el `.env` de Imágenes desde el gestor; firmar el instalador.
+
+### Criterios de aceptación
+
+- ✅ Publicar `armado-columnas-v1.0.0`, `imagenes-v1.0.0` y `gestor-v0.1.0`.
+- ✅ Instalar el gestor con `Setup.exe`; aparecen los dos add-ins (Revit 2027).
+- ✅ Instalar los dos; pestaña CQEING con sus tres paneles y botones (Revit 2027).
+- ✅ `armado-columnas-v1.0.1`: avisa, se actualiza con Revit abierto y se ve al reiniciar (Revit 2027).
+- ✅ Volver a la 1.0.0 desde «⋯» sin descargar (manual sin internet + automático: 0 pedidos).
+- ✅ `gestor-v0.1.1`: el gestor se actualiza solo.
+- ⚠️ Instalación vieja: retiro de `practicacq.addin` y sin ClientId repetidos comprobados de forma automática; falta verlo en un Revit real.
+- ⚠️ Ramas viejas: revisadas; falta borrarlas en GitHub.
+- ⚠️ Todo lo anterior falta repetirlo con Revit 2026.
