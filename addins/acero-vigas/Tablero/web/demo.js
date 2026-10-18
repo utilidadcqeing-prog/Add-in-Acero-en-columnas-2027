@@ -108,6 +108,21 @@
       };
       capa(G.c, pc, cRows, capaC);
       capa(G.f[side], pf, fRows, capaF);
+      // cambios manuales (#84), con las cuentas de la maqueta: Subir / Bajar fija el largo; un traslapo escrito crece
+      // al múltiplo y alarga la barra de la derecha
+      const cm = o.cambios || {};
+      Object.keys(cm.barras || {}).forEach((id) => {
+        const b = barras.find((x) => x.id === id);
+        if (b) Object.assign(b, { largo: cm.barras[id] / 1000, manual: true, kg: b.kg / b.largo * (cm.barras[id] / 1000) });
+      });
+      Object.keys(cm.traslapos || {}).forEach((id) => {
+        const t = traslapos.find((x) => x.id === id), M = num(reglas.multiplo, 0.5);
+        if (!t) return;
+        const inc = Math.max(0, Math.ceil((cm.traslapos[id] / 1000 - (t.hasta - t.desde)) / M - 1e-9) * M);
+        const b = barras.find((x) => x.id === t.barraDerecha);
+        Object.assign(t, { desde: t.desde - inc, manual: true });
+        Object.assign(b, { desde: b.desde - inc, kg: b.kg / b.largo * (b.largo + inc), largo: b.largo + inc });
+      });
 
       // bastones: arriba en todos los apoyos y abajo en el centro de cada luz; se cortan en la punta del pórtico
       const ob = o.bastones;
@@ -262,6 +277,40 @@
       };
     }
     const msgVista = () => ({ tipo: 'vista', vista: vista() });
+
+    // La vista previa de la edición (#84) con las cuentas de la maqueta; en Revit la arma EditorTablero en C#.
+    function previa(m) {
+      const P = armar(m.id, m.opciones), M = num(reglas.multiplo, 0.5), varilla = reglas.varilla12 ? 12 : 6;
+      const pe = m.pedido, id = pe.elemento, v = pe.valor;
+      const op = (accion, valor, sePuede, texto) => ({ accion, valor, sePuede, texto });
+      let opciones = [];
+      if (pe.accion === 'Barra') {
+        const b = P.barras.find((x) => x.id === id);
+        opciones = !b ? [] : [
+          b.largo + M > varilla ? op('subir', b.largo + M, false, 'No sale de una varilla de ' + varilla + ' m.') : op('subir', b.largo + M, true, id + ' pasa a ' + f2(b.largo + M) + ' m.'),
+          op('bajar', b.largo - M, false, 'Bajarla dejaría un traslapo por debajo del mínimo.'),
+        ];
+      } else if (pe.accion === 'Traslapo') {
+        const t = P.traslapos.find((x) => x.id === id);
+        if (t) {
+          const cur = t.hasta - t.desde, der = P.barras.find((x) => x.id === t.barraDerecha);
+          const inc = v == null ? 0 : Math.max(0, Math.ceil((v - cur) / M - 1e-9) * M);
+          opciones = [v == null ? op('aplicar', 0, false, 'Escribe un largo en metros.')
+            : v < t.minimo - 1e-9 ? op('aplicar', v, false, 'No puede ser menor que el mínimo (' + f2(t.minimo) + ' m).')
+            : inc === 0 ? op('aplicar', v, false, 'Escribe un largo mayor que el actual (' + f2(cur) + ' m).')
+            : der.largo + inc > varilla + 1e-9 ? op('aplicar', v, false, t.barraDerecha + ' pasaría a ' + f2(der.largo + inc) + ' m y no sale de una varilla de ' + varilla + ' m.')
+            : op('aplicar', v, true, t.barraDerecha + ' pasa a ' + f2(der.largo + inc) + ' m (múltiplo de ' + f2(M) + ') y el traslapo queda en ' + f2(cur + inc) + ' m.')];
+        }
+      } else if (pe.accion === 'Baston') {
+        const b = P.bastones.find((x) => x.id === id);
+        if (b) {
+          opciones = [v == null ? op('aplicar', 0, false, 'Escribe un largo en metros.')
+            : v <= 0 ? op('aplicar', v, false, 'El largo debe ser mayor que 0.')
+            : op('aplicar', v, true, b.cortado ? 'Llega al borde de la viga y se corta en la punta. No se redondea.' : 'Queda ' + f2(v / 2) + ' m a cada lado de su eje. No se redondea.')];
+        }
+      }
+      return { tipo: 'previa', previa: { n: pe.n, elemento: id, opciones, saltos: [] } };
+    }
     const aviso = (texto) => ({ tipo: 'aviso', texto });
     const nombre = (id) => (PORS.find((p) => p.id === id) || { nombre: '' }).nombre;
 
@@ -274,6 +323,7 @@
           if (elegidos && !elegidos.includes(m.id)) elegidos = null;
           return [msgVista()];
         case 'calcular': opciones[m.id] = m.opciones; actual = m.id; return [msgVista()];
+        case 'previsualizar': return [previa(m)];
         case 'cambiarEnVivo': enVivo = m.activo; return [msgVista()];
         case 'verTodos': elegidos = null; return [msgVista()];
         case 'guardarReglas':

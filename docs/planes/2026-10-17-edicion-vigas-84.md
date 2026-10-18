@@ -469,6 +469,11 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - Ruling: `Salto` y `CambioArrastre` se declararon ya en la tarea 1 (los usa `PreviaVista`); su lógica sigue siendo de la tarea 6.
     - Ruling: el caso "no sale de la varilla" se prueba con I1, que en la maqueta ya mide 6.00; el bastón centrado, con BS2, porque BS1 se corta en el borde.
     - `UnCambioDeUnIdQueYaNoExisteAvisaYSigue` pasó al primer intento: el motor ya lo hacía. Queda como prueba de que no se rompa.
+  - [x] Tarea 2: los paneles Barra, Traslapo y Bastón piden la vista previa a C# y aplican los cambios (`cambios` y `bastPuntas` en `OPCIONES0`). La página ya no calcula el efecto del traslapo. `demo.js` contesta `previsualizar` con las cuentas de la maqueta. 537 en verde.
+    - **Probado en Chrome con la demostración:** Subir S1 → 3.50 Manual, Subir a 4.00; Automático. Traslapo S1–S2: 0.80 → *"No puede ser menor que el mínimo (0.90 m)."* y Aplicar gris; 1.50 → *"S2 pasa a 5.50 m… y el traslapo queda en 1.50 m."*; Aplicar y Volver al mínimo. BS2: 2.30 → 1.15 a cada lado; 0 → *"El largo debe ser mayor que 0."*; Usar el largo general. S1 en 3.50 → pórtico 2 (3.00 Automático) → pórtico 1 (3.50 Manual). Sin errores en la consola.
+    - Ruling: el mensaje del traslapo sale en rojo solo si lo escrito es otro largo y no se puede; con el largo actual es gris (al aplicar o volver al mínimo no parece un error).
+    - Ruling: "Volver al mínimo" pone en el campo el largo automático que llega con la vista siguiente, no el mínimo de la tabla.
+    - Ruling: Aplicar del bastón no se desactiva (la maqueta lo dibuja siempre azul); si no se puede, muestra el motivo como aviso.
 - [ ] Fase B (tareas 3–4).
 - [ ] Fase C (tareas 5–7).
 - [ ] Fase D (tareas 8–9).

@@ -122,6 +122,19 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LasOpcionesTraenLosCambiosComoLosMandaLaPagina()
+    {
+        // tablero.js manda también movidos y ganchos (fases B y C): mientras C# no los conoce, se ignoran
+        string opciones = OpcionesJson(OpcionesTablero.PorDefecto).Replace("\"cambios\":null",
+            "\"cambios\":{\"barras\":{\"S1\":3500},\"traslapos\":{\"I2–I3\":1000},\"movidos\":{},\"ganchos\":{}}");
+
+        var m = Assert.IsType<Calcular>(ProtocoloTablero.Leer($$"""{"tipo":"calcular","id":"P1","opciones":{{opciones}}}"""));
+
+        Assert.Equal(3500, m.Opciones.Cambios!.Barras!["S1"]);
+        Assert.Equal(1000, m.Opciones.Cambios.Traslapos!["I2–I3"]);
+    }
+
+    [Fact]
     public void PrevisualizarSinPedidoEsDesconocido()
     {
         string json = $$"""{"tipo":"previsualizar","id":"P1","opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";

@@ -22,6 +22,8 @@
     est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20' }, estMarc: null, tramosSel: [],
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
+    // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
+    cambios: { barras: {}, traslapos: {}, movidos: {}, ganchos: {} }, bastPuntas: {},
   };
   // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
   const ANCHO_CORTE = 260;
@@ -50,7 +52,7 @@
         estribos: estribos(s.est),
         tramosMarcados: s.tramosSel.slice(),
         estribosMarcados: s.tramosSel.length && s.estMarc ? estribos(s.estMarc) : null,
-        cambios: null,
+        cambios: { barras: s.cambios.barras, traslapos: s.cambios.traslapos },
         corte: { x: String(s.cutX).trim() === '' ? null : mm(n(s.cutX)), profundidad: mm(n(s.depth)),
           mirando: s.mira === 'izquierda' ? 'Izquierda' : 'Derecha' },
       };
@@ -133,6 +135,32 @@
       return { pageW: W + 'px', pageH: H + 'px', dibujoW: 788 + W - 1440, dibujoH: 300 + H - 900 };
     }
 
+    // Lo elegido en el alzado o la lista; sin elegir, el traslapo del aviso largo o S1.
+    seleccion() {
+      const s = this.state, P = this.props.vista && this.props.vista.actual;
+      if (s.sel) return s.sel;
+      const largos = P ? P.avisos.filter((a) => a.tipo === 'TraslapoLargo') : [];
+      const avisoLargo = largos.find((a) => a.cambiarCara) || largos[0] || null;
+      return avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : { k: 'bar', id: 'S1' };
+    }
+
+    // Pide a C# la vista previa de lo elegido (#84): Subir / Bajar, o el largo escrito del traslapo o del bastón. La
+    // respuesta llega a previa(); las que traen otro número son viejas y se descartan.
+    pedirPrevia() {
+      const v = this.props.vista, opciones = opcionesDe(this.state);
+      if (!v || !v.actual || !opciones) return;
+      const sel = this.seleccion();
+      const valor = num(this.state.draft, NaN);
+      const accion = sel.k === 'lap' ? 'Traslapo' : sel.k === 'bast' ? 'Baston' : 'Barra';
+      this.n = (this.n || 0) + 1;
+      this.props.enviar({ tipo: 'previsualizar', id: v.actual.id, opciones,
+        pedido: { n: this.n, elemento: sel.id, accion, valor: accion === 'Barra' || !Number.isFinite(valor) ? null : valor } });
+    }
+
+    previa(p) {
+      if (p && p.n === this.n) this.setState({ previa: p });
+    }
+
     say(t) {
       this.setState({ toast: t });
       clearTimeout(this._t);
@@ -145,7 +173,19 @@
       this.say(texto);
     }
 
-    componentDidUpdate(prev) {
+    componentDidUpdate(prev, prevState) {
+      // la vista previa se vuelve a pedir al elegir otra cosa, al escribir un largo (150 ms) o al llegar otra vista
+      const s = this.state;
+      if (this.llenarLargo && prev.vista !== this.props.vista) {
+        this.llenarLargo = false;
+        const sel = this.seleccion(), P = this.props.vista && this.props.vista.actual;
+        const L = sel.k === 'lap' && P ? P.traslapos.find((x) => x.id === sel.id) : null;
+        if (L) this.setState({ draft: f2(L.hasta - L.desde) });
+      }
+      if (prev.vista !== this.props.vista || prevState.sel !== s.sel || prevState.draft !== s.draft) {
+        clearTimeout(this._previa);
+        this._previa = setTimeout(() => this.pedirPrevia(), prevState.draft !== s.draft ? 150 : 0);
+      }
       const antes = prev.vista && prev.vista.actual ? prev.vista.actual.id : null;
       const ahora = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
       // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas.
@@ -207,7 +247,7 @@
       const largos = P ? P.avisos.filter((a) => a.tipo === 'TraslapoLargo') : [];
       const avisoLargo = largos.find((a) => a.cambiarCara) || largos[0] || null;
       const avisoOtro = P ? P.avisos.find((a) => a.tipo !== 'TraslapoLargo') : null;
-      const selEl = s.sel || (avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : { k: 'bar', id: 'S1' });
+      const selEl = this.seleccion();
       const tipo = P ? P.tipo : 'Aérea';
       const isCim = tipo === 'Cimentación';
       const side = P ? P.caraUsada : 'izq';
@@ -217,7 +257,6 @@
       const R = vista.reglas;
       const rulesData = s.rules || R.porDiametro;
       const mult = s.mult ?? R.multiplo, gap = s.gap ?? R.distanciaLibreCm, bar12 = s.bar12 ?? R.varilla12;
-      const maxBar = bar12 ? 12 : 6;
       const M = num(mult, 0.5);
 
       // capas (#88): el reparto en filas sale del motor
@@ -287,51 +326,72 @@
       const SL = lapsAll.find((l) => l.id === selEl.id) || null;
       const SBa = BAST.find((b) => b.id === selEl.id) || null;
 
+      // vista previa de C# (#84) para lo elegido; mientras no llega, los botones quedan desactivados
+      const PV = s.previa && s.previa.elemento === selEl.id ? s.previa : null;
+      const opcion = (accion) => (PV ? PV.opciones.find((o) => o.accion === accion) : null);
+      const conCambio = (clave, id, valor) => {
+        const c = { ...s.cambios, [clave]: { ...s.cambios[clave] } };
+        if (valor == null) delete c[clave][id]; else c[clave][id] = valor;
+        return c;
+      };
+
       let sb = { id: '', where: '', qty: '', len: '', tag: '', tagCol: '#1E7A46', downVal: '', upVal: '', downOff: true, downWhy: '', downCol: '#9AA3AD',
         upOff: true, upWhy: '', upCol: '#9AA3AD', notManual: true, resetCol: '#9AA3AD', note: '', down: () => {}, up: () => {}, reset: () => {} };
       if (SB) {
         const sbLen = SB.largo;
-        const upVal = sbLen + M, downVal = sbLen - M;
+        const subir = opcion('subir'), bajar = opcion('bajar');
+        const aplicar = (o) => () => {
+          if (!o || !o.sePuede) return;
+          this.cambiar({ cambios: conCambio('barras', SB.id, mm(o.valor)) });
+          this.say(o.texto);
+        };
         sb = {
           id: SB.id, where: SB.capa === 'arriba' ? 'Arriba' : 'Abajo', qty: SB.cantidad, len: f2(sbLen),
           tag: SB.manual ? 'Manual' : 'Automático', tagCol: SB.manual ? '#9A5B00' : '#1E7A46',
-          downVal: f2(downVal), upVal: f2(upVal),
-          downOff: true, downWhy: 'El traslapo quedaría por debajo del mínimo', downCol: '#9AA3AD',
-          upOff: upVal > maxBar, upWhy: upVal > maxBar ? 'No sale de una varilla de ' + maxBar + ' m' : 'El traslapo vecino crece ' + f2(M), upCol: upVal > maxBar ? '#9AA3AD' : '#16191D',
+          downVal: f2(bajar ? bajar.valor : sbLen - M), upVal: f2(subir ? subir.valor : sbLen + M),
+          downOff: !(bajar && bajar.sePuede), downWhy: bajar ? bajar.texto : '', downCol: bajar && bajar.sePuede ? '#16191D' : '#9AA3AD',
+          upOff: !(subir && subir.sePuede), upWhy: subir ? subir.texto : '', upCol: subir && subir.sePuede ? '#16191D' : '#9AA3AD',
           notManual: !SB.manual, resetCol: SB.manual ? '#1F5FAF' : '#9AA3AD',
-          note: SB.llegaAlVoladizo ? 'Esta barra entra al voladizo de corrido: en el voladizo nunca se traslapa.' : ('Bajarla dejaría un traslapo por debajo del mínimo. ' + (upVal > maxBar ? 'Subirla no sale de una varilla de ' + maxBar + ' m.' : 'Subirla alarga su traslapo ' + f2(M) + ' m.')),
-          down: () => this.say(LLEGA(84)), up: () => this.say(LLEGA(84)), reset: () => this.say(LLEGA(84)),
+          note: (SB.llegaAlVoladizo ? 'Esta barra entra al voladizo de corrido: en el voladizo nunca se traslapa. ' : '')
+            + (bajar ? (bajar.sePuede ? 'Bajar: ' : '') + bajar.texto + ' ' : '') + (subir ? 'Subir: ' + subir.texto : ''),
+          down: aplicar(bajar), up: aplicar(subir),
+          reset: () => this.cambiar({ cambios: conCambio('barras', SB.id, null) }),
         };
       }
 
       let sl = { id: '', min: '', diam: '', cur: '', eff: '', effCol: '#5E6670', off: true, applyBg: '#9AA3AD', notManual: true, resetCol: '#9AA3AD', apply: () => {}, reset: () => {} };
       if (SL) {
-        const min = SL.minimo;
-        const cur = lapLen(SL);
-        const v = num(s.draft, NaN);
-        let eff = 'Escribe un largo en metros.', ok = false;
-        if (Number.isFinite(v)) {
-          if (v < min - 1e-9) eff = 'No puede ser menor que el mínimo (' + f2(min) + ' m).';
-          else {
-            let inc = Math.ceil((v - cur) / M - 1e-9) * M; if (inc < 0) inc = 0;
-            const fin = cur + inc;
-            const nbLen = (bars.find((b) => b.id === SL.barraDerecha) || { largo: 0 }).largo + inc;
-            if (nbLen > maxBar + 1e-9) eff = SL.barraDerecha + ' pasaría a ' + f2(nbLen) + ' m y no sale de una varilla de ' + maxBar + ' m.';
-            else { ok = Math.abs(fin - cur) > 1e-9; eff = SL.barraDerecha + ' pasa a ' + f2(nbLen) + ' m (múltiplo de ' + f2(M) + ') y el traslapo queda en ' + f2(fin) + ' m.'; }
-          }
-        }
-        sl = { id: SL.id, min: f2(min), diam: SL.diametro, cur: f2(cur), eff, effCol: ok ? '#1E5C38' : (eff.indexOf('No ') === 0 || eff.indexOf('pasaría') > 0 ? '#B42318' : '#5E6670'),
+        const o = opcion('aplicar');
+        const ok = !!o && o.sePuede;
+        // en rojo solo si lo escrito es otro largo y no se puede; con el largo actual es solo la indicación
+        const otro = Math.abs(num(s.draft, lapLen(SL)) - lapLen(SL)) > 1e-9;
+        sl = { id: SL.id, min: f2(SL.minimo), diam: SL.diametro, cur: f2(lapLen(SL)),
+          eff: o ? o.texto : 'Escribe un largo en metros.', effCol: ok ? '#1E5C38' : (o && otro ? '#B42318' : '#5E6670'),
           off: !ok, applyBg: ok ? '#1F5FAF' : '#9AA3AD', notManual: !SL.manual, resetCol: SL.manual ? '#1F5FAF' : '#9AA3AD',
-          apply: () => this.say(LLEGA(84)), reset: () => this.say(LLEGA(84)) };
+          apply: () => {
+            if (!ok) return;
+            this.cambiar({ cambios: conCambio('traslapos', SL.id, mm(o.valor)) });
+            this.say('Traslapo ' + SL.id + ': ' + o.texto);
+          },
+          // el largo automático llega con la vista siguiente; ahí se pone en el campo
+          reset: () => { this.llenarLargo = true; this.cambiar({ cambios: conCambio('traslapos', SL.id, null) }); } };
       }
       let stv = { id: '', where: '', note: '', apply: () => {}, reset: () => {} };
       if (SBa) {
-        const L = num(s.draft, SBa.hasta - SBa.desde);
+        const o = opcion('aplicar');
         stv = { id: SBa.id, where: SBa.donde + ' · ahora ' + f2(SBa.largo) + ' m',
-          note: SBa.cortado
-            ? 'Llega al borde de la viga y se corta en la punta' + (s.bastHook ? ', que lleva gancho de 90°' : '') + '. No se redondea.'
-            : 'Queda ' + f2(L / 2) + ' m a cada lado de su eje. No se redondea.',
-          apply: () => this.say(LLEGA(84)), reset: () => this.say(LLEGA(84)) };
+          note: o ? o.texto : 'Escribe un largo en metros.',
+          apply: () => {
+            if (!o) return;
+            if (!o.sePuede) { this.say(o.texto); return; }
+            this.cambiar({ bastLen: { ...s.bastLen, [SBa.id]: f2(o.valor) } });
+            this.say('Bastón ' + SBa.id + ' en ' + f2(o.valor) + ' m');
+          },
+          reset: () => {
+            const largos = { ...s.bastLen }, puntas = { ...s.bastPuntas };
+            delete largos[SBa.id]; delete puntas[SBa.id];
+            this.cambiar({ bastLen: largos, bastPuntas: puntas, draft: s.bastDef });
+          } };
       }
 
       // lista
@@ -1048,6 +1108,7 @@
       if (!m || typeof m !== 'object') return;
       if (m.tipo === 'vista') this.setState({ vista: m.vista });
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
+      else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
     }
 
     render() {
