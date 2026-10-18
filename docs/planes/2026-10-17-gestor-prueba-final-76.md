@@ -35,7 +35,27 @@ Copiados de la issue #76:
 2. (2026-10-17) Las releases viejas `v1.0.0` y `v1.1.0` no siguen el formato `<id>-vX.Y.Z`: el gestor las
    ignora (`EtiquetaRelease.Interpretar`), no hace falta borrarlas.
 3. (2026-10-17) El `.env` de Imágenes vive en `%AppData%\CQEING\imagenes\.env` y `.gitignore` lo excluye: el
-   paquete que arma GitHub Actions desde un checkout limpio no puede llevar claves.
+   paquete que arma GitHub Actions desde un checkout limpio no puede llevar claves. Comprobado con el
+   publicador en local: los ZIP de 2026 traen solo el `.addin`, la DLL, `deps.json` y los iconos.
+4. (2026-10-17) Ramas viejas, `git rev-list --count origin/main..origin/<rama>`:
+   - `equipo/armado-columnas`: 0 commits fuera de `main` (se puede borrar sin perder nada).
+   - `addin-de-imagenes`: 0 commits fuera de `main` (ídem).
+   - `migracion/monorepo`: ya no existe en GitHub.
+   - `juan/armado-columnas`: 1 commit, `509b390` «Los estribos ya no se borran: se sobreponen (D4)». En `main` el
+     borrado quedó como opción («Borrar TODO el armado existente…», `GeneradorArmado.BorrarAnteriores`): el
+     cambio quedó superado por otra decisión, pero el commit no está en `main`.
+   - `menu-cqeing-wpf`: 1 commit, `2287523` «Agregar menu WPF del add-in CQEING», carpeta `CQEING/` aparte que
+     `main` no usa (el menú actual vive en `addins/`).
+   El borrado de ramas en GitHub lo hace el usuario (a Claude no se le permitió por ser destructivo); las dos con
+   un commit propio, solo si el usuario confirma que se pueden perder.
+5. (2026-10-17) La primera corrida de `compilar.yml` en el PR falló en una prueba de la app que comparaba el
+   porcentaje final de la barra: sin la ventana, `Progress<T>` avisa desde otro hilo y el último aviso puede
+   llegar después de la comparación. Se quitó esa comparación (en la ventana los avisos van en orden por el hilo
+   de la interfaz).
+6. (2026-10-17) **GitHub no dispara workflows si se suben más de 3 etiquetas en un mismo `git push`.** Se subieron
+   las 5 juntas y no arrancó ninguna publicación. Como todavía no tenían release, se quitaron de GitHub
+   (`git push origin :refs/tags/<etiqueta>`) y se volvieron a subir de a una (`git push origin <etiqueta>`).
+   Para publicar varias versiones a la vez: **una etiqueta por `git push`** (o de a 3 como máximo).
 
 ## Decisiones
 
@@ -69,5 +89,69 @@ Copiados de la issue #76:
 
 ## Estado
 
-- [ ] Pasos 1 a 5.
-- [ ] Paso 6 (usuario).
+- [x] Paso 1: nombre del repo (commit `e379af9`).
+- [x] Paso 2: PR #102 en verde y unido a `main` por el usuario con merge commit (`e0bd560`, 2026-10-17).
+- [x] Paso 3: etiquetas anotadas sobre `e0bd560`: `armado-columnas-v1.0.0`, `imagenes-v1.0.0`, `gestor-v0.1.0`,
+      `armado-columnas-v1.0.1`, `gestor-v0.1.1`.
+- [x] Paso 4: prueba automática contra GitHub real (abajo).
+- [x] Paso 5: ramas revisadas (Hallazgo 4); el borrado lo hace el usuario.
+- [x] Paso 6 (usuario): hecho con Revit 2027 (abajo).
+
+### Publicación (2026-10-17)
+
+Las cinco corridas de `publicar.yml` y `publicar-gestor.yml` terminaron en verde. Archivos de cada release:
+
+- `armado-columnas-v1.0.0`, `armado-columnas-v1.0.1`, `imagenes-v1.0.0`: `manifest.json` + un ZIP por año (2026 y 2027).
+- `gestor-v0.1.0`, `gestor-v0.1.1`: `CQEING.Gestor-win-Setup.exe` (78 MB), `CQEING.Gestor-<versión>-full.nupkg`,
+  `CQEING.Gestor-win-Portable.zip`, `releases.win.json`, `assets.win.json`, `RELEASES`.
+
+### Prueba automática contra GitHub real (2026-10-17)
+
+Script fuera del repo (`C:\Users\PC\Downloads\trabajo1\Prueba_76\prueba.cs`, `dotnet run prueba.cs`): lógica real del
+gestor y releases públicas reales, sobre las carpetas de un equipo limpio temporal con Revit 2026 simulado (solo
+la carpeta con `RevitAPI.dll`). Resultado: **23 de 23 comprobaciones bien**:
+
+- La lista viene de GitHub; aparecen «Armado de columnas» e «Imágenes por actividad»; Armado ofrece 1.0.1 y 1.0.0
+  (la `-rc` no aparece); el último gestor es `gestor-v0.1.1`.
+- Con un `practicacq.addin` viejo en `Addins\2026` (como deja `Instalar.bat`): al instalar los dos add-ins 1.0.0,
+  `practicacq.addin` desaparece, no hay `ClientId` repetidos y cada `.addin` apunta a una DLL que existe.
+- El gestor avisa la 1.0.1, la instala y la 1.0.0 queda en disco; volver a la 1.0.0 hace **0 pedidos a internet**.
+- `releases.win.json` de `gestor-v0.1.0` y `gestor-v0.1.1` anuncian su versión y los dos `Setup.exe` se descargan.
+
+Captura de la ventana real leyendo las releases reales: `imagenes/2026-10-17-gestor-real-github.png` (la franja azul
+del gestor nuevo en esa captura viene de un actualizador simulado, porque la ventana no estaba instalada con
+`Setup.exe`; la versión 0.1.1 que muestra sí es la publicada).
+
+### Prueba manual del usuario (2026-10-17)
+
+Hecha con la guía `Guia_Prueba_Equipo_Limpio_76.md` en el equipo del usuario, que **solo tiene Revit 2027**
+(no había un equipo con Revit 2026; Revit es de licencia y lo instala quien maneja las licencias). Se usaron los
+mismos pasos con 2027 en lugar de 2026:
+
+| Paso | Resultado |
+|---|---|
+| 1. Instalar el gestor con `Setup.exe` de `gestor-v0.1.0`; aparecen los dos add-ins | ✔ |
+| 2. Instalar Armado 1.0.0 (desde «⋯») e Imágenes 1.0.0 | ✔ (`.addin` de 2027 apuntan a `%LOCALAPPDATA%\CQEING\Addins\<id>\1.0.0\2027`) |
+| 3. Revit 2027: pestaña CQEING con «Estructural», «Herramientas» e «Imágenes»; botones abren | ✔ |
+| 4. Actualizar Armado a 1.0.1 con Revit abierto; funciona al reiniciar Revit | ✔ |
+| 5. Volver a la 1.0.0 sin internet | ✔ |
+| 6. «Actualizar y reiniciar»: el gestor queda en 0.1.1 | ✔ (Windows lo registra como 0.1.1; `current\CQEING.Gestor.exe` = `0.1.1+e0bd560`) |
+| 7. Equipo con la instalación vieja en un Revit real | No aplica: no había equipo con Revit 2026 y `Instalar.bat` (el retiro de `practicacq.addin` y la ausencia de ClientId repetidos sí se comprobaron contra GitHub real) |
+
+### Pendiente
+
+- Repetir los pasos 0 a 7 en un equipo con **Revit 2026** cuando haya uno (paquete `net8.0-windows`).
+- Borrar en GitHub las ramas viejas (lo hace el usuario; ver Hallazgo 4).
+- Fuera de la #76: iniciar sesión con la plataforma y configurar el `.env` de Imágenes desde el gestor; firmar el instalador.
+
+### Criterios de aceptación
+
+- ✅ Publicar `armado-columnas-v1.0.0`, `imagenes-v1.0.0` y `gestor-v0.1.0`.
+- ✅ Instalar el gestor con `Setup.exe`; aparecen los dos add-ins (Revit 2027).
+- ✅ Instalar los dos; pestaña CQEING con sus tres paneles y botones (Revit 2027).
+- ✅ `armado-columnas-v1.0.1`: avisa, se actualiza con Revit abierto y se ve al reiniciar (Revit 2027).
+- ✅ Volver a la 1.0.0 desde «⋯» sin descargar (manual sin internet + automático: 0 pedidos).
+- ✅ `gestor-v0.1.1`: el gestor se actualiza solo.
+- ⚠️ Instalación vieja: retiro de `practicacq.addin` y sin ClientId repetidos comprobados de forma automática; falta verlo en un Revit real.
+- ⚠️ Ramas viejas: revisadas; falta borrarlas en GitHub.
+- ⚠️ Todo lo anterior falta repetirlo con Revit 2026.
