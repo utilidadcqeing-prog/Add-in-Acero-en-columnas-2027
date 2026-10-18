@@ -5,6 +5,19 @@
   'use strict';
   const { html, Component } = window.htmPreact;
   const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
+  // Gancho de una punta (#84), como la maqueta: 90° raya vertical, 135° diagonal hacia adentro, 180° en U. `alto` es
+  // lo que baja (o sube) la raya; `adentro`, +1 en la punta izquierda y −1 en la derecha.
+  const ganchoPts = (x, y, dir, tipo, adentro, alto) => (tipo === '135°' ? [[x + adentro * alto * 0.6, y + dir * alto * 0.75]]
+    : tipo === '180°' ? [[x, y + dir * alto * 0.45], [x + adentro * alto * 0.65, y + dir * alto * 0.45]]
+    : tipo ? [[x, y + dir * alto]] : []);
+  const conGanchos = (xa, xz, y, dir, ti, tf, alto) => {
+    let q = [[xa, y], [xz, y]];
+    q = ganchoPts(xa, y, dir, ti, 1, alto).reverse().concat(q).concat(ganchoPts(xz, y, dir, tf, -1, alto));
+    return q.map((c) => c[0] + ',' + c[1]).join(' ');
+  };
+  // Botones de gancho junto a la punta (#84): en las corridas 90° · 135° · 180°; en los bastones, también sin gancho.
+  const TIPOS = [['Sin', 'Sin', 'M1 6h10'], ['De90', '90°', 'M1 3h8v7'], ['De135', '135°', 'M1 3h8l-4 6'], ['De180', '180°', 'M1 3h7a3 3 0 010 6H5']];
+  const ANCHO_BOTON = 44;
 
   class Alzado extends Component {
     constructor(props) {
@@ -41,11 +54,10 @@
         const i = enCapa[isC ? 'C' : 'F']++;
         const y = isC ? (i % 2 ? 58 : 52) : (i % 2 ? 112 : 118);
         const dir = isC ? 1 : -1;
-        let pts = X(bar.desde) + ',' + y + ' ' + X(bar.hasta) + ',' + y;
-        if (bar.ganchoInicio) pts = X(bar.desde) + ',' + (y + dir * 22) + ' ' + pts;
-        if (bar.ganchoFin) pts = pts + ' ' + X(bar.hasta) + ',' + (y + dir * 22);
+        const ti = bar.ganchoInicio ? bar.ganchoInicioTipo || '90°' : '', tf = bar.ganchoFin ? bar.ganchoFinTipo || '90°' : '';
+        const pts = conGanchos(X(bar.desde), X(bar.hasta), y, dir, ti, tf, 22);
         const isSel = bar.id === sel && !selLap;
-        return { isC, pts, col: isSel ? '#1F5FAF' : '#3F4A57', sw: isSel ? 4.2 : 2.6, pick: pickBar(bar.id),
+        return { id: bar.id, y, isC, pts, col: isSel ? '#1F5FAF' : '#3F4A57', sw: isSel ? 4.2 : 2.6, pick: pickBar(bar.id),
           lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: bar.capa === 'arriba' ? 33 : 150, lt: bar.id + ' · ' + f2(bar.largo) };
       });
 
@@ -65,11 +77,10 @@
         const top = (bs.id.indexOf('BS') === 0) !== inv;
         const y = top ? 70 : 100, dir = top ? 1 : -1;
         const xa = X(bs.desde) + (bs.ganchoInicio ? ADENTRO : 0), xz = X(bs.hasta) - (bs.ganchoFin ? ADENTRO : 0);
-        let pts = xa + ',' + y + ' ' + xz + ',' + y;
-        if (bs.ganchoInicio) pts = xa + ',' + (y + dir * 16) + ' ' + pts;
-        if (bs.ganchoFin) pts = pts + ' ' + xz + ',' + (y + dir * 16);
+        const ti = bs.ganchoInicio ? bs.ganchoInicioTipo || '90°' : '', tf = bs.ganchoFin ? bs.ganchoFinTipo || '90°' : '';
+        const pts = conGanchos(xa, xz, y, dir, ti, tf, 16);
         const isSel = bs.id === sel && !selLap;
-        return { top, pts, col: isSel ? '#1F5FAF' : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
+        return { id: bs.id, y, top, pts, col: isSel ? '#1F5FAF' : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
       });
 
       // estribos: una raya por cada estribo real, donde va (Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba y la
@@ -117,6 +128,34 @@
       };
       const wl = p.traslapos.find((x) => x.id === warnLap);
 
+      // botones de gancho: junto a cada punta del borde del elemento elegido, arriba de las barras de arriba y abajo de
+      // las de abajo, sin salirse del alzado; siguen la punta con el zoom
+      const ganchos = [];
+      const datoSel = selLap ? null : (p.barras.find((x) => x.id === sel) || p.bastones.find((x) => x.id === sel));
+      if (datoSel && this.props.onHook) {
+        const esBarra = p.barras.includes(datoSel);
+        const dib = (esBarra ? b : t).find((x) => x.id === sel);
+        const arriba = esBarra ? dib.isC !== inv : dib.top;
+        const tipos = esBarra ? TIPOS.slice(1) : TIPOS;
+        const ancho = tipos.length * ANCHO_BOTON + 2;
+        [['inicio', datoSel.desde, datoSel.puntaInicioEnBorde, datoSel.ganchoInicioTipo], ['fin', datoSel.hasta, datoSel.puntaFinEnBorde, datoSel.ganchoFinTipo]]
+          .filter(([, , enBorde]) => enBorde)
+          .forEach(([punta, m, , actual]) => {
+            const xs = v.tx + X(m) * v.z, ys = v.ty + (inv ? 170 - dib.y : dib.y) * v.z;
+            const clave = esBarra ? datoSel.id[0] + '.' + punta : datoSel.id + '.' + punta;
+            const vigente = actual || (esBarra ? '90°' : 'Sin');
+            ganchos.push({
+              left: Math.max(4, Math.min(W - ancho - 4, punta === 'inicio' ? xs - 6 : xs - ancho + 6)) + 'px',
+              // arriba, en la franja sobre la viga, justo encima de los rótulos de las barras (y = 33) y debajo de la leyenda:
+              // pegados al elemento tapaban las corridas
+              top: Math.max(arriba ? 26 : 4, Math.min(H - 32, arriba ? v.ty + 33 * v.z - 38 : ys + 14)) + 'px',
+              label: 'Gancho de la punta ' + (punta === 'inicio' ? 'izquierda' : 'derecha') + ' de ' + datoSel.id,
+              botones: tipos.map(([valor, texto, icono], i) => ({ texto, icono, on: texto === vigente, borde: i ? '1px solid #C9CFD6' : '0',
+                titulo: valor === 'Sin' ? 'Sin gancho' : 'Gancho de ' + texto, elegir: () => this.props.onHook(clave, valor, texto) })),
+            });
+          });
+      }
+
       const scaleOf = (el) => { const r = el.getBoundingClientRect(); return { r, k: r.width ? W / r.width : 1 }; };
       const zoomAt = (mx, my, f) => {
         const z = Math.min(Math.max(v.z * f, fitZ * 0.4), fitZ * 12);
@@ -129,7 +168,7 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, stx, cols, luces, vol, ejes, cut,
+        b, l, t, st, stx, cols, luces, vol, ejes, cut, ganchos,
         beamX: X(p.inicio), beamW: X(p.fin) - X(p.inicio),
         stVis: showSt ? 'visible' : 'hidden',
         warnText: wl ? 'traslapo ' + f2(wl.hasta - wl.desde) + ' · +' + f2(wl.hasta - wl.desde - wl.minimo) : '',
@@ -209,6 +248,13 @@
       ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="192" r="8" fill="#FFFFFF" stroke="#9AA3AD"></circle><text x="${e.x}" y="195.5" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}
     </g>
   </svg>
+  ${v.ganchos.map((g) => html`
+  <div role="group" aria-label=${g.label} style="position: absolute; left: ${g.left}; top: ${g.top}; display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden; background: #FFFFFF; box-shadow: 0 2px 6px rgba(22, 25, 29, 0.14)" onPointerDown=${v.stop} onDblClick=${v.stop}>
+    ${g.botones.map((o) => html`
+    <button type="button" aria-pressed=${o.on ? 'true' : 'false'} title=${o.titulo} onClick=${o.elegir} style="display: flex; align-items: center; justify-content: center; gap: 3px; width: ${ANCHO_BOTON}px; height: 26px; padding: 0; border: 0; border-left: ${o.borde}; font: inherit; font-size: 11px; cursor: pointer; background: ${o.on ? '#1F5FAF' : '#FFFFFF'}; color: ${o.on ? '#FFFFFF' : '#16191D'}">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d=${o.icono} stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>${o.texto}
+    </button>`)}
+  </div>`)}
   <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 160}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
     <span>${v.caption}</span>
     <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #3F4A57"></span>corrida</span>

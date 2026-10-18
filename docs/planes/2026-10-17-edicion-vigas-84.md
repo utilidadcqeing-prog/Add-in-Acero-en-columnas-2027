@@ -485,6 +485,13 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - Ejemplo de la decisión 9 en la maqueta: BS1 va de −0.15 a 1.00 (1.15); con 90° da 1.428, sube a 1.50 y la punta de adentro pasa a 1.072.
     - "Con gancho" del paso 2 (#89) sigue sin redondear (1.428): solo redondea el gancho elegido con los botones.
     - Para la tarea 4: la página manda los ganchos con el nombre del enum (`"De90"`, `"De135"`, `"De180"`, `"Sin"`), como los demás enums del protocolo.
+  - Tarea 4, rulings anotados antes de programar:
+    - El alzado dibuja cada gancho con su forma, como la maqueta: 90° una raya vertical, 135° en diagonal hacia adentro y 180° en U. Hasta ahora todos se veían de 90°.
+    - Los botones van encima del dibujo, junto a la punta: arriba de las barras de arriba y abajo de las de abajo, sin salirse del alzado. Siguen la punta al hacer zoom o mover el dibujo.
+    - Corregido al probar en Chrome: en los elementos de arriba, los botones van en la franja de arriba de la viga, justo encima de los rótulos de las barras y debajo de la leyenda, y no pegados al elemento: los de un bastón tapaban la barra S1 y su rótulo.
+  - [x] Tarea 4: botones de gancho junto a la punta del borde (`alzado.js`), `onHook` → `cambios.ganchos` (`tablero.js`) y ganchos en la demostración (`demo.js`). 549 en verde.
+    - **Probado en Chrome con la demostración:** S1 elegida → *90°·135°·180°* con 90° marcado; 180° → la punta se dibuja en U y avisa *"Gancho de 180° en la punta izquierda de las barras de arriba"*. BS1 → *Sin·90°·135°·180°*; 90° → pasa de 1.15 a 1.50; Sin → vuelve a 1.15; 135° se dibuja en diagonal. BS2 (columna B, no llega al borde) no tiene botones. I1 (abajo) los tiene debajo de la barra. Al acercar y ajustar, los botones siguen la punta. Sin errores en la consola.
+    - En la demostración, una corrida que cambia de gancho conserva su largo (no hay motor que la vuelva a resolver); el bastón sí redondea como en C#. El gancho de 180° de cada diámetro va en `demo.js`, porque la pantalla de Reglas no lo muestra.
 - [ ] Fase C (tareas 5–7).
 - [ ] Fase D (tareas 8–9).
 - [ ] Probado en Revit (tarea 10).

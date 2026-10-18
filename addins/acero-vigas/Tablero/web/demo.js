@@ -11,6 +11,8 @@
     { d: '#5', t: '0.90', g: '0.278', e: '0.189', k: '1.552' }, { d: '#6', t: '1.10', g: '0.334', e: '0.272', k: '2.235' },
     { d: '#7', t: '1.35', g: '0.388', e: '0.316', k: '3.042' }, { d: '#8', t: '1.70', g: '0.444', e: '0.362', k: '3.973' },
   ];
+  // gancho de 180° por diámetro, en m (se guarda en las reglas, pero la pantalla de Reglas no lo muestra)
+  const G180 = { 3: 0.142, 4: 0.190, 5: 0.238, 6: 0.286, 7: 0.333, 8: 0.381 };
   const OPCIONES0 = {
     tipo: null, superior: [{ cantidad: 3, diametro: 5 }], inferior: [{ cantidad: 3, diametro: 5 }], recubrimientoCm: 4,
     recArribaCm: null, recAbajoCm: null, recLadosCm: null, separacionFilasCm: null, maximoFilas: 3, cara: null,
@@ -98,9 +100,15 @@
       const cRows = isCim ? o.inferior : o.superior, fRows = isCim ? o.superior : o.inferior;
       const capaC = isCim ? 'abajo' : 'arriba', capaF = isCim ? 'arriba' : 'abajo';
       const barras = [], traslapos = [];
+      const cm0 = o.cambios || {}, gch = cm0.ganchos || {};
+      const grados = (tipo) => ({ De90: '90°', De135: '135°', De180: '180°' })[tipo] || '';
+      // corridas (#84): el gancho de cada punta del borde; sin "Sin" (vuelve a 90°) y, en la demostración, con el mismo largo
+      const tipoCorrida = (clave) => (gch[clave] && gch[clave] !== 'Sin' ? grados(gch[clave]) : '90°');
       const capa = (lista, pre, rows, nombre) => {
         lista.forEach((b, i) => barras.push({ id: pre + (i + 1), capa: nombre, desde: b.a, hasta: b.b, ganchoInicio: !!b.hs, ganchoFin: !!b.he,
-          largo: b.len, recta: b.recta, manual: false, llegaAlVoladizo: !!b.vol, cantidad: qtyOf(rows), kg: b.len * kgRow(rows) }));
+          largo: b.len, recta: b.recta, manual: false, llegaAlVoladizo: !!b.vol, cantidad: qtyOf(rows), kg: b.len * kgRow(rows),
+          ganchoInicioTipo: b.hs ? tipoCorrida(pre + '.inicio') : '', ganchoFinTipo: b.he ? tipoCorrida(pre + '.fin') : '',
+          puntaInicioEnBorde: !!b.hs, puntaFinEnBorde: !!b.he }));
         for (let i = 0; i + 1 < lista.length; i++) {
           traslapos.push({ id: pre + (i + 1) + '–' + pre + (i + 2), barraIzquierda: pre + (i + 1), barraDerecha: pre + (i + 2), capa: nombre,
             desde: lista[i + 1].a, hasta: lista[i].b, minimo: num(regla(rows[0].diametro).t, 0), diametro: '#' + rows[0].diametro, manual: false });
@@ -136,13 +144,24 @@
         .concat(G.centros.map(([x, t], i) => ({ id: bBot + (i + 1), eje: x, donde: 'Centro de la luz ' + t })))
         .map((b) => {
           const L = (ob.largos && ob.largos[b.id] != null ? ob.largos[b.id] : ob.largo) / 1000, st = acero(b.id.slice(0, 2));
-          const a = Math.max(a0, b.eje - L / 2), z = Math.min(z0, b.eje + L / 2);
+          let a = Math.max(a0, b.eje - L / 2), z = Math.min(z0, b.eje + L / 2);
           const cutA = a > b.eje - L / 2, cutZ = z < b.eje + L / 2;
-          const g = num(regla(st.diametro).g, 0);
-          const hs = ob.conGancho && cutA, he = ob.conGancho && cutZ;
-          const len = z - a + (hs ? g : 0) + (he ? g : 0);
-          return { id: b.id, eje: b.eje, desde: a, hasta: z, ganchoInicio: hs, ganchoFin: he, largo: len, donde: b.donde,
-            cantidad: st.cantidad + ' #' + st.diametro, kg: len * st.cantidad * kgOf(st.diametro), cortado: cutA || cutZ, n: st.cantidad };
+          // gancho por punta (#84): el elegido con los botones o el general del paso 2; con uno elegido, el total sube al
+          // múltiplo y el sobrante va a la otra punta (como CalculadorBastones en C#)
+          const punta = (clave, borde) => (!borde ? 'Sin' : gch[clave] || (ob.conGancho ? 'De90' : 'Sin'));
+          const ti = punta(b.id + '.inicio', cutA), tf = punta(b.id + '.fin', cutZ);
+          const largoGancho = (tipo) => (tipo === 'De90' ? num(regla(st.diametro).g, 0) : tipo === 'De135' ? num(regla(st.diametro).e, 0) : tipo === 'De180' ? G180[st.diametro] || 0 : 0);
+          const gA = largoGancho(ti), gZ = largoGancho(tf);
+          let len = z - a + gA + gZ;
+          const elegido = (cutA && gch[b.id + '.inicio'] && gch[b.id + '.inicio'] !== 'Sin') || (cutZ && gch[b.id + '.fin'] && gch[b.id + '.fin'] !== 'Sin');
+          if (elegido) {
+            const M = num(reglas.multiplo, 0.5), sobra = Math.ceil(len / M - 1e-9) * M - len;
+            if (cutA && !cutZ) z = Math.min(z0, z + sobra); else if (cutZ && !cutA) a = Math.max(a0, a - sobra);
+            len = z - a + gA + gZ;
+          }
+          return { id: b.id, eje: b.eje, desde: a, hasta: z, ganchoInicio: gA > 0, ganchoFin: gZ > 0, largo: len, donde: b.donde,
+            cantidad: st.cantidad + ' #' + st.diametro, kg: len * st.cantidad * kgOf(st.diametro), cortado: cutA || cutZ, n: st.cantidad,
+            ganchoInicioTipo: grados(ti), ganchoFinTipo: grados(tf), puntaInicioEnBorde: cutA, puntaFinEnBorde: cutZ };
         }).filter((b) => b.n > 0);
 
       // sección y reparto en filas (#88)
