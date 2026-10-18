@@ -110,10 +110,10 @@ internal static class CalculadorBastones
         return new Baston(id, capa, lugar.Donde, lugar.EnApoyo, lugar.Centro, desde, hasta, ganchoInicio, ganchoFin, total,
             manual, grupo, total / 1000.0 * grupo.Cantidad * regla.KgPorMetro, tipoInicio, tipoFin, bordeInicio, bordeFin);
 
-        // un gancho elegido en una punta que no llega al borde se ignora con aviso
+        // un gancho elegido en una punta que no llega al borde se ignora con aviso; "Sin" no avisa: igual no lleva
         TipoGancho Punta(string clave, bool enBorde)
         {
-            if (!enBorde && e.Cambios?.Ganchos?.ContainsKey(clave) == true)
+            if (!enBorde && e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho elegido) == true && elegido != TipoGancho.Sin)
                 avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoLlegaAlBorde));
             return GanchoDe(e, clave, enBorde);
         }

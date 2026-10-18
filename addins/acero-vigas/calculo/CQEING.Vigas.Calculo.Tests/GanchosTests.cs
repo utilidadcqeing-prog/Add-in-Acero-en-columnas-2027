@@ -68,6 +68,15 @@ public class GanchosTests
     }
 
     [Fact]
+    public void SinGanchoEnUnaPuntaQueNoEstaEnElBordeNoAvisa()
+    {
+        // el "Sin" quedó guardado de cuando el bastón llegaba al borde (Juan, 18-oct, en Revit)
+        ResultadoVigas r = MotorVigas.Calcular(Entrada(new() { ["BS2.inicio"] = TipoGancho.Sin }));
+
+        Assert.DoesNotContain(r.Avisos, a => a.Elemento == "BS2.inicio");
+    }
+
+    [Fact]
     public void GanchoDeUnBastonQueNoExisteAvisa()
     {
         ResultadoVigas r = MotorVigas.Calcular(Entrada(new() { ["BS9.inicio"] = TipoGancho.De90 }));

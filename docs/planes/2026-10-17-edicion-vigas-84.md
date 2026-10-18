@@ -524,3 +524,5 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - **No se probó en Chrome** (Juan, 18-oct): queda para la prueba en Revit de la tarea 10.
     - El texto "Fila 1: … · Fila 2: …" sigue saliendo de `CaraVista.PorFila`, que calcula C#.
 - [ ] Probado en Revit (tarea 10).
+  - Corregido al probar en Revit (18-oct): un gancho guardado de un bastón que dejó de llegar al borde avisaba *"El cambio de BS1.inicio ya no se puede aplicar"* en cada cálculo y no había cómo quitarlo. Ahora un "Sin" en una punta fuera del borde no avisa; **Usar el largo general** borra los ganchos del bastón; y al arrastrar una punta se borra el gancho de esa punta.
+  - Corregido también: en un bastón arrastrado, **Aplicar** un largo escrito no hacía nada (las puntas mandan sobre el largo). Ahora borra las puntas y lo vuelve a centrar.

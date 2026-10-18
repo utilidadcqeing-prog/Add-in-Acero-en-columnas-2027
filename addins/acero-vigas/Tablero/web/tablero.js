@@ -202,12 +202,17 @@
     // Al soltar un punto en un salto: los traslapos corridos van a cambios.movidos y las puntas del bastón a bastPuntas,
     // en mm, como los manda C#.
     aplicarSalto(salto) {
-      const s = this.state, movidos = { ...s.cambios.movidos }, puntas = { ...s.bastPuntas };
+      const s = this.state, movidos = { ...s.cambios.movidos }, puntas = { ...s.bastPuntas }, ganchos = { ...s.cambios.ganchos };
+      const P = this.props.vista && this.props.vista.actual;
       salto.cambios.forEach((c) => {
-        if (c.tipo === 'movido') movidos[c.id] = { desde: c.desde, enVoladizo: c.enVoladizo };
-        else puntas[c.id] = { desde: c.desde, hasta: c.hasta };
+        if (c.tipo === 'movido') { movidos[c.id] = { desde: c.desde, enVoladizo: c.enVoladizo }; return; }
+        // la punta que se movió pierde el gancho elegido: puede haber dejado el borde
+        const b = P && P.bastones.find((x) => x.id === c.id);
+        if (!b || mm(b.desde) !== c.desde) delete ganchos[c.id + '.inicio'];
+        if (!b || mm(b.hasta) !== c.hasta) delete ganchos[c.id + '.fin'];
+        puntas[c.id] = { desde: c.desde, hasta: c.hasta };
       });
-      this.cambiar({ cambios: { ...s.cambios, movidos }, bastPuntas: puntas, confirmVol: null });
+      this.cambiar({ cambios: { ...s.cambios, movidos, ganchos }, bastPuntas: puntas, confirmVol: null });
     }
 
     say(t) {
@@ -440,13 +445,17 @@
           apply: () => {
             if (!o) return;
             if (!o.sePuede) { this.say(o.texto); return; }
-            this.cambiar({ bastLen: { ...s.bastLen, [SBa.id]: f2(o.valor) } });
+            // el largo escrito lo vuelve a centrar: las puntas de un arrastre mandarían sobre él
+            const puntas = { ...s.bastPuntas };
+            delete puntas[SBa.id];
+            this.cambiar({ bastLen: { ...s.bastLen, [SBa.id]: f2(o.valor) }, bastPuntas: puntas });
             this.say('Bastón ' + SBa.id + ' en ' + f2(o.valor) + ' m');
           },
           reset: () => {
-            const largos = { ...s.bastLen }, puntas = { ...s.bastPuntas };
-            delete largos[SBa.id]; delete puntas[SBa.id];
-            this.cambiar({ bastLen: largos, bastPuntas: puntas, draft: s.bastDef });
+            // vuelve a centrarse y puede dejar de llegar al borde: sus ganchos guardados se borran
+            const largos = { ...s.bastLen }, puntas = { ...s.bastPuntas }, ganchos = { ...s.cambios.ganchos };
+            delete largos[SBa.id]; delete puntas[SBa.id]; delete ganchos[SBa.id + '.inicio']; delete ganchos[SBa.id + '.fin'];
+            this.cambiar({ bastLen: largos, bastPuntas: puntas, cambios: { ...s.cambios, ganchos }, draft: s.bastDef });
           } };
       }
 
