@@ -24,12 +24,18 @@ internal sealed record CapaCalculada(
     /// <summary>Varilla de la que sale una barra de ese largo.</summary>
     public int VarillaPara(int largo) => largo > Entrada.Reglas.Varilla ? Entrada.Reglas.VarillaLarga : Entrada.Reglas.Varilla;
 
+    /// <summary>Si una barra con esa parte recta entra en algún voladizo.</summary>
+    public bool LlegaAlVoladizo(int desde, int hasta)
+    {
+        Portico portico = Entrada.Portico;
+        return (portico.VoladizoInicio > 0 && desde < portico.Apoyos[0].CaraIzquierda)
+            || (portico.VoladizoFinal > 0 && hasta > portico.Apoyos[^1].CaraDerecha);
+    }
+
     /// <summary>Convierte <paramref name="resuelta"/> (por defecto la automática); <paramref name="manuales"/> son índices de barra.</summary>
     public SolucionCapa Convertir(CapaResuelta? resuelta = null, IReadOnlySet<int>? manuales = null)
     {
         resuelta ??= Resuelta;
-        Portico portico = Entrada.Portico;
-        Apoyo primero = portico.Apoyos[0], ultimo = portico.Apoyos[^1];
         IReadOnlyList<BarraLinea> lineas = resuelta.Solucion.Barras;
 
         var barras = lineas.Select((b, i) => new Barra(
@@ -42,8 +48,7 @@ internal sealed record CapaCalculada(
             Largo: b.Largo,
             Varilla: VarillaPara(b.Largo),
             Manual: manuales?.Contains(i) ?? false,
-            LlegaAlVoladizo: (portico.VoladizoInicio > 0 && b.Desde < primero.CaraIzquierda)
-                || (portico.VoladizoFinal > 0 && b.Hasta > ultimo.CaraDerecha),
+            LlegaAlVoladizo: LlegaAlVoladizo(b.Desde, b.Hasta),
             Grupos: Grupos,
             Kg: KgDe(b.Largo),
             TipoInicio: i == 0 ? Parametros.TipoInicio : TipoGancho.Sin,

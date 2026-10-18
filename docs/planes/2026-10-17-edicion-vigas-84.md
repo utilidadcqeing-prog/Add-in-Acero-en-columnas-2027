@@ -493,5 +493,11 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - **Probado en Chrome con la demostración:** S1 elegida → *90°·135°·180°* con 90° marcado; 180° → la punta se dibuja en U y avisa *"Gancho de 180° en la punta izquierda de las barras de arriba"*. BS1 → *Sin·90°·135°·180°*; 90° → pasa de 1.15 a 1.50; Sin → vuelve a 1.15; 135° se dibuja en diagonal. BS2 (columna B, no llega al borde) no tiene botones. I1 (abajo) los tiene debajo de la barra. Al acercar y ajustar, los botones siguen la punta. Sin errores en la consola.
     - En la demostración, una corrida que cambia de gancho conserva su largo (no hay motor que la vuelva a resolver); el bastón sí redondea como en C#. El gancho de 180° de cada diámetro va en `demo.js`, porque la pantalla de Reglas no lo muestra.
 - [ ] Fase C (tareas 5–7).
+  - [x] Tarea 5: `TraslapoMovido` / `CambiosManuales.Movidos` con `AplicarMovidos` después de los largos, `PuntasBaston` / `ArmadoBastones.Puntas` en `CalculadorBastones`, y el motivo `TraslapoEnVoladizo`. `rtk dotnet test CQEING-Addins.sln -c Release` → 559 en verde.
+    - Ruling: el traslapo de prueba es S1–S2 y no I1–I2: I1 ya mide 6.00 y no puede crecer.
+    - Ruling: **no se agregó `ChocaConOtroTraslapo`**. Hay a lo sumo un traslapo por luz y uno corrido no sale de la suya (salvo al voladizo, donde no hay otro), así que nunca alcanza al siguiente. La prueba quedó como `MoverUnTraslapoALaLuzSiguienteSeRechaza` → `EntraAlNudo`. Ese motivo cubre también salirse por la punta del voladizo; el texto (columna o punta) lo arma la tarea 6.
+    - Ruling: la prueba del voladizo usa un pórtico propio (ejes en 0, 4.40 y 6.80, voladizo de 2.50, capa de abajo en la cara final): en la maqueta ninguna barra puede crecer lo que hace falta para cruzar la columna D.
+    - Un bastón cuya punta queda justo en `InicioBarras` / `FinBarras` (el imán) cuenta como punta del borde y puede llevar gancho. Unas puntas con `Hasta <= Desde` se ignoran con `LargoNoValido`.
+    - Al correr un traslapo, `LlegaAlVoladizo` de sus barras se vuelve a calcular (`CapaCalculada.LlegaAlVoladizo`).
 - [ ] Fase D (tareas 8–9).
 - [ ] Probado en Revit (tarea 10).

@@ -128,4 +128,92 @@ public class CambiosManualesTests
         Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "S9", Motivo: MotivoBloqueo.NoExiste });
         Assert.Equal((3500, true), (r.Superior!.Barras[0].Largo, r.Superior.Barras[0].Manual));
     }
+
+    private static CambiosManuales Movido(string id, int desde, bool enVoladizo = false) =>
+        new(Movidos: new Dictionary<string, TraslapoMovido> { [id] = new(desde, enVoladizo) });
+
+    [Fact]
+    public void MoverUnTraslapoUnModuloCreceLaIzquierdaYAcortaLaDerecha()
+    {
+        // con S1–S2 (1672 a 2572): I1 ya mide 6.00 y no puede crecer
+        SolucionCapa arriba = MotorVigas.Calcular(Maqueta(Movido("S1–S2", 1672 + 500))).Superior!;
+
+        Assert.Equal((2172, 3072, 900, true), (arriba.Traslapos[0].Desde, arriba.Traslapos[0].Hasta, arriba.Traslapos[0].Largo, arriba.Traslapos[0].Manual));
+        Assert.Equal((3072, 3500, true), (arriba.Barras[0].Hasta, arriba.Barras[0].Largo, arriba.Barras[0].Manual));
+        Assert.Equal((2172, 4500, true), (arriba.Barras[1].Desde, arriba.Barras[1].Largo, arriba.Barras[1].Manual));
+    }
+
+    [Fact]
+    public void MoverUnTraslapoQueNoEsMultiploSeLlevaAlModuloMasCercano()
+    {
+        SolucionCapa arriba = MotorVigas.Calcular(Maqueta(Movido("S1–S2", 1672 + 260))).Superior!;
+
+        Assert.Equal(2172, arriba.Traslapos[0].Desde);
+    }
+
+    [Fact]
+    public void MoverUnTraslapoAlNudoSeRechaza()
+    {
+        // corrido 2.00 terminaría en 4572, dentro de la columna B (4200 a 4600)
+        ResultadoVigas r = MotorVigas.Calcular(Maqueta(Movido("S1–S2", 1672 + 2000)));
+
+        Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "S1–S2", Motivo: MotivoBloqueo.EntraAlNudo });
+        Assert.Equal((1672, false), (r.Superior!.Traslapos[0].Desde, r.Superior.Traslapos[0].Manual));
+    }
+
+    [Fact]
+    public void MoverUnTraslapoALaLuzSiguienteSeRechaza()
+    {
+        // corrido 3.00 queda entero en B-C (4672 a 5572): un traslapo arrastrado no cambia de luz
+        ResultadoVigas r = MotorVigas.Calcular(Maqueta(Movido("S1–S2", 1672 + 3000)));
+
+        Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "S1–S2", Motivo: MotivoBloqueo.EntraAlNudo });
+        Assert.Equal(1672, r.Superior!.Traslapos[0].Desde);
+    }
+
+    [Fact]
+    public void MoverAlVoladizoSinConfirmarSeRechazaYConfirmadoSeAplica()
+    {
+        // ejes A, B y C en 0, 4.40 y 6.80, voladizo de 2.50 (C termina en 7000 y las barras en 9450); abajo, junto a
+        // la cara final: I2 3.00 · I3 4.50, con I2–I3 de 5228 a 6172 en B-C
+        var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 6800)], VoladizoFinal: 2500);
+        EntradaVigas Entrada(bool confirmado) => new(portico, TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)],
+            Reglas.Generales, Cara.Final, Cambios: Movido("I2–I3", 5228 + 2000, confirmado));
+
+        ResultadoVigas sinConfirmar = MotorVigas.Calcular(Entrada(false));
+        ResultadoVigas confirmado = MotorVigas.Calcular(Entrada(true));
+
+        Assert.Contains(sinConfirmar.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "I2–I3", Motivo: MotivoBloqueo.TraslapoEnVoladizo });
+        Assert.Equal(5228, sinConfirmar.Inferior!.Traslapos[^1].Desde);
+        SolucionCapa abajo = confirmado.Inferior!;
+        Assert.Equal((7228, 8172), (abajo.Traslapos[^1].Desde, abajo.Traslapos[^1].Hasta));
+        Assert.Equal((5000, true), (abajo.Barras[^2].Largo, abajo.Barras[^2].LlegaAlVoladizo));
+        Assert.Equal(2500, abajo.Barras[^1].Largo);
+    }
+
+    [Fact]
+    public void ElMovidoSeAplicaDespuesDeSubirOBajar()
+    {
+        var subir = new Dictionary<string, int> { ["S1"] = 3500 };
+        Traslapo subido = MotorVigas.Calcular(Maqueta(new CambiosManuales(Barras: subir))).Superior!.Traslapos[0];
+
+        SolucionCapa arriba = MotorVigas.Calcular(Maqueta(new CambiosManuales(Barras: subir,
+            Movidos: new Dictionary<string, TraslapoMovido> { ["S1–S2"] = new(subido.Desde + 500) }))).Superior!;
+
+        Assert.Equal((subido.Desde + 500, subido.Largo), (arriba.Traslapos[0].Desde, arriba.Traslapos[0].Largo));
+        Assert.Equal(4000, arriba.Barras[0].Largo);
+    }
+
+    [Fact]
+    public void UnMovidoDeUnIdQueYaNoExisteAvisaYSigue()
+    {
+        ResultadoVigas r = MotorVigas.Calcular(Maqueta(new CambiosManuales(Movidos: new Dictionary<string, TraslapoMovido>
+        {
+            ["S8–S9"] = new(1000),
+            ["S1–S2"] = new(2172),
+        })));
+
+        Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "S8–S9", Motivo: MotivoBloqueo.NoExiste });
+        Assert.Equal(2172, r.Superior!.Traslapos[0].Desde);
+    }
 }

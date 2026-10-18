@@ -39,11 +39,16 @@ internal static class CalculadorBastones
             IEnumerable<Lugar> lugares = (capa == capaDeLosApoyos ? apoyos : luces).OrderBy(l => l.Centro);
             bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, e, armado, g, avisos)));
         }
-        // un gancho guardado para un bastón que ya no está (#84)
+        // un gancho o unas puntas guardados para un bastón que ya no está (#84)
         foreach (string clave in e.Cambios?.Ganchos?.Keys ?? [])
         {
             if (clave.StartsWith('B') && bastones.All(b => b.Id != clave.Split('.')[0]))
                 avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoExiste));
+        }
+        foreach (string id in armado.Puntas?.Keys ?? [])
+        {
+            if (bastones.All(b => b.Id != id))
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, Motivo: MotivoBloqueo.NoExiste));
         }
         return bastones;
     }
@@ -62,10 +67,18 @@ internal static class CalculadorBastones
         int? escrito = armado.Largos?.TryGetValue(id, out int valor) == true ? valor : null;
         if (escrito <= 0)
             avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, escrito.Value, Motivo: MotivoBloqueo.LargoNoValido));
-        bool manual = escrito > 0;
+        // arrastrado, deja de estar centrado (decisión 8 del plan de #84)
+        PuntasBaston? puntas = armado.Puntas?.GetValueOrDefault(id);
+        if (puntas is not null && puntas.Hasta <= puntas.Desde)
+        {
+            avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, puntas.Hasta - puntas.Desde, Motivo: MotivoBloqueo.LargoNoValido));
+            puntas = null;
+        }
+        bool manual = escrito > 0 || puntas is not null;
         int largo = LargoDe(armado, id);
-        int desde = lugar.Centro - largo / 2, hasta = desde + largo;
-        bool bordeInicio = desde < g.InicioBarras, bordeFin = hasta > g.FinBarras;
+        int desde = puntas?.Desde ?? lugar.Centro - largo / 2, hasta = puntas?.Hasta ?? desde + largo;
+        // una punta arrastrada se pega justo en el borde, y desde ahí también lleva gancho
+        bool bordeInicio = desde <= g.InicioBarras, bordeFin = hasta >= g.FinBarras;
         TipoGancho tipoInicio = Punta(id + ".inicio", bordeInicio), tipoFin = Punta(id + ".fin", bordeFin);
         int ganchoInicio = Reglas.LargoGancho(regla, tipoInicio), ganchoFin = Reglas.LargoGancho(regla, tipoFin);
         desde = Math.Max(desde, g.InicioBarras);

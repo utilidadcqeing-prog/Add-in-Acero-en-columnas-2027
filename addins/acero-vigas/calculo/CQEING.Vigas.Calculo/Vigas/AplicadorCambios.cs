@@ -11,7 +11,8 @@ internal static class AplicadorCambios
     public static SolucionCapa Aplicar(CapaCalculada capa, GeometriaPortico g, CambiosManuales? cambios, List<Aviso> avisos)
     {
         SolucionCapa solucion = AplicarBarras(capa, g, cambios?.Barras, avisos);
-        return AplicarTraslapos(capa, g, solucion, cambios?.Traslapos, avisos);
+        solucion = AplicarTraslapos(capa, g, solucion, cambios?.Traslapos, avisos);
+        return AplicarMovidos(capa, g, solucion, cambios?.Movidos, avisos);
     }
 
     /// <summary>
@@ -94,12 +95,81 @@ internal static class AplicadorCambios
     }
 
     /// <summary>
+    /// Traslapo arrastrado (decisiones 6 y 7 del plan de #84): se corre entero, de módulo en módulo, para que sus dos
+    /// barras sigan en largo cerrado; la de la izquierda crece lo que se corre y la de la derecha se acorta lo mismo.
+    /// </summary>
+    private static SolucionCapa AplicarMovidos(CapaCalculada capa, GeometriaPortico g, SolucionCapa solucion,
+        IReadOnlyDictionary<string, TraslapoMovido>? movidos, List<Aviso> avisos)
+    {
+        var barras = solucion.Barras.ToList();
+        var lista = solucion.Traslapos.ToList();
+        int modulo = capa.Parametros.Modulo;
+        foreach (var (id, movido) in DeEstaCapa(capa, movidos))
+        {
+            int i = lista.FindIndex(t => t.Id == id);
+            if (i < 0)
+            {
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, Largo: movido.Desde, Motivo: MotivoBloqueo.NoExiste));
+                continue;
+            }
+            Traslapo t = lista[i];
+            int corre = (int)Math.Round((movido.Desde - t.Desde) / (double)modulo, MidpointRounding.AwayFromZero) * modulo;
+            if (corre == 0)
+                continue;
+
+            Barra izquierda = barras[i], derecha = barras[i + 1];
+            int desde = t.Desde + corre, hasta = t.Hasta + corre;
+            int largoIzquierda = izquierda.Largo + corre, largoDerecha = derecha.Largo - corre;
+            MotivoBloqueo motivo = !SaleDeLaVarilla(capa, izquierda.Largo, largoIzquierda) || !SaleDeLaVarilla(capa, derecha.Largo, largoDerecha)
+                ? MotivoBloqueo.NoSaleDeLaVarilla
+                : DondeQueda(g, t, desde, hasta, movido.EnVoladizo);
+            if (motivo != MotivoBloqueo.Ninguno)
+            {
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, Largo: movido.Desde, Motivo: motivo));
+                continue;
+            }
+            barras[i] = izquierda with
+            {
+                Hasta = hasta, Largo = largoIzquierda, Varilla = capa.VarillaPara(largoIzquierda), Kg = capa.KgDe(largoIzquierda),
+                Manual = true, LlegaAlVoladizo = capa.LlegaAlVoladizo(izquierda.Desde, hasta),
+            };
+            barras[i + 1] = derecha with
+            {
+                Desde = desde, Largo = largoDerecha, Varilla = capa.VarillaPara(largoDerecha), Kg = capa.KgDe(largoDerecha),
+                Manual = true, LlegaAlVoladizo = capa.LlegaAlVoladizo(desde, derecha.Hasta),
+            };
+            lista[i] = t with { Desde = desde, Hasta = hasta, Manual = true };
+        }
+        return solucion with { Barras = barras, Traslapos = lista };
+    }
+
+    /// <summary>
+    /// Un traslapo corrido no cambia de luz y queda a 5 cm de sus caras. Solo el de la primera o la última luz puede
+    /// pasar al voladizo que toca, sin salirse por la punta, y si el usuario lo confirmó.
+    /// </summary>
+    private static MotivoBloqueo DondeQueda(GeometriaPortico g, Traslapo t, int desde, int hasta, bool enVoladizo)
+    {
+        const int cara = GeometriaPortico.DistanciaACara;
+        Luz luz = g.Luces.First(l => l.Nombre == t.Luz);
+        if (desde >= luz.CaraIzquierda + cara && hasta <= luz.CaraDerecha - cara)
+            return MotivoBloqueo.Ninguno;
+
+        Portico portico = g.Portico;
+        bool alVoladizo =
+            (luz == g.Luces[0] && portico.VoladizoInicio > 0 && desde > g.InicioBarras && hasta <= portico.Apoyos[0].CaraIzquierda - cara)
+            || (luz == g.Luces[^1] && portico.VoladizoFinal > 0 && desde >= portico.Apoyos[^1].CaraDerecha + cara && hasta < g.FinBarras);
+        return !alVoladizo ? MotivoBloqueo.EntraAlNudo
+            : enVoladizo ? MotivoBloqueo.Ninguno
+            : MotivoBloqueo.TraslapoEnVoladizo;
+    }
+
+    /// <summary>
     /// Una barra que salía de la varilla normal no puede pasar de ella a mano; una que ya usaba la larga, no puede
     /// pasar de la larga.
     /// </summary>
     private static bool SaleDeLaVarilla(CapaCalculada capa, int largoActual, int largoNuevo) =>
         largoNuevo <= capa.VarillaPara(largoActual);
 
-    private static IEnumerable<KeyValuePair<string, int>> DeEstaCapa(CapaCalculada capa, IReadOnlyDictionary<string, int>? cambios) =>
+    private static IEnumerable<KeyValuePair<string, T>> DeEstaCapa<T>(CapaCalculada capa, IReadOnlyDictionary<string, T>? cambios) =>
         cambios?.Where(c => c.Key.StartsWith(capa.Prefijo, StringComparison.Ordinal)) ?? [];
 }

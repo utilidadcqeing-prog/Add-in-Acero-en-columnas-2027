@@ -49,6 +49,34 @@ public class BastonesTests
     }
 
     [Fact]
+    public void BastonConPuntasAMano()
+    {
+        var puntas = new Dictionary<string, PuntasBaston> { ["BS2"] = new(3250, 5550) };
+        Baston bs2 = De(MotorVigas.Calcular(Entrada(new ArmadoBastones(Puntas: puntas))), "BS2");
+
+        Assert.Equal((3250, 5550, 2300, true, 4400), (bs2.Desde, bs2.Hasta, bs2.Largo, bs2.Manual, bs2.Eje));
+    }
+
+    [Fact]
+    public void PuntasFueraDelPorticoSeCortanEnElBorde()
+    {
+        var puntas = new Dictionary<string, PuntasBaston> { ["BS1"] = new(-1000, 1200) };
+        Baston bs1 = De(MotorVigas.Calcular(Entrada(new ArmadoBastones(Puntas: puntas))), "BS1");
+
+        Assert.Equal((-150, 1200, true, false), (bs1.Desde, bs1.Hasta, bs1.PuntaInicioEnBorde, bs1.PuntaFinEnBorde));
+    }
+
+    [Fact]
+    public void UnasPuntasDeUnIdQueYaNoExisteAvisanYSigue()
+    {
+        var puntas = new Dictionary<string, PuntasBaston> { ["BS9"] = new(0, 1000), ["BS2"] = new(3250, 5550) };
+        ResultadoVigas r = MotorVigas.Calcular(Entrada(new ArmadoBastones(Puntas: puntas)));
+
+        Assert.Contains(r.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "BS9", Motivo: MotivoBloqueo.NoExiste });
+        Assert.Equal(3250, De(r, "BS2").Desde);
+    }
+
+    [Fact]
     public void ConGancho_SoloLaPuntaQueLlegaAlBordeLoLleva()
     {
         ResultadoVigas r = MotorVigas.Calcular(Entrada(new ArmadoBastones(ConGancho: true)));
