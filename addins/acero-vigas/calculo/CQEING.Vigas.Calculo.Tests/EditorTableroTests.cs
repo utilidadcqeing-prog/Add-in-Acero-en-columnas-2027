@@ -94,6 +94,16 @@ public class EditorTableroTests
     }
 
     [Fact]
+    public void ArrastreDevuelveLosSaltos()
+    {
+        PreviaVista p = EditorTablero.Previsualizar(ArmadorVistaTests.Portico1(), OpcionesTablero.PorDefecto, Reglas.Generales,
+            new PedidoEdicion(1, "S2", AccionEdicion.Arrastre, Punto: PuntoArrastre.Izquierda));
+
+        Assert.NotEmpty(p.Saltos);
+        Assert.Empty(p.Opciones);
+    }
+
+    [Fact]
     public void BastonEscritoNoSeRedondea()
     {
         OpcionEdicion aplicar = Opcion(Previa("BS2", AccionEdicion.Baston, 2.30), "aplicar");

@@ -57,6 +57,9 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
         _ => 0,
     };
 
+    /// <summary>Varilla de la que sale una barra de ese largo: la normal o, si no alcanza, la larga.</summary>
+    public int VarillaPara(int largo) => largo > Varilla ? VarillaLarga : Varilla;
+
     /// <summary>Los que muestra la pantalla de Reglas (la maqueta va del #3 al #8). El #2 se guarda sin mostrarse.</summary>
     public static IReadOnlyList<int> DiametrosEnPantalla { get; } = [3, 4, 5, 6, 7, 8];
 

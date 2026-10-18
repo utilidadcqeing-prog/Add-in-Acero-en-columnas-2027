@@ -22,7 +22,7 @@ internal sealed record CapaCalculada(
     public double KgDe(int largo) => largo / 1000.0 * KgPorMetro;
 
     /// <summary>Varilla de la que sale una barra de ese largo.</summary>
-    public int VarillaPara(int largo) => largo > Entrada.Reglas.Varilla ? Entrada.Reglas.VarillaLarga : Entrada.Reglas.Varilla;
+    public int VarillaPara(int largo) => Entrada.Reglas.VarillaPara(largo);
 
     /// <summary>Si una barra con esa parte recta entra en algún voladizo.</summary>
     public bool LlegaAlVoladizo(int desde, int hasta)

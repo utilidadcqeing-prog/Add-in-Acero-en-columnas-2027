@@ -499,5 +499,14 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - Ruling: la prueba del voladizo usa un pórtico propio (ejes en 0, 4.40 y 6.80, voladizo de 2.50, capa de abajo en la cara final): en la maqueta ninguna barra puede crecer lo que hace falta para cruzar la columna D.
     - Un bastón cuya punta queda justo en `InicioBarras` / `FinBarras` (el imán) cuenta como punta del borde y puede llevar gancho. Unas puntas con `Hasta <= Desde` se ignoran con `LargoNoValido`.
     - Al correr un traslapo, `LlegaAlVoladizo` de sus barras se vuelve a calcular (`CapaCalculada.LlegaAlVoladizo`).
+  - [x] Tarea 6: `EditorArrastre.Saltos`, `Rotulo.De` y la acción `Arrastre` en `EditorTablero`. `rtk dotnet test CQEING-Addins.sln -c Release` → 570 en verde.
+    - Ruling: las pruebas de la punta y del centro de una barra usan S2. En I2, I1–I2 está pegado a la cara de B y I1 ya mide 6.00, así que no tiene más salto que el actual.
+    - Cada lista de saltos va de izquierda a derecha e incluye el lugar actual, **sin cambios**: si se suelta ahí, no se guarda nada.
+    - Los saltos que caen en el nudo se saltan, pero la lista sigue del otro lado, para que el traslapo de la última (o la primera) luz llegue al voladizo. Solo se corta donde una barra deja de salir de la varilla.
+    - `Salto.EnVoladizo` = hay que confirmar (cae en el voladizo y antes no estaba). `CambioArrastre.EnVoladizo` va en `true` en todo salto dentro del voladizo, para que el motor lo acepte sin volver a preguntar (decisión 7).
+    - Al soltar, se valida con `AplicadorCambios`: la prueba `LosSaltosNoEntranAlNudoNiPasanDeLaVarilla` aplica cada salto de la maqueta y no hay ningún `CambioNoAplicado`. Para eso, `AplicarMovidos` aplica los dos traslapos del centro de una barra en el orden en que la barra del medio primero se acorta.
+    - Bastón: la punta suelta no lleva gancho; al llegar a 5 cm del borde se pega, toma el gancho que le toca ahí (`CalculadorBastones.GanchoDe`), el total sube al módulo y el sobrante va a la otra punta. El centro corre de 5 cm en 5 cm desde donde está, más los dos lugares pegados a los bordes.
+    - `Reglas.VarillaPara` reemplaza las tres copias de "normal o larga".
+    - El rótulo con varios tipos de barra los junta con `+` (`"2#5+1#4L= 3.00"`).
 - [ ] Fase D (tareas 8–9).
 - [ ] Probado en Revit (tarea 10).

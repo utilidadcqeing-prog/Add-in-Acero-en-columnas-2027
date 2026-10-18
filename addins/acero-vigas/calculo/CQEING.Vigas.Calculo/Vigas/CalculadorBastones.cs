@@ -57,6 +57,18 @@ internal static class CalculadorBastones
     public static int LargoDe(ArmadoBastones armado, string id) =>
         armado.Largos?.TryGetValue(id, out int largo) == true && largo > 0 ? largo : armado.Largo;
 
+    /// <summary>
+    /// El gancho de una punta de bastón (#84): en el borde, el elegido con los botones o el general del paso 2; fuera
+    /// del borde, ninguno.
+    /// </summary>
+    public static TipoGancho GanchoDe(EntradaVigas e, string clave, bool enBorde)
+    {
+        if (!enBorde)
+            return TipoGancho.Sin;
+        return e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) == true ? tipo
+            : (e.Bastones ?? new ArmadoBastones()).ConGancho ? TipoGancho.De90 : TipoGancho.Sin;
+    }
+
     private static GrupoBarras GrupoDe(ArmadoBastones armado, EntradaVigas e, Posicion capa) => capa == Posicion.Superior
         ? armado.Superior ?? new GrupoBarras(1, e.Superior[0].Diametro)
         : armado.Inferior ?? new GrupoBarras(1, e.Inferior[0].Diametro);
@@ -98,15 +110,12 @@ internal static class CalculadorBastones
         return new Baston(id, capa, lugar.Donde, lugar.EnApoyo, lugar.Centro, desde, hasta, ganchoInicio, ganchoFin, total,
             manual, grupo, total / 1000.0 * grupo.Cantidad * regla.KgPorMetro, tipoInicio, tipoFin, bordeInicio, bordeFin);
 
-        // el gancho de una punta: el elegido con los botones (solo en el borde) o, en el borde, el general del paso 2
+        // un gancho elegido en una punta que no llega al borde se ignora con aviso
         TipoGancho Punta(string clave, bool enBorde)
         {
-            if (e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) != true)
-                return enBorde && armado.ConGancho ? TipoGancho.De90 : TipoGancho.Sin;
-            if (enBorde)
-                return tipo;
-            avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoLlegaAlBorde));
-            return TipoGancho.Sin;
+            if (!enBorde && e.Cambios?.Ganchos?.ContainsKey(clave) == true)
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoLlegaAlBorde));
+            return GanchoDe(e, clave, enBorde);
         }
 
         bool Elegido(string clave) => e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) == true && tipo != TipoGancho.Sin;

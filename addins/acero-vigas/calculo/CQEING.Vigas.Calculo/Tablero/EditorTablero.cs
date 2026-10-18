@@ -25,7 +25,10 @@ public static class EditorTablero
             AccionEdicion.Baston => [Baston(e, pedido.Elemento, pedido.Valor)],
             _ => [],
         };
-        return new PreviaVista(pedido.N, pedido.Elemento, opciones, []);
+        IReadOnlyList<Salto> saltos = pedido.Accion == AccionEdicion.Arrastre
+            ? EditorArrastre.Saltos(e, MotorVigas.Calcular(e), pedido.Elemento, pedido.Punto ?? PuntoArrastre.Centro)
+            : [];
+        return new PreviaVista(pedido.N, pedido.Elemento, opciones, saltos);
     }
 
     /// <summary>Subir y Bajar: un módulo más y uno menos (decisión 2), con cómo quedan las vecinas.</summary>
@@ -129,7 +132,7 @@ public static class EditorTablero
 
     /// <summary>La varilla de la que no puede pasar una barra que hoy mide <paramref name="largoActual"/>, en m ("6" o "12").</summary>
     private static string Varilla(Reglas r, int largoActual) =>
-        ((largoActual > r.Varilla ? r.VarillaLarga : r.Varilla) / 1000.0).ToString("0.##", Inv);
+        (r.VarillaPara(largoActual) / 1000.0).ToString("0.##", Inv);
 
     private static int Mm(double m) => (int)Math.Round(m * 1000);
 

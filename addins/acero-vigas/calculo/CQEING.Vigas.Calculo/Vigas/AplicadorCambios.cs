@@ -104,9 +104,14 @@ internal static class AplicadorCambios
         var barras = solucion.Barras.ToList();
         var lista = solucion.Traslapos.ToList();
         int modulo = capa.Parametros.Modulo;
-        foreach (var (id, movido) in DeEstaCapa(capa, movidos))
+        // si se corren dos traslapos seguidos (el centro de una barra), la barra del medio primero se acorta y después
+        // crece: a la derecha se aplican de izquierda a derecha, y a la izquierda al revés
+        var orden = DeEstaCapa(capa, movidos)
+            .Select(c => (c.Key, c.Value, Indice: lista.FindIndex(t => t.Id == c.Key)))
+            .OrderBy(c => c.Indice < 0 || c.Value.Desde >= lista[c.Indice].Desde ? 0 : 1)
+            .ThenBy(c => c.Indice < 0 || c.Value.Desde >= lista[c.Indice].Desde ? c.Indice : -c.Indice);
+        foreach (var (id, movido, i) in orden)
         {
-            int i = lista.FindIndex(t => t.Id == id);
             if (i < 0)
             {
                 avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, Largo: movido.Desde, Motivo: MotivoBloqueo.NoExiste));
@@ -147,7 +152,7 @@ internal static class AplicadorCambios
     /// Un traslapo corrido no cambia de luz y queda a 5 cm de sus caras. Solo el de la primera o la última luz puede
     /// pasar al voladizo que toca, sin salirse por la punta, y si el usuario lo confirmó.
     /// </summary>
-    private static MotivoBloqueo DondeQueda(GeometriaPortico g, Traslapo t, int desde, int hasta, bool enVoladizo)
+    internal static MotivoBloqueo DondeQueda(GeometriaPortico g, Traslapo t, int desde, int hasta, bool enVoladizo)
     {
         const int cara = GeometriaPortico.DistanciaACara;
         Luz luz = g.Luces.First(l => l.Nombre == t.Luz);
@@ -167,8 +172,11 @@ internal static class AplicadorCambios
     /// Una barra que salía de la varilla normal no puede pasar de ella a mano; una que ya usaba la larga, no puede
     /// pasar de la larga.
     /// </summary>
+    internal static bool SaleDeLaVarilla(Reglas reglas, int largoActual, int largoNuevo) =>
+        largoNuevo <= reglas.VarillaPara(largoActual);
+
     private static bool SaleDeLaVarilla(CapaCalculada capa, int largoActual, int largoNuevo) =>
-        largoNuevo <= capa.VarillaPara(largoActual);
+        SaleDeLaVarilla(capa.Entrada.Reglas, largoActual, largoNuevo);
 
     private static IEnumerable<KeyValuePair<string, T>> DeEstaCapa<T>(CapaCalculada capa, IReadOnlyDictionary<string, T>? cambios) =>
         cambios?.Where(c => c.Key.StartsWith(capa.Prefijo, StringComparison.Ordinal)) ?? [];
