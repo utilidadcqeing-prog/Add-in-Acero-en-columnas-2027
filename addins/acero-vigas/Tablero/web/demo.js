@@ -11,6 +11,8 @@
     { d: '#5', t: '0.90', g: '0.278', e: '0.189', k: '1.552' }, { d: '#6', t: '1.10', g: '0.334', e: '0.272', k: '2.235' },
     { d: '#7', t: '1.35', g: '0.388', e: '0.316', k: '3.042' }, { d: '#8', t: '1.70', g: '0.444', e: '0.362', k: '3.973' },
   ];
+  // gancho de 180° por diámetro, en m (se guarda en las reglas, pero la pantalla de Reglas no lo muestra)
+  const G180 = { 3: 0.142, 4: 0.190, 5: 0.238, 6: 0.286, 7: 0.333, 8: 0.381 };
   const OPCIONES0 = {
     tipo: null, superior: [{ cantidad: 3, diametro: 5 }], inferior: [{ cantidad: 3, diametro: 5 }], recubrimientoCm: 4,
     recArribaCm: null, recAbajoCm: null, recLadosCm: null, separacionFilasCm: null, maximoFilas: 3, cara: null,
@@ -98,9 +100,15 @@
       const cRows = isCim ? o.inferior : o.superior, fRows = isCim ? o.superior : o.inferior;
       const capaC = isCim ? 'abajo' : 'arriba', capaF = isCim ? 'arriba' : 'abajo';
       const barras = [], traslapos = [];
+      const cm0 = o.cambios || {}, gch = cm0.ganchos || {};
+      const grados = (tipo) => ({ De90: '90°', De135: '135°', De180: '180°' })[tipo] || '';
+      // corridas (#84): el gancho de cada punta del borde; sin "Sin" (vuelve a 90°) y, en la demostración, con el mismo largo
+      const tipoCorrida = (clave) => (gch[clave] && gch[clave] !== 'Sin' ? grados(gch[clave]) : '90°');
       const capa = (lista, pre, rows, nombre) => {
         lista.forEach((b, i) => barras.push({ id: pre + (i + 1), capa: nombre, desde: b.a, hasta: b.b, ganchoInicio: !!b.hs, ganchoFin: !!b.he,
-          largo: b.len, recta: b.recta, manual: false, llegaAlVoladizo: !!b.vol, cantidad: qtyOf(rows), kg: b.len * kgRow(rows) }));
+          largo: b.len, recta: b.recta, manual: false, llegaAlVoladizo: !!b.vol, cantidad: qtyOf(rows), kg: b.len * kgRow(rows),
+          ganchoInicioTipo: b.hs ? tipoCorrida(pre + '.inicio') : '', ganchoFinTipo: b.he ? tipoCorrida(pre + '.fin') : '',
+          puntaInicioEnBorde: !!b.hs, puntaFinEnBorde: !!b.he }));
         for (let i = 0; i + 1 < lista.length; i++) {
           traslapos.push({ id: pre + (i + 1) + '–' + pre + (i + 2), barraIzquierda: pre + (i + 1), barraDerecha: pre + (i + 2), capa: nombre,
             desde: lista[i + 1].a, hasta: lista[i].b, minimo: num(regla(rows[0].diametro).t, 0), diametro: '#' + rows[0].diametro, manual: false });
@@ -108,6 +116,31 @@
       };
       capa(G.c, pc, cRows, capaC);
       capa(G.f[side], pf, fRows, capaF);
+      // cambios manuales (#84), con las cuentas de la maqueta: Subir / Bajar fija el largo; un traslapo escrito crece
+      // al múltiplo y alarga la barra de la derecha
+      const cm = o.cambios || {};
+      Object.keys(cm.barras || {}).forEach((id) => {
+        const b = barras.find((x) => x.id === id);
+        if (b) Object.assign(b, { largo: cm.barras[id] / 1000, manual: true, kg: b.kg / b.largo * (cm.barras[id] / 1000) });
+      });
+      Object.keys(cm.traslapos || {}).forEach((id) => {
+        const t = traslapos.find((x) => x.id === id), M = num(reglas.multiplo, 0.5);
+        if (!t) return;
+        const inc = Math.max(0, Math.ceil((cm.traslapos[id] / 1000 - (t.hasta - t.desde)) / M - 1e-9) * M);
+        const b = barras.find((x) => x.id === t.barraDerecha);
+        Object.assign(t, { desde: t.desde - inc, manual: true });
+        Object.assign(b, { desde: b.desde - inc, kg: b.kg / b.largo * (b.largo + inc), largo: b.largo + inc });
+      });
+      // traslapos arrastrados: se corren enteros; crece la barra de su izquierda y se acorta la de su derecha
+      Object.keys(cm.movidos || {}).forEach((id) => {
+        const t = traslapos.find((x) => x.id === id);
+        if (!t) return;
+        const d = cm.movidos[id].desde / 1000 - t.desde;
+        const izq = barras.find((x) => x.id === t.barraIzquierda), der = barras.find((x) => x.id === t.barraDerecha);
+        Object.assign(t, { desde: t.desde + d, hasta: t.hasta + d, manual: true });
+        Object.assign(izq, { hasta: izq.hasta + d, kg: izq.kg / izq.largo * (izq.largo + d), largo: izq.largo + d, manual: true });
+        Object.assign(der, { desde: der.desde + d, kg: der.kg / der.largo * (der.largo - d), largo: der.largo - d, manual: true });
+      });
 
       // bastones: arriba en todos los apoyos y abajo en el centro de cada luz; se cortan en la punta del pórtico
       const ob = o.bastones;
@@ -121,13 +154,27 @@
         .concat(G.centros.map(([x, t], i) => ({ id: bBot + (i + 1), eje: x, donde: 'Centro de la luz ' + t })))
         .map((b) => {
           const L = (ob.largos && ob.largos[b.id] != null ? ob.largos[b.id] : ob.largo) / 1000, st = acero(b.id.slice(0, 2));
-          const a = Math.max(a0, b.eje - L / 2), z = Math.min(z0, b.eje + L / 2);
-          const cutA = a > b.eje - L / 2, cutZ = z < b.eje + L / 2;
-          const g = num(regla(st.diametro).g, 0);
-          const hs = ob.conGancho && cutA, he = ob.conGancho && cutZ;
-          const len = z - a + (hs ? g : 0) + (he ? g : 0);
-          return { id: b.id, eje: b.eje, desde: a, hasta: z, ganchoInicio: hs, ganchoFin: he, largo: len, donde: b.donde,
-            cantidad: st.cantidad + ' #' + st.diametro, kg: len * st.cantidad * kgOf(st.diametro), cortado: cutA || cutZ, n: st.cantidad };
+          // arrastrado (#84): sus puntas; si no, centrado en su eje
+          const pu = ob.puntas && ob.puntas[b.id];
+          let a = pu ? Math.max(a0, pu.desde / 1000) : Math.max(a0, b.eje - L / 2);
+          let z = pu ? Math.min(z0, pu.hasta / 1000) : Math.min(z0, b.eje + L / 2);
+          const cutA = pu ? a <= a0 + 1e-9 : a > b.eje - L / 2, cutZ = pu ? z >= z0 - 1e-9 : z < b.eje + L / 2;
+          // gancho por punta (#84): el elegido con los botones o el general del paso 2; con uno elegido, el total sube al
+          // múltiplo y el sobrante va a la otra punta (como CalculadorBastones en C#)
+          const punta = (clave, borde) => (!borde ? 'Sin' : gch[clave] || (ob.conGancho ? 'De90' : 'Sin'));
+          const ti = punta(b.id + '.inicio', cutA), tf = punta(b.id + '.fin', cutZ);
+          const largoGancho = (tipo) => (tipo === 'De90' ? num(regla(st.diametro).g, 0) : tipo === 'De135' ? num(regla(st.diametro).e, 0) : tipo === 'De180' ? G180[st.diametro] || 0 : 0);
+          const gA = largoGancho(ti), gZ = largoGancho(tf);
+          let len = z - a + gA + gZ;
+          const elegido = (cutA && gch[b.id + '.inicio'] && gch[b.id + '.inicio'] !== 'Sin') || (cutZ && gch[b.id + '.fin'] && gch[b.id + '.fin'] !== 'Sin');
+          if (elegido) {
+            const M = num(reglas.multiplo, 0.5), sobra = Math.ceil(len / M - 1e-9) * M - len;
+            if (cutA && !cutZ) z = Math.min(z0, z + sobra); else if (cutZ && !cutA) a = Math.max(a0, a - sobra);
+            len = z - a + gA + gZ;
+          }
+          return { id: b.id, eje: b.eje, desde: a, hasta: z, ganchoInicio: gA > 0, ganchoFin: gZ > 0, largo: len, donde: b.donde,
+            cantidad: st.cantidad + ' #' + st.diametro, kg: len * st.cantidad * kgOf(st.diametro), cortado: cutA || cutZ, n: st.cantidad,
+            ganchoInicioTipo: grados(ti), ganchoFinTipo: grados(tf), puntaInicioEnBorde: cutA, puntaFinEnBorde: cutZ };
         }).filter((b) => b.n > 0);
 
       // sección y reparto en filas (#88)
@@ -135,29 +182,40 @@
       const dE = DIAM[o.estribos.diametro];
       const gap = num(reglas.distanciaLibreCm, 2.5);
       const maxCapas = o.maximoFilas;
+      // los diámetros de cada fila, como RepartidorFilas en C#: primero los tipos con fila fija (#84), en su fila; los
+      // Auto llenan lo libre desde la fila 1
+      const enFilas = (rows, per) => {
+        const filas = [], at = (i) => { while (filas.length <= i) filas.push([]); return filas[i]; };
+        rows.filter((r) => r.fila >= 1).forEach((r) => { for (let i = 0; i < r.cantidad; i++) at(r.fila - 1).push(r.diametro); });
+        let f = 0;
+        rows.filter((r) => !(r.fila >= 1)).forEach((r) => {
+          for (let i = 0; i < r.cantidad; i++) { while (at(f).length >= per) f++; at(f).push(r.diametro); }
+        });
+        return filas;
+      };
       const cara = (rows) => {
         const total = rows.reduce((a, r) => a + r.cantidad, 0);
         const dmax = Math.max(...rows.map((r) => DIAM[r.diametro]));
         const per = Math.max(0, Math.floor((30 - 2 * recSide - 2 * dE + gap) / (dmax + gap)));
-        const filas = per ? Math.ceil(total / per) : 99;
-        const porFila = [];
-        let left = total;
-        while (left > 0 && per && porFila.length < maxCapas) { porFila.push(Math.min(per, left)); left -= Math.min(per, left); }
-        const error = total < 2 ? 'MenosDeDosBarras' : (filas > maxCapas ? 'NoCaben' : 'Ninguno');
-        return { cabenPorFila: per, porFila: error === 'Ninguno' ? porFila : [], error, maximo: per * maxCapas, dmax };
+        const lista = per ? enFilas(rows, per) : [];
+        const fijas = rows.some((r) => r.fila != null);
+        const error = total < 2 ? 'MenosDeDosBarras'
+          : !per || lista.length > maxCapas || lista.some((x) => x.length > per) || rows.some((r) => r.fila != null && r.fila < 1) ? 'NoCaben'
+          : fijas && lista[0].length < 2 ? 'MenosDeDosBarras' : 'Ninguno';
+        const filas = lista.filter((x) => x.length);
+        return { cabenPorFila: per, porFila: error === 'Ninguno' ? filas.map((x) => x.length) : [], error, maximo: per * maxCapas, dmax, filas };
       };
       const sup = cara(o.superior), inf = cara(o.inferior);
       const barrasSec = [];
       const place = (rows, info, fromTop) => {
-        const list = [];
-        rows.forEach((r) => { for (let i = 0; i < r.cantidad; i++) list.push(r.diametro); });
+        const enFila = info.filas, list = [].concat(...enFila);
         const per = Math.max(1, info.cabenPorFila);
         const sepV = o.separacionFilasCm ?? 0;
         const recV = fromTop ? recUp : recDown;
         let idx = 0, fila = 0;
         const salen = [];
-        while (idx < list.length && fila < 4) {
-          const n = Math.min(per, list.length - idx);
+        while (fila < enFila.length && fila < 4) {
+          const n = enFila[fila].length;
           const d = DIAM[list[idx]];
           const yc = recV + dE + d / 2 + fila * (info.dmax + sepV);
           const xL = recSide + dE + d / 2, xR = 30 - xL;
@@ -165,7 +223,7 @@
           for (let i = 0; i < per; i++) slotsAll.push(per === 1 ? 15 : xL + i * (xR - xL) / (per - 1));
           let order;
           if (fila === 0) order = n === per ? slotsAll : Array.from({ length: n }, (_, i) => (n === 1 ? 15 : xL + i * (xR - xL) / (n - 1)));
-          else { order = []; let a = 0, z = per - 1; while (order.length < n) { order.push(slotsAll[a++]); if (order.length < n) order.push(slotsAll[z--]); } }
+          else { order = []; let a = 0, z = per - 1; while (order.length < n && a <= z) { order.push(slotsAll[a++]); if (order.length < n && a <= z) order.push(slotsAll[z--]); } }
           order.forEach((xc, j) => salen.push({ fila, x: xc, y: fromTop ? yc : 50 - yc, d: DIAM[list[idx + j]] }));
           idx += n; fila++;
         }
@@ -262,6 +320,113 @@
       };
     }
     const msgVista = () => ({ tipo: 'vista', vista: vista() });
+
+    // La vista previa de la edición (#84) con las cuentas de la maqueta; en Revit la arma EditorTablero en C#.
+    function previa(m) {
+      const P = armar(m.id, m.opciones), M = num(reglas.multiplo, 0.5), varilla = reglas.varilla12 ? 12 : 6;
+      const pe = m.pedido, id = pe.elemento, v = pe.valor;
+      const op = (accion, valor, sePuede, texto) => ({ accion, valor, sePuede, texto });
+      let opciones = [];
+      if (pe.accion === 'Barra') {
+        const b = P.barras.find((x) => x.id === id);
+        opciones = !b ? [] : [
+          b.largo + M > varilla ? op('subir', b.largo + M, false, 'No sale de una varilla de ' + varilla + ' m.') : op('subir', b.largo + M, true, id + ' pasa a ' + f2(b.largo + M) + ' m.'),
+          op('bajar', b.largo - M, false, 'Bajarla dejaría un traslapo por debajo del mínimo.'),
+        ];
+      } else if (pe.accion === 'Traslapo') {
+        const t = P.traslapos.find((x) => x.id === id);
+        if (t) {
+          const cur = t.hasta - t.desde, der = P.barras.find((x) => x.id === t.barraDerecha);
+          const inc = v == null ? 0 : Math.max(0, Math.ceil((v - cur) / M - 1e-9) * M);
+          opciones = [v == null ? op('aplicar', 0, false, 'Escribe un largo en metros.')
+            : v < t.minimo - 1e-9 ? op('aplicar', v, false, 'No puede ser menor que el mínimo (' + f2(t.minimo) + ' m).')
+            : inc === 0 ? op('aplicar', v, false, 'Escribe un largo mayor que el actual (' + f2(cur) + ' m).')
+            : der.largo + inc > varilla + 1e-9 ? op('aplicar', v, false, t.barraDerecha + ' pasaría a ' + f2(der.largo + inc) + ' m y no sale de una varilla de ' + varilla + ' m.')
+            : op('aplicar', v, true, t.barraDerecha + ' pasa a ' + f2(der.largo + inc) + ' m (múltiplo de ' + f2(M) + ') y el traslapo queda en ' + f2(cur + inc) + ' m.')];
+        }
+      } else if (pe.accion === 'Baston') {
+        const b = P.bastones.find((x) => x.id === id);
+        if (b) {
+          opciones = [v == null ? op('aplicar', 0, false, 'Escribe un largo en metros.')
+            : v <= 0 ? op('aplicar', v, false, 'El largo debe ser mayor que 0.')
+            : op('aplicar', v, true, b.cortado ? 'Llega al borde de la viga y se corta en la punta. No se redondea.' : 'Queda ' + f2(v / 2) + ' m a cada lado de su eje. No se redondea.')];
+        }
+      }
+      const saltos = pe.accion === 'Arrastre' ? saltosDe(P, m.opciones, id, pe.punto, M, varilla) : [];
+      return { tipo: 'previa', previa: { n: pe.n, elemento: id, opciones, saltos } };
+    }
+
+    // Los saltos del arrastre (#84) con módulo fijo; en Revit los arma EditorArrastre en C#. Un traslapo se queda en su
+    // luz, a 5 cm de las caras, o pasa al voladizo que toca su luz (pide confirmar); ninguna barra pasa de la varilla.
+    function saltosDe(P, o, id, punto, M, varilla) {
+      const r3 = (x) => Math.round(x * 1000) / 1000;
+      const rotulo = (cant, recto, total) => cant.split(' + ').map((c) => c.replace(' ', '')).join('+') + 'L= ' + f2(recto)
+        + (Math.abs(total - recto) > 1e-6 ? '/' + f2(total) : '');
+      const salto = (x, recto, total, cant, enVoladizo, cambios) => ({ x: r3(x), recto: r3(recto), total: r3(total), rotulo: rotulo(cant, recto, total), enVoladizo, cambios });
+      const b = P.barras.find((x) => x.id === id);
+      if (b) {
+        const laps = P.traslapos.filter((t) => t.capa === b.capa);
+        const izq = laps.find((t) => t.barraDerecha === id), der = laps.find((t) => t.barraIzquierda === id);
+        const mueve = punto === 'Izquierda' ? [izq] : punto === 'Derecha' ? [der] : izq && der ? [izq, der] : [];
+        if (!mueve.length || !mueve[0]) return [];
+        const luces = G.luces.filter((l) => !l[3]), vol = G.luces.find((l) => l[3]);
+        // la luz donde está un traslapo (índice), 'V' en el voladizo o −1 en ninguna
+        const zona = (lo, hi) => {
+          const i = luces.findIndex((l) => lo >= l[1] + 0.05 - 1e-9 && hi <= l[2] - 0.05 + 1e-9);
+          return i >= 0 ? i : vol && lo >= vol[1] + 0.05 - 1e-9 && hi < vol[2] - 1e-9 ? 'V' : -1;
+        };
+        const casa = (t) => { const z = zona(t.desde, t.hasta); return z === 'V' ? luces.length - 1 : z; };
+        const crece = P.barras.find((x) => x.id === mueve[0].barraIzquierda), acorta = P.barras.find((x) => x.id === mueve[mueve.length - 1].barraDerecha);
+        const ganchos = b.largo - (b.hasta - b.desde), out = [];
+        for (let k = -30; k <= 30; k++) {
+          const d = k * M;
+          if (crece.largo + d > varilla + 1e-9 || acorta.largo - d > varilla + 1e-9) continue;
+          const zonas = mueve.map((t) => zona(t.desde + d, t.hasta + d));
+          if (zonas.some((z, j) => z !== casa(mueve[j]) && !(z === 'V' && casa(mueve[j]) === luces.length - 1))) continue;
+          const enVol = zonas.includes('V'), pregunta = mueve.some((t, j) => zonas[j] === 'V' && zona(t.desde, t.hasta) !== 'V');
+          const desde = b.desde + (punto === 'Derecha' ? 0 : d), hasta = b.hasta + (punto === 'Izquierda' ? 0 : d);
+          const x = punto === 'Izquierda' ? desde : punto === 'Derecha' ? hasta : (desde + hasta) / 2;
+          const cambios = k === 0 ? [] : mueve.map((t) => ({ tipo: 'movido', id: t.id, desde: Math.round((t.desde + d) * 1000), hasta: 0, enVoladizo: enVol }));
+          out.push(salto(x, hasta - desde, hasta - desde + ganchos, b.cantidad, pregunta, cambios));
+        }
+        return out;
+      }
+      const bs = P.bastones.find((x) => x.id === id);
+      if (!bs) return [];
+      const a0 = G.inicio + 0.05, z0 = G.fin - 0.05, d = parseInt(bs.cantidad.split('#')[1], 10);
+      const gch = (o.cambios && o.cambios.ganchos) || {};
+      // gancho en una punta pegada al borde (en la demostración, siempre con el largo del de 90°)
+      const gancho = (punta, enBorde) => (enBorde && ((gch[id + '.' + punta] && gch[id + '.' + punta] !== 'Sin') || (!gch[id + '.' + punta] && o.bastones.conGancho)) ? num(regla(d).g, 0) : 0);
+      const total = (a, z) => z - a + gancho('inicio', a <= a0 + 1e-9) + gancho('fin', z >= z0 - 1e-9);
+      const en = (a, z, x) => salto(x, z - a, total(a, z), bs.cantidad, false,
+        Math.abs(a - bs.desde) < 1e-9 && Math.abs(z - bs.hasta) < 1e-9 ? [] : [{ tipo: 'puntas', id, desde: Math.round(a * 1000), hasta: Math.round(z * 1000), enVoladizo: false }]);
+      if (punto === 'Centro') {
+        const out = [];
+        for (let c = Math.ceil((a0 - bs.desde) / 0.05 - 1e-9); bs.hasta + c * 0.05 <= z0 + 1e-9; c++) {
+          const a = bs.desde + c * 0.05, z = bs.hasta + c * 0.05;
+          out.push(en(a, z, (a + z) / 2));
+        }
+        return out;
+      }
+      const izqP = punto === 'Izquierda', fija = izqP ? bs.hasta : bs.desde;
+      const gFija = izqP ? gancho('fin', bs.hasta >= z0 - 1e-9) : gancho('inicio', bs.desde <= a0 + 1e-9);
+      const puntas = [[bs.desde, bs.hasta]];
+      for (let t = M; ; t += M) {
+        const recto = t - gFija;
+        if (recto < M - 1e-9) continue;
+        const suelta = izqP ? fija - recto : fija + recto;
+        if (izqP ? suelta <= a0 + 0.05 + 1e-9 : suelta >= z0 - 0.05 - 1e-9) {
+          // imán: se pega al borde, el total sube al módulo y el sobrante va a la otra punta
+          let a = izqP ? a0 : bs.desde, z = izqP ? bs.hasta : z0;
+          const sobra = Math.ceil(total(a, z) / M - 1e-9) * M - total(a, z);
+          if (izqP) z = Math.min(z0, z + sobra); else a = Math.max(a0, a - sobra);
+          puntas.push([a, z]);
+          break;
+        }
+        puntas.push(izqP ? [suelta, fija] : [fija, suelta]);
+      }
+      return puntas.sort((p, q) => (izqP ? p[0] - q[0] : p[1] - q[1])).map(([a, z]) => en(a, z, izqP ? a : z));
+    }
     const aviso = (texto) => ({ tipo: 'aviso', texto });
     const nombre = (id) => (PORS.find((p) => p.id === id) || { nombre: '' }).nombre;
 
@@ -274,6 +439,7 @@
           if (elegidos && !elegidos.includes(m.id)) elegidos = null;
           return [msgVista()];
         case 'calcular': opciones[m.id] = m.opciones; actual = m.id; return [msgVista()];
+        case 'previsualizar': return [previa(m)];
         case 'cambiarEnVivo': enVivo = m.activo; return [msgVista()];
         case 'verTodos': elegidos = null; return [msgVista()];
         case 'guardarReglas':

@@ -22,6 +22,8 @@
     est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20' }, estMarc: null, tramosSel: [],
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
+    // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
+    cambios: { barras: {}, traslapos: {}, movidos: {}, ganchos: {} }, bastPuntas: {},
   };
   // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
   const ANCHO_CORTE = 260;
@@ -32,7 +34,8 @@
   function opcionesDe(s) {
     const n = (x) => { const v = num(x, NaN); if (!Number.isFinite(v)) throw new Error(x); return v; };
     const opcional = (x) => (String(x).trim() === '' ? null : n(x));
-    const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d) }));
+    // la fila a mano de cada tipo (#84): '' = Auto
+    const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
     const estribos = (e) => ({ diametro: diametro(e.estD), gancho: e.estG === '135°' ? 'De135' : 'De90',
       largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
@@ -46,11 +49,11 @@
         separacionFilasCm: s.sepMode === 'pegada' ? null : n(s.sepCm), maximoFilas: Math.max(1, Math.round(n(s.maxCapas))),
         cara: s.side ? (s.side === 'izq' ? 'Inicio' : 'Final') : null,
         bastones: { superior: baston(s.bastSupN, s.bastSupD, s.sup), inferior: baston(s.bastInfN, s.bastInfD, s.inf),
-          largo: mm(n(s.bastDef)), conGancho: s.bastHook, largos },
+          largo: mm(n(s.bastDef)), conGancho: s.bastHook, largos, puntas: s.bastPuntas },
         estribos: estribos(s.est),
         tramosMarcados: s.tramosSel.slice(),
         estribosMarcados: s.tramosSel.length && s.estMarc ? estribos(s.estMarc) : null,
-        cambios: null,
+        cambios: { barras: s.cambios.barras, traslapos: s.cambios.traslapos, ganchos: s.cambios.ganchos, movidos: s.cambios.movidos },
         corte: { x: String(s.cutX).trim() === '' ? null : mm(n(s.cutX)), profundidad: mm(n(s.depth)),
           mirando: s.mira === 'izquierda' ? 'Izquierda' : 'Derecha' },
       };
@@ -58,6 +61,20 @@
       return null;
     }
   }
+
+  // El texto de la confirmación del voladizo (#84): dónde quedaría cada traslapo corrido y en qué voladizo.
+  const confirmVolTexto = (salto, P) => {
+    if (!salto || !P) return '';
+    const ap = P.apoyos;
+    const partes = salto.cambios.filter((c) => c.tipo === 'movido').map((c) => {
+      const t = P.traslapos.find((x) => x.id === c.id), desde = c.desde / 1000;
+      return { id: c.id, desde, hasta: desde + (t ? t.hasta - t.desde : 0) };
+    });
+    if (!partes.length) return '';
+    const eje = partes[0].desde > ap[ap.length - 1].x ? ap[ap.length - 1].eje : ap[0].eje;
+    return 'El traslapo ' + partes.map((x) => x.id + ' quedaría de ' + f2(x.desde) + ' a ' + f2(x.hasta) + ' m').join(' y ')
+      + ', dentro del voladizo ' + eje + '. El add-in nunca lo pone ahí: solo queda si lo confirmas.';
+  };
 
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
@@ -133,6 +150,71 @@
       return { pageW: W + 'px', pageH: H + 'px', dibujoW: 788 + W - 1440, dibujoH: 300 + H - 900 };
     }
 
+    // Lo elegido en el alzado o la lista; sin elegir, el traslapo del aviso largo o S1.
+    seleccion() {
+      const s = this.state, P = this.props.vista && this.props.vista.actual;
+      if (s.sel) return s.sel;
+      const largos = P ? P.avisos.filter((a) => a.tipo === 'TraslapoLargo') : [];
+      const avisoLargo = largos.find((a) => a.cambiarCara) || largos[0] || null;
+      return avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : { k: 'bar', id: 'S1' };
+    }
+
+    // Pide a C# la vista previa de lo elegido (#84): Subir / Bajar, o el largo escrito del traslapo o del bastón. La
+    // respuesta llega a previa(); las que traen otro número son viejas y se descartan.
+    pedirPrevia() {
+      const v = this.props.vista, opciones = opcionesDe(this.state);
+      if (!v || !v.actual || !opciones) return;
+      const sel = this.seleccion();
+      const valor = num(this.state.draft, NaN);
+      const accion = sel.k === 'lap' ? 'Traslapo' : sel.k === 'bast' ? 'Baston' : 'Barra';
+      this.n = this.siguiente();
+      this.props.enviar({ tipo: 'previsualizar', id: v.actual.id, opciones,
+        pedido: { n: this.n, elemento: sel.id, accion, valor: accion === 'Barra' || !Number.isFinite(valor) ? null : valor } });
+    }
+
+    // Pide a C# los saltos de los 3 puntos de la barra o el bastón elegido (#84, tarea 7). Van con su propio número,
+    // así no pisan la vista previa del panel.
+    pedirSaltos() {
+      const v = this.props.vista, opciones = opcionesDe(this.state), sel = this.seleccion();
+      this.saltosPedidos = {};
+      if (!v || !v.actual || !opciones || sel.k === 'lap') return;
+      ['Izquierda', 'Centro', 'Derecha'].forEach((punto) => {
+        const n = this.siguiente();
+        this.saltosPedidos[n] = punto;
+        this.props.enviar({ tipo: 'previsualizar', id: v.actual.id, opciones, pedido: { n, elemento: sel.id, accion: 'Arrastre', punto } });
+      });
+    }
+
+    siguiente() {
+      this.pedidos = (this.pedidos || 0) + 1;
+      return this.pedidos;
+    }
+
+    previa(p) {
+      if (!p) return;
+      if (p.n === this.n) this.setState({ previa: p });
+      const punto = this.saltosPedidos && this.saltosPedidos[p.n];
+      if (punto) {
+        this.setState((st) => ({ saltos: { ...(st.saltos && st.saltos.elemento === p.elemento ? st.saltos : { elemento: p.elemento }), [punto]: p.saltos } }));
+      }
+    }
+
+    // Al soltar un punto en un salto: los traslapos corridos van a cambios.movidos y las puntas del bastón a bastPuntas,
+    // en mm, como los manda C#.
+    aplicarSalto(salto) {
+      const s = this.state, movidos = { ...s.cambios.movidos }, puntas = { ...s.bastPuntas }, ganchos = { ...s.cambios.ganchos };
+      const P = this.props.vista && this.props.vista.actual;
+      salto.cambios.forEach((c) => {
+        if (c.tipo === 'movido') { movidos[c.id] = { desde: c.desde, enVoladizo: c.enVoladizo }; return; }
+        // la punta que se movió pierde el gancho elegido: puede haber dejado el borde
+        const b = P && P.bastones.find((x) => x.id === c.id);
+        if (!b || mm(b.desde) !== c.desde) delete ganchos[c.id + '.inicio'];
+        if (!b || mm(b.hasta) !== c.hasta) delete ganchos[c.id + '.fin'];
+        puntas[c.id] = { desde: c.desde, hasta: c.hasta };
+      });
+      this.cambiar({ cambios: { ...s.cambios, movidos, ganchos }, bastPuntas: puntas, confirmVol: null });
+    }
+
     say(t) {
       this.setState({ toast: t });
       clearTimeout(this._t);
@@ -145,7 +227,23 @@
       this.say(texto);
     }
 
-    componentDidUpdate(prev) {
+    componentDidUpdate(prev, prevState) {
+      // la vista previa se vuelve a pedir al elegir otra cosa, al escribir un largo (150 ms) o al llegar otra vista
+      const s = this.state;
+      if (this.llenarLargo && prev.vista !== this.props.vista) {
+        this.llenarLargo = false;
+        const sel = this.seleccion(), P = this.props.vista && this.props.vista.actual;
+        const L = sel.k === 'lap' && P ? P.traslapos.find((x) => x.id === sel.id) : null;
+        if (L) this.setState({ draft: f2(L.hasta - L.desde) });
+      }
+      if (prev.vista !== this.props.vista || prevState.sel !== s.sel || prevState.draft !== s.draft) {
+        clearTimeout(this._previa);
+        this._previa = setTimeout(() => this.pedirPrevia(), prevState.draft !== s.draft ? 150 : 0);
+      }
+      if (prev.vista !== this.props.vista || prevState.sel !== s.sel) {
+        clearTimeout(this._saltos);
+        this._saltos = setTimeout(() => this.pedirSaltos(), 0);
+      }
       const antes = prev.vista && prev.vista.actual ? prev.vista.actual.id : null;
       const ahora = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
       // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas.
@@ -207,7 +305,7 @@
       const largos = P ? P.avisos.filter((a) => a.tipo === 'TraslapoLargo') : [];
       const avisoLargo = largos.find((a) => a.cambiarCara) || largos[0] || null;
       const avisoOtro = P ? P.avisos.find((a) => a.tipo !== 'TraslapoLargo') : null;
-      const selEl = s.sel || (avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : { k: 'bar', id: 'S1' });
+      const selEl = this.seleccion();
       const tipo = P ? P.tipo : 'Aérea';
       const isCim = tipo === 'Cimentación';
       const side = P ? P.caraUsada : 'izq';
@@ -217,7 +315,6 @@
       const R = vista.reglas;
       const rulesData = s.rules || R.porDiametro;
       const mult = s.mult ?? R.multiplo, gap = s.gap ?? R.distanciaLibreCm, bar12 = s.bar12 ?? R.varilla12;
-      const maxBar = bar12 ? 12 : 6;
       const M = num(mult, 0.5);
 
       // capas (#88): el reparto en filas sale del motor
@@ -249,8 +346,11 @@
         return { total, per, filas, msg, col, filasVis };
       };
       const supI = layerInfo(s.sup, P && P.superior), infI = layerInfo(s.inf, P && P.inferior);
+      // Fila: Auto · 1 … el máximo de filas del paso 1 (decisión 11 del plan de #84)
+      const filasOpc = Array.from({ length: Math.max(1, Math.round(num(s.maxCapas, 3))) }, (_, i) => String(i + 1));
       const mkRows = (key, rows, label) => rows.map((r, i) => ({
-        n: r.n, d: r.d, canRemove: rows.length > 1,
+        n: r.n, d: r.d, f: r.f || '', filasOpc, canRemove: rows.length > 1, filaLabel: 'Fila de las ' + r.n + ' ' + r.d + ' ' + label,
+        setF: (e) => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, f: e.target.value } : x)) }),
         minusLabel: 'Quitar barra ' + label, plusLabel: 'Añadir barra ' + label, selLabel: 'Diámetro ' + label, removeLabel: 'Quitar este diámetro',
         minus: () => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, n: Math.max(1, x.n - 1) } : x)) }),
         plus: () => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, n: Math.min(20, x.n + 1) } : x)) }),
@@ -287,51 +387,76 @@
       const SL = lapsAll.find((l) => l.id === selEl.id) || null;
       const SBa = BAST.find((b) => b.id === selEl.id) || null;
 
+      // vista previa de C# (#84) para lo elegido; mientras no llega, los botones quedan desactivados
+      const PV = s.previa && s.previa.elemento === selEl.id ? s.previa : null;
+      const opcion = (accion) => (PV ? PV.opciones.find((o) => o.accion === accion) : null);
+      const conCambio = (clave, id, valor) => {
+        const c = { ...s.cambios, [clave]: { ...s.cambios[clave] } };
+        if (valor == null) delete c[clave][id]; else c[clave][id] = valor;
+        return c;
+      };
+
       let sb = { id: '', where: '', qty: '', len: '', tag: '', tagCol: '#1E7A46', downVal: '', upVal: '', downOff: true, downWhy: '', downCol: '#9AA3AD',
         upOff: true, upWhy: '', upCol: '#9AA3AD', notManual: true, resetCol: '#9AA3AD', note: '', down: () => {}, up: () => {}, reset: () => {} };
       if (SB) {
         const sbLen = SB.largo;
-        const upVal = sbLen + M, downVal = sbLen - M;
+        const subir = opcion('subir'), bajar = opcion('bajar');
+        const aplicar = (o) => () => {
+          if (!o || !o.sePuede) return;
+          this.cambiar({ cambios: conCambio('barras', SB.id, mm(o.valor)) });
+          this.say(o.texto);
+        };
         sb = {
           id: SB.id, where: SB.capa === 'arriba' ? 'Arriba' : 'Abajo', qty: SB.cantidad, len: f2(sbLen),
           tag: SB.manual ? 'Manual' : 'Automático', tagCol: SB.manual ? '#9A5B00' : '#1E7A46',
-          downVal: f2(downVal), upVal: f2(upVal),
-          downOff: true, downWhy: 'El traslapo quedaría por debajo del mínimo', downCol: '#9AA3AD',
-          upOff: upVal > maxBar, upWhy: upVal > maxBar ? 'No sale de una varilla de ' + maxBar + ' m' : 'El traslapo vecino crece ' + f2(M), upCol: upVal > maxBar ? '#9AA3AD' : '#16191D',
+          downVal: f2(bajar ? bajar.valor : sbLen - M), upVal: f2(subir ? subir.valor : sbLen + M),
+          downOff: !(bajar && bajar.sePuede), downWhy: bajar ? bajar.texto : '', downCol: bajar && bajar.sePuede ? '#16191D' : '#9AA3AD',
+          upOff: !(subir && subir.sePuede), upWhy: subir ? subir.texto : '', upCol: subir && subir.sePuede ? '#16191D' : '#9AA3AD',
           notManual: !SB.manual, resetCol: SB.manual ? '#1F5FAF' : '#9AA3AD',
-          note: SB.llegaAlVoladizo ? 'Esta barra entra al voladizo de corrido: en el voladizo nunca se traslapa.' : ('Bajarla dejaría un traslapo por debajo del mínimo. ' + (upVal > maxBar ? 'Subirla no sale de una varilla de ' + maxBar + ' m.' : 'Subirla alarga su traslapo ' + f2(M) + ' m.')),
-          down: () => this.say(LLEGA(84)), up: () => this.say(LLEGA(84)), reset: () => this.say(LLEGA(84)),
+          note: (SB.llegaAlVoladizo ? 'Esta barra entra al voladizo de corrido: en el voladizo nunca se traslapa. ' : '')
+            + (bajar ? (bajar.sePuede ? 'Bajar: ' : '') + bajar.texto + ' ' : '') + (subir ? 'Subir: ' + subir.texto : ''),
+          down: aplicar(bajar), up: aplicar(subir),
+          reset: () => this.cambiar({ cambios: conCambio('barras', SB.id, null) }),
         };
       }
 
       let sl = { id: '', min: '', diam: '', cur: '', eff: '', effCol: '#5E6670', off: true, applyBg: '#9AA3AD', notManual: true, resetCol: '#9AA3AD', apply: () => {}, reset: () => {} };
       if (SL) {
-        const min = SL.minimo;
-        const cur = lapLen(SL);
-        const v = num(s.draft, NaN);
-        let eff = 'Escribe un largo en metros.', ok = false;
-        if (Number.isFinite(v)) {
-          if (v < min - 1e-9) eff = 'No puede ser menor que el mínimo (' + f2(min) + ' m).';
-          else {
-            let inc = Math.ceil((v - cur) / M - 1e-9) * M; if (inc < 0) inc = 0;
-            const fin = cur + inc;
-            const nbLen = (bars.find((b) => b.id === SL.barraDerecha) || { largo: 0 }).largo + inc;
-            if (nbLen > maxBar + 1e-9) eff = SL.barraDerecha + ' pasaría a ' + f2(nbLen) + ' m y no sale de una varilla de ' + maxBar + ' m.';
-            else { ok = Math.abs(fin - cur) > 1e-9; eff = SL.barraDerecha + ' pasa a ' + f2(nbLen) + ' m (múltiplo de ' + f2(M) + ') y el traslapo queda en ' + f2(fin) + ' m.'; }
-          }
-        }
-        sl = { id: SL.id, min: f2(min), diam: SL.diametro, cur: f2(cur), eff, effCol: ok ? '#1E5C38' : (eff.indexOf('No ') === 0 || eff.indexOf('pasaría') > 0 ? '#B42318' : '#5E6670'),
+        const o = opcion('aplicar');
+        const ok = !!o && o.sePuede;
+        // en rojo solo si lo escrito es otro largo y no se puede; con el largo actual es solo la indicación
+        const otro = Math.abs(num(s.draft, lapLen(SL)) - lapLen(SL)) > 1e-9;
+        sl = { id: SL.id, min: f2(SL.minimo), diam: SL.diametro, cur: f2(lapLen(SL)),
+          eff: o ? o.texto : 'Escribe un largo en metros.', effCol: ok ? '#1E5C38' : (o && otro ? '#B42318' : '#5E6670'),
           off: !ok, applyBg: ok ? '#1F5FAF' : '#9AA3AD', notManual: !SL.manual, resetCol: SL.manual ? '#1F5FAF' : '#9AA3AD',
-          apply: () => this.say(LLEGA(84)), reset: () => this.say(LLEGA(84)) };
+          apply: () => {
+            if (!ok) return;
+            this.cambiar({ cambios: conCambio('traslapos', SL.id, mm(o.valor)) });
+            this.say('Traslapo ' + SL.id + ': ' + o.texto);
+          },
+          // el largo automático llega con la vista siguiente; ahí se pone en el campo
+          reset: () => { this.llenarLargo = true; this.cambiar({ cambios: conCambio('traslapos', SL.id, null) }); } };
       }
       let stv = { id: '', where: '', note: '', apply: () => {}, reset: () => {} };
       if (SBa) {
-        const L = num(s.draft, SBa.hasta - SBa.desde);
+        const o = opcion('aplicar');
         stv = { id: SBa.id, where: SBa.donde + ' · ahora ' + f2(SBa.largo) + ' m',
-          note: SBa.cortado
-            ? 'Llega al borde de la viga y se corta en la punta' + (s.bastHook ? ', que lleva gancho de 90°' : '') + '. No se redondea.'
-            : 'Queda ' + f2(L / 2) + ' m a cada lado de su eje. No se redondea.',
-          apply: () => this.say(LLEGA(84)), reset: () => this.say(LLEGA(84)) };
+          note: o ? o.texto : 'Escribe un largo en metros.',
+          apply: () => {
+            if (!o) return;
+            if (!o.sePuede) { this.say(o.texto); return; }
+            // el largo escrito lo vuelve a centrar: las puntas de un arrastre mandarían sobre él
+            const puntas = { ...s.bastPuntas };
+            delete puntas[SBa.id];
+            this.cambiar({ bastLen: { ...s.bastLen, [SBa.id]: f2(o.valor) }, bastPuntas: puntas });
+            this.say('Bastón ' + SBa.id + ' en ' + f2(o.valor) + ' m');
+          },
+          reset: () => {
+            // vuelve a centrarse y puede dejar de llegar al borde: sus ganchos guardados se borran
+            const largos = { ...s.bastLen }, puntas = { ...s.bastPuntas }, ganchos = { ...s.cambios.ganchos };
+            delete largos[SBa.id]; delete puntas[SBa.id]; delete ganchos[SBa.id + '.inicio']; delete ganchos[SBa.id + '.fin'];
+            this.cambiar({ bastLen: largos, bastPuntas: puntas, cambios: { ...s.cambios, ganchos }, draft: s.bastDef });
+          } };
       }
 
       // lista
@@ -457,6 +582,18 @@
         liveDot: vista.enVivo ? '#1E7A46' : '#9AA3AD', liveText: vista.enVivo ? 'En vivo con Revit' : 'Sin enlace con Revit',
         genOff: !P || !P.sePuedeGenerar, genBg: P && P.sePuedeGenerar ? '#1F5FAF' : '#9AA3AD', hasToast: !!s.toast, toast: s.toast,
         pickEl: (id) => selectBar(id), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
+        // gancho de una punta del borde (#84): "S.inicio"… en las corridas, "BS1.inicio"… en los bastones
+        onHook: (clave, valor, texto) => {
+          this.cambiar({ cambios: conCambio('ganchos', clave, valor) });
+          const [quien, punta] = clave.split('.');
+          const de = quien.length > 1 ? quien : 'las barras de ' + (quien === 'S' ? 'arriba' : 'abajo');
+          this.say((valor === 'Sin' ? 'Sin gancho' : 'Gancho de ' + texto) + ' en la punta ' + (punta === 'inicio' ? 'izquierda' : 'derecha') + ' de ' + de);
+        },
+        // arrastre (#84): los saltos de los 3 puntos y, en el voladizo, la confirmación dentro de la página (decisión 7)
+        arrastre: s.saltos, onDrop: (salto) => { if (salto.enVoladizo) this.setState({ confirmVol: salto }); else this.aplicarSalto(salto); },
+        hasConfirm: !!s.confirmVol, confirmText: confirmVolTexto(s.confirmVol, P),
+        confirmYes: () => { if (s.confirmVol) this.aplicarSalto(s.confirmVol); },
+        confirmNo: () => this.setState({ confirmVol: null }),
         setQ: (e) => this.setState({ q: e.target.value }), setVer: (e) => this.setState({ ver: e.target.value }),
         setDraft: (e) => this.setState({ draft: e.target.value }),
         showAlzado: () => this.setState({ tab: 'alzado' }), showCorte: () => this.setState({ tab: 'corte', step: 'corte', cutWin: false }),
@@ -589,7 +726,7 @@
 
         ${v.isAlzado ? html`
           <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
-            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} />
+            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} />
             ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
           </div>` : null}
         ${v.isCorte ? html`
@@ -739,6 +876,7 @@
                   <span style="font-size: 12px; color: #5E6670">caben ${ly.per} por fila</span>
                 </div>
                 ${ly.rows.map((r) => html`
+                  <div style="display: flex; flex-direction: column; gap: 6px">
                   <div style="display: flex; align-items: center; gap: 8px">
                     <div style="display: flex; align-items: center; border: 1px solid #C9CFD6; border-radius: 6px; height: 32px">
                       <button type="button" aria-label=${r.minusLabel} onClick=${r.minus} style="width: 30px; height: 30px; border: 0; background: transparent; font: inherit; cursor: pointer">−</button>
@@ -751,6 +889,13 @@
                     </select>
                     ${r.canRemove ? html`
                       <button type="button" aria-label=${r.removeLabel} onClick=${r.remove} style="width: 28px; height: 28px; border: 0; background: transparent; font: inherit; color: #5E6670; cursor: pointer">✕</button>` : null}
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; padding-left: 2px">
+                    <span style="font-size: 12px; color: #5E6670">Van en</span>
+                    <select aria-label=${r.filaLabel} value=${r.f} onChange=${r.setF} style="height: 28px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; font-size: 12px; background: #FFFFFF; color: #16191D; padding: 0 6px">
+                      <option value="">Auto</option>${r.filasOpc.map((x) => html`<option value=${x}>Fila ${x}</option>`)}
+                    </select>
+                  </div>
                   </div>`)}
                 <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #F4F6F8; border-radius: 6px">
                   ${ly.filas.map((fi) => html`
@@ -1031,6 +1176,22 @@
     </div>
   </div>
 
+  ${v.hasConfirm ? html`
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(22, 25, 29, 0.32)">
+      <div role="alertdialog" aria-labelledby="vol-t" aria-describedby="vol-d" style="width: 440px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 12px 32px rgba(22, 25, 29, 0.22)">
+        <div style="display: flex; gap: 10px; align-items: flex-start">
+          <svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px"><path d="M8 2l6.5 11.5h-13z" stroke="#B26B00" stroke-width="1.4" fill="none" stroke-linejoin="round"></path><path d="M8 6.5v3.2M8 11.6v.1" stroke="#B26B00" stroke-width="1.6" stroke-linecap="round"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <span id="vol-t" style="font-weight: 600; font-size: 15px">En un voladizo nunca se traslapa. ¿Ponerlo igual?</span>
+            <span id="vol-d" style="font-size: 12px; color: #5E6670; line-height: 1.5">${v.confirmText}</span>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" onClick=${v.confirmNo} style="height: 32px; padding: 0 14px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">Cancelar</button>
+          <button type="button" onClick=${v.confirmYes} style="height: 32px; padding: 0 14px; border: 1px solid #9A5B00; border-radius: 6px; background: #9A5B00; font: inherit; font-weight: 600; color: #FFFFFF; cursor: pointer">Ponerlo igual</button>
+        </div>
+      </div>
+    </div>` : null}
   ${v.hasToast ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">${v.toast}</div>` : null}
 </div>`;
@@ -1048,6 +1209,7 @@
       if (!m || typeof m !== 'object') return;
       if (m.tipo === 'vista') this.setState({ vista: m.vista });
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
+      else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
     }
 
     render() {

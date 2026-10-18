@@ -37,7 +37,18 @@ internal static class CalculadorBastones
             }
             string prefijo = capa == Posicion.Superior ? "BS" : "BI";
             IEnumerable<Lugar> lugares = (capa == capaDeLosApoyos ? apoyos : luces).OrderBy(l => l.Centro);
-            bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, armado, g, avisos)));
+            bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, e, armado, g, avisos)));
+        }
+        // un gancho o unas puntas guardados para un bastón que ya no está (#84)
+        foreach (string clave in e.Cambios?.Ganchos?.Keys ?? [])
+        {
+            if (clave.StartsWith('B') && bastones.All(b => b.Id != clave.Split('.')[0]))
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoExiste));
+        }
+        foreach (string id in armado.Puntas?.Keys ?? [])
+        {
+            if (bastones.All(b => b.Id != id))
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, Motivo: MotivoBloqueo.NoExiste));
         }
         return bastones;
     }
@@ -46,25 +57,67 @@ internal static class CalculadorBastones
     public static int LargoDe(ArmadoBastones armado, string id) =>
         armado.Largos?.TryGetValue(id, out int largo) == true && largo > 0 ? largo : armado.Largo;
 
+    /// <summary>
+    /// El gancho de una punta de bastón (#84): en el borde, el elegido con los botones o el general del paso 2; fuera
+    /// del borde, ninguno.
+    /// </summary>
+    public static TipoGancho GanchoDe(EntradaVigas e, string clave, bool enBorde)
+    {
+        if (!enBorde)
+            return TipoGancho.Sin;
+        return e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) == true ? tipo
+            : (e.Bastones ?? new ArmadoBastones()).ConGancho ? TipoGancho.De90 : TipoGancho.Sin;
+    }
+
     private static GrupoBarras GrupoDe(ArmadoBastones armado, EntradaVigas e, Posicion capa) => capa == Posicion.Superior
         ? armado.Superior ?? new GrupoBarras(1, e.Superior[0].Diametro)
         : armado.Inferior ?? new GrupoBarras(1, e.Inferior[0].Diametro);
 
     private static Baston Armar(string id, Posicion capa, Lugar lugar, GrupoBarras grupo, ReglaDiametro regla,
-        ArmadoBastones armado, GeometriaPortico g, List<Aviso> avisos)
+        EntradaVigas e, ArmadoBastones armado, GeometriaPortico g, List<Aviso> avisos)
     {
         int? escrito = armado.Largos?.TryGetValue(id, out int valor) == true ? valor : null;
         if (escrito <= 0)
             avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, escrito.Value, Motivo: MotivoBloqueo.LargoNoValido));
-        bool manual = escrito > 0;
+        // arrastrado, deja de estar centrado (decisión 8 del plan de #84)
+        PuntasBaston? puntas = armado.Puntas?.GetValueOrDefault(id);
+        if (puntas is not null && puntas.Hasta <= puntas.Desde)
+        {
+            avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, id, puntas.Hasta - puntas.Desde, Motivo: MotivoBloqueo.LargoNoValido));
+            puntas = null;
+        }
+        bool manual = escrito > 0 || puntas is not null;
         int largo = LargoDe(armado, id);
-        int desde = lugar.Centro - largo / 2, hasta = desde + largo;
-        int ganchoInicio = armado.ConGancho && desde < g.InicioBarras ? regla.Gancho90.B : 0;
-        int ganchoFin = armado.ConGancho && hasta > g.FinBarras ? regla.Gancho90.B : 0;
+        int desde = puntas?.Desde ?? lugar.Centro - largo / 2, hasta = puntas?.Hasta ?? desde + largo;
+        // una punta arrastrada se pega justo en el borde, y desde ahí también lleva gancho
+        bool bordeInicio = desde <= g.InicioBarras, bordeFin = hasta >= g.FinBarras;
+        TipoGancho tipoInicio = Punta(id + ".inicio", bordeInicio), tipoFin = Punta(id + ".fin", bordeFin);
+        int ganchoInicio = Reglas.LargoGancho(regla, tipoInicio), ganchoFin = Reglas.LargoGancho(regla, tipoFin);
         desde = Math.Max(desde, g.InicioBarras);
         hasta = Math.Min(hasta, g.FinBarras);
         int total = hasta - desde + ganchoInicio + ganchoFin;
+        // con un gancho elegido con los botones, el total sube al múltiplo y el sobrante va a la otra punta (decisión 9
+        // del plan de #84, Carlos 17-oct: "1.95… va a aumentar cinco para afuera"); el escrito sin gancho no se redondea
+        if ((bordeInicio && Elegido(id + ".inicio")) || (bordeFin && Elegido(id + ".fin")))
+        {
+            int modulo = e.Reglas.Modulo, sobra = (total + modulo - 1) / modulo * modulo - total;
+            if (bordeInicio && !bordeFin)
+                hasta = Math.Min(g.FinBarras, hasta + sobra);
+            else if (bordeFin && !bordeInicio)
+                desde = Math.Max(g.InicioBarras, desde - sobra);
+            total = hasta - desde + ganchoInicio + ganchoFin;
+        }
         return new Baston(id, capa, lugar.Donde, lugar.EnApoyo, lugar.Centro, desde, hasta, ganchoInicio, ganchoFin, total,
-            manual, grupo, total / 1000.0 * grupo.Cantidad * regla.KgPorMetro);
+            manual, grupo, total / 1000.0 * grupo.Cantidad * regla.KgPorMetro, tipoInicio, tipoFin, bordeInicio, bordeFin);
+
+        // un gancho elegido en una punta que no llega al borde se ignora con aviso; "Sin" no avisa: igual no lleva
+        TipoGancho Punta(string clave, bool enBorde)
+        {
+            if (!enBorde && e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho elegido) == true && elegido != TipoGancho.Sin)
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoLlegaAlBorde));
+            return GanchoDe(e, clave, enBorde);
+        }
+
+        bool Elegido(string clave) => e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) == true && tipo != TipoGancho.Sin;
     }
 }

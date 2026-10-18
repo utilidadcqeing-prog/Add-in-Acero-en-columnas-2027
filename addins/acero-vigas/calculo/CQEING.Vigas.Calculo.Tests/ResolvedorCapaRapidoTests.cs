@@ -59,7 +59,7 @@ public class ResolvedorCapaRapidoTests
     {
         ReglaDiametro regla = Reglas.Generales.PorDiametro[diametro];
         var g = new GeometriaPortico(Luces(luces, largo, voladizo), 50);
-        var p = new ParametrosCapa(referencia, regla.Traslapo!.Value, regla.Gancho90.B, 500, varilla, 12000);
+        var p = new ParametrosCapa(referencia, regla.Traslapo!.Value, regla.Gancho90.B, regla.Gancho90.B, 500, varilla, 12000);
 
         CapaResuelta? esperada = BusquedaCompleta(g, p);
         CapaResuelta? obtenida = ResolvedorCapa.Resolver(g, p);
@@ -80,7 +80,7 @@ public class ResolvedorCapaRapidoTests
         {
             foreach (IReadOnlyList<Luz> luces in Combinaciones(g.Luces, cantidad))
             {
-                var problema = new ProblemaLinea(g.InicioBarras, g.FinBarras, p.Gancho, p.Gancho,
+                var problema = new ProblemaLinea(g.InicioBarras, g.FinBarras, p.GanchoInicio, p.GanchoFin,
                     luces.Select(l => g.Ranura(l, p.Referencia) with { DesvioMaximo = p.Modulo }).ToList(),
                     p.TraslapoMinimo, p.Modulo, p.Varilla, Math.Max(p.Varilla, p.VarillaLarga));
                 SolucionLinea? s = ResolvedorLinea.Resolver(problema);

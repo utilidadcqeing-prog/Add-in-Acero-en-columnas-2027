@@ -22,14 +22,20 @@ internal sealed record CapaCalculada(
     public double KgDe(int largo) => largo / 1000.0 * KgPorMetro;
 
     /// <summary>Varilla de la que sale una barra de ese largo.</summary>
-    public int VarillaPara(int largo) => largo > Entrada.Reglas.Varilla ? Entrada.Reglas.VarillaLarga : Entrada.Reglas.Varilla;
+    public int VarillaPara(int largo) => Entrada.Reglas.VarillaPara(largo);
+
+    /// <summary>Si una barra con esa parte recta entra en algún voladizo.</summary>
+    public bool LlegaAlVoladizo(int desde, int hasta)
+    {
+        Portico portico = Entrada.Portico;
+        return (portico.VoladizoInicio > 0 && desde < portico.Apoyos[0].CaraIzquierda)
+            || (portico.VoladizoFinal > 0 && hasta > portico.Apoyos[^1].CaraDerecha);
+    }
 
     /// <summary>Convierte <paramref name="resuelta"/> (por defecto la automática); <paramref name="manuales"/> son índices de barra.</summary>
     public SolucionCapa Convertir(CapaResuelta? resuelta = null, IReadOnlySet<int>? manuales = null)
     {
         resuelta ??= Resuelta;
-        Portico portico = Entrada.Portico;
-        Apoyo primero = portico.Apoyos[0], ultimo = portico.Apoyos[^1];
         IReadOnlyList<BarraLinea> lineas = resuelta.Solucion.Barras;
 
         var barras = lineas.Select((b, i) => new Barra(
@@ -37,15 +43,16 @@ internal sealed record CapaCalculada(
             Capa: Capa,
             Desde: b.Desde,
             Hasta: b.Hasta,
-            GanchoInicio: i == 0 ? Parametros.Gancho : 0,
-            GanchoFin: i == lineas.Count - 1 ? Parametros.Gancho : 0,
+            GanchoInicio: i == 0 ? Parametros.GanchoInicio : 0,
+            GanchoFin: i == lineas.Count - 1 ? Parametros.GanchoFin : 0,
             Largo: b.Largo,
             Varilla: VarillaPara(b.Largo),
             Manual: manuales?.Contains(i) ?? false,
-            LlegaAlVoladizo: (portico.VoladizoInicio > 0 && b.Desde < primero.CaraIzquierda)
-                || (portico.VoladizoFinal > 0 && b.Hasta > ultimo.CaraDerecha),
+            LlegaAlVoladizo: LlegaAlVoladizo(b.Desde, b.Hasta),
             Grupos: Grupos,
-            Kg: KgDe(b.Largo))).ToList();
+            Kg: KgDe(b.Largo),
+            TipoInicio: i == 0 ? Parametros.TipoInicio : TipoGancho.Sin,
+            TipoFin: i == lineas.Count - 1 ? Parametros.TipoFin : TipoGancho.Sin)).ToList();
 
         var traslapos = resuelta.Solucion.Traslapos.Select((t, i) => new Traslapo(
             Id: $"{barras[i].Id}–{barras[i + 1].Id}",

@@ -34,5 +34,8 @@ public sealed record Apoyo(string Eje, int PosicionEje, int CaraIzquierda, int C
 /// </summary>
 public sealed record Portico(IReadOnlyList<Apoyo> Apoyos, int VoladizoInicio = 0, int VoladizoFinal = 0);
 
-/// <summary>Barras iguales dentro de una capa: <c>3 #5</c> es <c>new(3, 5)</c>.</summary>
-public sealed record GrupoBarras(int Cantidad, int Diametro);
+/// <summary>
+/// Barras iguales dentro de una capa: <c>3 #5</c> es <c>new(3, 5)</c>. <paramref name="Fila"/> (#84) es la fila del
+/// corte elegida a mano, desde 1; null = Auto.
+/// </summary>
+public sealed record GrupoBarras(int Cantidad, int Diametro, int? Fila = null);

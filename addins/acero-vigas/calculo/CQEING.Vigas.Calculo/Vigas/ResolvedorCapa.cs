@@ -1,9 +1,14 @@
+using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Nucleo;
 
 namespace CQEING.Vigas.Calculo.Vigas;
 
-/// <summary>Datos de una capa para el motor, en mm. El traslapo y el gancho son los del diámetro mayor.</summary>
-public sealed record ParametrosCapa(Referencia Referencia, int TraslapoMinimo, int Gancho, int Modulo, int Varilla, int VarillaLarga);
+/// <summary>
+/// Datos de una capa para el motor, en mm. El traslapo y los ganchos son los del diámetro mayor; cada punta del borde
+/// lleva el suyo (#84), y <paramref name="TipoInicio"/> / <paramref name="TipoFin"/> dicen cuál es.
+/// </summary>
+public sealed record ParametrosCapa(Referencia Referencia, int TraslapoMinimo, int GanchoInicio, int GanchoFin, int Modulo, int Varilla,
+    int VarillaLarga, TipoGancho TipoInicio = TipoGancho.De90, TipoGancho TipoFin = TipoGancho.De90);
 
 /// <summary>Solución de una capa y las luces donde quedó cada traslapo (una por traslapo, en orden).</summary>
 public sealed record CapaResuelta(SolucionLinea Solucion, IReadOnlyList<Luz> Luces);
@@ -66,7 +71,7 @@ public static class ResolvedorCapa
     private static int LargoMinimoMayor(GeometriaPortico g, ParametrosCapa p, IReadOnlyList<Luz> luces)
     {
         int min = p.TraslapoMinimo;
-        int inicio = g.InicioBarras - p.Gancho, fin = g.FinBarras + p.Gancho;
+        int inicio = g.InicioBarras - p.GanchoInicio, fin = g.FinBarras + p.GanchoFin;
         if (luces.Count == 0)
             return fin - inicio;
         List<Ranura> ranuras = luces.Select(l => g.Ranura(l, p.Referencia)).ToList();
@@ -81,7 +86,7 @@ public static class ResolvedorCapa
     {
         // Decisión 15 del plan: el traslapo se corre a lo sumo un módulo de su punto ideal, como en el procedimiento
         // de Carlos (solo se mueve lo que exige el redondeo).
-        var problema = new ProblemaLinea(g.InicioBarras, g.FinBarras, p.Gancho, p.Gancho,
+        var problema = new ProblemaLinea(g.InicioBarras, g.FinBarras, p.GanchoInicio, p.GanchoFin,
             luces.Select(l => g.Ranura(l, p.Referencia) with { DesvioMaximo = p.Modulo }).ToList(),
             p.TraslapoMinimo, p.Modulo, p.Varilla, Math.Max(p.Varilla, p.VarillaLarga), largosFijos);
         SolucionLinea? s = ResolvedorLinea.Resolver(problema);

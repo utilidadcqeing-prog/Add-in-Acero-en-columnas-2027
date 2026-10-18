@@ -25,18 +25,30 @@ public static class RepartidorFilas
         double estribo = Diametro(e, e.DiametroEstribo);
         double libre = e.Reglas.DistanciaLibre;
         double mayor = grupos.Max(g => Diametro(e, g.Diametro));
-        double esquina = Diametro(e, grupos[0].Diametro);
         double disponible = e.Ancho - 2 * e.Recubrimiento.Lados - 2 * estribo;
         int caben = Math.Max(0, (int)Math.Floor((disponible + libre) / (mayor + libre)));
         int maximo = caben * e.MaximoFilas;
-        double alEje = recubrimiento + estribo + esquina / 2;
 
         List<int> numeros = grupos.SelectMany(g => Enumerable.Repeat(g.Diametro, g.Cantidad)).ToList();
         ErrorCara error = numeros.Count < 2 ? ErrorCara.MenosDeDosBarras
             : caben == 0 || numeros.Count > maximo ? ErrorCara.NoCaben
             : ErrorCara.Ninguno;
         if (caben == 0)
-            return new CaraSeccion(cara, 0, [], error, 0, alEje);
+            return new CaraSeccion(cara, 0, [], error, 0, recubrimiento + estribo + Diametro(e, grupos[0].Diametro) / 2);
+
+        List<List<int>> porFila = EnFilas(grupos, caben);
+        if (error == ErrorCara.Ninguno && grupos.Any(g => g.Fila is not null))
+        {
+            error = grupos.Any(g => g.Fila is < 1 || g.Fila > e.MaximoFilas) || porFila.Count > e.MaximoFilas
+                || porFila.Any(f => f.Count > caben) ? ErrorCara.NoCaben
+                : porFila[0].Count < 2 ? ErrorCara.MenosDeDosBarras
+                : ErrorCara.Ninguno;
+        }
+        // una fila que quedó vacía no se dibuja
+        List<List<int>> enFilas = porFila.Where(f => f.Count > 0).ToList();
+        // las esquinas son del primer grupo de la fila 1
+        double esquina = Diametro(e, enFilas[0][0]);
+        double alEje = recubrimiento + estribo + esquina / 2;
 
         // Puestos de una fila llena, de esquina a esquina y a la misma distancia.
         double izquierda = e.Recubrimiento.Lados + estribo + esquina / 2;
@@ -44,11 +56,12 @@ public static class RepartidorFilas
 
         var filas = new List<IReadOnlyList<BarraEnSeccion>>();
         double borde = recubrimiento + estribo; // de la cara al borde de la fila actual
-        for (int inicio = 0; inicio < numeros.Count; inicio += caben)
+        foreach (List<int> enFila in enFilas)
         {
-            List<int> enFila = numeros.Skip(inicio).Take(caben).ToList();
-            // La fila 1 reparte sus barras de esquina a esquina; las demás usan los puestos de la fila 1 llena.
-            double[] puestos = inicio == 0 ? Puestos(izquierda, e.Ancho - izquierda, enFila.Count, e.Ancho) : puestosLlenos;
+            // La fila 1 reparte sus barras de esquina a esquina; las demás usan los puestos de la fila 1 llena. Una
+            // fila fija con más barras de las que caben (error NoCaben) se dibuja con sus puestos, para que se vea.
+            double[] puestos = filas.Count == 0 || enFila.Count > caben ? Puestos(izquierda, e.Ancho - izquierda, enFila.Count, e.Ancho)
+                : puestosLlenos;
             int?[] acomodo = Acomodar(enFila, puestos.Length);
             double bordeFila = borde;
             filas.Add(acomodo
@@ -64,6 +77,32 @@ public static class RepartidorFilas
             borde += enFila.Max(n => Diametro(e, n)) + e.SeparacionFilas;
         }
         return new CaraSeccion(cara, caben, filas, error, maximo, alEje);
+    }
+
+    /// <summary>
+    /// Los diámetros de cada fila (decisión 11 del plan de #84): primero los grupos con fila fija, en su fila; luego los
+    /// Auto, en orden, llenan los puestos libres desde la fila 1, hasta <paramref name="caben"/> por fila. Sin filas fijas
+    /// es el reparto de siempre. Puede devolver filas vacías (una fila fija más abajo que las demás).
+    /// </summary>
+    private static List<List<int>> EnFilas(IReadOnlyList<GrupoBarras> grupos, int caben)
+    {
+        var filas = new List<List<int>>();
+        List<int> Fila(int i)
+        {
+            while (filas.Count <= i)
+                filas.Add([]);
+            return filas[i];
+        }
+        foreach (GrupoBarras g in grupos.Where(g => g.Fila is >= 1))
+            Fila(g.Fila!.Value - 1).AddRange(Enumerable.Repeat(g.Diametro, g.Cantidad));
+        int actual = 0;
+        foreach (int numero in grupos.Where(g => g.Fila is not >= 1).SelectMany(g => Enumerable.Repeat(g.Diametro, g.Cantidad)))
+        {
+            while (Fila(actual).Count >= caben)
+                actual++;
+            Fila(actual).Add(numero);
+        }
+        return filas;
     }
 
     /// <summary><paramref name="cantidad"/> puestos de <paramref name="desde"/> a <paramref name="hasta"/> a la misma distancia; uno solo va al centro.</summary>

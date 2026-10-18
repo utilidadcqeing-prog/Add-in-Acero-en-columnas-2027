@@ -25,9 +25,12 @@ public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, doub
 /// <summary>
 /// Una barra corrida. <paramref name="Capa"/> es <c>"arriba"</c> o <c>"abajo"</c>; <paramref name="Recta"/> es como
 /// <c>"5.80 + gancho"</c> o <c>"recta"</c>; <paramref name="Cantidad"/> como <c>"3 #5"</c>.
+/// <paramref name="GanchoInicioTipo"/> y <paramref name="GanchoFinTipo"/> son <c>"90°"</c>, <c>"135°"</c>, <c>"180°"</c> o
+/// <c>""</c>; <paramref name="PuntaInicioEnBorde"/> / <paramref name="PuntaFinEnBorde"/>: ahí van los botones de gancho (#84).
 /// </summary>
 public sealed record BarraVista(string Id, string Capa, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
-    string Recta, bool Manual, bool LlegaAlVoladizo, string Cantidad, double Kg);
+    string Recta, bool Manual, bool LlegaAlVoladizo, string Cantidad, double Kg,
+    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false);
 
 public sealed record TraslapoVista(string Id, string BarraIzquierda, string BarraDerecha, string Capa, double Desde, double Hasta,
     double Minimo, string Diametro, bool Manual);
@@ -37,7 +40,8 @@ public sealed record TraslapoVista(string Id, string BarraIzquierda, string Barr
 /// <paramref name="Cortado"/> = una punta se cortó en el borde del pórtico.
 /// </summary>
 public sealed record BastonVista(string Id, double Eje, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
-    string Donde, string Cantidad, double Kg, bool Cortado);
+    string Donde, string Cantidad, double Kg, bool Cortado,
+    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false);
 
 /// <summary>Una zona de estribos en el alzado; <paramref name="Junta"/> = la de confinamiento, junto a una columna.</summary>
 public sealed record ZonaEstribos(double Desde, double Hasta, bool Junta);
@@ -126,3 +130,30 @@ public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string M
 
 /// <summary>Una fila de la tabla de reglas: traslapo, gancho de 90°, estribo de 135° y peso por metro.</summary>
 public sealed record ReglaVista(string D, string T, string G, string E, string K);
+
+// La edición (#84): la página pide ver un cambio antes de aplicarlo y C# contesta con lo que pasaría.
+
+public enum AccionEdicion { Barra, Traslapo, Baston, Arrastre }
+
+public enum PuntoArrastre { Izquierda, Centro, Derecha }
+
+/// <summary>
+/// Lo que la página quiere ver antes de aplicar. <paramref name="Valor"/> va en m (el largo escrito del traslapo o del
+/// bastón); <paramref name="N"/> vuelve en la respuesta, para que la página descarte las viejas.
+/// </summary>
+public sealed record PedidoEdicion(int N, string Elemento, AccionEdicion Accion, double? Valor = null, PuntoArrastre? Punto = null);
+
+/// <summary>Una opción del panel: <paramref name="Accion"/> es <c>"subir"</c>, <c>"bajar"</c> o <c>"aplicar"</c>; <paramref name="Valor"/> en m.</summary>
+public sealed record OpcionEdicion(string Accion, double Valor, bool SePuede, string Texto);
+
+/// <summary>
+/// Un cambio que deja el arrastre al soltar. <paramref name="Tipo"/> es <c>"movido"</c> (<paramref name="Id"/> del
+/// traslapo y su <paramref name="Desde"/>) o <c>"puntas"</c> (el bastón, <paramref name="Desde"/> y <paramref name="Hasta"/>), en mm.
+/// </summary>
+public sealed record CambioArrastre(string Tipo, string Id, int Desde, int Hasta = 0, bool EnVoladizo = false);
+
+/// <summary>Un lugar donde puede caer el punto arrastrado: <paramref name="X"/> en m, los largos del elemento en m y su rótulo.</summary>
+public sealed record Salto(double X, double Recto, double Total, string Rotulo, bool EnVoladizo, IReadOnlyList<CambioArrastre> Cambios);
+
+/// <summary>La respuesta a <see cref="PedidoEdicion"/>: las opciones del panel o, al arrastrar, los saltos posibles.</summary>
+public sealed record PreviaVista(int N, string Elemento, IReadOnlyList<OpcionEdicion> Opciones, IReadOnlyList<Salto> Saltos);

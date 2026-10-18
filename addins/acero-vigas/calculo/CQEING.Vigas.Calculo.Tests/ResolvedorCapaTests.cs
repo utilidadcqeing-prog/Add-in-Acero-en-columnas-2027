@@ -7,7 +7,7 @@ namespace CQEING.Vigas.Calculo.Tests;
 /// <summary>Con la tabla real de Carlos: #5 traslapa 900 y su gancho de 90° mide 278; #8, 1700 y 444.</summary>
 public class ResolvedorCapaTests
 {
-    private static readonly ParametrosCapa CentroNumero5 = new(Referencia.Centro, TraslapoMinimo: 900, Gancho: 278,
+    private static readonly ParametrosCapa CentroNumero5 = new(Referencia.Centro, TraslapoMinimo: 900, GanchoInicio: 278, GanchoFin: 278,
         Modulo: 500, Varilla: 6000, VarillaLarga: 12000);
 
     private static readonly GeometriaPortico Maqueta = new(Datos.PorticoMaqueta(), recubrimientoPuntas: 50);
@@ -52,7 +52,7 @@ public class ResolvedorCapaTests
         // Luz libre de 1.20 m (no le cabe un traslapo #8 de 1.70) con voladizos de 3 m: la barra pasa de 6 m.
         var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 1600)], VoladizoInicio: 3000, VoladizoFinal: 3000);
         var g = new GeometriaPortico(portico, recubrimientoPuntas: 50);
-        var numero8 = CentroNumero5 with { TraslapoMinimo = 1700, Gancho = 444 };
+        var numero8 = CentroNumero5 with { TraslapoMinimo = 1700, GanchoInicio = 444, GanchoFin = 444 };
 
         CapaResuelta? capa = ResolvedorCapa.Resolver(g, numero8);
 
