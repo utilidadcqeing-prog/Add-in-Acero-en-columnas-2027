@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CQEING.Gestor</AssemblyName>
+    <RootNamespace>CQEING.Gestor</RootNamespace>
+    <Version>0.1.0</Version>
+    <Company>CQEING</Company>
+    <Product>Gestor de add-ins CQEING</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.161" />
+    <ProjectReference Include="..\CQEING.Gestor.Core\CQEING.Gestor.Core.csproj" />
+  </ItemGroup>
+
+</Project>

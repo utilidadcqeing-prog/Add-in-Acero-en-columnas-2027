@@ -1,0 +1,58 @@
+name: Publicar gestor
+
+on:
+  push:
+    tags: ['gestor-v*']
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # checkout deja la etiqueta como ligera; se trae de nuevo para leer su mensaje (las notas).
+      - run: git fetch --force --tags origin
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Versión y notas (mensaje de la etiqueta anotada)
+        id: version
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $version = $tag.Substring('gestor-v'.Length)
+          # El gestor solo busca releases estables gestor-vX.Y.Z (ConstructorCatalogo.UltimoGestor).
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "La etiqueta $tag debe ser gestor-vX.Y.Z (sin -rc)." }
+          if ((git cat-file -t "refs/tags/$tag") -ne 'tag') { throw "La etiqueta $tag no es anotada. Créela con: git tag -a $tag -m 'notas'" }
+          git tag -l --format='%(contents)' $tag | Set-Content notas.md -Encoding utf8
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Pruebas del gestor
+        run: |
+          dotnet test gestor/CQEING.Gestor.Core.Tests -c Release
+          dotnet test gestor/CQEING.Gestor.Tests -c Release
+      - name: Compilar (autocontenido, win-x64) y empaquetar con Velopack
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          dotnet publish gestor/CQEING.Gestor/CQEING.Gestor.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=$version
+          if ($LASTEXITCODE) { exit 1 }
+          dotnet tool install -g vpk --version 1.2.161
+          if ($LASTEXITCODE) { exit 1 }
+          vpk pack --packId CQEING.Gestor --packVersion $version --packDir publish --mainExe CQEING.Gestor.exe --packTitle "Gestor de add-ins CQEING" --outputDir Releases
+          if ($LASTEXITCODE) { exit 1 }
+          foreach ($archivo in 'CQEING.Gestor-win-Setup.exe', 'releases.win.json') {
+            if (-not (Test-Path (Join-Path Releases $archivo))) { throw "vpk no generó $archivo." }
+          }
+      - name: Crear la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          gh release create $tag (Get-ChildItem Releases -File).FullName --title $tag --notes-file notas.md

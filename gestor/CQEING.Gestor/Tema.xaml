@@ -1,0 +1,169 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Colores (contraste AA sobre blanco y sobre el fondo). -->
+    <SolidColorBrush x:Key="Fondo" Color="#F4F5F7"/>
+    <SolidColorBrush x:Key="Superficie" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Borde" Color="#E1E4E8"/>
+    <SolidColorBrush x:Key="Texto" Color="#1F2328"/>
+    <SolidColorBrush x:Key="TextoSuave" Color="#59636E"/>
+    <SolidColorBrush x:Key="Acento" Color="#0F6CBD"/>
+    <SolidColorBrush x:Key="AcentoOscuro" Color="#0C5596"/>
+    <SolidColorBrush x:Key="AcentoPresionado" Color="#0A4478"/>
+    <SolidColorBrush x:Key="AcentoClaro" Color="#EBF3FC"/>
+    <SolidColorBrush x:Key="AcentoBorde" Color="#B4D6FA"/>
+    <SolidColorBrush x:Key="Exito" Color="#107C41"/>
+    <SolidColorBrush x:Key="ErrorTexto" Color="#B3261E"/>
+    <SolidColorBrush x:Key="ErrorFondo" Color="#FDECEA"/>
+    <SolidColorBrush x:Key="ErrorBorde" Color="#F3B8B2"/>
+    <SolidColorBrush x:Key="GrisFondo" Color="#EEF0F2"/>
+    <SolidColorBrush x:Key="Deshabilitado" Color="#E6E8EB"/>
+    <SolidColorBrush x:Key="TextoDeshabilitado" Color="#6E7781"/>
+
+    <FontFamily x:Key="Iconos">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <BooleanToVisibilityConverter x:Key="BoolAVisible"/>
+
+    <!-- Foco de teclado bien visible (accesibilidad). -->
+    <Style x:Key="FocoVisible">
+        <Setter Property="Control.Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="-3" BorderBrush="{StaticResource Acento}" BorderThickness="2" CornerRadius="7"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="BotonBase" TargetType="Button">
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="16,7"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocoVisible}"/>
+        <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Caja" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="BotonPrincipal" TargetType="Button" BasedOn="{StaticResource BotonBase}">
+        <Setter Property="Background" Value="{StaticResource Acento}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Acento}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="MinWidth" Value="112"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource AcentoOscuro}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource AcentoPresionado}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource Deshabilitado}"/>
+                <Setter Property="BorderBrush" Value="{StaticResource Deshabilitado}"/>
+                <Setter Property="Foreground" Value="{StaticResource TextoDeshabilitado}"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="BotonSecundario" TargetType="Button" BasedOn="{StaticResource BotonBase}">
+        <Setter Property="Background" Value="{StaticResource Superficie}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Borde}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="{StaticResource Texto}"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource GrisFondo}"/>
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource Deshabilitado}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource TextoDeshabilitado}"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Botón solo con icono o texto, sin caja (⋯, ✕, «Actualizar todas»). -->
+    <Style x:Key="BotonPlano" TargetType="Button" BasedOn="{StaticResource BotonBase}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{StaticResource TextoSuave}"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="MinHeight" Value="30"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource GrisFondo}"/>
+                <Setter Property="Foreground" Value="{StaticResource Texto}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource TextoDeshabilitado}"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="Insignia" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource AcentoClaro}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource AcentoBorde}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Padding" Value="8,1"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="Tarjeta" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Superficie}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Borde}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="18,16"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+    </Style>
+
+    <Style x:Key="BarraProgreso" TargetType="ProgressBar">
+        <Setter Property="Height" Value="6"/>
+        <Setter Property="Foreground" Value="{StaticResource Acento}"/>
+        <Setter Property="Background" Value="{StaticResource GrisFondo}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+
+    <!-- Selector de años como botones de pastilla. -->
+    <Style x:Key="PastillaAnio" TargetType="ListBoxItem">
+        <Setter Property="Margin" Value="0,0,6,0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocoVisible}"/>
+        <Setter Property="AutomationProperties.Name" Value="{Binding NombreAccesible}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Caja" Background="{StaticResource Superficie}" BorderBrush="{StaticResource Borde}" BorderThickness="1"
+                            CornerRadius="16" Padding="14,5">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Caja" Property="Background" Value="{StaticResource GrisFondo}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Caja" Property="Background" Value="{StaticResource AcentoClaro}"/>
+                            <Setter TargetName="Caja" Property="BorderBrush" Value="{StaticResource Acento}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>
