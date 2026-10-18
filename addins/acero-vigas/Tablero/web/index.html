@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Acero en vigas · Tablero</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<!-- El <style> del helmet de Main.dc.html de la maqueta, tal cual (#83). -->
+<style>
+body{margin:0}
+a{color:#1F5FAF}a:hover{color:#174A8A}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #1F5FAF;outline-offset:1px}
+button:disabled{cursor:not-allowed}
+input:disabled,select:disabled{background:#F4F6F8;color:#5E6670}
+</style>
+</head>
+<body>
+<div id="tablero"></div>
+<script src="vendor/htm-preact-standalone.umd.js"></script>
+<script src="alzado.js"></script>
+<!-- Fuera de Revit, tablero.js carga demo.js con los datos de la maqueta (?estado=normal|reglas|cimentacion|aviso|varias|vacio|largo). -->
+<script src="tablero.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "id": "acero-vigas",
+  "nombre": "Acero en vigas",
+  "descripcion": "Barras longitudinales con traslapos a múltiplos de corte, bastones y estribos de vigas, por pórtico.",
+  "proyecto": "CQEING.Vigas.csproj",
+  "revit": ["2026", "2027"]
+}

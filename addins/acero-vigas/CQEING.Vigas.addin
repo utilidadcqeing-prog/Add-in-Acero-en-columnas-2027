@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>CQEING - Acero en vigas</Name>
+    <!-- El gestor reescribe esta ruta como absoluta a la carpeta de la versión instalada. -->
+    <Assembly>CQEING.Vigas.dll</Assembly>
+    <FullClassName>CQEING.Vigas.AppVigas</FullClassName>
+    <ClientId>70ab44cf-2375-4c2d-be56-aca53983d195</ClientId>
+    <VendorId>CQEING</VendorId>
+    <VendorDescription>CQEING</VendorDescription>
+  </AddIn>
+</RevitAddIns>
