@@ -50,20 +50,31 @@ public sealed class GestorAddins(FuenteReleases fuente, ConstructorCatalogo cata
     {
         ResultadoReleases releases = await fuente.ObtenerAsync(ct);
         ResultadoCatalogo resultado = await catalogo.ConstruirAsync(releases.Releases, ct);
-        IReadOnlyList<AddinInstalado> instalados = LectorEstado.Leer(rutas);
         IReadOnlyList<string> anios = DetectorRevit.AniosInstalados(programFiles);
 
-        List<EstadoAddin> addins = resultado.Addins
+        var avisos = new List<string>();
+        if (releases.Aviso is not null) avisos.Add(releases.Aviso);
+        avisos.AddRange(resultado.Avisos);
+
+        return new ResumenGestor(anios, LeerEstados(resultado.Addins, anios), avisos, ConstructorCatalogo.UltimoGestor(releases.Releases), releases.DesdeCache);
+    }
+
+    /// <summary>
+    /// Vuelve a leer del disco qué está instalado y descargado, con el mismo catálogo y SIN consultar GitHub
+    /// (sin token, cada consulta descuenta del cupo de 60 por hora). Es lo que usa la ventana después de instalar.
+    /// </summary>
+    public ResumenGestor ReleerEstado(ResumenGestor resumen) =>
+        resumen with { Addins = LeerEstados(resumen.Addins.Select(a => a.Addin).ToList(), resumen.AniosRevit) };
+
+    private List<EstadoAddin> LeerEstados(IReadOnlyList<EntradaCatalogo> catalogo, IReadOnlyList<string> anios)
+    {
+        IReadOnlyList<AddinInstalado> instalados = LectorEstado.Leer(rutas);
+        return catalogo
             .Select(addin => new EstadoAddin(
                 addin,
                 instalados.Where(i => i.Id == addin.Id).ToDictionary(i => i.Anio, i => i.Version),
                 anios.ToDictionary(anio => anio, anio => LectorEstado.VersionesEnDisco(rutas, addin.Id, anio))))
             .ToList();
-        var avisos = new List<string>();
-        if (releases.Aviso is not null) avisos.Add(releases.Aviso);
-        avisos.AddRange(resultado.Avisos);
-
-        return new ResumenGestor(anios, addins, avisos, ConstructorCatalogo.UltimoGestor(releases.Releases), releases.DesdeCache);
     }
 
     /// <summary>Instala, actualiza o vuelve a <paramref name="version"/> en ese año de Revit.</summary>

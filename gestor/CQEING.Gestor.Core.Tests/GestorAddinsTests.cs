@@ -183,6 +183,27 @@ public class GestorAddinsTests : IDisposable
     }
 
     [Fact]
+    public async Task Releer_el_estado_despues_de_instalar_no_consulta_GitHub()
+    {
+        Publicar("1.0.0", "1.1.0");
+        ResumenGestor antes = await _gestor.ConsultarAsync();
+        EstadoAddin armado = antes.Addins.Single();
+        await _gestor.InstalarAsync(armado.Addin.Versiones.Single(v => v.Version.ToString() == "1.0.0"), "2026");
+
+        _sinRed = true; // si ReleerEstado pidiera algo a GitHub, fallaría
+        ResumenGestor despues = _gestor.ReleerEstado(antes);
+
+        EstadoAddin estado = despues.Addins.Single();
+        Assert.Equal("1.0.0", estado.Instalada("2026"));
+        Assert.True(estado.EstaEnDisco("2026", "1.0.0"));
+        Assert.True(estado.HayActualizacion("2026"));
+        Assert.Same(armado.Addin, estado.Addin);
+        Assert.Equal(antes.AniosRevit, despues.AniosRevit);
+        Assert.Equal(antes.UltimoGestor, despues.UltimoGestor);
+        Assert.Null(antes.Addins.Single().Instalada("2026")); // el resumen anterior no cambia
+    }
+
+    [Fact]
     public async Task Cancelar_la_consulta_se_propaga()
     {
         Publicar("1.0.0");
