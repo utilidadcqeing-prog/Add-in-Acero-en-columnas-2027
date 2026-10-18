@@ -96,6 +96,23 @@ public static class MotorVigas
         return bloqueo is null ? new Previsualizacion(true, MotivoBloqueo.Ninguno, r) : new Previsualizacion(false, bloqueo.Motivo, r);
     }
 
+    /// <summary>
+    /// El gancho de una punta del borde de las corridas (<c>"S.inicio"</c>…): 90° si no se cambió. Una corrida no puede
+    /// quedar sin gancho en el borde: se avisa una vez y queda el de 90° (decisión 5 del plan de #84). El núcleo deja
+    /// el largo total en múltiplo del módulo con el gancho que sea.
+    /// </summary>
+    private static TipoGancho GanchoCorrida(CambiosManuales? cambios, string clave, List<Aviso> avisos)
+    {
+        if (cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) != true)
+            return TipoGancho.De90;
+        if (tipo != TipoGancho.Sin)
+            return tipo;
+        var aviso = new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.GanchoNoValido);
+        if (!avisos.Contains(aviso))
+            avisos.Add(aviso);
+        return TipoGancho.De90;
+    }
+
     private static Dictionary<string, int> Con(IReadOnlyDictionary<string, int>? actuales, string id, int valor) =>
         new(actuales ?? new Dictionary<string, int>()) { [id] = valor };
 
@@ -108,8 +125,11 @@ public static class MotorVigas
         IReadOnlyList<GrupoBarras> grupos = capa == Posicion.Superior ? e.Superior : e.Inferior;
         int diametro = grupos.Max(gr => gr.Diametro);
         ReglaDiametro regla = e.Reglas.PorDiametro[diametro];
+        string prefijo = capa == Posicion.Superior ? "S" : "I";
+        TipoGancho inicio = GanchoCorrida(e.Cambios, prefijo + ".inicio", avisos), fin = GanchoCorrida(e.Cambios, prefijo + ".fin", avisos);
         var parametros = new ParametrosCapa(GeometriaPortico.ReferenciaDe(e.Tipo, capa, cara), regla.Traslapo!.Value,
-            regla.Gancho90.B, e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga);
+            Reglas.LargoGancho(regla, inicio), Reglas.LargoGancho(regla, fin), e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga,
+            inicio, fin);
 
         CapaResuelta? resuelta = ResolvedorCapa.Resolver(g, parametros);
         if (resuelta is not null)

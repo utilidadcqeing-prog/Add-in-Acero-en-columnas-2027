@@ -5,6 +5,8 @@ namespace CQEING.Vigas.Calculo.Modelo;
 /// <summary>
 /// Una barra corrida, tal como la pinta el tablero. <paramref name="Desde"/> y <paramref name="Hasta"/> son las
 /// puntas de su parte recta, en mm desde el eje A; <paramref name="Largo"/> incluye los ganchos.
+/// <paramref name="TipoInicio"/> y <paramref name="TipoFin"/> (#84) son los ganchos de las puntas del borde; las
+/// demás puntas, <see cref="TipoGancho.Sin"/>.
 /// </summary>
 public sealed record Barra(
     string Id,
@@ -18,7 +20,9 @@ public sealed record Barra(
     bool Manual,
     bool LlegaAlVoladizo,
     IReadOnlyList<GrupoBarras> Grupos,
-    double Kg)
+    double Kg,
+    TipoGancho TipoInicio = TipoGancho.Sin,
+    TipoGancho TipoFin = TipoGancho.Sin)
 {
     public int LargoRecto => Hasta - Desde;
 }

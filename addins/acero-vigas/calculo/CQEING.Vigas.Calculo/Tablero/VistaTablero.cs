@@ -25,9 +25,12 @@ public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, doub
 /// <summary>
 /// Una barra corrida. <paramref name="Capa"/> es <c>"arriba"</c> o <c>"abajo"</c>; <paramref name="Recta"/> es como
 /// <c>"5.80 + gancho"</c> o <c>"recta"</c>; <paramref name="Cantidad"/> como <c>"3 #5"</c>.
+/// <paramref name="GanchoInicioTipo"/> y <paramref name="GanchoFinTipo"/> son <c>"90°"</c>, <c>"135°"</c>, <c>"180°"</c> o
+/// <c>""</c>; <paramref name="PuntaInicioEnBorde"/> / <paramref name="PuntaFinEnBorde"/>: ahí van los botones de gancho (#84).
 /// </summary>
 public sealed record BarraVista(string Id, string Capa, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
-    string Recta, bool Manual, bool LlegaAlVoladizo, string Cantidad, double Kg);
+    string Recta, bool Manual, bool LlegaAlVoladizo, string Cantidad, double Kg,
+    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false);
 
 public sealed record TraslapoVista(string Id, string BarraIzquierda, string BarraDerecha, string Capa, double Desde, double Hasta,
     double Minimo, string Diametro, bool Manual);
@@ -37,7 +40,8 @@ public sealed record TraslapoVista(string Id, string BarraIzquierda, string Barr
 /// <paramref name="Cortado"/> = una punta se cortó en el borde del pórtico.
 /// </summary>
 public sealed record BastonVista(string Id, double Eje, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
-    string Donde, string Cantidad, double Kg, bool Cortado);
+    string Donde, string Cantidad, double Kg, bool Cortado,
+    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false);
 
 /// <summary>Una zona de estribos en el alzado; <paramref name="Junta"/> = la de confinamiento, junto a una columna.</summary>
 public sealed record ZonaEstribos(double Desde, double Hasta, bool Junta);

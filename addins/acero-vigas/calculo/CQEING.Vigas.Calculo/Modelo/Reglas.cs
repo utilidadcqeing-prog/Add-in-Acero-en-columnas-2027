@@ -8,6 +8,9 @@ namespace CQEING.Vigas.Calculo.Modelo;
 /// </summary>
 public sealed record Gancho(int B, int? E = null, int? D = null, int? A = null);
 
+/// <summary>El gancho de una punta de barra o de bastón (#84). Las corridas no pueden quedar <see cref="Sin"/> en el borde.</summary>
+public enum TipoGancho { Sin, De90, De135, De180 }
+
 /// <summary>
 /// Valores de un diámetro, en mm y kg/m. <paramref name="Traslapo"/> es null si la tabla no lo trae (#2 en vigas).
 /// Las barras longitudinales usan <paramref name="Gancho90"/>; <paramref name="Gancho180"/> y
@@ -41,6 +44,18 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
         [7] = new(1350, new(388, 266, 133, 317), new(333, 89, 133, 279), new(316), 3.042, 22.2),
         [8] = new(1700, new(444, 305, 152, 363), new(381, 102, 152, 319), new(362), 3.973, 25.4),
     });
+
+    /// <summary>
+    /// Largo (B) del gancho <paramref name="t"/> en mm. El de 135° sale del cuadro de estribos, el único 135° que mandó
+    /// Carlos (decisión 5 del plan de #84; pregunta 1 en #79).
+    /// </summary>
+    public static int LargoGancho(ReglaDiametro r, TipoGancho t) => t switch
+    {
+        TipoGancho.De90 => r.Gancho90.B,
+        TipoGancho.De135 => r.Estribo135.B,
+        TipoGancho.De180 => r.Gancho180.B,
+        _ => 0,
+    };
 
     /// <summary>Los que muestra la pantalla de Reglas (la maqueta va del #3 al #8). El #2 se guarda sin mostrarse.</summary>
     public static IReadOnlyList<int> DiametrosEnPantalla { get; } = [3, 4, 5, 6, 7, 8];

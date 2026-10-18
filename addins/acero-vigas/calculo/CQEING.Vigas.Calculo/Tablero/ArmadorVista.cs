@@ -60,12 +60,14 @@ public static class ArmadorVista
         avisos.AddRange(re.Avisos);
 
         var barras = rv.Barras.Select(b => new BarraVista(b.Id, Capa(b.Capa), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
-            M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg)).ToList();
+            M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg,
+            Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin)).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
             M(t.Minimo), $"#{t.Diametro}", t.Manual)).ToList();
         var bastones = rv.Bastones.Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Donde(p, b), Cantidad([b.Grupo]), b.Kg,
-            b.LargoRecto < CalculadorBastones.LargoDe(o.Bastones, b.Id))).ToList();
+            b.LargoRecto < CalculadorBastones.LargoDe(o.Bastones, b.Id),
+            Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde)).ToList();
 
         bool seccionSinError = re.Seccion.Superior.Error == ErrorCara.Ninguno && re.Seccion.Inferior.Error == ErrorCara.Ninguno;
         bool sePuede = rv.Superior is not null && rv.Inferior is not null && seccionSinError && !avisos.Any(a => Bloquean.Contains(a.Tipo));
@@ -80,6 +82,15 @@ public static class ArmadorVista
             CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
             re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList());
     }
+
+    /// <summary>El gancho como lo escribe la página: "90°", "135°", "180°" o "" (sin gancho).</summary>
+    private static string Grados(TipoGancho t) => t switch
+    {
+        TipoGancho.De90 => "90°",
+        TipoGancho.De135 => "135°",
+        TipoGancho.De180 => "180°",
+        _ => "",
+    };
 
     /// <summary>Lo que recibe el motor para el pórtico <paramref name="p"/> con lo que eligió el usuario (también la vista previa, #84).</summary>
     internal static EntradaVigas EntradaDe(PorticoLeido p, OpcionesTablero o, Reglas r) =>

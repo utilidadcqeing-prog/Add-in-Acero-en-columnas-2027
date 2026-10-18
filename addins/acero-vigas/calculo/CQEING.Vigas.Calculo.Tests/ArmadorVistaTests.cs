@@ -29,6 +29,25 @@ public class ArmadorVistaTests
         new(p.Portico, p.Tipo, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Reglas.Generales);
 
     [Fact]
+    public void LaVistaDiceElGanchoDeCadaPuntaYSiLlegaAlBorde()
+    {
+        var o = OpcionesTablero.PorDefecto with
+        {
+            Cambios = new CambiosManuales(Ganchos: new Dictionary<string, TipoGancho> { ["S.inicio"] = TipoGancho.De180, ["BS1.inicio"] = TipoGancho.De135 }),
+        };
+
+        VistaPortico v = Armar(o);
+
+        BarraVista s1 = v.Barras.Single(b => b.Id == "S1"), s2 = v.Barras.Single(b => b.Id == "S2"), s4 = v.Barras.Single(b => b.Id == "S4");
+        Assert.Equal(("180°", "", true, false), (s1.GanchoInicioTipo, s1.GanchoFinTipo, s1.PuntaInicioEnBorde, s1.PuntaFinEnBorde));
+        Assert.Equal((false, false), (s2.PuntaInicioEnBorde, s2.PuntaFinEnBorde));
+        Assert.Equal(("90°", true), (s4.GanchoFinTipo, s4.PuntaFinEnBorde));
+        BastonVista bs1 = v.Bastones.Single(b => b.Id == "BS1"), bs2 = v.Bastones.Single(b => b.Id == "BS2");
+        Assert.Equal(("135°", true, false), (bs1.GanchoInicioTipo, bs1.PuntaInicioEnBorde, bs1.PuntaFinEnBorde));
+        Assert.Equal(("", false), (bs2.GanchoInicioTipo, bs2.PuntaInicioEnBorde));
+    }
+
+    [Fact]
     public void LaListaNombraElPorticoComoLaMaqueta()
     {
         PorticoEnLista l = ArmadorVista.EnLista(Portico1());

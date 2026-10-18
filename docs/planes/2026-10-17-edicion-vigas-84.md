@@ -475,6 +475,16 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
     - Ruling: "Volver al mínimo" pone en el campo el largo automático que llega con la vista siguiente, no el mínimo de la tabla.
     - Ruling: Aplicar del bastón no se desactiva (la maqueta lo dibuja siempre azul); si no se puede, muestra el motivo como aviso.
 - [ ] Fase B (tareas 3–4).
+  - Tarea 3, rulings anotados antes de programar:
+    - `BastonSinGanchoEscritoNoSeRedondea` se prueba con BS2: BS1 está en la columna A y se corta en el borde, así que su parte recta nunca mide lo escrito.
+    - `UnGanchoMasLargoQueNoSaleDeLaVarillaUsaLaLargaOAvisa` usa reglas de prueba con un gancho de 180° largo: en los cuadros de Carlos el de 90° es el más largo de cada diámetro, así que con ellos cambiar el gancho nunca alarga una barra.
+    - `ParametrosCapa` lleva también el tipo de gancho de cada punta (`TipoInicio`, `TipoFin`), para que `CapaCalculada` se los ponga a las barras de borde.
+    - `Baston` gana `PuntaInicioEnBorde` y `PuntaFinEnBorde`: en el bastón se permite "Sin", así que el largo del gancho no alcanza para saber dónde van los botones.
+    - Una clave de gancho de un bastón que no existe (`"BS9.inicio"`) avisa `CambioNoAplicado` / `NoExiste`, como los demás cambios.
+  - [x] Tarea 3: `TipoGancho`, `Reglas.LargoGancho`, `CambiosManuales.Ganchos`, ganchos por punta en `ParametrosCapa`, `CalculadorBastones` con el redondeo de la decisión 9, y la vista con `GanchoInicioTipo` / `GanchoFinTipo` / `PuntaInicioEnBorde` / `PuntaFinEnBorde`. `rtk dotnet test CQEING-Addins.sln -c Release` → 549 en verde.
+    - Ejemplo de la decisión 9 en la maqueta: BS1 va de −0.15 a 1.00 (1.15); con 90° da 1.428, sube a 1.50 y la punta de adentro pasa a 1.072.
+    - "Con gancho" del paso 2 (#89) sigue sin redondear (1.428): solo redondea el gancho elegido con los botones.
+    - Para la tarea 4: la página manda los ganchos con el nombre del enum (`"De90"`, `"De135"`, `"De180"`, `"Sin"`), como los demás enums del protocolo.
 - [ ] Fase C (tareas 5–7).
 - [ ] Fase D (tareas 8–9).
 - [ ] Probado en Revit (tarea 10).

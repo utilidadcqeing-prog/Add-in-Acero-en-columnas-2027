@@ -37,15 +37,17 @@ internal sealed record CapaCalculada(
             Capa: Capa,
             Desde: b.Desde,
             Hasta: b.Hasta,
-            GanchoInicio: i == 0 ? Parametros.Gancho : 0,
-            GanchoFin: i == lineas.Count - 1 ? Parametros.Gancho : 0,
+            GanchoInicio: i == 0 ? Parametros.GanchoInicio : 0,
+            GanchoFin: i == lineas.Count - 1 ? Parametros.GanchoFin : 0,
             Largo: b.Largo,
             Varilla: VarillaPara(b.Largo),
             Manual: manuales?.Contains(i) ?? false,
             LlegaAlVoladizo: (portico.VoladizoInicio > 0 && b.Desde < primero.CaraIzquierda)
                 || (portico.VoladizoFinal > 0 && b.Hasta > ultimo.CaraDerecha),
             Grupos: Grupos,
-            Kg: KgDe(b.Largo))).ToList();
+            Kg: KgDe(b.Largo),
+            TipoInicio: i == 0 ? Parametros.TipoInicio : TipoGancho.Sin,
+            TipoFin: i == lineas.Count - 1 ? Parametros.TipoFin : TipoGancho.Sin)).ToList();
 
         var traslapos = resuelta.Solucion.Traslapos.Select((t, i) => new Traslapo(
             Id: $"{barras[i].Id}–{barras[i + 1].Id}",

@@ -37,7 +37,13 @@ internal static class CalculadorBastones
             }
             string prefijo = capa == Posicion.Superior ? "BS" : "BI";
             IEnumerable<Lugar> lugares = (capa == capaDeLosApoyos ? apoyos : luces).OrderBy(l => l.Centro);
-            bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, armado, g, avisos)));
+            bastones.AddRange(lugares.Select((lugar, i) => Armar($"{prefijo}{i + 1}", capa, lugar, grupo, regla, e, armado, g, avisos)));
+        }
+        // un gancho guardado para un bastón que ya no está (#84)
+        foreach (string clave in e.Cambios?.Ganchos?.Keys ?? [])
+        {
+            if (clave.StartsWith('B') && bastones.All(b => b.Id != clave.Split('.')[0]))
+                avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoExiste));
         }
         return bastones;
     }
@@ -51,7 +57,7 @@ internal static class CalculadorBastones
         : armado.Inferior ?? new GrupoBarras(1, e.Inferior[0].Diametro);
 
     private static Baston Armar(string id, Posicion capa, Lugar lugar, GrupoBarras grupo, ReglaDiametro regla,
-        ArmadoBastones armado, GeometriaPortico g, List<Aviso> avisos)
+        EntradaVigas e, ArmadoBastones armado, GeometriaPortico g, List<Aviso> avisos)
     {
         int? escrito = armado.Largos?.TryGetValue(id, out int valor) == true ? valor : null;
         if (escrito <= 0)
@@ -59,12 +65,37 @@ internal static class CalculadorBastones
         bool manual = escrito > 0;
         int largo = LargoDe(armado, id);
         int desde = lugar.Centro - largo / 2, hasta = desde + largo;
-        int ganchoInicio = armado.ConGancho && desde < g.InicioBarras ? regla.Gancho90.B : 0;
-        int ganchoFin = armado.ConGancho && hasta > g.FinBarras ? regla.Gancho90.B : 0;
+        bool bordeInicio = desde < g.InicioBarras, bordeFin = hasta > g.FinBarras;
+        TipoGancho tipoInicio = Punta(id + ".inicio", bordeInicio), tipoFin = Punta(id + ".fin", bordeFin);
+        int ganchoInicio = Reglas.LargoGancho(regla, tipoInicio), ganchoFin = Reglas.LargoGancho(regla, tipoFin);
         desde = Math.Max(desde, g.InicioBarras);
         hasta = Math.Min(hasta, g.FinBarras);
         int total = hasta - desde + ganchoInicio + ganchoFin;
+        // con un gancho elegido con los botones, el total sube al múltiplo y el sobrante va a la otra punta (decisión 9
+        // del plan de #84, Carlos 17-oct: "1.95… va a aumentar cinco para afuera"); el escrito sin gancho no se redondea
+        if ((bordeInicio && Elegido(id + ".inicio")) || (bordeFin && Elegido(id + ".fin")))
+        {
+            int modulo = e.Reglas.Modulo, sobra = (total + modulo - 1) / modulo * modulo - total;
+            if (bordeInicio && !bordeFin)
+                hasta = Math.Min(g.FinBarras, hasta + sobra);
+            else if (bordeFin && !bordeInicio)
+                desde = Math.Max(g.InicioBarras, desde - sobra);
+            total = hasta - desde + ganchoInicio + ganchoFin;
+        }
         return new Baston(id, capa, lugar.Donde, lugar.EnApoyo, lugar.Centro, desde, hasta, ganchoInicio, ganchoFin, total,
-            manual, grupo, total / 1000.0 * grupo.Cantidad * regla.KgPorMetro);
+            manual, grupo, total / 1000.0 * grupo.Cantidad * regla.KgPorMetro, tipoInicio, tipoFin, bordeInicio, bordeFin);
+
+        // el gancho de una punta: el elegido con los botones (solo en el borde) o, en el borde, el general del paso 2
+        TipoGancho Punta(string clave, bool enBorde)
+        {
+            if (e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) != true)
+                return enBorde && armado.ConGancho ? TipoGancho.De90 : TipoGancho.Sin;
+            if (enBorde)
+                return tipo;
+            avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoLlegaAlBorde));
+            return TipoGancho.Sin;
+        }
+
+        bool Elegido(string clave) => e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) == true && tipo != TipoGancho.Sin;
     }
 }

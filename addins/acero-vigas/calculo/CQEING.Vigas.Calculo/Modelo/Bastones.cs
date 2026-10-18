@@ -31,7 +31,11 @@ public sealed record Baston(
     int Largo,
     bool Manual,
     GrupoBarras Grupo,
-    double Kg)
+    double Kg,
+    TipoGancho TipoInicio = TipoGancho.Sin,
+    TipoGancho TipoFin = TipoGancho.Sin,
+    bool PuntaInicioEnBorde = false,
+    bool PuntaFinEnBorde = false)
 {
     public int LargoRecto => Hasta - Desde;
 }
