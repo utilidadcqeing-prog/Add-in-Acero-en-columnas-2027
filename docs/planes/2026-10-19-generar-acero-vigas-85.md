@@ -165,6 +165,16 @@ Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo
 | E14 | **El abierto y el cerrado adicional abrazan la misma barra** (la 2 de arriba y la 2 de abajo), y el tablero los acepta los dos. | El motor solo descarta un adicional que coincide con el estribo de las esquinas (`IgualAlCerrado`), no uno que repite una rama de otro adicional. |
 | E10 | **Sigue:** BS1 y S1 en el mismo punto (X 3308, Z 6630). | Ver E10 arriba. |
 
+**Estado después de la quinta prueba** (2026-10-19, Juan: "resuelve", con Revit cerrado):
+
+| # | Estado | Qué se hizo, o por qué sigue abierto |
+|---|---|---|
+| E9 | ✅ en código | La lista de adicionales muestra en rojo "No se agrega: …" con el texto del aviso con el que el motor lo descartó. Los ids son E1, E2… primero los del pórtico y después los de los tramos marcados. |
+| E13 | ✅ en código, falta verlo en Revit | La rama va al lado de las barras, del lado del centro de la viga, a un radio de doblado de su eje (`StandardHookBendDiameter / 2 + d / 2`): el doblez queda centrado en la barra y la cola entra al núcleo. Cada gancho se revisa después de regenerar y se voltea si su punta no queda del lado de la barra (`CreadorEstribos.CorregirAbierto`). El plan trae las dos barras que abraza (`Rama`). |
+| E14 | ✅ | El motor descarta un abierto en la rama de otro adicional, o un cerrado con las mismas dos ramas, con el aviso nuevo `RepiteOtroAdicional` (`11becb4`). |
+| E10, E11 | ⏳ experimento en Revit | Antes de tocar las posiciones hace falta saber qué hace Revit, y eso solo se ve con Revit abierto (por MCP, en una subtransacción que se deshace): (1) si crear los estribos **antes** que las barras evita que Revit las pegue al doblez; (2) si un bastón puesto un poco más abajo queda donde se pide o Revit lo vuelve a pegar; (3) con qué diámetro arma Revit la posición de la barra (nominal o de modelo). Según eso: ajustar el orden de creación, o poner en el plan las esquinas y los bastones donde los deja Revit. |
+| E12, gancho que no cabe | ⏳ Carlos | Reglas de diseño. |
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.

@@ -41,7 +41,14 @@ public sealed record GrupoEstribos(
     double Abajo,
     double Arriba,
     Corrida Corrida,
-    string Host);
+    string Host,
+    Rama? Rama = null);
+
+/// <summary>
+/// Las dos barras que abraza un estribo abierto, por su centro en el corte (mm), y el diámetro mayor de las dos (hallazgo
+/// E13): la rama va al lado de ellas y sus ganchos las abrazan.
+/// </summary>
+public sealed record Rama(double X, double YArriba, double YAbajo, double Diametro);
 
 /// <summary>
 /// Todo lo que se crea en Revit para un pórtico. <paramref name="Portico"/> es su id en el tablero.

@@ -74,11 +74,26 @@ public static class PlanificadorAcero
             IReadOnlyList<Corrida> corridas = tramos.TryGetValue(e.Tramo, out Tramo? tramo)
                 ? CorridasEstribos.PorZonas(e.Posiciones, DistribuidorEstribos.Zonas(tramo, config, r.PorDiametro[config.Diametro].Diametro))
                 : CorridasEstribos.Partir(e.Posiciones);
+            Rama? rama = e.Tipo == TipoEstribo.Abierto ? RamaDe(re.Seccion, caras.Izquierda, r) : null;
             grupos.AddRange(corridas.Select(c => new GrupoEstribos(e.Id, e.Tramo, e.Tipo, e.Diametro, e.Gancho,
                 caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba, c,
-                MarcoPortico.VigaEn(u, c.Primero + (c.Cantidad - 1) * c.Separacion / 2) ?? throw new InvalidOperationException("El pórtico no tiene vigas."))));
+                MarcoPortico.VigaEn(u, c.Primero + (c.Cantidad - 1) * c.Separacion / 2) ?? throw new InvalidOperationException("El pórtico no tiene vigas."),
+                rama)));
         }
         return grupos;
+    }
+
+    /// <summary>
+    /// Las barras que abraza un abierto en <paramref name="x"/>: la de arriba más alta y la de abajo más baja en esa x (las
+    /// de la fila de cada cara), ya alineadas por el motor (hallazgo E13).
+    /// </summary>
+    private static Rama? RamaDe(ResultadoSeccion s, double x, Reglas r)
+    {
+        BarraEnSeccion? arriba = s.Superior.Filas.SelectMany(f => f).Where(b => Math.Abs(b.X - x) < 0.5).MaxBy(b => b.Y);
+        BarraEnSeccion? abajo = s.Inferior.Filas.SelectMany(f => f).Where(b => Math.Abs(b.X - x) < 0.5).MinBy(b => b.Y);
+        if (arriba is null || abajo is null)
+            return null;
+        return new Rama(x, arriba.Y, abajo.Y, Math.Max(r.PorDiametro[arriba.Diametro].Diametro, r.PorDiametro[abajo.Diametro].Diametro));
     }
 
     /// <summary>Un diámetro hacia el centro del corte; la barra que está justo en el centro, hacia +X.</summary>

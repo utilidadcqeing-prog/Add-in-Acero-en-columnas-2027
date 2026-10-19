@@ -112,20 +112,64 @@ internal static class CreadorEstribos
             useExistingShapeIfPossible: true, createNewShape: true);
     }
 
-    /// <summary>Una rama vertical entre la barra de abajo y la de arriba, con ganchos de 135° en las dos puntas.</summary>
+    /// <summary>
+    /// Una rama vertical al lado de las dos barras que abraza, con un gancho en cada punta que da la vuelta a su barra
+    /// (hallazgo E13: antes la rama iba por el eje de las barras y los ganchos se abrían hacia afuera). La rama queda del
+    /// lado del centro de la viga, a un radio de doblado del eje de las barras: así el doblez del gancho queda centrado en
+    /// la barra y la cola entra al núcleo. Los ganchos que doblen hacia el otro lado se voltean después de regenerar
+    /// (<see cref="CorregirAbierto"/>).
+    /// </summary>
     private static Rebar? Abierto(Document doc, UbicacionPortico u, GrupoEstribos g, RebarBarType barra, TiposAcero tipos, Element host, double d)
     {
-        double x = g.Corrida.Primero, xc = g.Izquierda;
-        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, xc, g.Abajo + d / 2), CreadorBarras.Punto(u, x, xc, g.Arriba - d / 2));
+        if (g.Rama is not { } rama)
+            return null;
+        double radio = LectorModelo.Mm(barra.StandardHookBendDiameter) / 2 + d / 2;
+        double xRama = rama.X + LadoDeLaRama(u, rama) * radio;
+        double x = g.Corrida.Primero;
+        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, xRama, rama.YAbajo), CreadorBarras.Punto(u, x, xRama, rama.YArriba));
         RebarHookType? gancho = tipos.Gancho(g.Gancho == GanchoEstribo.De135 ? TipoGancho.De135 : TipoGancho.De90, g.Diametro);
         using var terminaciones = new BarTerminationsData(doc);
         if (gancho is not null)
         {
             terminaciones.HookTypeIdAtStart = gancho.Id;
             terminaciones.HookTypeIdAtEnd = gancho.Id;
+            terminaciones.TerminationOrientationAtStart = RebarTerminationOrientation.Right;
+            terminaciones.TerminationOrientationAtEnd = RebarTerminationOrientation.Right;
         }
         return Rebar.CreateFromCurves(doc, RebarStyle.Standard, barra, host, Direccion(u), new List<Curve> { linea }, terminaciones,
             useExistingShapeIfPossible: true, createNewShape: true);
+    }
+
+    /// <summary>+1 si la rama va a la derecha de las barras (en la X del corte), −1 si a la izquierda: hacia el centro.</summary>
+    private static int LadoDeLaRama(UbicacionPortico u, Rama rama) => rama.X <= u.Ancho / 2 ? 1 : -1;
+
+    /// <summary>
+    /// Deja los dos ganchos del abierto dando la vuelta a su barra: la punta de cada gancho tiene que quedar del lado de la
+    /// barra, no del lado de la rama. Llamar después de regenerar. Devuelve si volteó alguno.
+    /// </summary>
+    public static bool CorregirAbierto(Rebar r, UbicacionPortico u, GrupoEstribos g)
+    {
+        if (g.Tipo != TipoEstribo.Abierto || g.Rama is not { } rama)
+            return false;
+        IList<Curve> curvas = r.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
+        if (curvas.Count < 2)
+            return false;
+        XYZ haciaLaBarra = CreadorBarras.Lateral(u) * LadoDeLaRama(u, rama); // −X del corte si la rama está a la derecha
+        XYZ inicioRama = curvas.First(c => c.Length > 0).GetEndPoint(0);
+        bool volteo = false;
+        volteo |= Voltear(r, 0, curvas[0].GetEndPoint(0), curvas.Count > 2 ? curvas[2].GetEndPoint(0) : inicioRama, haciaLaBarra);
+        volteo |= Voltear(r, 1, curvas[^1].GetEndPoint(1), curvas.Count > 2 ? curvas[^3].GetEndPoint(1) : inicioRama, haciaLaBarra);
+        return volteo;
+    }
+
+    /// <summary>Voltea el gancho del extremo si su punta no queda del lado de la barra respecto de la rama.</summary>
+    private static bool Voltear(Rebar r, int extremo, XYZ punta, XYZ enLaRama, XYZ haciaLaBarra)
+    {
+        if ((punta - enLaRama).DotProduct(haciaLaBarra) > 0)
+            return false;
+        RebarTerminationOrientation actual = r.GetTerminationOrientation(extremo);
+        r.SetTerminationOrientation(extremo, actual == RebarTerminationOrientation.Right ? RebarTerminationOrientation.Left : RebarTerminationOrientation.Right);
+        return true;
     }
 
     private static XYZ Direccion(UbicacionPortico u) => new(u.Ux, u.Uy, 0);

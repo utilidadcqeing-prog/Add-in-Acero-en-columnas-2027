@@ -31,7 +31,7 @@ internal static class GeneradorAcero
         RebarShape? formaEstribo = CreadorEstribos.FormaEstribo(doc);
         var formasMalas = new HashSet<ElementId>();
         var creadas = new List<Creada>();
-        var estribos = new List<Rebar>();
+        var estribos = new List<(Rebar Conjunto, PorticoAGenerar Portico, GrupoEstribos Grupo)>();
         using var t = new Transaction(doc, NombreTransaccion);
         FailureHandlingOptions opciones = t.GetFailureHandlingOptions();
         opciones.SetFailuresPreprocessor(new SinAdvertencias());
@@ -55,7 +55,7 @@ internal static class GeneradorAcero
                 if (CrearEstribos(doc, p, g, tipos, formaEstribo, formasMalas) is { } conjunto)
                 {
                     MarcaAcero.Marcar(conjunto, p.Id, $"{g.Pieza} {g.Tramo}");
-                    estribos.Add(conjunto);
+                    estribos.Add((conjunto, p, g));
                 }
                 else
                     fallas.Add($"{g.Pieza} de {g.Tramo} ({p.Id}): Revit no pudo crear los estribos #{g.Diametro}.");
@@ -67,6 +67,8 @@ internal static class GeneradorAcero
         bool volteados = false;
         foreach (Creada c in creadas)
             volteados |= CreadorBarras.CorregirGanchos(c.Barra, c.Pieza, CreadorBarras.Pies(c.Portico.Ubicacion.ZAbajo + c.Pieza.YCorte));
+        foreach ((Rebar conjunto, PorticoAGenerar p, GrupoEstribos g) in estribos)
+            volteados |= CreadorEstribos.CorregirAbierto(conjunto, p.Ubicacion, g);
         if (volteados)
             doc.Regenerate();
 
@@ -75,7 +77,7 @@ internal static class GeneradorAcero
             .Where(d => Math.Abs(d.LargoRevit - d.LargoTablero) > ToleranciaLargo)
             .ToList();
         // Ya regenerado: NumberOfBarPositions cuenta los estribos que de verdad quedaron (columnas: sin regenerar, uno menos).
-        int cantidadEstribos = estribos.Sum(e => e.NumberOfBarPositions);
+        int cantidadEstribos = estribos.Sum(e => e.Conjunto.NumberOfBarPositions);
         t.Commit();
 
         return new ResumenGeneracion(porticos.Count, creadas.Count(c => !c.EsBaston), creadas.Count(c => c.EsBaston), cantidadEstribos,

@@ -201,6 +201,11 @@ public class PlanificadorAceroTests
 
         Assert.NotEmpty(e1);
         Assert.All(e1, g => Assert.Equal((TipoEstribo.Abierto, g.Izquierda), (g.Tipo, g.Derecha)));
+        // Hallazgo E13: la rama sabe qué barras abraza (la del medio de arriba y la del medio de abajo, ya alineadas).
+        PorticoCalculado c = Calcular(o);
+        BarraEnSeccion medioArriba = c.Estribos.Seccion.Superior.Filas[0][1], medioAbajo = c.Estribos.Seccion.Inferior.Filas[0][1];
+        Assert.All(e1, g => Assert.Equal(new Rama(medioArriba.X, medioArriba.Y, medioAbajo.Y, 15.9), g.Rama));
+        Assert.All(Planificar(o).Estribos.Where(g => g.Pieza == "E"), g => Assert.Null(g.Rama));
     }
 
     [Fact]

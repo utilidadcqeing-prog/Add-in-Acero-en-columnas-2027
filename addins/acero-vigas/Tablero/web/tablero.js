@@ -11,6 +11,8 @@
   const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
   const mm = (m) => Math.round(m * 1000);
   const diametro = (d) => parseInt(String(d).slice(1), 10);
+  // Los avisos con los que el motor descarta un estribo adicional (TipoAviso en C#).
+  const DESCARTA = ['EstriboIncompleto', 'BarraNoExiste', 'MueveUnaEsquina', 'NoSePuedeAlinear', 'IgualAlCerrado', 'RepiteOtroAdicional'];
 
   // Lo que el usuario elige para un pórtico: el `state` de la maqueta que cambia el cálculo (OpcionesTablero).
   const OPCIONES0 = {
@@ -584,8 +586,15 @@
         rulesWarn: s.rulesWarn,
         // abierta, la lista de barras toma todo el alto que sobra en la columna (Juan, 19-oct: "que la tabla llegue al límite")
         listOpen: s.listOpen, listLabel: s.listOpen ? 'Ocultar' : 'Ver lista', rows: rowsList.concat(estRows),
+        // Hallazgo E9: el motor puede descartar un adicional (rama del cerrado, otro igual, no cabe…); la lista lo dice con
+        // su motivo. Los ids son E1, E2… primero los del pórtico y después los de los tramos marcados.
         estAddList: misAdicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1),
           desc: ea.tipo + ' · ' + ea.barras.map((b) => b.nombre).join(', '),
+          motivo: (() => {
+            const id = 'E' + (i + 1 + (nSel ? (s.est.adicionales || []).length : 0));
+            const a = P ? P.avisos.find((x) => x.elemento === id && DESCARTA.includes(x.tipo)) : null;
+            return a ? 'No se agrega: ' + a.texto : '';
+          })(),
           removeLabel: 'Quitar adicional ' + (i + 1), remove: () => ponerAdicionales(misAdicionales.filter((_, j) => j !== i)) })),
         isPicking: !!pk, noPick: !pk, pickNotDone: !pk || nArriba !== limite || nAbajo !== limite,
         pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
@@ -1128,6 +1137,7 @@
                   <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
                     <span style="font-weight: 600">${ea.name}</span>
                     <span style="color: #5E6670">${ea.desc}</span>
+                    ${ea.motivo ? html`<span role="status" style="color: #B42318">${ea.motivo}</span>` : null}
                   </div>
                   <button type="button" aria-label=${ea.removeLabel} onClick=${ea.remove} style="height: 28px; padding: 0 8px; border: 0; background: transparent; font: inherit; color: #B42318; cursor: pointer">Quitar</button>
                 </div>`)}
