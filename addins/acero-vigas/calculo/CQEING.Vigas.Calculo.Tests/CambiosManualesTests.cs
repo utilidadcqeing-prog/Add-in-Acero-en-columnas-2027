@@ -174,19 +174,20 @@ public class CambiosManualesTests
     [Fact]
     public void MoverAlVoladizoSinConfirmarSeRechazaYConfirmadoSeAplica()
     {
-        // ejes A, B y C en 0, 4.40 y 6.80, voladizo de 2.50 (C termina en 7000 y las barras en 9450); abajo, junto a
-        // la cara final: I2 3.00 · I3 4.50, con I2–I3 de 5228 a 6172 en B-C
+        // ejes A, B y C en 0, 4.40 y 6.80, voladizo de 2.50 (C termina en 7000; las barras de arriba en 9450 y las de
+        // abajo 16 mm antes, con el gancho anidado); abajo, junto a la cara final: I2 3.00 · I3 4.50, con I2–I3 desde 5212
+        // en B-C
         var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 6800)], VoladizoFinal: 2500);
         EntradaVigas Entrada(bool confirmado) => new(portico, TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)],
-            Reglas.Generales, Cara.Final, Cambios: Movido("I2–I3", 5228 + 2000, confirmado));
+            Reglas.Generales, Cara.Final, Cambios: Movido("I2–I3", 5212 + 2000, confirmado));
 
         ResultadoVigas sinConfirmar = MotorVigas.Calcular(Entrada(false));
         ResultadoVigas confirmado = MotorVigas.Calcular(Entrada(true));
 
         Assert.Contains(sinConfirmar.Avisos, a => a is { Tipo: TipoAviso.CambioNoAplicado, Elemento: "I2–I3", Motivo: MotivoBloqueo.TraslapoEnVoladizo });
-        Assert.Equal(5228, sinConfirmar.Inferior!.Traslapos[^1].Desde);
+        Assert.Equal(5212, sinConfirmar.Inferior!.Traslapos[^1].Desde);
         SolucionCapa abajo = confirmado.Inferior!;
-        Assert.Equal((7228, 8172), (abajo.Traslapos[^1].Desde, abajo.Traslapos[^1].Hasta));
+        Assert.Equal((7212, 8188), (abajo.Traslapos[^1].Desde, abajo.Traslapos[^1].Hasta));
         Assert.Equal((5000, true), (abajo.Barras[^2].Largo, abajo.Barras[^2].LlegaAlVoladizo));
         Assert.Equal(2500, abajo.Barras[^1].Largo);
     }

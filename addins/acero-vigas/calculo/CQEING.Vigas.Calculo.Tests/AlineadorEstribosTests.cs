@@ -234,4 +234,31 @@ public class AlineadorEstribosTests
         Assert.Equal(4, r.Estribos.Count(e => e.Id == "E"));
         Assert.Contains(r.EnSeccion, e => e.Id == "E");
     }
+
+    [Fact]
+    public void AbiertoEnUnaRamaDeOtroAdicional_NoSeAgrega()
+    {
+        // Hallazgo E14 (Revit, 2026-10-19): un cerrado en las barras 1 y 2 y un abierto en la 2 abrazaban la misma barra.
+        ResultadoEstribos r = Calcular(Cerrado(S(1), S(2), I(1), I(2)), Abierto(S(2), I(2)));
+
+        NoSeAgrega(r, TipoAviso.RepiteOtroAdicional, "E2");
+        Assert.Contains(r.EnSeccion, e => e.Id == "E1");
+    }
+
+    [Fact]
+    public void CerradoIgualAOtroAdicional_NoSeAgrega()
+    {
+        ResultadoEstribos r = Calcular(Cerrado(S(2), S(3), I(2), I(3)), Cerrado(I(3), S(2), S(3), I(2)));
+
+        NoSeAgrega(r, TipoAviso.RepiteOtroAdicional, "E2");
+    }
+
+    [Fact]
+    public void AbiertoEnOtraBarra_SiSeAgrega()
+    {
+        ResultadoEstribos r = Calcular(Cerrado(S(1), S(2), I(1), I(2)), Abierto(S(3), I(3)));
+
+        Assert.Contains(r.EnSeccion, e => e.Id == "E2");
+        Assert.DoesNotContain(r.Avisos, a => a.Tipo == TipoAviso.RepiteOtroAdicional);
+    }
 }

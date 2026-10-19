@@ -104,6 +104,10 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
                 vista = View3D.CreateIsometric(doc, tipo);
                 vista.Name = Nombre3d;
             }
+            // Sombreado: en alambre Revit no pinta superficies, y el acero (la vista previa y las barras con filtro de color
+            // por diámetro) se vería sin color.
+            if (vista.DisplayStyle != DisplayStyle.ShadingWithEdges)
+                vista.DisplayStyle = DisplayStyle.ShadingWithEdges;
             if (vista.IsInTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate))
                 vista.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
             vista.IsolateElementsTemporary(ids);

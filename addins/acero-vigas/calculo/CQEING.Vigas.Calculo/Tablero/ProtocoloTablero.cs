@@ -35,6 +35,9 @@ public sealed record VerTodos() : MensajeTablero;
 /// <summary>"Guardar y bloquear" en la pantalla Reglas, con los textos de sus campos.</summary>
 public sealed record GuardarReglas(VistaReglas Reglas) : MensajeTablero;
 
+/// <summary>"Generar en Revit" (#85): el acero de los pórticos <paramref name="Ids"/>.</summary>
+public sealed record Generar(IReadOnlyList<string> Ids) : MensajeTablero;
+
 /// <summary>Un mensaje que no se entiende (<paramref name="Tipo"/> vacío si ni siquiera trae tipo): se ignora.</summary>
 public sealed record Desconocido(string Tipo) : MensajeTablero;
 
@@ -81,6 +84,7 @@ public static class ProtocoloTablero
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
                 "cambiarEnVivo" => new CambiarEnVivo(nodo["activo"]?.GetValue<bool>() ?? false),
                 "verTodos" => new VerTodos(),
+                "generar" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } ids ? new Generar(ids) : new Desconocido(tipo),
                 "guardarReglas" => nodo["reglas"]?.Deserialize<VistaReglas>(Json) is { PorDiametro: not null } r
                     ? new GuardarReglas(r) : new Desconocido(tipo),
                 _ => new Desconocido(tipo),
@@ -100,6 +104,39 @@ public static class ProtocoloTablero
 
     /// <summary><c>{"tipo":"previa","previa":…}</c>: la respuesta a <see cref="Previsualizar"/>.</summary>
     public static string Previa(PreviaVista p) => JsonSerializer.Serialize(new { tipo = "previa", previa = p }, Json);
+
+    /// <summary>
+    /// <c>{"tipo":"generado","texto":…,"resumen":…}</c>: la página muestra <c>texto</c>, una línea por cosa (#85). La
+    /// primera dice qué se creó; siguen las fallas y las diferencias de largo con Revit.
+    /// </summary>
+    public static string Resumen(ResumenGeneracion r)
+    {
+        string primera = r.Porticos == 0
+            ? "No se generó ningún pórtico."
+            : $"Se generó el acero de {Contar(r.Porticos, "pórtico", "pórticos")}: {Contar(r.Barras, "barra", "barras")}, " +
+              $"{Contar(r.Bastones, "bastón", "bastones")} y {Contar(r.Estribos, "estribo", "estribos")}.";
+        string texto = string.Join("\n", r.Fallas.Prepend(primera).Concat(Textos(r.Diferencias)));
+        return JsonSerializer.Serialize(new { tipo = "generado", texto, resumen = r }, Json);
+    }
+
+    /// <summary>
+    /// Una línea por pórtico, diámetro y diferencia, con las piezas que la tienen: así los 3 #5 de S1, S4, I1 e I4, que
+    /// difieren por el mismo gancho, dan una sola. En m a 2 decimales.
+    /// </summary>
+    public static IReadOnlyList<string> Textos(IReadOnlyList<DiferenciaLargo> diferencias) =>
+        diferencias.GroupBy(d => (d.Portico, d.Diametro, Delta: d.LargoRevit - d.LargoTablero)).Select(g =>
+            $"{g.Key.Portico}, barras #{g.Key.Diametro} ({Lista(g.Select(d => d.Pieza).Distinct().ToList())}): en Revit miden " +
+            $"{Metros(Math.Abs(g.Key.Delta))} m {(g.Key.Delta < 0 ? "menos" : "más")} que en el tablero. " +
+            $"El gancho del tipo de barra #{g.Key.Diametro} en Revit no coincide con el cuadro de Reglas.").ToList();
+
+    /// <summary>"S1", "S1 y S4", "S1, S4 e I1": "e" antes de una palabra que suena a "i".</summary>
+    private static string Lista(IReadOnlyList<string> piezas) => piezas.Count == 1
+        ? piezas[0]
+        : $"{string.Join(", ", piezas.Take(piezas.Count - 1))} {(piezas[^1].StartsWith('I') ? "e" : "y")} {piezas[^1]}";
+
+    private static string Contar(int n, string uno, string varios) => $"{n} {(n == 1 ? uno : varios)}";
+
+    private static string Metros(int mm) => (mm / 1000.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string Texto(JsonObject nodo, string clave) => nodo[clave]?.GetValue<string>() ?? "";
 

@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
+using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using CQEING.Vigas.Calculo.Modelo;
@@ -29,7 +30,7 @@ internal sealed class PuenteTablero
         this.ventana = ventana;
         this.uiapp = uiapp;
         leido = uiapp.ActiveUIDocument?.Document;
-        sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "");
+        sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "", NominalesDelModelo);
 
         ventana.MensajeRecibido += json => acciones.Encolar(app => Atender(app, ProtocoloTablero.Leer(json)));
         acciones.Fallo += texto => ventana.Enviar(ProtocoloTablero.Aviso($"No se pudo hacer en Revit: {texto}"));
@@ -48,8 +49,21 @@ internal sealed class PuenteTablero
                 ventana.Enviar(js.Json);
             else if (salida is ARevit(AccionRevit accion, IReadOnlyList<string> vigas) && !desdeRevit)
                 Hacer(app, accion, vigas);
+            else if (salida is AGenerar(var porticos, var saltados, Reglas reglas) && leido is not null)
+                ventana.Enviar(ProtocoloTablero.Resumen(GeneradorAcero.Generar(leido, porticos, saltados, reglas)));
+            else if (salida is APrevia3d(var portico, Reglas reglasPrevia) && leido is not null)
+            {
+                PreviaAcero3D.Mostrar(leido, AccionesRevit.Nombre3d, portico, reglasPrevia);
+                app.ActiveUIDocument?.RefreshActiveView();
+            }
         }
     }
+
+    /// <summary>El diámetro nominal de cada tipo de barra del documento leído, en mm (#85).</summary>
+    private IEnumerable<double> NominalesDelModelo() => leido is null
+        ? []
+        : new FilteredElementCollector(leido).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
+            .Select(t => LectorModelo.Mm(t.BarNominalDiameter)).ToList();
 
     private void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {
@@ -122,6 +136,7 @@ internal sealed class PuenteTablero
 
     private void Recargar(UIApplication app)
     {
+        PreviaAcero3D.Quitar();
         sesion.Recargar(app.ActiveUIDocument?.Document?.Title ?? "");
         ventana.Enviar(sesion.Vista().Json);
     }
@@ -193,6 +208,9 @@ internal sealed class PuenteTablero
         barra?.Close();
         try
         {
+            // La vista previa vive mientras el tablero esté abierto.
+            PreviaAcero3D.Quitar();
+            uiapp.ActiveUIDocument?.RefreshActiveView();
             uiapp.SelectionChanged -= AlCambiarSeleccion;
             uiapp.ViewActivated -= AlActivarVista;
             uiapp.Application.DocumentClosing -= AlCerrarDocumento;

@@ -16,7 +16,7 @@ public class EditorTableroTests
     private static OpcionEdicion Opcion(PreviaVista p, string accion) => Assert.Single(p.Opciones, o => o.Accion == accion);
 
     private static EntradaVigas Entrada() =>
-        ArmadorVista.EntradaDe(ArmadorVistaTests.Portico1(), OpcionesTablero.PorDefecto, Reglas.Generales);
+        CalculoPortico.EntradaDe(ArmadorVistaTests.Portico1(), OpcionesTablero.PorDefecto, Reglas.Generales);
 
     [Fact]
     public void SubirYBajarDevuelvenLasDosOpciones()

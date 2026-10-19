@@ -157,4 +157,70 @@ public class ProtocoloTableroTests
     {
         Assert.Equal("""{"tipo":"aviso","texto":"Hola \"tú\""}""", ProtocoloTablero.Aviso("Hola \"tú\""));
     }
+
+    [Fact]
+    public void CalcularTraeLosEstribosAdicionales()
+    {
+        // Lo que manda la página al agregar un adicional en el corte (hallazgo E8); "nombre" es solo para la lista y se ignora.
+        const string json = """
+            {"tipo":"calcular","id":"Pórtico 1","opciones":{"superior":[{"cantidad":3,"diametro":5}],"inferior":[{"cantidad":3,"diametro":5}],
+             "recubrimientoCm":4,"maximoFilas":3,
+             "estribos":{"diametro":3,"gancho":"De135","largoZona":800,"separacionZona":100,"separacionCentro":200,
+               "adicionales":[{"tipo":"Abierto","barras":[{"cara":"Superior","fila":1,"numero":2,"nombre":"arriba 2"},{"cara":"Inferior","fila":1,"numero":2}]}]}}}
+            """;
+
+        Calcular c = Assert.IsType<Calcular>(ProtocoloTablero.Leer(json));
+
+        EstriboAdicional a = Assert.Single(c.Opciones.Estribos.Adicionales!);
+        Assert.Equal(TipoEstribo.Abierto, a.Tipo);
+        Assert.Equal([new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)], a.Barras);
+    }
+
+    [Fact]
+    public void LeeGenerar()
+    {
+        MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1","Pórtico 2"]}""");
+
+        Assert.Equal(["Pórtico 1", "Pórtico 2"], Assert.IsType<Generar>(m).Ids);
+        Assert.IsType<Desconocido>(ProtocoloTablero.Leer("""{"tipo":"generar"}"""));
+    }
+
+    [Fact]
+    public void LasDiferenciasDeLargo_UnaLineaPorPorticoDiametroYDiferencia()
+    {
+        // Lo que dio el modelo real (hallazgo del plan): S1, S4 e I1 con el gancho del proyecto, 0.18 m más cortas.
+        IReadOnlyList<string> t = ProtocoloTablero.Textos([
+            new DiferenciaLargo("Pórtico A", "S1", 5, 4317, 4500),
+            new DiferenciaLargo("Pórtico A", "S1", 5, 4317, 4500),
+            new DiferenciaLargo("Pórtico A", "S4", 5, 4317, 4500),
+            new DiferenciaLargo("Pórtico A", "I1", 5, 3317, 3500),
+            new DiferenciaLargo("Pórtico A", "S1", 4, 6310, 6280),
+        ]);
+
+        Assert.Equal([
+            "Pórtico A, barras #5 (S1, S4 e I1): en Revit miden 0.18 m menos que en el tablero. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
+            "Pórtico A, barras #4 (S1): en Revit miden 0.03 m más que en el tablero. El gancho del tipo de barra #4 en Revit no coincide con el cuadro de Reglas.",
+        ], t);
+    }
+
+    [Fact]
+    public void ElResumenTraeSuTexto()
+    {
+        var r = new ResumenGeneracion(2, 48, 7, 112, ["Pórtico 3: el modelo no tiene un tipo de barra para el #9."],
+            [new DiferenciaLargo("Pórtico 2", "S1", 5, 6320, 6280)]);
+
+        JsonElement raiz = JsonDocument.Parse(ProtocoloTablero.Resumen(r)).RootElement;
+
+        Assert.Equal("generado", raiz.GetProperty("tipo").GetString());
+        Assert.Equal(
+            "Se generó el acero de 2 pórticos: 48 barras, 7 bastones y 112 estribos.\n" +
+            "Pórtico 3: el modelo no tiene un tipo de barra para el #9.\n" +
+            "Pórtico 2, barras #5 (S1): en Revit miden 0.04 m más que en el tablero. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
+            raiz.GetProperty("texto").GetString());
+        Assert.Equal("Se generó el acero de 1 pórtico: 3 barras, 0 bastones y 1 estribo.",
+            JsonDocument.Parse(ProtocoloTablero.Resumen(new ResumenGeneracion(1, 3, 0, 1, [], []))).RootElement.GetProperty("texto").GetString());
+        Assert.Equal("No se generó ningún pórtico.\nPórtico 3: no se puede generar; revisa los avisos del tablero.",
+            JsonDocument.Parse(ProtocoloTablero.Resumen(new ResumenGeneracion(0, 0, 0, 0, ["Pórtico 3: no se puede generar; revisa los avisos del tablero."], [])))
+                .RootElement.GetProperty("texto").GetString());
+    }
 }

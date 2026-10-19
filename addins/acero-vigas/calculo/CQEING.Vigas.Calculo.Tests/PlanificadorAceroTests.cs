@@ -1,0 +1,219 @@
+using CQEING.Vigas.Calculo.Generacion;
+using CQEING.Vigas.Calculo.Modelo;
+using CQEING.Vigas.Calculo.Porticos;
+using CQEING.Vigas.Calculo.Seccion;
+using CQEING.Vigas.Calculo.Tablero;
+
+namespace CQEING.Vigas.Calculo.Tests;
+
+/// <summary>
+/// El plan de lo que se crea en Revit (#85): una pieza por barra física, en su puesto del corte, con el traslapo al lado
+/// (decisión 2 del plan docs/planes/2026-10-19-generar-acero-vigas-85.md). El pórtico es el de la maqueta, 300 × 500.
+/// </summary>
+public class PlanificadorAceroTests
+{
+    /// <summary>Las vigas van de cara a cara de las columnas de 0.40, y la última hasta la punta del voladizo.</summary>
+    internal static PorticoLeido Portico(TipoViga tipo = TipoViga.Aerea) => ArmadorVistaTests.Portico1(tipo: tipo) with
+    {
+        Ubicacion = new UbicacionPortico(1, 0, 0, 0, 3000, 3500, 300, 500,
+            [new("101", -200, 4200), new("102", 4600, 7700), new("103", 8100, 12100), new("104", 12500, 14000)]),
+    };
+
+    private static PlanAcero Planificar(OpcionesTablero? o = null, PorticoLeido? p = null) =>
+        PlanificadorAcero.Planificar("Pórtico 1", p ?? Portico(), o ?? OpcionesTablero.PorDefecto, Reglas.Generales)!;
+
+    private static PorticoCalculado Calcular(OpcionesTablero? o = null, PorticoLeido? p = null) =>
+        CalculoPortico.Calcular(p ?? Portico(), o ?? OpcionesTablero.PorDefecto, Reglas.Generales)!;
+
+    private static List<BarraEnSeccion> DelCorte(PorticoCalculado c, Posicion capa) =>
+        (capa == Posicion.Superior ? c.Estribos.Seccion.Superior : c.Estribos.Seccion.Inferior).Filas.SelectMany(f => f).ToList();
+
+    [Fact]
+    public void UnaPiezaPorBarraFisica()
+    {
+        PorticoCalculado c = Calcular();
+
+        PlanAcero plan = Planificar();
+
+        Assert.Equal(c.Vigas.Barras.Count() * 3, plan.Barras.Count);
+        Assert.Equal("Pórtico 1", plan.Portico);
+        Assert.All(c.Vigas.Barras, b => Assert.Equal(3, plan.Barras.Count(x => x.Pieza == b.Id)));
+    }
+
+    [Fact]
+    public void VariasFilas_CadaPiezaEnSuPuestoDelCorte()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(7, 5)] };
+        PorticoCalculado c = Calcular(o);
+        List<BarraEnSeccion> corte = DelCorte(c, Posicion.Superior);
+
+        List<PiezaLongitudinal> s1 = Planificar(o).Barras.Where(b => b.Pieza == "S1").ToList();
+
+        Assert.Equal(7, s1.Count);
+        Assert.True(corte.Select(b => b.Y).Distinct().Count() > 1, "7 #5 en 300 de ancho tienen que ir en dos filas");
+        Assert.Equal(corte.Select(b => (b.X, b.Y, b.Diametro)), s1.Select(p => (p.XCorte, p.YCorte, p.Diametro)));
+    }
+
+    [Fact]
+    public void DosDiametros_CadaPiezaConElDeSuBarra()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };
+
+        List<PiezaLongitudinal> s1 = Planificar(o).Barras.Where(b => b.Pieza == "S1").ToList();
+
+        Assert.Equal(3, s1.Count(p => p.Diametro == 5));
+        Assert.Equal(2, s1.Count(p => p.Diametro == 4));
+        Assert.Equal([3, 4, 5], Planificar(o).Diametros.Order()); // el #3 es el de los estribos
+    }
+
+    [Fact]
+    public void GanchosDelBorde_SoloEnLasPuntasDelPortico()
+    {
+        PorticoCalculado c = Calcular();
+        List<string> arriba = c.Vigas.Superior!.Barras.Select(b => b.Id).ToList();
+
+        PlanAcero plan = Planificar();
+
+        Assert.All(plan.Barras.Where(p => p.Pieza == arriba[0]), p => Assert.Equal(TipoGancho.De90, p.GanchoInicio));
+        Assert.All(plan.Barras.Where(p => p.Pieza == arriba[^1]), p => Assert.Equal(TipoGancho.De90, p.GanchoFin));
+        if (arriba.Count > 1)
+            Assert.All(plan.Barras.Where(p => p.Pieza == arriba[0]), p => Assert.Equal(TipoGancho.Sin, p.GanchoFin));
+        Assert.All(plan.Barras, p => Assert.Equal(c.Vigas.Barras.Single(b => b.Id == p.Pieza) is var b ? (b.Desde, b.Largo) : default, (p.Desde, p.Largo)));
+    }
+
+    [Fact]
+    public void TraslapoAlLado_LaSegundaBarraSeCorreUnDiametroHaciaElCentro()
+    {
+        PorticoCalculado c = Calcular();
+        List<string> arriba = c.Vigas.Superior!.Barras.Select(b => b.Id).ToList();
+        Assert.True(arriba.Count >= 2, "el pórtico de la maqueta traslapa arriba");
+        List<BarraEnSeccion> corte = DelCorte(c, Posicion.Superior);
+        const double d5 = 15.9;
+
+        PlanAcero plan = Planificar();
+
+        List<PiezaLongitudinal> primera = plan.Barras.Where(p => p.Pieza == arriba[0]).ToList();
+        List<PiezaLongitudinal> segunda = plan.Barras.Where(p => p.Pieza == arriba[1]).ToList();
+        Assert.Equal(corte.Select(b => b.X), primera.Select(p => p.XCorte));
+        Assert.Equal(corte.Select(b => b.X < 150 ? b.X + d5 : b.X > 150 ? b.X - d5 : b.X + d5), segunda.Select(p => p.XCorte));
+        Assert.Equal(corte.Select(b => b.Y), segunda.Select(p => p.YCorte));
+        if (arriba.Count >= 3)
+            Assert.Equal(primera.Select(p => p.XCorte), plan.Barras.Where(p => p.Pieza == arriba[2]).Select(p => p.XCorte));
+    }
+
+    [Fact]
+    public void SinTraslapo_NadaSeCorre()
+    {
+        // Un pórtico de una luz de 3 m: cada capa sale de una sola varilla.
+        var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 3000)]);
+        PorticoLeido p = ArmadorVistaTests.Portico1(portico) with
+        {
+            Ubicacion = new UbicacionPortico(1, 0, 0, 0, 3000, 3500, 300, 500, [new("101", 200, 2800)]),
+        };
+        PorticoCalculado c = Calcular(p: p);
+        Assert.Single(c.Vigas.Superior!.Barras);
+
+        PlanAcero plan = Planificar(p: p);
+
+        Assert.Equal(DelCorte(c, Posicion.Superior).Select(b => b.X), plan.Barras.Where(b => b.Capa == Posicion.Superior).Select(b => b.XCorte));
+    }
+
+    [Fact]
+    public void Bastones_EnElPuestoQueLesDaElCorte()
+    {
+        PorticoCalculado c = Calcular();
+        Assert.NotEmpty(c.Vigas.Bastones);
+
+        PlanAcero plan = Planificar();
+
+        foreach (Baston b in c.Vigas.Bastones)
+        {
+            UbicacionBastones u = UbicadorBastones.Ubicar(c.Seccion, b.Capa, [b.Grupo]);
+            List<PiezaLongitudinal> piezas = plan.Bastones.Where(p => p.Pieza == b.Id).ToList();
+            Assert.Equal(u.Barras.Select(x => (x.Barra.X, x.Barra.Y)), piezas.Select(p => (p.XCorte, p.YCorte)));
+            Assert.All(piezas, p => Assert.Equal((b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, b.Capa), (p.Desde, p.Hasta, p.GanchoInicio, p.GanchoFin, p.Capa)));
+        }
+        Assert.Empty(plan.BastonesSinLugar);
+    }
+
+    [Fact]
+    public void Cimentacion_LosBastonesDeLosApoyosVanAbajo()
+    {
+        PlanAcero plan = Planificar(p: Portico(TipoViga.Cimentacion));
+
+        Assert.Contains(plan.Bastones, b => b.Pieza.StartsWith("BI") && b.Capa == Posicion.Inferior);
+        Assert.All(plan.Bastones, b => Assert.Equal(b.Pieza.StartsWith("BS") ? Posicion.Superior : Posicion.Inferior, b.Capa));
+    }
+
+    [Fact]
+    public void Host_LaVigaDelPuntoMedio_OLaMasCercanaSiCaeEnUnApoyo()
+    {
+        PlanAcero plan = Planificar();
+
+        // El bastón de arriba en B queda centrado en el eje (4400), dentro de la columna: las vigas 101 y 102 están a
+        // 200 mm; con empate, la primera.
+        PiezaLongitudinal enB = plan.Bastones.First(b => b.Capa == Posicion.Superior && (b.Desde + b.Hasta) / 2 == 4400);
+        Assert.Equal("101", enB.Host);
+        Assert.All(plan.Barras, b => Assert.Contains(b.Host, new[] { "101", "102", "103", "104" }));
+    }
+
+    [Fact]
+    public void Estribos_UnGrupoPorCorridaConLasCarasDelCorte()
+    {
+        PorticoCalculado c = Calcular();
+
+        PlanAcero plan = Planificar();
+
+        foreach (EstriboEnPortico e in c.Estribos.Estribos)
+        {
+            List<GrupoEstribos> grupos = plan.Estribos.Where(g => g.Pieza == e.Id && g.Tramo == e.Tramo).ToList();
+            EstriboEnSeccion caras = c.Estribos.EnSeccion.Single(s => s.Id == e.Id);
+            // Por zonas (hallazgo E6): las mismas posiciones, y en una luz las dos zonas con la misma cantidad.
+            List<double> rehechas = grupos.SelectMany(g => Enumerable.Range(0, g.Corrida.Cantidad).Select(k => g.Corrida.Primero + k * g.Corrida.Separacion)).ToList();
+            Assert.Equal(e.Posiciones.Count, rehechas.Count);
+            Assert.All(e.Posiciones.Zip(rehechas), z => Assert.Equal(z.First, z.Second, 1));
+            if (!e.Tramo.StartsWith("Voladizo") && grupos.Count == 3)
+                Assert.Equal(grupos[0].Corrida.Cantidad, grupos[2].Corrida.Cantidad);
+            Assert.All(grupos, g => Assert.Equal((e.Tipo, e.Diametro, e.Gancho, caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba),
+                (g.Tipo, g.Diametro, g.Gancho, g.Izquierda, g.Derecha, g.Abajo, g.Arriba)));
+        }
+        Assert.Equal(c.Estribos.Cantidad, plan.Estribos.Sum(g => g.Corrida.Cantidad));
+        Assert.Contains(3, plan.Diametros);
+    }
+
+    [Fact]
+    public void Estribos_ElHostEsLaVigaDeSuTramo()
+    {
+        PlanAcero plan = Planificar();
+
+        Assert.All(plan.Estribos.Where(g => g.Tramo == "A-B"), g => Assert.Equal("101", g.Host));
+        Assert.All(plan.Estribos.Where(g => g.Tramo == "C-D"), g => Assert.Equal("103", g.Host));
+        Assert.All(plan.Estribos.Where(g => g.Tramo.StartsWith("Voladizo")), g => Assert.Equal("104", g.Host));
+    }
+
+    [Fact]
+    public void Estribos_ElAdicionalAbiertoEsUnaRama()
+    {
+        var adicional = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)]);
+        var o = OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(Adicionales: [adicional]) };
+
+        List<GrupoEstribos> e1 = Planificar(o).Estribos.Where(g => g.Pieza == "E1").ToList();
+
+        Assert.NotEmpty(e1);
+        Assert.All(e1, g => Assert.Equal((TipoEstribo.Abierto, g.Izquierda), (g.Tipo, g.Derecha)));
+        // Hallazgo E13: la rama sabe qué barras abraza (la del medio de arriba y la del medio de abajo, ya alineadas).
+        PorticoCalculado c = Calcular(o);
+        BarraEnSeccion medioArriba = c.Estribos.Seccion.Superior.Filas[0][1], medioAbajo = c.Estribos.Seccion.Inferior.Filas[0][1];
+        Assert.All(e1, g => Assert.Equal(new Rama(medioArriba.X, medioArriba.Y, medioAbajo.Y, 15.9), g.Rama));
+        Assert.All(Planificar(o).Estribos.Where(g => g.Pieza == "E"), g => Assert.Null(g.Rama));
+    }
+
+    [Fact]
+    public void NoSePlanifica_SiNoSePuedeGenerarOSinUbicacion()
+    {
+        var noCaben = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(30, 8)] };
+
+        Assert.Null(PlanificadorAcero.Planificar("Pórtico 1", Portico(), noCaben, Reglas.Generales));
+        Assert.Null(PlanificadorAcero.Planificar("Pórtico 1", ArmadorVistaTests.Portico1(), OpcionesTablero.PorDefecto, Reglas.Generales));
+    }
+}

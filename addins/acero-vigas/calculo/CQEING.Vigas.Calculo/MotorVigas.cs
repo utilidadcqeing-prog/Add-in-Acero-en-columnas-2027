@@ -19,9 +19,10 @@ public static class MotorVigas
             return new ResultadoVigas(null, null, capaDeLaCara, null, null, Cara.Inicio, Cara.Inicio, avisos, []);
 
         var g = new GeometriaPortico(entrada.Portico, entrada.RecubrimientoPuntas);
-        CapaCalculada? centro = Resolver(entrada, g, capaDelCentro, Cara.Inicio, avisos);
-        CapaCalculada? inicio = Resolver(entrada, g, capaDeLaCara, Cara.Inicio, avisos);
-        CapaCalculada? final = Resolver(entrada, g, capaDeLaCara, Cara.Final, avisos);
+        GeometriaPortico gCentro = GeometriaDe(entrada, capaDelCentro, g), gCara = GeometriaDe(entrada, capaDeLaCara, g);
+        CapaCalculada? centro = Resolver(entrada, gCentro, capaDelCentro, Cara.Inicio, avisos);
+        CapaCalculada? inicio = Resolver(entrada, gCara, capaDeLaCara, Cara.Inicio, avisos);
+        CapaCalculada? final = Resolver(entrada, gCara, capaDeLaCara, Cara.Final, avisos);
         SolucionCapa? solucionInicio = inicio?.Convertir();
         SolucionCapa? solucionFinal = final?.Convertir();
 
@@ -30,9 +31,9 @@ public static class MotorVigas
         Cara usada = entrada.CaraElegida ?? masEconomica;
         Cara otra = usada == Cara.Inicio ? Cara.Final : Cara.Inicio;
 
-        SolucionCapa? capaCentro = centro is null ? null : AplicadorCambios.Aplicar(centro, g, entrada.Cambios, avisos);
+        SolucionCapa? capaCentro = centro is null ? null : AplicadorCambios.Aplicar(centro, gCentro, entrada.Cambios, avisos);
         CapaCalculada? usadaCalculada = usada == Cara.Inicio ? inicio : final;
-        SolucionCapa? capaCara = usadaCalculada is null ? null : AplicadorCambios.Aplicar(usadaCalculada, g, entrada.Cambios, avisos);
+        SolucionCapa? capaCara = usadaCalculada is null ? null : AplicadorCambios.Aplicar(usadaCalculada, gCara, entrada.Cambios, avisos);
 
         int varilla = entrada.Reglas.Varilla;
         if (capaCentro is not null)
@@ -111,6 +112,21 @@ public static class MotorVigas
         if (!avisos.Contains(aviso))
             avisos.Add(aviso);
         return TipoGancho.De90;
+    }
+
+    /// <summary>
+    /// Dónde terminan las barras corridas de <paramref name="capa"/>. Las de abajo terminan antes, la mitad del diámetro de
+    /// arriba más la mitad del de abajo: la pata de su gancho queda pegada por dentro a la de arriba (ganchos anidados, como
+    /// se arma en obra). Con las dos capas hasta el mismo borde las patas quedaban una encima de otra (#85, novena prueba
+    /// en Revit; Juan: opción 1). El núcleo deja el largo en múltiplo del módulo igual que siempre.
+    /// </summary>
+    public static GeometriaPortico GeometriaDe(EntradaVigas e, Posicion capa, GeometriaPortico comun)
+    {
+        if (capa == Posicion.Superior)
+            return comun;
+        double Mayor(IReadOnlyList<GrupoBarras> grupos) => e.Reglas.PorDiametro[grupos.Max(gr => gr.Diametro)].Diametro;
+        int anidado = (int)Math.Round((Mayor(e.Superior) + Mayor(e.Inferior)) / 2);
+        return new GeometriaPortico(e.Portico, e.RecubrimientoPuntas + anidado);
     }
 
     private static Dictionary<string, int> Con(IReadOnlyDictionary<string, int>? actuales, string id, int valor) =>

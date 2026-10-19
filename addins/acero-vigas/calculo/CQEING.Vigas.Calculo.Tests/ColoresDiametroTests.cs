@@ -27,4 +27,11 @@ public class ColoresDiametroTests
     {
         Assert.Equal(ColoresDiametro.SinColor, ColoresDiametro.De(diametro));
     }
+
+    [Fact]
+    public void RgbDaLosTresCanalesDelColor_ParaLosFiltrosDeRevit()
+    {
+        Assert.Equal(((byte)0xD3, (byte)0x2F, (byte)0x2F), ColoresDiametro.Rgb(5));
+        Assert.Equal(((byte)0x5E, (byte)0x66, (byte)0x70), ColoresDiametro.Rgb(99));
+    }
 }

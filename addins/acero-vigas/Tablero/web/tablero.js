@@ -11,15 +11,25 @@
   const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
   const mm = (m) => Math.round(m * 1000);
   const diametro = (d) => parseInt(String(d).slice(1), 10);
-  // "Esto llega con la #NN." (decisión 7): los botones de otras issues se ven como en la maqueta, sin su acción.
-  const LLEGA = (n) => 'Esto llega con la #' + n + '.';
+  // Los avisos con los que el motor descarta un estribo adicional (TipoAviso en C#).
+  const DESCARTA = ['EstriboIncompleto', 'BarraNoExiste', 'MueveUnaEsquina', 'NoSePuedeAlinear', 'IgualAlCerrado', 'RepiteOtroAdicional'];
+  const PULGADAS = { 3: '3/8"', 4: '1/2"', 5: '5/8"', 6: '3/4"', 7: '7/8"', 8: '1"' };
+
+  // Las opciones de una lista de diámetros (#85, tarea 10): solo los que tienen tipo de barra en el modelo
+  // (`diametrosDisponibles`); el elegido se queda aunque no esté, para que la lista no cambie sola lo que dice.
+  function opcionesDiametro(disponibles, desde, hasta, actual, conPulgadas) {
+    const ns = [];
+    for (let n = desde; n <= hasta; n++) if (!disponibles || disponibles.includes(n) || '#' + n === actual) ns.push(n);
+    return ns.map((n) => html`<option value=${'#' + n}>${'#' + n + (conPulgadas ? ' · ' + PULGADAS[n] : '')}</option>`);
+  }
 
   // Lo que el usuario elige para un pórtico: el `state` de la maqueta que cambia el cálculo (OpcionesTablero).
   const OPCIONES0 = {
     tipo: undefined, side: undefined, sup: [{ n: 3, d: '#5' }], inf: [{ n: 3, d: '#5' }],
     rec: '4', recUp: '', recDown: '', recSide: '', sepMode: 'pegada', sepCm: '1', maxCapas: '3',
     bastDef: '2.00', bastHook: false, bastLen: {}, bastSupN: '1', bastSupD: '', bastInfN: '1', bastInfD: '',
-    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20' }, estMarc: null, tramosSel: [],
+    // adicionales (#85, hallazgo E8): [{ tipo: 'Cerrado' | 'Abierto', barras: [{ cara, fila, numero, nombre }] }]
+    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20', adicionales: [] }, estMarc: null, tramosSel: [],
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
@@ -37,7 +47,8 @@
     // la fila a mano de cada tipo (#84): '' = Auto
     const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
     const estribos = (e) => ({ diametro: diametro(e.estD), gancho: e.estG === '135°' ? 'De135' : 'De90',
-      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)) });
+      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)),
+      adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
     try {
       const largos = {};
@@ -484,10 +495,31 @@
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
       const cerrado = secc.figuras.find((f) => f.id === 'E');
       const recCm = num(s.rec, 4);
+      // Estribos adicionales (#85, hallazgo E8): con "+ Cerrado" o "+ Abierto" el corte queda eligiendo barras. Cada barra
+      // es un PuntoBarra del motor: su cara, su fila desde 1 (la de la cara) y su número de izquierda a derecha en la fila.
+      const pk = s.pick;
+      const limite = pk ? (pk.tipo === 'Cerrado' ? 2 : 1) : 0;
+      const punto = (b) => ({ cara: b.arriba ? 'Superior' : 'Inferior', fila: b.fila + 1, nombre: b.nombre,
+        numero: 1 + secBars.filter((x) => !x.baston && x.arriba === b.arriba && x.fila === b.fila && x.x < b.x).length });
+      const igual = (a, b) => a.cara === b.cara && a.fila === b.fila && a.numero === b.numero;
+      const elegirBarra = (b) => {
+        const p = punto(b);
+        if (pk.barras.some((x) => igual(x, p))) { this.setState({ pick: { ...pk, barras: pk.barras.filter((x) => !igual(x, p)) } }); return; }
+        if (pk.barras.filter((x) => x.cara === p.cara).length >= limite) {
+          this.say('Ya elegiste ' + limite + (limite === 1 ? ' barra ' : ' barras ') + (p.cara === 'Superior' ? 'arriba' : 'abajo') + '. Haz clic en una para quitarla.');
+          return;
+        }
+        this.setState({ pick: { ...pk, barras: pk.barras.concat(p) } });
+      };
       const seccionA = (K) => ({
         wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
-        dots: secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
-          c: b.color || '#3F4A57', ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
+        dots: secBars.map((b) => {
+          const elegible = !!pk && !b.baston;
+          const elegida = elegible && pk.barras.some((x) => igual(x, punto(b)));
+          return { x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
+            c: b.color || '#3F4A57', ring: elegida ? '2px solid #0F7B6C' : 'none', cur: elegible ? 'pointer' : 'default',
+            label: (b.baston ? '' : 'Barra ') + b.nombre, pick: elegible ? () => elegirBarra(b) : () => {} };
+        }),
         // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
         proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
         adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
@@ -507,6 +539,14 @@
         if (nSel) this.cambiar({ estMarc: { ...(s.estMarc || s.est), [k]: valor } }, texto);
         else this.cambiar({ est: { ...s.est, [k]: valor } }, texto);
       };
+      // los adicionales van donde se aplica este paso: los tramos marcados o todo el pórtico
+      const misAdicionales = est.adicionales || [];
+      const ponerAdicionales = (lista) => (nSel
+        ? this.cambiar({ estMarc: { ...(s.estMarc || s.est), adicionales: lista } })
+        : this.cambiar({ est: { ...s.est, adicionales: lista } }));
+      const nArriba = pk ? pk.barras.filter((x) => x.cara === 'Superior').length : 0;
+      const nAbajo = pk ? pk.barras.filter((x) => x.cara === 'Inferior').length : 0;
+      const empezar = (tipo) => () => this.setState({ pick: { tipo, barras: [] }, tab: 'corte' });
 
       const on = 'background: #1F5FAF; color: #FFFFFF';
       const off = 'background: #FFFFFF; color: #16191D';
@@ -521,7 +561,7 @@
       const pors = enLista.filter((p) => !q || (p.nombre + ' ' + p.sub).toLowerCase().includes(q)).map((p) => {
         const active = p.id === porId;
         return { id: p.id, name: p.nombre, sub: p.sub, tipo: p.tipo, open: active, bg: active ? '#F3F7FC' : '#FFFFFF', bd: active ? '#1F5FAF' : '#FFFFFF',
-          pick: () => { this.setState({ ver: 'todo', sel: undefined }); enviar({ tipo: 'elegirPortico', id: p.id }); },
+          pick: () => { this.setState({ ver: 'todo', sel: undefined, pick: null }); enviar({ tipo: 'elegirPortico', id: p.id }); },
           tramos: (active ? p.tramos : []).map((t) => {
             const on2 = tramosSel.includes(t.id);
             return { name: t.nombre, chkLabel: 'Marcar ' + t.nombre, pressed: on2 ? 'true' : 'false', bg: s.ver === t.id && active ? '#E8F0FA' : 'transparent',
@@ -555,12 +595,23 @@
         rulesWarn: s.rulesWarn,
         // abierta, la lista de barras toma todo el alto que sobra en la columna (Juan, 19-oct: "que la tabla llegue al límite")
         listOpen: s.listOpen, listLabel: s.listOpen ? 'Ocultar' : 'Ver lista', rows: rowsList.concat(estRows),
-        estAddList: adicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1), desc: ea.tipo.replace('Adicional ', '').replace(/^./, (c) => c.toUpperCase()) + ' · ' + ea.detalle,
-          removeLabel: 'Quitar adicional ' + (i + 1), remove: () => this.say(LLEGA(91)) })),
-        isPicking: false, noPick: true, pickMsg: '', pickNotDone: true,
+        // Hallazgo E9: el motor puede descartar un adicional (rama del cerrado, otro igual, no cabe…); la lista lo dice con
+        // su motivo. Los ids son E1, E2… primero los del pórtico y después los de los tramos marcados.
+        estAddList: misAdicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1),
+          desc: ea.tipo + ' · ' + ea.barras.map((b) => b.nombre).join(', '),
+          motivo: (() => {
+            const id = 'E' + (i + 1 + (nSel ? (s.est.adicionales || []).length : 0));
+            const a = P ? P.avisos.find((x) => x.elemento === id && DESCARTA.includes(x.tipo)) : null;
+            return a ? 'No se agrega: ' + a.texto : '';
+          })(),
+          removeLabel: 'Quitar adicional ' + (i + 1), remove: () => ponerAdicionales(misAdicionales.filter((_, j) => j !== i)) })),
+        isPicking: !!pk, noPick: !pk, pickNotDone: !pk || nArriba !== limite || nAbajo !== limite,
+        pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
+          + limite + ' abajo. Llevas ' + nArriba + ' arriba y ' + nAbajo + ' abajo.' : '',
         confTxt: est.conf + ' m', s1Txt: 'cada ' + est.s1, s2Txt: 'cada ' + est.s2, bastTxt: s.bastDef + ' m',
         secAddText: adicionales.length ? ' · ' + adicionales.length + (adicionales.length === 1 ? ' adicional' : ' adicionales') : '',
-        startCerrado: () => this.say(LLEGA(91)), startAbierto: () => this.say(LLEGA(91)), cancelPick: () => {}, addPick: () => {},
+        startCerrado: empezar('Cerrado'), startAbierto: empezar('Abierto'), cancelPick: () => this.setState({ pick: null }),
+        addPick: () => { this.setState({ pick: null }); ponerAdicionales(misAdicionales.concat({ tipo: pk.tipo, barras: pk.barras })); },
         corte: C, cutLive: s.cutLive, cutX: s.cutX !== '' ? s.cutX : (C ? f2(C.x) : ''), cutPos: C ? f2(s.cutLive ?? C.x) : '',
         cutAjustado: !!C && C.ajustado, cutBd: C && C.ajustado ? '#B26B00' : '#C9CFD6', cutTipo: !!C && C.esTipo,
         cutTramo: C ? C.tramo : '', cutAviso: C ? C.aviso : null,
@@ -595,7 +646,19 @@
           return { d: r.d, t: r.t, g: r.g, e: r.e, k: r.k, labT: 'Traslapo ' + r.d, labG: 'Gancho 90° ' + r.d, labE: 'Gancho de estribo 135° ' + r.d, labK: 'Peso por metro ' + r.d, setT: set('t'), setG: set('g'), setE: set('e'), setK: set('k') };
         }),
         liveDot: vista.enVivo ? '#1E7A46' : '#9AA3AD', liveText: vista.enVivo ? 'En vivo con Revit' : 'Sin enlace con Revit',
-        genOff: !P || !P.sePuedeGenerar, genBg: P && P.sePuedeGenerar ? '#1F5FAF' : '#9AA3AD', hasToast: !!s.toast, toast: s.toast,
+        // #85, decisión 4: con la lista filtrada por "Seleccionar en Revit" se generan todos los de la lista (la sesión salta
+        // y nombra los que tienen error); si no, el pórtico abierto.
+        genOff: elegidos ? enLista.length === 0 : !P || !P.sePuedeGenerar,
+        genBg: (elegidos ? enLista.length > 0 : P && P.sePuedeGenerar) ? '#1F5FAF' : '#9AA3AD',
+        disponibles: vista.diametrosDisponibles || null, hasToast: !!s.toast, toast: s.toast,
+        hasConfirmGen: !!s.confirmGen,
+        confirmGenText: s.confirmGen ? 'Se generará el acero de ' + (s.confirmGen.length === 1
+          ? (PORS.find((p) => p.id === s.confirmGen[0]) || { nombre: s.confirmGen[0] }).nombre
+          : s.confirmGen.length + ' pórticos') + '. Lo que el add-in generó antes en ' + (s.confirmGen.length === 1 ? 'él' : 'ellos') + ' se reemplaza.' : '',
+        confirmGenYes: () => { enviar({ tipo: 'generar', ids: s.confirmGen }); this.setState({ confirmGen: null }); },
+        confirmGenNo: () => this.setState({ confirmGen: null }),
+        // #85: el resumen de "Generar en Revit", una línea por cosa; se queda hasta cerrarlo
+        resumen: s.resumen ? { titulo: s.resumen[0], lineas: s.resumen.slice(1) } : null, closeResumen: () => this.setState({ resumen: null }),
         pickEl: (id) => selectBar(id), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
         // gancho de una punta del borde (#84): "S.inicio"… en las corridas, "BS1.inicio"… en los bastones
         onHook: (clave, valor, texto) => {
@@ -650,7 +713,11 @@
         pickInRevit: () => enviar({ tipo: 'seleccionarEnRevit' }),
         showInRevit: () => { if (P) enviar({ tipo: 'verEnRevit', id: P.id }); },
         open3d: () => { if (P) enviar({ tipo: 'abrir3d', id: P.id }); },
-        generate: () => this.say(LLEGA(85)),
+        // #85, tarea 10: primero la tarjeta de confirmación; "Generar" en ella manda los pórticos.
+        generate: () => {
+          const ids = elegidos ? enLista.map((p) => p.id) : P ? [P.id] : [];
+          if (ids.length) this.setState({ confirmGen: ids, resumen: null });
+        },
       };
     }
 
@@ -905,7 +972,7 @@
                     <span style="color: #5E6670">barras</span>
                     <span aria-hidden="true" style="width: 10px; height: 10px; flex-shrink: 0; border-radius: 50%; background: ${r.c}"></span>
                     <select aria-label=${r.selLabel} value=${r.d} onChange=${r.setD} style="flex: 1; height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
-                      <option value="#3">#3 · 3/8"</option><option value="#4">#4 · 1/2"</option><option value="#5">#5 · 5/8"</option><option value="#6">#6 · 3/4"</option><option value="#7">#7 · 7/8"</option><option value="#8">#8 · 1"</option>
+                      ${opcionesDiametro(v.disponibles, 3, 8, r.d, true)}
                     </select>
                     ${r.canRemove ? html`
                       <button type="button" aria-label=${r.removeLabel} onClick=${r.remove} style="width: 28px; height: 28px; border: 0; background: transparent; font: inherit; color: #5E6670; cursor: pointer">✕</button>` : null}
@@ -1016,14 +1083,14 @@
                 <label for="bast-sup-n" style="flex: 1; color: #3F4A57">Arriba</label>
                 <input id="bast-sup-n" type="text" inputmode="numeric" value=${v.bastSupN} onInput=${v.setBastSupN} style="width: 48px; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />
                 <select aria-label="Diámetro de los bastones de arriba" value=${v.bastSupD} onChange=${v.setBastSupD} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
-                  <option value="#3">#3</option><option value="#4">#4</option><option value="#5">#5</option><option value="#6">#6</option><option value="#7">#7</option><option value="#8">#8</option>
+                  ${opcionesDiametro(v.disponibles, 3, 8, v.bastSupD, false)}
                 </select>
               </div>
               <div style="display: flex; align-items: center; gap: 8px">
                 <label for="bast-inf-n" style="flex: 1; color: #3F4A57">Abajo</label>
                 <input id="bast-inf-n" type="text" inputmode="numeric" value=${v.bastInfN} onInput=${v.setBastInfN} style="width: 48px; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />
                 <select aria-label="Diámetro de los bastones de abajo" value=${v.bastInfD} onChange=${v.setBastInfD} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
-                  <option value="#3">#3</option><option value="#4">#4</option><option value="#5">#5</option><option value="#6">#6</option><option value="#7">#7</option><option value="#8">#8</option>
+                  ${opcionesDiametro(v.disponibles, 3, 8, v.bastInfD, false)}
                 </select>
               </div>
               <span style="font-size: 12px; color: #5E6670; line-height: 1.5">Barras por bastón. Por defecto, 1 del diámetro de las esquinas; con 0, esa cara no lleva bastones.</span>
@@ -1058,7 +1125,7 @@
             <div style="display: flex; align-items: center; gap: 8px">
               <span style="font-weight: 600; flex: 1">Estribo</span>
               <select aria-label="Diámetro del estribo" value=${v.estD} onChange=${v.setEstD} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
-                <option value="#3">#3 · 3/8"</option><option value="#4">#4 · 1/2"</option>
+                ${opcionesDiametro(v.disponibles, 3, 4, v.estD, true)}
               </select>
               <select aria-label="Gancho del estribo" value=${v.estG} onChange=${v.setEstG} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                 <option value="135°">135°</option><option value="90°">90°</option>
@@ -1092,6 +1159,7 @@
                   <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
                     <span style="font-weight: 600">${ea.name}</span>
                     <span style="color: #5E6670">${ea.desc}</span>
+                    ${ea.motivo ? html`<span role="status" style="color: #B42318">${ea.motivo}</span>` : null}
                   </div>
                   <button type="button" aria-label=${ea.removeLabel} onClick=${ea.remove} style="height: 28px; padding: 0 8px; border: 0; background: transparent; font: inherit; color: #B42318; cursor: pointer">Quitar</button>
                 </div>`)}
@@ -1213,8 +1281,29 @@
         </div>
       </div>
     </div>` : null}
+  ${v.hasConfirmGen ? html`
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(22, 25, 29, 0.32)">
+      <div role="alertdialog" aria-labelledby="gen-t" aria-describedby="gen-d" style="width: 440px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 12px 32px rgba(22, 25, 29, 0.22)">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span id="gen-t" style="font-weight: 600; font-size: 15px">¿Generar el acero en Revit?</span>
+          <span id="gen-d" style="font-size: 12px; color: #5E6670; line-height: 1.5">${v.confirmGenText}</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" onClick=${v.confirmGenNo} style="height: 32px; padding: 0 14px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">Cancelar</button>
+          <button type="button" onClick=${v.confirmGenYes} style="height: 32px; padding: 0 14px; border: 1px solid #1F5FAF; border-radius: 6px; background: #1F5FAF; font: inherit; font-weight: 600; color: #FFFFFF; cursor: pointer">Generar</button>
+        </div>
+      </div>
+    </div>` : null}
   ${v.hasToast ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">${v.toast}</div>` : null}
+  ${v.resumen ? html`
+    <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); max-height: 45%; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.25)">
+      <div style="display: flex; align-items: flex-start; gap: 12px">
+        <div style="flex: 1; font-weight: 600">${v.resumen.titulo}</div>
+        <button type="button" onClick=${v.closeResumen} style="height: 26px; padding: 0 10px; border: 1px solid #5E6670; border-radius: 6px; background: transparent; color: #FFFFFF; font: inherit; cursor: pointer">Cerrar</button>
+      </div>
+      ${v.resumen.lineas.length ? html`<ul style="margin: 0; padding-left: 18px; overflow: auto">${v.resumen.lineas.map((l) => html`<li style="margin: 2px 0">${l}</li>`)}</ul>` : null}
+    </div>` : null}
 </div>`;
     }
   }
@@ -1231,6 +1320,8 @@
       if (m.tipo === 'vista') this.setState({ vista: m.vista });
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
       else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
+      // #85: el resumen de la generación; la primera línea es el título y las demás, una por falla o diferencia.
+      else if (m.tipo === 'generado' && this.tablero) this.tablero.setState({ resumen: m.texto.split('\n') });
     }
 
     render() {

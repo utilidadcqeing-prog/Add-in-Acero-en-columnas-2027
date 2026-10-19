@@ -13,8 +13,11 @@ public sealed record NivelLeido(string Nombre, double Elevacion);
 
 /// <summary>
 /// Una viga del modelo, sin tipos de Revit: su eje en planta, su alto real (de la geometría) y su ancho, en mm.
+/// <paramref name="Centro"/> es el centro en planta de su geometría (#85): la línea de ubicación de Revit depende de la
+/// justificación y puede ir por una cara. Null = se usa la línea.
 /// </summary>
-public sealed record VigaLeida(string Id, Punto Desde, Punto Hasta, double ZAbajo, double ZArriba, double Ancho, NivelLeido? Nivel)
+public sealed record VigaLeida(string Id, Punto Desde, Punto Hasta, double ZAbajo, double ZArriba, double Ancho, NivelLeido? Nivel,
+    Punto? Centro = null)
 {
     public double Alto => ZArriba - ZAbajo;
 }
@@ -39,10 +42,22 @@ public sealed record ModeloLeido(IReadOnlyList<EjeLeido> Ejes, IReadOnlyList<Vig
 /// <summary>Un tramo del pórtico (una luz entre apoyos o un voladizo), en mm desde el eje A, con su sección.</summary>
 public sealed record TramoLeido(string Nombre, int Desde, int Hasta, bool EsVoladizo, double Ancho, double Alto);
 
+/// <summary>Una viga del pórtico, a lo largo de él, en mm desde el eje A.</summary>
+public sealed record VigaEnPortico(string Id, int Desde, int Hasta);
+
+/// <summary>
+/// Dónde está el pórtico en el modelo (#85), en mm del modelo. (<paramref name="Ux"/>, <paramref name="Uy"/>) es la
+/// dirección en que crece x; (<paramref name="OrigenX"/>, <paramref name="OrigenY"/>), el eje A sobre el centro lateral
+/// de la viga. <paramref name="ZAbajo"/> y <paramref name="ZArriba"/> son las caras de abajo y de arriba.
+/// </summary>
+public sealed record UbicacionPortico(double Ux, double Uy, double OrigenX, double OrigenY, double ZAbajo, double ZArriba,
+    double Ancho, double Alto, IReadOnlyList<VigaEnPortico> Vigas);
+
 /// <summary>
 /// Un pórtico listo para el motor: <see cref="Portico"/> es lo que recibe <c>MotorVigas.Calcular</c>; el resto es
 /// lo que muestra la lista de pórticos del tablero. <paramref name="FondosDeApoyo"/> es lo que mide cada apoyo de lado a
 /// lado de la viga, en mm (el ancho a lo largo ya está en <see cref="Portico"/>), para la sección de columnas (#100).
+/// <paramref name="Ubicacion"/> es para generar el acero en Revit (#85).
 /// </summary>
 public sealed record PorticoLeido(
     string Nombre,
@@ -53,7 +68,8 @@ public sealed record PorticoLeido(
     IReadOnlyList<TipoApoyo> TiposDeApoyo,
     IReadOnlyList<TramoLeido> Tramos,
     IReadOnlyList<string> Vigas,
-    IReadOnlyList<double>? FondosDeApoyo = null);
+    IReadOnlyList<double>? FondosDeApoyo = null,
+    UbicacionPortico? Ubicacion = null);
 
 public enum TipoAvisoLectura
 {
