@@ -34,8 +34,10 @@ internal static class LectorModelo
             double ancho = puntos.Max(p => p.DotProduct(normal)) - puntos.Min(p => p.DotProduct(normal));
             NivelLeido? nivel = doc.GetElement(viga.get_Parameter(BuiltInParameter.INSTANCE_REFERENCE_LEVEL_PARAM)?.AsElementId()
                 ?? ElementId.InvalidElementId) is Level l ? new NivelLeido(l.Name, Mm(l.Elevation)) : null;
+            // El centro de la caja en planta es el de la viga, también girada: la sección es simétrica (#85).
+            var centro = new XYZ((puntos.Min(p => p.X) + puntos.Max(p => p.X)) / 2, (puntos.Min(p => p.Y) + puntos.Max(p => p.Y)) / 2, 0);
             vigas.Add(new VigaLeida(viga.Id.ToString(), Planta(linea.GetEndPoint(0)), Planta(linea.GetEndPoint(1)),
-                Mm(puntos.Min(p => p.Z)), Mm(puntos.Max(p => p.Z)), Mm(ancho), nivel));
+                Mm(puntos.Min(p => p.Z)), Mm(puntos.Max(p => p.Z)), Mm(ancho), nivel, Planta(centro)));
         }
         return vigas;
     }

@@ -153,7 +153,8 @@
   - `public readonly record struct Punto3(double X, double Y, double Z);` (mm del modelo)
   - `public static class MarcoPortico { public static Punto3 AlModelo(UbicacionPortico u, double x, double xCorte, double yCorte); public static string? VigaEn(UbicacionPortico u, double x); }`
 
-- [ ] **Paso 1: pruebas que fallan.**
+- [x] **Hecho** (2026-10-19): pasos 1 a 5. Pruebas `MarcoPorticoTests` (3) y `AgrupadorPorticosTests.LaUbicacion_*` (2); 742 en verde y el add-in compila para 2026 y 2027. El centro de `LectorModelo` (la caja en planta de la geometría) se comprueba con el modelo real en la tarea 7.
+- [x] **Paso 1: pruebas que fallan.**
   - `MarcoPorticoTests.EnX`: `Ux=1, Uy=0`, origen `(1000, 2000)`, `ZAbajo=3000`, `Ancho=300`. `AlModelo(u, 500, 0, 0)` = `(1500, 2150, 3000)`: la cara izquierda, mirando a `+x`, es la de `+y`. `AlModelo(u, 500, 300, 450)` = `(1500, 1850, 3450)`.
   - `MarcoPorticoTests.EnDiagonal`: con `Ux=cos30°, Uy=sin30°`, `AlModelo(u, 1000, 150, 0)` cae en `origen + 1000·(Ux, Uy)` (el centro), a ±0.01 mm.
   - `MarcoPorticoTests.VigaMasCercana`: con vigas `0–4000` y `4400–8000`, `VigaEn(u, 4200)` es la de `4400–8000` si está más cerca; `VigaEn(u, 2000)` es la primera.

@@ -119,7 +119,8 @@ public static class AgrupadorPorticos
         return new PorticoLeido(nombre, eje, nivel?.Nombre, TipoDe(nivel),
             new Portico(apoyos, voladizoInicio, voladizoFinal),
             soportes.Select(s => s.Tipo).ToList(), tramos, cadena.Select(t => t.Viga.Id).ToList(),
-            soportes.Select(s => Math.Round(s.NormalHasta - s.NormalDesde)).ToList());
+            soportes.Select(s => Math.Round(s.NormalHasta - s.NormalDesde)).ToList(),
+            Ubicacion(linea, cadena, origen, tramos[0], cadena.Select(t => new VigaEnPortico(t.Viga.Id, Mm(t.Desde), Mm(t.Hasta))).ToList()));
 
         TramoLeido Tramo(string nombreTramo, double a, double b, bool voladizo)
         {
@@ -129,6 +130,20 @@ public static class AgrupadorPorticos
             // Al milímetro: la medida en la geometría de Revit trae ruido de decimales (Hallazgos del plan).
             return new TramoLeido(nombreTramo, Mm(a), Mm(b), voladizo, Math.Round(viga.Ancho), Math.Round(viga.Alto));
         }
+    }
+
+    /// <summary>
+    /// El eje A del pórtico en el modelo: a <paramref name="origen"/> a lo largo de la línea y, de lado, en el promedio del
+    /// centro de las vigas (su geometría, o su línea si no lo traen). La sección es la de <paramref name="primero"/>: el
+    /// cambio de sección es #92.
+    /// </summary>
+    private static UbicacionPortico Ubicacion(Linea linea, List<Tramo> cadena, double origen, TramoLeido primero, IReadOnlyList<VigaEnPortico> vigas)
+    {
+        double lado = cadena.Average(t => linea.Normal(t.Viga.Centro ?? t.Viga.Desde));
+        // n = (−Uy, Ux): A(p) = origen y Normal(p) = lado.
+        double x = origen * linea.Ux - lado * linea.Uy, y = origen * linea.Uy + lado * linea.Ux;
+        return new UbicacionPortico(linea.Ux, linea.Uy, x, y, cadena.Min(t => t.Viga.ZAbajo), cadena.Max(t => t.Viga.ZArriba),
+            primero.Ancho, primero.Alto, vigas);
     }
 
     /// <summary>Cimentación si la cota del nivel es ≤ 0 o su nombre dice cimentación o fundación (decisión 4).</summary>

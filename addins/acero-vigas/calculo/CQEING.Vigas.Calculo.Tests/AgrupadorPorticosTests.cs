@@ -304,4 +304,32 @@ public class AgrupadorPorticosTests
 
         Assert.Equal([("Pórtico 1", "N+3.50 Piso 2"), ("Pórtico 1", "Cubierta")], r.Porticos.Select(p => (p.Nombre, p.Nivel)));
     }
+
+    [Fact]
+    public void LaUbicacion_PoneElEjeASobreElCentroDeLaViga()
+    {
+        // La línea de ubicación va por y = 0, pero la geometría está corrida 100 mm hacia −y (justificación lateral).
+        ModeloLeido m = EjeUnoPiso2() with
+        {
+            Vigas = [Viga("v1", 0, 3500, 3500, Piso2) with { Centro = new(1750, -100) }, Viga("v2", 3500, 7000, 3500, Piso2) with { Centro = new(5250, -100) }],
+        };
+
+        UbicacionPortico u = Assert.Single(AgrupadorPorticos.Agrupar(m).Porticos).Ubicacion!;
+
+        Assert.Equal((1, 0), (u.Ux, u.Uy));
+        Assert.Equal((0, -100), (u.OrigenX, u.OrigenY));
+        Assert.Equal((3150, 3500, 250, 350), (u.ZAbajo, u.ZArriba, u.Ancho, u.Alto));
+        Assert.Equal([new VigaEnPortico("v1", 0, 3500), new VigaEnPortico("v2", 3500, 7000)], u.Vigas);
+    }
+
+    [Fact]
+    public void LaUbicacion_SinCentroUsaLaLineaYSiguiendoLaDireccionDelPortico()
+    {
+        // Vigas dibujadas de derecha a izquierda: el pórtico igual va de A (x = 0) a 6 (x = 7000).
+        ModeloLeido m = EjeUnoPiso2() with { Vigas = [Viga("v1", 3500, 0, 3500, Piso2), Viga("v2", 7000, 3500, 3500, Piso2)] };
+
+        UbicacionPortico u = Assert.Single(AgrupadorPorticos.Agrupar(m).Porticos).Ubicacion!;
+
+        Assert.Equal((1, 0, 0, 0), (u.Ux, u.Uy, u.OrigenX, u.OrigenY));
+    }
 }
