@@ -553,6 +553,7 @@
         isSelBar: kind === 'bar' && !!SB, isSelLap: kind === 'lap' && !!SL, isSelBast: kind === 'bast' && !!SBa, sb, sl, st: stv, draft: s.draft,
         bastDef: s.bastDef, bastSupN: s.bastSupN, bastInfN: s.bastInfN, bastSupD: bastD(s.bastSupD, s.sup), bastInfD: bastD(s.bastInfD, s.inf),
         rulesWarn: s.rulesWarn,
+        // abierta, la lista de barras toma todo el alto que sobra en la columna (Juan, 19-oct: "que la tabla llegue al límite")
         listOpen: s.listOpen, listLabel: s.listOpen ? 'Ocultar' : 'Ver lista', rows: rowsList.concat(estRows),
         estAddList: adicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1), desc: ea.tipo.replace('Adicional ', '').replace(/^./, (c) => c.toUpperCase()) + ' · ' + ea.detalle,
           removeLabel: 'Quitar adicional ' + (i + 1), remove: () => this.say(LLEGA(91)) })),
@@ -715,7 +716,7 @@
     </div>
 
     ${v.hasPor ? html`
-      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px">
+      <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px">
         <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap">
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
             <span style="font-size: 18px; font-weight: 600">${v.por.name}</span>
@@ -830,7 +831,7 @@
             <span style="font-size: 12px; color: #5E6670">${v.st.note}</span>` : null}
         </div>
 
-        <div style="display: flex; flex-direction: column; min-height: 0; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
+        <div style="display: flex; flex-direction: column; min-height: 0; ${v.listOpen ? 'flex: 1;' : ''} background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
           <button type="button" onClick=${v.toggleList} style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0; background: transparent; font: inherit; color: #16191D; text-align: left; cursor: pointer; white-space: nowrap">
             <span style="font-weight: 600">Lista de barras</span>
             <span style="color: #5E6670">${v.summary}</span>
@@ -838,7 +839,7 @@
             <span style="color: #1F5FAF">${v.listLabel}</span>
           </button>
           ${v.listOpen ? html`
-            <div style="max-height: 150px; overflow: auto; border-top: 1px solid #D9DDE2">
+            <div style="flex: 1; min-height: 90px; overflow: auto; border-top: 1px solid #D9DDE2">
               ${v.rows.map((r) => html`
                 <button type="button" onClick=${r.pick} style="display: grid; grid-template-columns: 56px 90px 80px 70px minmax(0, 1fr) 70px; gap: 8px; width: 100%; padding: 6px 12px; border: 0; border-bottom: 1px solid #EEF0F2; background: ${r.bg}; font: inherit; font-size: 12px; color: #16191D; text-align: left; cursor: pointer; white-space: nowrap">
                   <span style="font-weight: 600">${r.id}</span>
