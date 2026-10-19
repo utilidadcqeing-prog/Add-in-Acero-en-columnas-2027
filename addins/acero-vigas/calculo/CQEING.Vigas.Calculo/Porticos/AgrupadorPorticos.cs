@@ -47,14 +47,32 @@ public static class AgrupadorPorticos
                     continue;
                 }
 
-                string nombre = ejePropio is null
+                EjeLeido? eje = ejePropio ?? EjeQuePasaPorLosApoyos(linea, modelo.Ejes, propios);
+                string nombre = eje is null
                     ? $"Pórtico sin eje {++sinEje}"
-                    : $"Pórtico {ejePropio.Nombre}{(cadenas.Count > 1 ? (char)('a' + i) : "")}";
+                    : $"Pórtico {eje.Nombre}{(cadenas.Count > 1 ? (char)('a' + i) : "")}";
 
-                porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, ejePropio?.Nombre, desde, hasta, avisos));
+                porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, eje?.Nombre, desde, hasta, avisos));
             }
         }
         return new ResultadoLectura(porticos, avisos);
+    }
+
+    /// <summary>
+    /// Viga corrida del eje (al borde de la columna, excéntrica): la rejilla paralela más cercana que pasa por dentro
+    /// de todas las columnas y muros del pórtico, o null (decisión 2 del plan docs/planes/2026-10-19-ajustes-tablero-vigas-100.md).
+    /// </summary>
+    private static EjeLeido? EjeQuePasaPorLosApoyos(Linea linea, IReadOnlyList<EjeLeido> ejes, List<Soporte> soportes)
+    {
+        List<Soporte> firmes = soportes.Where(s => s.Tipo != TipoApoyo.Viga).ToList();
+        if (firmes.Count == 0)
+            return null;
+        return ejes.Where(e => linea.EsParalela(e.Hasta.X - e.Desde.X, e.Hasta.Y - e.Desde.Y))
+            .Select(e => (Eje: e, Distancia: linea.Normal(e.Desde) - linea.Desplazamiento))
+            .Where(c => firmes.All(s => c.Distancia >= s.NormalDesde && c.Distancia <= s.NormalHasta))
+            .OrderBy(c => Math.Abs(c.Distancia))
+            .Select(c => c.Eje)
+            .FirstOrDefault();
     }
 
     private static PorticoLeido Armar(Linea linea, IReadOnlyList<EjeLeido> ejes, List<Tramo> cadena, List<Soporte> soportes,
@@ -128,8 +146,11 @@ public static class AgrupadorPorticos
     /// <summary>Una viga sobre la línea, medida a lo largo de ella (Desde &lt; Hasta).</summary>
     private sealed record Tramo(VigaLeida Viga, double Desde, double Hasta);
 
-    /// <summary>Un apoyo sobre la línea: el rango de su huella medido a lo largo de ella.</summary>
-    private sealed record Soporte(string Id, TipoApoyo Tipo, double Desde, double Hasta);
+    /// <summary>
+    /// Un apoyo sobre la línea: el rango de su huella medido a lo largo de ella (Desde–Hasta) y de lado a lado
+    /// (NormalDesde–NormalHasta, con signo desde la línea).
+    /// </summary>
+    private sealed record Soporte(string Id, TipoApoyo Tipo, double Desde, double Hasta, double NormalDesde, double NormalHasta);
 
     /// <summary>Vigas del mismo nivel sobre una misma línea, con la línea en dirección +X o +Y.</summary>
     private sealed class Linea
@@ -186,13 +207,13 @@ public static class AgrupadorPorticos
             return -(ox * gy - oy * gx) / denominador;
         }
 
-        /// <summary>Si la huella cruza la línea en planta, el rango que ocupa a lo largo de ella.</summary>
-        public (double Desde, double Hasta)? Cruza(IReadOnlyList<Punto> huella)
+        /// <summary>Si la huella cruza la línea en planta, el rango que ocupa a lo largo de ella y de lado a lado.</summary>
+        public (double Desde, double Hasta, double NormalDesde, double NormalHasta)? Cruza(IReadOnlyList<Punto> huella)
         {
             double minimo = huella.Min(p => Normal(p) - Desplazamiento), maximo = huella.Max(p => Normal(p) - Desplazamiento);
             if (minimo > SolapeMinimoEnAlto || maximo < -SolapeMinimoEnAlto)
                 return null;
-            return (huella.Min(A), huella.Max(A));
+            return (huella.Min(A), huella.Max(A), minimo, maximo);
         }
 
         public bool SeSolapaEnAlto(double zAbajo, double zArriba) =>
@@ -232,16 +253,16 @@ public static class AgrupadorPorticos
                 continue;
             if (a.Direccion is Punto d && linea.EsParalela(d.X, d.Y))
                 continue;
-            if (linea.Cruza(a.Huella) is var (desde, hasta))
-                soportes.Add(new Soporte(a.Id, a.Tipo, desde, hasta));
+            if (linea.Cruza(a.Huella) is var (desde, hasta, normalDesde, normalHasta))
+                soportes.Add(new Soporte(a.Id, a.Tipo, desde, hasta, normalDesde, normalHasta));
         }
         foreach (VigaLeida v in modelo.Vigas)
         {
             if (linea.Tramos.Any(t => t.Viga == v) || linea.EsParalela(v.Hasta.X - v.Desde.X, v.Hasta.Y - v.Desde.Y)
                 || !linea.SeSolapaEnAlto(v.ZAbajo, v.ZArriba))
                 continue;
-            if (linea.Cruza(Huella(v)) is var (desde, hasta))
-                soportes.Add(new Soporte(v.Id, TipoApoyo.Viga, desde, hasta));
+            if (linea.Cruza(Huella(v)) is var (desde, hasta, normalDesde, normalHasta))
+                soportes.Add(new Soporte(v.Id, TipoApoyo.Viga, desde, hasta, normalDesde, normalHasta));
         }
         return soportes;
     }
@@ -288,7 +309,12 @@ public static class AgrupadorPorticos
         foreach (Soporte s in soportes.OrderBy(s => s.Desde))
         {
             if (unidos.Count > 0 && s.Desde <= unidos[^1].Hasta)
-                unidos[^1] = unidos[^1] with { Hasta = Math.Max(unidos[^1].Hasta, s.Hasta) };
+                unidos[^1] = unidos[^1] with
+                {
+                    Hasta = Math.Max(unidos[^1].Hasta, s.Hasta),
+                    NormalDesde = Math.Min(unidos[^1].NormalDesde, s.NormalDesde),
+                    NormalHasta = Math.Max(unidos[^1].NormalHasta, s.NormalHasta),
+                };
             else
                 unidos.Add(s);
         }

@@ -213,6 +213,40 @@ public class AgrupadorPorticosTests
     }
 
     [Fact]
+    public void UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla()
+    {
+        // Viga al borde de las columnas: su línea queda a 150 mm del eje 1, que sí pasa por el centro de las columnas.
+        ModeloLeido m = EjeUnoPiso2() with
+        {
+            Vigas = [Viga("v1", 0, 3500, 3500, Piso2, y: 150), Viga("v2", 3500, 7000, 3500, Piso2, y: 150)],
+            Apoyos = [Columna("c1", 0, 0, 400, 0, 3500), Columna("c2", 3500, 0, 400, 0, 3500), Columna("c3", 7000, 0, 400, 0, 3500)],
+        };
+
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(m);
+
+        PorticoLeido p = Assert.Single(r.Porticos);
+        Assert.Equal(("Pórtico 1", "1"), (p.Nombre, p.Eje));
+        Assert.DoesNotContain(r.Avisos, a => a.Tipo == TipoAvisoLectura.SinEje);
+    }
+
+    [Fact]
+    public void UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma()
+    {
+        // El eje B va a 200 mm de la viga pero por fuera de las columnas (850–1150).
+        ModeloLeido m = EjeUnoPiso2() with
+        {
+            Ejes = [.. Ejes, new("B", new(-2000, 800), new(8000, 800))],
+            Vigas = [Viga("v1", 0, 3500, 3500, Piso2, y: 1000), Viga("v2", 3500, 7000, 3500, Piso2, y: 1000)],
+            Apoyos = [Columna("c1", 0, 1000, 300, 0, 3500), Columna("c2", 3500, 1000, 300, 0, 3500), Columna("c3", 7000, 1000, 300, 0, 3500)],
+        };
+
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(m);
+
+        PorticoLeido p = Assert.Single(r.Porticos);
+        Assert.Equal(("Pórtico sin eje 1", null), (p.Nombre, p.Eje));
+    }
+
+    [Fact]
     public void ElMismoEjeEnDosNiveles_SonDosPorticos()
     {
         ModeloLeido m = EjeUnoPiso2() with

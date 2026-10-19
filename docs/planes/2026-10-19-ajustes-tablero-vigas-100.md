@@ -99,7 +99,7 @@
    - traslapo: su largo con 2 decimales (`1.20`) en el empalme;
    - estribos: por zona, una línea con rayitas en sus dos puntas, `9e#3` encima, `@.10` debajo y `L=0.95` al lado. `L` se mide de la cara de la columna al último estribo de la zona. Lo arma C# (`RotuloEstribos`);
    - sección: `30×50` arriba, en la mitad de cada luz (y de cada voladizo).
-8. **Diámetro en número o en pulgadas** (Carlos): un interruptor `#4 · ½"` en el menú Capas. C# manda los dos textos de cada rótulo; la página elige. Pulgadas: `#n` = n/8", simplificado (`#2 ¼"`, `#3 ⅜"`, `#4 ½"`, `#5 ⅝"`, `#6 ¾"`, `#7 ⅞"`, `#8 1"`, `#9 1⅛"`, `#10 1¼"`, `#11 1⅜"`).
+8. **Diámetro en número o en pulgadas** (Carlos): un interruptor `#4 · ½"` en el menú Capas. C# manda los dos textos de cada rótulo; la página elige. En pulgadas, la cantidad va con `Ø`: `3Ø⅝"L= 2.80/3.00`. Pulgadas: `#n` = n/8", simplificado (`#2 ¼"`, `#3 ⅜"`, `#4 ½"`, `#5 ⅝"`, `#6 ¾"`, `#7 ⅞"`, `#8 1"`, `#9 1⅛"`, `#10 1¼"`, `#11 1⅜"`).
 9. **Colores por diámetro** (Carlos: #5 rojo, #4 naranja; el resto, nuestra, aprobada por Juan el 19-oct "por ahora"; se le muestra a Carlos al probar): `#3 amarillo`, `#4 naranja`, `#5 rojo`, `#6 magenta`, `#7 morado`, `#8 azul`, `#9 cian`, `#10 verde`, `#11 café`. Viven en C# (`ColoresDiametro`) y viajan en la vista; #85 los usa en Revit. Corrida y bastón se distinguen por el trazo (bastón un poco más delgado), no por el color. La selección deja de ser azul: va con un halo gris oscuro detrás de la barra, para no confundirse con el #8.
 10. **Leyenda** (Carlos): arriba, una bolita por cada diámetro que hay en el pórtico + su texto (`● #5  ● #4`), en lugar de la de corrida/bastón/traslapo.
 11. **Recubrimiento del corte** (Carlos 1:00:08): la línea del recubrimiento en gris medio punteada sobre el fondo claro del corte, con su texto `r = 4 cm`.
@@ -157,9 +157,9 @@
 **Archivos:** `calculo/CQEING.Vigas.Calculo/Porticos/AgrupadorPorticos.cs`, `calculo/CQEING.Vigas.Calculo.Tests/AgrupadorPorticosTests.cs`.
 
 - [ ] **Paso 1:** abrir el modelo de Carlos y medir por el MCP de Revit la distancia entre la línea de las vigas del eje A y su rejilla. Anotar en Hallazgos si confirma el hallazgo 1 o es otra cosa.
-- [ ] **Paso 2:** pruebas que fallan: `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` (viga a 150 mm del eje, columnas centradas en el eje) y `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma`.
-- [ ] **Paso 3:** en `Agrupar`, si no hay eje colineal, buscar la rejilla paralela más cercana que pase por dentro de las huellas de los apoyos (decisión 2).
-- [ ] **Paso 4:** `rtk dotnet test CQEING-Addins.sln -c Release` en verde. Commit `fix(vigas): el pórtico toma el nombre de la rejilla aunque la viga esté corrida del eje (#100)`.
+- [x] **Paso 2:** pruebas que fallan: `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` (viga a 150 mm del eje, columnas centradas en el eje) y `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma`.
+- [x] **Paso 3:** en `Agrupar`, si no hay eje colineal, buscar la rejilla paralela más cercana que pase por dentro de las huellas de los apoyos (decisión 2).
+- [x] **Paso 4:** `rtk dotnet test CQEING-Addins.sln -c Release` en verde. Commit `fix(vigas): el pórtico toma el nombre de la rejilla aunque la viga esté corrida del eje (#100)`.
 
 ### Tarea 2: la viga de borde del voladizo no es apoyo
 
@@ -279,8 +279,20 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
 ## Estado
 
 - [ ] Plan revisado con Juan.
-- [ ] Tarea 0: maqueta aprobada.
+- [x] Tarea 0: maqueta aprobada por Juan (19-oct, versión 28).
+  - Componente del alzado (`Beam`): líneas con `non-scaling-stroke` y textos/círculos divididos por el zoom; rótulo `3#5L= 2.80/3.00` en cada barra y bastón; largo de cada traslapo con 2 decimales; estribos por zona **debajo de la viga** (`8e#3` / `@.10 L=0.75`) en lugar del rayado; `30×50` arriba de cada luz; `40×40` debajo de cada columna (capa apagada por defecto); leyenda de bolitas por diámetro; menú **Capas** con el interruptor `#4 · ½"`; altura que crece 14 por cada fila de más.
+  - Ruling: el **traslapo pasa a gris** (`#5E6670`): el naranja de antes chocaba con el #4.
+  - Ruling: en pulgadas el rótulo queda `3Ø⅝"L= 2.80/3.00` (la `Ø` separa la cantidad de la fracción; `3⅝"` se leería como tres y cinco octavos).
+  - Ruling: la selección de una barra va con un halo gris detrás; el arrastre sigue en azul / ámbar (es el elemento vivo, no un diámetro).
+  - Pantalla (`Main`): tamaño variable para probar 1366 × 768; el selector de fila va en el mismo renglón del diámetro; el dibujo del recubrimiento queda detrás de *Ver el dibujo* (estribo gris claro, barra con el color de su diámetro, cotas en gris oscuro y ámbar); el corte con colores por diámetro y estribo gris; la ventana flotante del corte se mueve por su barra y se oculta con ✕.
+  - Ruling: la **lista de barras** conserva su scroll interno, como la de pórticos: crece con el pórtico.
+  - Artboards nuevos: *Sin scroll a 1366 × 768*, *Corte 1-1 en ventana flotante*, *Menú Capas y diámetro en pulgadas*, *La viga crece con 2 filas arriba*.
+  - Versión 24 (Juan: *"Ojalá sobre la misma barra… falta esto"*): el rótulo va **pegado a su barra**, encima de las de arriba y debajo de las de abajo, con un borde del color del fondo para que se lea sobre las líneas; antes salía fuera de la viga. Los bastones también llevan el suyo (`1#5L= 2.00`), del lado de adentro de la viga.
+  - Versiones 25–28 (Juan: *"no lo veo"*): **el motor de la maqueta no pinta un `{{hueco}}` dentro de un `<text>` de SVG** (probado con textos de muestra: los fijos salen y los de hueco no). Por eso los rótulos nunca se vieron, ni siquiera el del arrastre de #84. Ahora van como etiquetas HTML encima del dibujo, en px de pantalla (así también quedan fijos al zoom). Visto en Chrome: rótulos de barras, bastones y traslapos, estribos y `30×50`. **En el tablero real (Preact) esto no pasa**: allí siguen siendo `<text>` con `font-size / z`.
+  - No está en la maqueta: el apoyo que es viga (decisión 4), porque la maqueta no tiene ese caso.
 - [ ] Fase A (tareas 1–2).
+  - Tarea 1 (pasos 2–4): `EjeQuePasaPorLosApoyos` toma la rejilla paralela más cercana que pasa por dentro de **todas** las columnas y muros del pórtico (no cuenta las vigas que cruzan). `Soporte` guarda también su rango de lado a lado (`NormalDesde`–`NormalHasta`); `Unir` junta esos rangos. `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma` pasó desde el inicio: queda como guarda para que el arreglo no tome ejes de más. 578 pruebas en verde.
+  - Pendiente el **paso 1**: Revit no respondía por el MCP el 19-oct. Falta medir en el modelo de Carlos si el eje A es una viga corrida del eje (hallazgo 1); si es otra cosa, este arreglo no basta.
 - [ ] Fase B (tareas 3–5).
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
