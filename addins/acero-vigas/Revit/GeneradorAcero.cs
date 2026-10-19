@@ -34,7 +34,8 @@ internal static class GeneradorAcero
         var estribos = new List<(Rebar Conjunto, PorticoAGenerar Portico, GrupoEstribos Grupo)>();
         using var t = new Transaction(doc, NombreTransaccion);
         FailureHandlingOptions opciones = t.GetFailureHandlingOptions();
-        opciones.SetFailuresPreprocessor(new SinAdvertencias());
+        var manejo = new ManejoDeFallas();
+        opciones.SetFailuresPreprocessor(manejo);
         t.SetFailureHandlingOptions(opciones);
         t.Start();
         foreach (PorticoAGenerar p in porticos)
@@ -72,15 +73,21 @@ internal static class GeneradorAcero
         if (volteados)
             doc.Regenerate();
 
-        List<DiferenciaLargo> diferencias = creadas
+        // Lo que Revit rechace al confirmar se quita y se anota (ver ManejoDeFallas), sin cuadros de error.
+        manejo.Nuestras = creadas.ToDictionary(c => c.Barra.Id, c => $"{c.Pieza.Pieza} ({c.Portico.Id})")
+            .Concat(estribos.ToDictionary(e => e.Conjunto.Id, e => $"{e.Grupo.Pieza} de {e.Grupo.Tramo} ({e.Portico.Id})"))
+            .ToDictionary(par => par.Key, par => par.Value);
+        t.Commit();
+        fallas.AddRange(manejo.Quitadas);
+
+        // Después de confirmar: solo cuenta lo que quedó (ya regenerado; NumberOfBarPositions sin regenerar da uno menos).
+        List<Creada> quedaron = creadas.Where(c => c.Barra.IsValidObject).ToList();
+        List<DiferenciaLargo> diferencias = quedaron
             .Select(c => new DiferenciaLargo(c.Portico.Id, c.Pieza.Pieza, c.Pieza.Diametro, CreadorBarras.LargoEnRevit(c.Barra), c.Pieza.Largo))
             .Where(d => Math.Abs(d.LargoRevit - d.LargoTablero) > ToleranciaLargo)
             .ToList();
-        // Ya regenerado: NumberOfBarPositions cuenta los estribos que de verdad quedaron (columnas: sin regenerar, uno menos).
-        int cantidadEstribos = estribos.Sum(e => e.Conjunto.NumberOfBarPositions);
-        t.Commit();
-
-        return new ResumenGeneracion(porticos.Count, creadas.Count(c => !c.EsBaston), creadas.Count(c => c.EsBaston), cantidadEstribos,
+        int cantidadEstribos = estribos.Where(e => e.Conjunto.IsValidObject).Sum(e => e.Conjunto.NumberOfBarPositions);
+        return new ResumenGeneracion(porticos.Count, quedaron.Count(c => !c.EsBaston), quedaron.Count(c => c.EsBaston), cantidadEstribos,
             fallas.Distinct().ToList(), diferencias);
     }
 
@@ -113,17 +120,41 @@ internal static class GeneradorAcero
     }
 
     /// <summary>
-    /// Descarta las advertencias de la transacción (decisión 3): se sabe que una barra corrida recorre varias vigas y Revit
-    /// avisa que queda fuera de su host. Los errores no se tocan: esos sí deshacen la transacción.
+    /// Lo que Revit dice al confirmar la transacción:
+    /// <list type="bullet">
+    /// <item>las advertencias se descartan (decisión 3): se sabe que una barra corrida recorre varias vigas y Revit avisa que
+    /// queda fuera de su host;</item>
+    /// <item>un error sobre una barra que creó el add-in quita esa barra y lo anota en <see cref="Quitadas"/>, en vez de abrir
+    /// el cuadro de error de Revit que bloquea todo (prueba del 2026-10-19: "El diámetro de curvatura de armadura es
+    /// demasiado grande"). El resto se confirma. Un error que no toca barras del add-in sigue a Revit.</item>
+    /// </list>
     /// </summary>
-    private sealed class SinAdvertencias : IFailuresPreprocessor
+    private sealed class ManejoDeFallas : IFailuresPreprocessor
     {
+        /// <summary>Las barras que creó esta generación, con su nombre para el resumen.</summary>
+        public Dictionary<ElementId, string> Nuestras { get; set; } = [];
+
+        /// <summary>Una línea por barra quitada: qué era y qué dijo Revit.</summary>
+        public List<string> Quitadas { get; } = [];
+
         public FailureProcessingResult PreprocessFailures(FailuresAccessor a)
         {
+            var quitar = new HashSet<ElementId>();
             foreach (FailureMessageAccessor m in a.GetFailureMessages())
+            {
                 if (m.GetSeverity() == FailureSeverity.Warning)
+                {
                     a.DeleteWarning(m);
-            return FailureProcessingResult.Continue;
+                    continue;
+                }
+                List<ElementId> nuestras = m.GetFailingElementIds().Where(Nuestras.ContainsKey).ToList();
+                foreach (ElementId id in nuestras.Where(quitar.Add))
+                    Quitadas.Add($"{Nuestras[id]}: Revit no lo pudo crear ({m.GetDescriptionText().TrimEnd('.')}).");
+            }
+            if (quitar.Count == 0)
+                return FailureProcessingResult.Continue;
+            a.DeleteElements(quitar.ToList());
+            return FailureProcessingResult.ProceedWithCommit;
         }
     }
 }

@@ -175,6 +175,13 @@ Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo
 | E10, E11 | ⏳ experimento en Revit | Antes de tocar las posiciones hace falta saber qué hace Revit, y eso solo se ve con Revit abierto (por MCP, en una subtransacción que se deshace): (1) si crear los estribos **antes** que las barras evita que Revit las pegue al doblez; (2) si un bastón puesto un poco más abajo queda donde se pide o Revit lo vuelve a pegar; (3) con qué diámetro arma Revit la posición de la barra (nominal o de modelo). Según eso: ajustar el orden de creación, o poner en el plan las esquinas y los bastones donde los deja Revit. |
 | E12, gancho que no cabe | ⏳ Carlos | Reglas de diseño. |
 
+### Sexta prueba en Revit: 4 #5 por cara, cerrado en 1-2 y abierto en 3 (2026-10-19)
+
+| # | Hallazgo | Motivo / estado |
+|---|---|---|
+| E15 | **Revit abrió el cuadro "Error: no se puede ignorar" con 2 errores: *"El diámetro de curvatura de armadura es demasiado grande. Utilice un tipo de barra más pequeño."*** El cuadro bloquea Revit (y el MCP) hasta que alguien elige "Suprimir armadura" o "Cancelar". Juan canceló: no quedó nada de esa generación (el gancho "CQEING 135° #3" no existe en el modelo). | Las advertencias se descartaban, pero un **error** seguía al cuadro de Revit. **✅ en código:** `ManejoDeFallas` quita la barra del add-in que tiene el error, lo anota en el resumen (*"E1 de A-B (Pórtico C · N+6.70): Revit no lo pudo crear (…)"*) y confirma lo demás. Falta ver en Revit cuál de los dos adicionales lo provoca: el resumen lo va a decir. |
+| E16 | **El cerrado adicional en las barras 1 y 2 es muy angosto para sus ganchos.** Con 4 #5 en 25 cm las barras quedan a 45 mm entre centros: el cerrado mide 70 mm al eje. Probado por MCP (subtransacción deshecha): Revit lo arma, pero la cola del gancho de 135° de la esquina de arriba a la izquierda termina en X 128 del corte, más allá de su propia rama derecha (X 115). | El gancho de 135° con cola de 57 mm (E del cuadro) va en diagonal hacia el núcleo y, en un estribo de 70 mm, lo atraviesa. Es candidato al error de E15. En obra, un cerrado así de angosto no se usa con ganchos de 135° en la esquina; es pregunta para Carlos (¿ancho mínimo de un cerrado adicional, o los ganchos en otra esquina?). |
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
