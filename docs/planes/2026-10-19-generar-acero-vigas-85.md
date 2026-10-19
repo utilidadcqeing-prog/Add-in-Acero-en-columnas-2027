@@ -86,7 +86,16 @@ Modelo de prueba con dos pórticos generados: "Pórtico A · N+3.70" y "Pórtico
 - **El modelo de prueba usa barras métricas.** El tipo elegido para el #5 fue "16 B 400 S" (16 mm, a 0.1 mm del 15.9). El #4 (12.7) no tiene tipo: el más cercano es el de 12 mm, a 0.7 mm. El #3 (9.5) cae en el de 10 mm, justo en la tolerancia de 0.5. En un modelo con tipos `#3`…`#8` esto no pasa.
 - **El resumen no se leía.** Salía en una sola línea que se cortaba por los lados, con una frase por barra. Se cambió a una tarjeta con una línea por cosa, que se queda hasta pulsar "Cerrar", y las diferencias se agrupan por pórtico, diámetro y diferencia: *"Pórtico A · N+3.70, barras #5 (S1, S4, I1 e I4): en Revit miden 0.18 m menos que en el tablero…"*.
 
-**Pendiente de decidir (Juan):** cómo hacer que el gancho de Revit dé el B del cuadro sin cambiar los tipos del proyecto. La opción es que el add-in cree sus propios tipos de gancho ("CQEING 90° #5"…) con el multiplicador que da el B de cada diámetro. Son tipos nuevos: no cambian los que ya tiene el proyecto.
+~~**Pendiente de decidir (Juan):** cómo hacer que el gancho de Revit dé el B del cuadro sin cambiar los tipos del proyecto.~~ **Decidido: ganchos propios** (decisión 8b).
+
+8b. **Ganchos propios por ángulo y diámetro** (2026-10-19, Juan: "ganchos propios"):
+   - las barras y los bastones usan un tipo de gancho del add-in por ángulo y diámetro: `CQEING 90° #5`, `CQEING 180° #4`…;
+   - su multiplicador hace que la extensión recta sea `B + R + d/2 − R·θ`, con `R = D/2 + d/2` (`D` = diámetro de doblado del gancho en el tipo de barra, `d` = diámetro de la barra). Así Revit mide lo mismo que el tablero (`GanchoPropio`, con la medida de la primera prueba en `GanchoPropioTests`);
+   - si el tipo ya existe (de una generación anterior) se pone al día con las reglas y el tipo de barra vigentes: es del add-in. Los del proyecto siguen sin tocarse;
+   - el aviso de la decisión 8 se queda: si aun así Revit no da el largo, el resumen lo dice;
+   - los estribos tendrán el suyo (`CQEING Estribo 135° #3`) en la tarea 8.
+
+**Las casillas de los tramos** (pregunta de Juan, 2026-10-19): no limitan lo que se genera. Sirven para darle a esos tramos otra configuración de estribos (#83 y #90). "Generar" crea siempre el pórtico completo, porque las barras corridas cruzan los tramos. Los estribos de los tramos marcados ya salen con su configuración en el plan (tarea 4) y se crean en la tarea 8.
 
 ## Decisiones
 

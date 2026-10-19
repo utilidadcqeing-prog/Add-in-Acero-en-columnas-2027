@@ -37,12 +37,12 @@ internal static class CreadorBarras
         Line linea = Line.CreateBound(Punto(u, p.Desde, p.XCorte, p.YCorte), Punto(u, p.Hasta, p.XCorte, p.YCorte));
 
         using var terminaciones = new BarTerminationsData(doc);
-        if (tipos.Gancho(p.GanchoInicio) is { } inicio)
+        if (tipos.Gancho(p.GanchoInicio, p.Diametro) is { } inicio)
         {
             terminaciones.HookTypeIdAtStart = inicio.Id;
             terminaciones.TerminationOrientationAtStart = RebarTerminationOrientation.Right;
         }
-        if (tipos.Gancho(p.GanchoFin) is { } fin)
+        if (tipos.Gancho(p.GanchoFin, p.Diametro) is { } fin)
         {
             terminaciones.HookTypeIdAtEnd = fin.Id;
             terminaciones.TerminationOrientationAtEnd = RebarTerminationOrientation.Right;
