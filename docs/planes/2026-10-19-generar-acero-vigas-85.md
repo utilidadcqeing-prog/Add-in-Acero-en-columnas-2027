@@ -187,7 +187,8 @@
   - `public sealed record PlanAcero(string Portico, IReadOnlyList<PiezaLongitudinal> Barras, IReadOnlyList<PiezaLongitudinal> Bastones, IReadOnlyList<GrupoEstribos> Estribos, IReadOnlyList<int> Diametros);`
   - `public static class PlanificadorAcero { public static PlanAcero? Planificar(string idPortico, PorticoLeido p, OpcionesTablero o, Reglas r); }` → null si `SePuedeGenerar` es falso o `p.Ubicacion` es null.
 
-- [ ] **Paso 1: pruebas que fallan**, con el pórtico de la maqueta y una `UbicacionPortico` en `+X`:
+- [x] **Hecho** (2026-10-19): 10 pruebas en `PlanificadorAceroTests`. Cambio sobre lo previsto: `PlanAcero` todavía no trae `Estribos` (los agrega la tarea 4) y trae `BastonesSinLugar`, los ids de los bastones que no caben en el corte y no se crean.
+- [x] **Paso 1: pruebas que fallan**, con el pórtico de la maqueta y una `UbicacionPortico` en `+X`:
   - `UnaPiezaPorBarraFisica`: con `3 #5` arriba y abajo, `Barras.Count` = (barras calculadas de las dos capas) × 3.
   - `VariasFilas`: con `7 #5` arriba en una viga donde caben 5, las piezas de `S1` tienen 5 `YCorte` iguales y 2 más bajos (fila 2), y las mismas `XCorte` que `Estribos.Seccion.Superior.Filas`.
   - `DosDiametros`: con `3 #5 + 2 #4`, cada pieza toma el `Diametro` de su barra del corte.
@@ -228,6 +229,8 @@
 - [ ] **Paso 5:** commit `feat(vigas): plan de estribos por corridas (#85)`.
 
 ### Tarea 5: el mensaje "generar" y los diámetros del modelo
+
+> **Cambio (2026-10-19, Juan):** para poder probar en Revit desde la tarea 7, esta tarea también conecta el botón "Generar en Revit" de forma mínima: envía `{tipo:'generar', ids:[P.id]}` con el pórtico abierto, sin confirmación, y muestra el aviso que llegue. La confirmación, varios pórticos y el resumen completo siguen en la tarea 10.
 
 **Archivos:**
 - Modificar: `calculo/.../Tablero/ProtocoloTablero.cs` (mensaje `generar`)
