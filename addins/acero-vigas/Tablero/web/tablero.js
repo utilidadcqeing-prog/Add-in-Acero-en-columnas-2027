@@ -11,15 +11,14 @@
   const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
   const mm = (m) => Math.round(m * 1000);
   const diametro = (d) => parseInt(String(d).slice(1), 10);
-  // "Esto llega con la #NN." (decisión 7): los botones de otras issues se ven como en la maqueta, sin su acción.
-  const LLEGA = (n) => 'Esto llega con la #' + n + '.';
 
   // Lo que el usuario elige para un pórtico: el `state` de la maqueta que cambia el cálculo (OpcionesTablero).
   const OPCIONES0 = {
     tipo: undefined, side: undefined, sup: [{ n: 3, d: '#5' }], inf: [{ n: 3, d: '#5' }],
     rec: '4', recUp: '', recDown: '', recSide: '', sepMode: 'pegada', sepCm: '1', maxCapas: '3',
     bastDef: '2.00', bastHook: false, bastLen: {}, bastSupN: '1', bastSupD: '', bastInfN: '1', bastInfD: '',
-    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20' }, estMarc: null, tramosSel: [],
+    // adicionales (#85, hallazgo E8): [{ tipo: 'Cerrado' | 'Abierto', barras: [{ cara, fila, numero, nombre }] }]
+    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20', adicionales: [] }, estMarc: null, tramosSel: [],
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
@@ -37,7 +36,8 @@
     // la fila a mano de cada tipo (#84): '' = Auto
     const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
     const estribos = (e) => ({ diametro: diametro(e.estD), gancho: e.estG === '135°' ? 'De135' : 'De90',
-      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)) });
+      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)),
+      adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
     try {
       const largos = {};
@@ -484,10 +484,31 @@
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
       const cerrado = secc.figuras.find((f) => f.id === 'E');
       const recCm = num(s.rec, 4);
+      // Estribos adicionales (#85, hallazgo E8): con "+ Cerrado" o "+ Abierto" el corte queda eligiendo barras. Cada barra
+      // es un PuntoBarra del motor: su cara, su fila desde 1 (la de la cara) y su número de izquierda a derecha en la fila.
+      const pk = s.pick;
+      const limite = pk ? (pk.tipo === 'Cerrado' ? 2 : 1) : 0;
+      const punto = (b) => ({ cara: b.arriba ? 'Superior' : 'Inferior', fila: b.fila + 1, nombre: b.nombre,
+        numero: 1 + secBars.filter((x) => !x.baston && x.arriba === b.arriba && x.fila === b.fila && x.x < b.x).length });
+      const igual = (a, b) => a.cara === b.cara && a.fila === b.fila && a.numero === b.numero;
+      const elegirBarra = (b) => {
+        const p = punto(b);
+        if (pk.barras.some((x) => igual(x, p))) { this.setState({ pick: { ...pk, barras: pk.barras.filter((x) => !igual(x, p)) } }); return; }
+        if (pk.barras.filter((x) => x.cara === p.cara).length >= limite) {
+          this.say('Ya elegiste ' + limite + (limite === 1 ? ' barra ' : ' barras ') + (p.cara === 'Superior' ? 'arriba' : 'abajo') + '. Haz clic en una para quitarla.');
+          return;
+        }
+        this.setState({ pick: { ...pk, barras: pk.barras.concat(p) } });
+      };
       const seccionA = (K) => ({
         wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
-        dots: secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
-          c: b.color || '#3F4A57', ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
+        dots: secBars.map((b) => {
+          const elegible = !!pk && !b.baston;
+          const elegida = elegible && pk.barras.some((x) => igual(x, punto(b)));
+          return { x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
+            c: b.color || '#3F4A57', ring: elegida ? '2px solid #0F7B6C' : 'none', cur: elegible ? 'pointer' : 'default',
+            label: (b.baston ? '' : 'Barra ') + b.nombre, pick: elegible ? () => elegirBarra(b) : () => {} };
+        }),
         // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
         proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
         adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
@@ -507,6 +528,14 @@
         if (nSel) this.cambiar({ estMarc: { ...(s.estMarc || s.est), [k]: valor } }, texto);
         else this.cambiar({ est: { ...s.est, [k]: valor } }, texto);
       };
+      // los adicionales van donde se aplica este paso: los tramos marcados o todo el pórtico
+      const misAdicionales = est.adicionales || [];
+      const ponerAdicionales = (lista) => (nSel
+        ? this.cambiar({ estMarc: { ...(s.estMarc || s.est), adicionales: lista } })
+        : this.cambiar({ est: { ...s.est, adicionales: lista } }));
+      const nArriba = pk ? pk.barras.filter((x) => x.cara === 'Superior').length : 0;
+      const nAbajo = pk ? pk.barras.filter((x) => x.cara === 'Inferior').length : 0;
+      const empezar = (tipo) => () => this.setState({ pick: { tipo, barras: [] }, tab: 'corte' });
 
       const on = 'background: #1F5FAF; color: #FFFFFF';
       const off = 'background: #FFFFFF; color: #16191D';
@@ -521,7 +550,7 @@
       const pors = enLista.filter((p) => !q || (p.nombre + ' ' + p.sub).toLowerCase().includes(q)).map((p) => {
         const active = p.id === porId;
         return { id: p.id, name: p.nombre, sub: p.sub, tipo: p.tipo, open: active, bg: active ? '#F3F7FC' : '#FFFFFF', bd: active ? '#1F5FAF' : '#FFFFFF',
-          pick: () => { this.setState({ ver: 'todo', sel: undefined }); enviar({ tipo: 'elegirPortico', id: p.id }); },
+          pick: () => { this.setState({ ver: 'todo', sel: undefined, pick: null }); enviar({ tipo: 'elegirPortico', id: p.id }); },
           tramos: (active ? p.tramos : []).map((t) => {
             const on2 = tramosSel.includes(t.id);
             return { name: t.nombre, chkLabel: 'Marcar ' + t.nombre, pressed: on2 ? 'true' : 'false', bg: s.ver === t.id && active ? '#E8F0FA' : 'transparent',
@@ -555,12 +584,16 @@
         rulesWarn: s.rulesWarn,
         // abierta, la lista de barras toma todo el alto que sobra en la columna (Juan, 19-oct: "que la tabla llegue al límite")
         listOpen: s.listOpen, listLabel: s.listOpen ? 'Ocultar' : 'Ver lista', rows: rowsList.concat(estRows),
-        estAddList: adicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1), desc: ea.tipo.replace('Adicional ', '').replace(/^./, (c) => c.toUpperCase()) + ' · ' + ea.detalle,
-          removeLabel: 'Quitar adicional ' + (i + 1), remove: () => this.say(LLEGA(91)) })),
-        isPicking: false, noPick: true, pickMsg: '', pickNotDone: true,
+        estAddList: misAdicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1),
+          desc: ea.tipo + ' · ' + ea.barras.map((b) => b.nombre).join(', '),
+          removeLabel: 'Quitar adicional ' + (i + 1), remove: () => ponerAdicionales(misAdicionales.filter((_, j) => j !== i)) })),
+        isPicking: !!pk, noPick: !pk, pickNotDone: !pk || nArriba !== limite || nAbajo !== limite,
+        pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
+          + limite + ' abajo. Llevas ' + nArriba + ' arriba y ' + nAbajo + ' abajo.' : '',
         confTxt: est.conf + ' m', s1Txt: 'cada ' + est.s1, s2Txt: 'cada ' + est.s2, bastTxt: s.bastDef + ' m',
         secAddText: adicionales.length ? ' · ' + adicionales.length + (adicionales.length === 1 ? ' adicional' : ' adicionales') : '',
-        startCerrado: () => this.say(LLEGA(91)), startAbierto: () => this.say(LLEGA(91)), cancelPick: () => {}, addPick: () => {},
+        startCerrado: empezar('Cerrado'), startAbierto: empezar('Abierto'), cancelPick: () => this.setState({ pick: null }),
+        addPick: () => { this.setState({ pick: null }); ponerAdicionales(misAdicionales.concat({ tipo: pk.tipo, barras: pk.barras })); },
         corte: C, cutLive: s.cutLive, cutX: s.cutX !== '' ? s.cutX : (C ? f2(C.x) : ''), cutPos: C ? f2(s.cutLive ?? C.x) : '',
         cutAjustado: !!C && C.ajustado, cutBd: C && C.ajustado ? '#B26B00' : '#C9CFD6', cutTipo: !!C && C.esTipo,
         cutTramo: C ? C.tramo : '', cutAviso: C ? C.aviso : null,

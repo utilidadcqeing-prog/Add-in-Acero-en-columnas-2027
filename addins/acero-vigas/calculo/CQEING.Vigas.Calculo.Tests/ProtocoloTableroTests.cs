@@ -159,6 +159,24 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void CalcularTraeLosEstribosAdicionales()
+    {
+        // Lo que manda la página al agregar un adicional en el corte (hallazgo E8); "nombre" es solo para la lista y se ignora.
+        const string json = """
+            {"tipo":"calcular","id":"Pórtico 1","opciones":{"superior":[{"cantidad":3,"diametro":5}],"inferior":[{"cantidad":3,"diametro":5}],
+             "recubrimientoCm":4,"maximoFilas":3,
+             "estribos":{"diametro":3,"gancho":"De135","largoZona":800,"separacionZona":100,"separacionCentro":200,
+               "adicionales":[{"tipo":"Abierto","barras":[{"cara":"Superior","fila":1,"numero":2,"nombre":"arriba 2"},{"cara":"Inferior","fila":1,"numero":2}]}]}}}
+            """;
+
+        Calcular c = Assert.IsType<Calcular>(ProtocoloTablero.Leer(json));
+
+        EstriboAdicional a = Assert.Single(c.Opciones.Estribos.Adicionales!);
+        Assert.Equal(TipoEstribo.Abierto, a.Tipo);
+        Assert.Equal([new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)], a.Barras);
+    }
+
+    [Fact]
     public void LeeGenerar()
     {
         MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1","Pórtico 2"]}""");

@@ -120,6 +120,35 @@ Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo
 | E8 | **"+ Cerrado" y "+ Abierto" no hacen nada: los estribos adicionales no se pueden elegir en el tablero.** Al pulsarlos sale "Esto llega con la #91", pero la #91 ya está cerrada. | Nadie lo tiene asignado. El motor los calcula (#90) y la generación los crea en código (tarea 8), pero el modo de elegir barras con clics en el corte quedó **fuera de alcance de la #91** (su plan, `2026-10-17-corte-vigas-91.md`, línea 37: *"el modo de elegir no está activo, `isPicking: false`"*) y no pasó a ninguna otra issue. En `tablero.js:559-563` los botones siguen con el aviso viejo. Por eso tampoco se pueden probar en Revit (E7). |
 | E7 | **No se probaron los estribos adicionales** (E1, E2… abiertos o cerrados). | El pórtico no tenía ninguno. |
 
+**Estado de los hallazgos** (2026-10-19, Juan: "resuelve los hallazgos", con Revit cerrado):
+
+| # | Estado | Qué se hizo, o por qué sigue abierto |
+|---|---|---|
+| Gancho que no cabe en el alto | ⏳ Carlos | Es regla de diseño: la propuesta está arriba, en "Propuesta para Carlos". |
+| E1 | ✅ cubierto por E2 | Sin forma de estribo en el modelo sigue el lazo por curvas, que ahora queda bien. Con una forma del documento se usa esa. |
+| E2 | ✅ en código, falta verlo en Revit | El lazo arranca y cierra en la esquina de arriba a la izquierda: los dos ganchos de 135° abrazan la barra de esquina y el lado de arriba queda cerrado (`a6b4f06`). Falta ver en Revit hacia dónde doblan los ganchos. |
+| E3 | ⏳ Revit abierto | Hay que medir con qué diámetro de doblado arma Revit el estribo y cuánto corre la barra de esquina, para que el tablero ponga la barra donde la deja Revit. Con Revit cerrado sería adivinar. |
+| E4 | ⏳ con E3 | El bastón se monta porque se ubica con la barra de esquina sin correr. Se resuelve junto con E3. |
+| E5 | ⏳ Revit abierto | Gran parte de los 0.11 m era el lado abierto de E2. Lo que quede sale de las esquinas redondeadas de Revit: hay que medirlo antes de decidir si el tablero debe descontarlas (cambia los kg). |
+| E6 | ✅ | Cada zona del motor es un conjunto de Revit; el estribo compartido es de la zona: 2 + 16 + 2 en el tramo de la prueba (`f0da498`). |
+| E7 | ⏳ Revit abierto | Ya se pueden elegir (E8); falta generarlos y revisarlos. |
+| E8 | ✅ en código, falta verlo en Revit | Tarea 8b, abajo. |
+
+### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
+
+> Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
+
+**Archivos:** `addins/acero-vigas/Tablero/web/tablero.js`; prueba en `ProtocoloTableroTests.CalcularTraeLosEstribosAdicionales`.
+
+- [x] **"+ Cerrado" y "+ Abierto"** pasan a la pestaña del corte y dejan el corte eligiendo barras. Cada clic marca o desmarca una barra con un anillo verde; los bastones no se eligen.
+- [x] **Límite:** el cerrado pide 2 arriba y 2 abajo; el abierto, 1 y 1. Un clic de más avisa: *"Ya elegiste 2 barras arriba. Haz clic en una para quitarla."* El aviso de la tarjeta dice cuántas lleva.
+- [x] **"Agregar"** se habilita con las barras justas y guarda el adicional donde se aplica el paso 3: los tramos marcados, o todo el pórtico. **"Cancelar"** lo descarta, y cambiar de pórtico también.
+- [x] **Cada barra** viaja como el `PuntoBarra` del motor: cara, fila desde 1 (la de la cara) y número de izquierda a derecha en su fila.
+- [x] **La lista** muestra cada adicional con sus barras ("Abierto · arriba 2, abajo 2") y "Quitar".
+- [x] Se quitó el aviso viejo "Esto llega con la #NN".
+- **Límite conocido:** al marcar un tramo, su configuración copia la del pórtico con sus adicionales. Como llegan por JSON, el motor no los reconoce como los mismos y los numera aparte (E1 en el pórtico, E2 en el tramo). No cambia lo que se genera, solo el número de la lista.
+- [ ] **Prueba en Revit:** agregar un cerrado y un abierto, generar y revisar por MCP (E7).
+
 **Gancho propio medido en Revit** (2026-10-19, por MCP, en una subtransacción deshecha: el modelo no cambió). Barra "16 B 400 S" (d = 16, doblado del gancho 64), línea recta de 3000 mm con gancho al inicio:
 
 | Gancho | B del cuadro (#5) | Multiplicador | Largo en Revit | Esperado |
