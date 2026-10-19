@@ -234,9 +234,9 @@
 
 **Archivos:** `alzado.js`, `tablero.js`.
 
-- [ ] **Paso 1:** botón **Capas ▾** junto al zoom con las casillas y el interruptor `#4 · ½"` de la decisión 12; lo elegido se guarda en `localStorage` con try/catch.
-- [ ] **Paso 2:** cada capa esconde lo suyo (media luz, línea 1-1, textos, estribos, sección de columnas).
-- [ ] **Paso 3:** `node --check`. Commit `feat(vigas): menú de capas en el alzado (#100)`.
+- [x] **Paso 1:** botón **Capas ▾** junto al zoom con las casillas y el interruptor `#4 · ½"` de la decisión 12; lo elegido se guarda en `localStorage` con try/catch.
+- [x] **Paso 2:** cada capa esconde lo suyo (media luz, línea 1-1, textos, estribos, sección de columnas).
+- [x] **Paso 3:** `node --check`. Commit `feat(vigas): menú de capas en el alzado (#100)`.
 
 ### Tarea 10: la sección de las columnas
 
@@ -304,6 +304,8 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Tarea 7, como la maqueta: corrida 2.4 px (elegida 3.4) y bastón 1.7 px (elegido 3), los dos con el color de su diámetro; la elegida conserva su color y lleva un halo gris (`#16191D` al 22 %, 10 px) detrás. Solo al arrastrarla pasa a azul o ámbar (el elemento vivo). Traslapo en gris `#5E6670` (elegido o a mano en azul, con aviso en ámbar). Leyenda: una bolita por diámetro + traslapo. Corte: cada barra con su color (el tamaño ya era a escala) y la leyenda debajo del título. Panel: las bolitas de cada fila con el color de sus barras y una bolita junto al selector de diámetro; el dibujo del recubrimiento con el color de la barra. `demo.js` tiene la misma tabla que C#. Falta verlo en Revit: el DLL con los colores (tarea 6) necesita cerrar Revit para compilar.
 - [ ] Fase D (tarea 8).
   - Tarea 8: `Rotulo.EnPulgadas` y `Rotulo.Pulgadas`; `Rotulo` / `RotuloPulgadas` en `BarraVista` y `BastonVista`; `TraslapoVista.Rotulo` (`"1.20"`); `ZonaEstribos` con `Cantidad` (`"8e#3"`), `CantidadPulgadas`, `Separacion` (`"@.10"`) y `Largo` (`"L=0.75"`); `VistaPortico.Secciones` (`SeccionEnAlzado`, `"30×50"` en la mitad de cada tramo, de `TramoLeido`). `DistribuidorEstribos.Zonas` cuenta los estribos de cada zona sobre las posiciones reales (el que comparte una zona con el centro es de la zona) y da la separación real: el centro reparte sin pasar de la suya, así que puede salir `@.17`. Ruling: como en la maqueta, `L=` va debajo junto a la separación (`@.10 L=0.75`), no al lado; el centro no lleva `L`; si todo el tramo va como zona, tampoco. En el alzado, los estribos dejan de dibujarse uno por uno: una línea por zona en y = 148 con rayitas, la cantidad encima y la separación debajo; la sección en y = 9; los textos con borde del fondo. 603 pruebas en verde. Falta verlo en Revit (Review Focus 3 y 4: la línea 1-1 sin rayas y los rótulos que se tapan en luces cortas).
+- [ ] Fase E (tareas 9–11).
+  - Tarea 9: menú **Capas** igual al de la maqueta, junto al zoom. Se guarda en `localStorage` (`cqeing.vigas.capas`, con try/catch; sin almacenamiento dura lo que dure la página). Por defecto todo prendido salvo *Sección de columnas* (llega con la tarea 10). *Línea de media luz*: las líneas punteadas de cada luz. *Corte 1-1*: la franja, la línea, sus flechas, el "1-1" y la zona para agarrarla (apagada no se puede arrastrar). *Textos*: rótulos de barras, bastones, traslapos y la sección; las luces, los voladizos y los ejes quedan. *Estribos*: sus líneas y sus textos (los textos también se van con *Textos*). Interruptor `#4 · ½"`: rótulos, cantidad de estribos y leyenda; C# manda los dos textos (`DiametroVista.NombrePulgadas` nuevo). La rueda sobre el menú no hace zoom. El corte y el panel siguen en `#` (el interruptor es del alzado).
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).

@@ -47,16 +47,35 @@
     baston: { Izquierda: 'Arrastra para cambiar el largo por esta punta', Centro: 'Arrastra para correr el bastón', Derecha: 'Arrastra para cambiar el largo por esta punta' },
   };
 
+  // Capas (#100, Carlos 1:07:24–1:08:17): lo que se apaga para seguir trabajando sin salir del dibujo. Lo elegido es de
+  // cada usuario y se queda en esta página (decisión 12): no viaja a C#.
+  const CAPAS = [['media', 'Línea de media luz'], ['corte', 'Corte 1-1'], ['textos', 'Textos'], ['estribos', 'Estribos'], ['colsec', 'Sección de columnas']];
+  const CAPAS0 = { media: true, corte: true, textos: true, estribos: true, colsec: false, pulgadas: false };
+  const CLAVE_CAPAS = 'cqeing.vigas.capas';
+  const leerCapas = () => {
+    try { return { ...CAPAS0, ...JSON.parse(window.localStorage.getItem(CLAVE_CAPAS) || '{}') }; } catch (e) { return { ...CAPAS0 }; }
+  };
+  const guardarCapas = (c) => {
+    try { window.localStorage.setItem(CLAVE_CAPAS, JSON.stringify(c)); } catch (e) { /* sin almacenamiento: dura lo que dure la página */ }
+  };
+
   class Alzado extends Component {
     constructor(props) {
       super(props);
-      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', rk: '', hd: null };
+      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', rk: '', hd: null,
+        capas: leerCapas(), capasOpen: false };
       // Esc mientras se arrastra un punto: el elemento queda como estaba
       this.esc = (e) => { if (e.key === 'Escape') this.soltarPunto(false); };
     }
 
     componentWillUnmount() {
       window.removeEventListener('keydown', this.esc);
+    }
+
+    cambiarCapas(cambio) {
+      const capas = { ...this.state.capas, ...cambio };
+      guardarCapas(capas);
+      this.setState({ capas });
     }
 
     // Termina el arrastre de un punto; con `aplicar`, avisa el salto donde quedó (si mueve algo).
@@ -85,6 +104,7 @@
       // Carlos (1:11:23): líneas y textos del mismo tamaño a cualquier zoom. Los trazos van con non-scaling-stroke; los
       // textos, radios y márgenes que dependen del tamaño en pantalla se multiplican por k (en el ajuste, k = 1).
       const k = fitZ / v.z;
+      const capas = this.state.capas, pulg = capas.pulgadas;
       const sel = this.props.sel ?? this.state.selLocal;
       const selLap = this.props.selLap ?? this.state.selLapLocal;
       const manualLaps = String(this.props.lapsManual || '').split(',');
@@ -116,7 +136,7 @@
         // el rótulo de DC-CAD (C#, #100) va sobre la misma barra: encima de las de arriba y debajo de las de abajo
         const yS = inv ? 170 - y : y, top = isC !== inv;
         return { id: bar.id, y, isC, pts, isSel, col: isSel && cur ? colVivo : bar.color || '#3F4A57', sw: isSel ? 3.4 : 2.4, pick: pickBar(bar.id),
-          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: top ? yS - 3 * k : yS + 10 * k, lt: bar.rotulo || '' };
+          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: top ? yS - 3 * k : yS + 10 * k, lt: (pulg ? bar.rotuloPulgadas : bar.rotulo) || '' };
       });
 
       const warnLap = warn ? this.props.warnLap : '';
@@ -147,11 +167,11 @@
         // su rótulo, del lado de adentro de la viga
         const yS = inv ? 170 - y : y, arriba = top !== inv;
         return { id: bs.id, y, top, pts, isSel, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : 1.7, pick: pickBar(bs.id),
-          lx: (xa + xz) / 2, ly: arriba ? yS + 10 * k : yS - 3 * k, lt: bs.rotulo || '' };
+          lx: (xa + xz) / 2, ly: arriba ? yS + 10 * k : yS - 3 * k, lt: (pulg ? bs.rotuloPulgadas : bs.rotulo) || '' };
       });
       // la selección va con un halo detrás y no con otro color: el azul ya es del #8 (#100)
       const halo = selLap ? null : (b.find((x) => x.isSel) || t.find((x) => x.isSel) || null);
-      const ley = (p.diametros || []).map((d) => ({ c: d.color, t: d.nombre }));
+      const ley = (p.diametros || []).map((d) => ({ c: d.color, t: (pulg && d.nombrePulgadas) || d.nombre }));
 
       // estribos como DC-CAD (Carlos, #100): debajo de la viga, una línea por zona con una rayita en cada punta,
       // "9e#3" encima y "@.10 L=0.95" debajo, en lugar de una raya por estribo. La línea 1-1 sigue saltando de estribo
@@ -159,7 +179,7 @@
       const yE = 148;
       const st = p.zonas.map((z) => ({ d: 'M' + X(z.desde) + ' ' + yE + 'H' + X(z.hasta) + 'M' + X(z.desde) + ' ' + (yE - 3 * k) + 'v' + 6 * k
         + 'M' + X(z.hasta) + ' ' + (yE - 3 * k) + 'v' + 6 * k, x: (X(z.desde) + X(z.hasta)) / 2,
-        a: z.cantidad || '', b: [z.separacion, z.largo].filter(Boolean).join(' ') }));
+        a: (pulg ? z.cantidadPulgadas : z.cantidad) || '', b: [z.separacion, z.largo].filter(Boolean).join(' ') }));
       const secs = (p.secciones || []).map((s) => ({ x: X(s.x), t: s.texto }));
 
       const ap = p.apoyos;
@@ -315,7 +335,11 @@
         hdUp: () => this.soltarPunto(true),
         hdCancel: () => this.soltarPunto(false),
         beamX: X(p.inicio), beamW: X(p.fin) - X(p.inicio),
-        stVis: showSt ? 'visible' : 'hidden',
+        stVis: showSt && capas.estribos ? 'visible' : 'hidden',
+        mediaOn: capas.media, corteOn: capas.corte, textosOn: capas.textos, estTextos: capas.estribos && capas.textos,
+        capasOpen: this.state.capasOpen, toggleCapas: () => this.setState({ capasOpen: !this.state.capasOpen }),
+        capasList: CAPAS.map(([clave, texto]) => ({ texto, on: !!capas[clave], toggle: () => this.cambiarCapas({ [clave]: !capas[clave] }) })),
+        pulg, setNum: () => this.cambiarCapas({ pulgadas: false }), setPulg: () => this.cambiarCapas({ pulgadas: true }),
         warnText: wl ? 'traslapo ' + f2(wl.hasta - wl.desde) + ' · +' + f2(wl.hasta - wl.desde - wl.minimo) : '',
         warnX: wl ? X((wl.desde + wl.hasta) / 2) : 0, warnY: inv ? 100 : 82,
         zoomPct: Math.round((v.z / fitZ) * 100) + '%',
@@ -369,7 +393,7 @@
       <rect x="${v.beamX}" y="40" width="${v.beamW}" height="90" fill="#F1F3F5" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>
       ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="90" fill="#E9ECEF" stroke="none"></rect>`)}
       ${v.cols.map((c) => html`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>`)}
-      ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3" vector-effect="${NS}"></line>`)}
+      ${v.mediaOn ? v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3" vector-effect="${NS}"></line>`) : null}
       <g transform="${v.flip}">
         ${v.l.filter((x) => x.isC).map(lap)}
         ${v.l.filter((x) => !x.isC).map(lap)}
@@ -389,21 +413,23 @@
       </g>
       <g visibility="${v.stVis}">
         ${v.st.map((z) => html`<path d="${z.d}" stroke="#5E6670" stroke-width="1" fill="none" vector-effect="${NS}"></path>`)}
-        ${v.st.map((z) => texto(z.x, v.yE - 4 * k, z.a, '#3F4A57', 9, 400))}
-        ${v.st.map((z) => texto(z.x, v.yE + 10 * k, z.b, '#3F4A57', 9, 400))}
+        ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE - 4 * k, z.a, '#3F4A57', 9, 400)) : null}
+        ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 10 * k, z.b, '#3F4A57', 9, 400)) : null}
       </g>
+      ${v.textosOn ? html`
       ${v.secs.map((s) => texto(s.x, 9, s.t, '#5E6670', 9, 400))}
       ${v.l.map((x) => texto(x.lx, x.ly, x.lt, '#3F4A57', 9, 600))}
       ${v.t.map((x) => texto(x.lx, x.ly, x.lt, x.col, 9, 400))}
-      ${v.b.map(rotulo)}
+      ${v.b.map(rotulo)}` : null}
       ${v.fantasma ? html`<text x="${v.fantasma.lx}" y="${v.fantasma.ly}" text-anchor="middle" font-size="${12 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.fantasma.col}" stroke="#FAFBFC" stroke-width="${4 * k}" paint-order="stroke" pointer-events="none">${v.fantasma.lt}</text>` : null}
       <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
+      ${v.corteOn ? html`
       <rect x="${v.cut.bandX}" y="40" width="${v.cut.bandW}" height="90" fill="${v.cut.c}" fill-opacity="0.08" pointer-events="none"></rect>
       <line x1="${v.cut.x}" y1="18" x2="${v.cut.x}" y2="152" stroke="${v.cut.c}" stroke-width="1.6" stroke-dasharray="6 3" vector-effect="${NS}" pointer-events="none"></line>
       <path d="${v.cut.arrow(18)}" stroke="${v.cut.c}" stroke-width="1.6" vector-effect="${NS}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
       <path d="${v.cut.arrow(152)}" stroke="${v.cut.c}" stroke-width="1.6" vector-effect="${NS}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
       <text x="${v.cut.x}" y="${18 - 6 * k}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}" pointer-events="none">1-1</text>
-      <rect x="${v.cut.x - 7 * k}" y="2" width="${14 * k}" height="158" fill="transparent" style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>
+      <rect x="${v.cut.x - 7 * k}" y="2" width="${14 * k}" height="158" fill="transparent" style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>` : null}
       ${v.luces.map((m) => html`<text x="${m.x}" y="178" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#5E6670">${m.lt}</text>`)}
       ${v.vol.map((o) => html`<text x="${o.lx}" y="178" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#5E6670">${o.lt}</text>`)}
       ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="192" r="${8 * k}" fill="#FFFFFF" stroke="#9AA3AD" vector-effect="${NS}"></circle><text x="${e.x}" y="${192 + 3.5 * k}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}
@@ -416,12 +442,35 @@
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d=${o.icono} stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>${o.texto}
     </button>`)}
   </div>`)}
-  <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 160}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
+  <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 260}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
     <span>${v.caption}</span>
     ${v.ley.map((d) => html`<span style="display: flex; align-items: center; gap: 4px"><span style="width: 9px; height: 9px; border-radius: 50%; background: ${d.c}"></span>${d.t}</span>`)}
     <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(94,102,112,0.14); border: 1px solid #5E6670"></span>traslapo</span>
   </div>
-  <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 2px; align-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; padding: 2px" onPointerDown=${v.stop} onDblClick=${v.stop}>
+  <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 6px; align-items: flex-start" onPointerDown=${v.stop} onDblClick=${v.stop} onWheel=${v.stop}>
+  <div style="position: relative">
+    <button type="button" aria-expanded=${v.capasOpen ? 'true' : 'false'} aria-controls="capas-menu" onClick=${v.toggleCapas} style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid #D9DDE2; border-radius: 6px; background: ${v.capasOpen ? '#E8F0FA' : '#FFFFFF'}; font: inherit; font-size: 12px; color: #16191D; cursor: pointer">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5l5.5 3L7 7.5 1.5 4.5zM1.5 7.2L7 10.2l5.5-3M1.5 9.8L7 12.8l5.5-3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"></path></svg>
+      Capas
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    ${v.capasOpen ? html`
+    <div id="capas-menu" style="position: absolute; top: 40px; right: 0; width: 224px; display: flex; flex-direction: column; gap: 2px; padding: 8px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 8px 24px rgba(22, 25, 29, 0.16); font-size: 12px; z-index: 2">
+      ${v.capasList.map((c) => html`
+      <label style="display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 4px; border-radius: 4px; cursor: pointer; color: #16191D">
+        <input type="checkbox" checked=${c.on} onChange=${c.toggle} style="width: 15px; height: 15px; margin: 0; accent-color: #1F5FAF" />${c.texto}
+      </label>`)}
+      <div style="height: 1px; margin: 4px 0; background: #EEF0F2"></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 2px 4px">
+        <span style="flex: 1; color: #3F4A57">Diámetro</span>
+        <div role="group" aria-label="Cómo se escribe el diámetro" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+          <button type="button" aria-pressed=${v.pulg ? 'false' : 'true'} onClick=${v.setNum} style="height: 28px; padding: 0 10px; border: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; ${v.pulg ? 'background: #FFFFFF; color: #16191D' : 'background: #1F5FAF; color: #FFFFFF'}">#4</button>
+          <button type="button" aria-pressed=${v.pulg ? 'true' : 'false'} onClick=${v.setPulg} style="height: 28px; padding: 0 10px; border: 0; border-left: 1px solid #C9CFD6; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; ${v.pulg ? 'background: #1F5FAF; color: #FFFFFF' : 'background: #FFFFFF; color: #16191D'}">½"</button>
+        </div>
+      </div>
+    </div>` : null}
+  </div>
+  <div style="display: flex; gap: 2px; align-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; padding: 2px">
     <button type="button" aria-label="Alejar" onClick=${v.zoomOut} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>
     </button>
@@ -432,6 +481,7 @@
     <button type="button" aria-label="Ajustar a la vista" onClick=${v.fitView} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
     </button>
+  </div>
   </div>
   <div style="position: absolute; bottom: 6px; left: 10px; right: 10px; font-size: 11px; line-height: 1.35; color: ${v.footCol}; pointer-events: none">${v.foot}</div>
 </div>`;

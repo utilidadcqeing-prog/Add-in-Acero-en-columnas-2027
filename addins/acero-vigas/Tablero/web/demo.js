@@ -329,7 +329,7 @@
       const secciones = G.luces.map(([, a, b, vol]) => ({ x: (a + (vol ? G.fin : b)) / 2, texto: '30×50' }));
       // los de la leyenda: barras y bastones, del más grueso al más delgado
       const diametros = [...new Set(o.superior.concat(o.inferior).map((r) => r.diametro).concat(bastones.map((b) => b.diametro)))]
-        .sort((p, q) => q - p).map((d) => ({ nombre: '#' + d, color: colorDe(d) }));
+        .sort((p, q) => q - p).map((d) => ({ nombre: '#' + d, color: colorDe(d), nombrePulgadas: PULG[d] }));
       return {
         id, tipo, inicio: G.inicio, fin: G.fin,
         apoyos: G.apoyos.map(([eje, x, caraIzquierda, caraDerecha]) => ({ eje, x, caraIzquierda, caraDerecha })),

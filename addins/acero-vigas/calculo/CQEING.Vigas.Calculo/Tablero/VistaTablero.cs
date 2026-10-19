@@ -81,8 +81,8 @@ public sealed record OpcionCaraVista(double Kg, bool Existe);
 public sealed record BarraSeccion(string Id, string Nombre, bool Arriba, int Fila, double X, double Y, double D, bool Esquina,
     bool Baston = false, string Color = "");
 
-/// <summary>Un diámetro que hay en el pórtico, para la leyenda: <c>"#5"</c> y su color.</summary>
-public sealed record DiametroVista(string Nombre, string Color);
+/// <summary>Un diámetro que hay en el pórtico, para la leyenda: <c>"#5"</c> (o <c>"⅝\""</c>) y su color.</summary>
+public sealed record DiametroVista(string Nombre, string Color, string NombrePulgadas = "");
 
 /// <summary>Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba.</summary>
 public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo);

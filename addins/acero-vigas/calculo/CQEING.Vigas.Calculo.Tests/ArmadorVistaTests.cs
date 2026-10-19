@@ -60,6 +60,7 @@ public class ArmadorVistaTests
         Assert.All(v.Seccion.Barras.Where(b => !b.Baston), b => Assert.Equal(ColoresDiametro.De(b.Arriba ? 5 : 4), b.Color));
         Assert.Equal(["#5", "#4"], v.Diametros!.Select(d => d.Nombre));
         Assert.Equal([ColoresDiametro.De(5), ColoresDiametro.De(4)], v.Diametros!.Select(d => d.Color));
+        Assert.Equal(["⅝\"", "½\""], v.Diametros!.Select(d => d.NombrePulgadas));
     }
 
     [Fact]
