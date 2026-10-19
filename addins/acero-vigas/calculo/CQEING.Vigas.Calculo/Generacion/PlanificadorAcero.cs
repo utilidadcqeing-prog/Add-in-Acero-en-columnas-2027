@@ -33,7 +33,7 @@ public static class PlanificadorAcero
                 Barra b = enOrden[i];
                 bool alLado = i % 2 == 1;
                 barras.AddRange(corte.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
-                    alLado ? AlLado(s, u.Ancho, r) : s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta))));
+                    alLado ? AlLado(s, u.Ancho, r) : s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
             }
         }
 
@@ -48,7 +48,7 @@ public static class PlanificadorAcero
                 continue;
             }
             bastones.AddRange(enCorte.Barras.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Barra.Diametro, s.Barra.X, s.Barra.Y,
-                b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta))));
+                b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
         }
 
         List<GrupoEstribos> estribos = Estribos(c.Estribos, u);

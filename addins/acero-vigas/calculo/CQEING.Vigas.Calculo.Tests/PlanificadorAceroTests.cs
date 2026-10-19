@@ -78,7 +78,7 @@ public class PlanificadorAceroTests
         Assert.All(plan.Barras.Where(p => p.Pieza == arriba[^1]), p => Assert.Equal(TipoGancho.De90, p.GanchoFin));
         if (arriba.Count > 1)
             Assert.All(plan.Barras.Where(p => p.Pieza == arriba[0]), p => Assert.Equal(TipoGancho.Sin, p.GanchoFin));
-        Assert.All(plan.Barras, p => Assert.Equal(c.Vigas.Barras.Single(b => b.Id == p.Pieza).Desde, p.Desde));
+        Assert.All(plan.Barras, p => Assert.Equal(c.Vigas.Barras.Single(b => b.Id == p.Pieza) is var b ? (b.Desde, b.Largo) : default, (p.Desde, p.Largo)));
     }
 
     [Fact]

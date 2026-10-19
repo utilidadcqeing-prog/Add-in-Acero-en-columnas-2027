@@ -304,7 +304,14 @@
 - Consume: `PiezaLongitudinal`, `MarcoPortico.AlModelo`, `TiposAcero`, `MarcaAcero`.
 - Produce: `internal static class CreadorBarras { public static Rebar? Crear(Document doc, UbicacionPortico u, PiezaLongitudinal p, TiposAcero tipos); }` → null si Revit no pudo; el generador lo anota en `Fallas` con el pórtico y la pieza.
 
-- [ ] **Paso 1:** implementar. La curva es la línea entre `AlModelo(u, Desde, XCorte, YCorte)` y `AlModelo(u, Hasta, XCorte, YCorte)`, en pies. La normal del plano de la barra es la horizontal lateral `n` de la tarea 2 (perpendicular a la barra, como exige Revit). Ganchos con `BarTerminationsData`, como en `BarraContinua.cs:257-280`.
+- [x] **Hecho en código** (2026-10-19), compila para 2026 y 2027; desplegado en Revit 2026 con `desplegar-local.ps1`. Cambios sobre lo previsto:
+  - `PiezaLongitudinal` lleva también `Largo` (el del tablero, con ganchos), para comparar con Revit;
+  - **orientación de los ganchos sin suponerla:** se crean con `Right`, se regenera una vez, y `CreadorBarras.CorregirGanchos` mira la Z de la punta de cada gancho; si quedó hacia afuera de la viga, lo voltea con `SetTerminationOrientation`. Si se volteó alguno, se regenera otra vez;
+  - el largo de Revit se lee de `REBAR_ELEM_LENGTH`; si difiere del tablero en más de 10 mm va a `Diferencias`;
+  - una barra que Revit no crea (null o excepción de Revit) va a las fallas y se sigue con las demás;
+  - mientras falta la tarea 8, el resumen dice que los estribos todavía no se crean (`TEMPORAL`).
+- [ ] **Pendiente: prueba en Revit** (pasos 2 y 3, y el paso 3 de la tarea 6).
+- [x] **Paso 1:** implementar. La curva es la línea entre `AlModelo(u, Desde, XCorte, YCorte)` y `AlModelo(u, Hasta, XCorte, YCorte)`, en pies. La normal del plano de la barra es la horizontal lateral `n` de la tarea 2 (perpendicular a la barra, como exige Revit). Ganchos con `BarTerminationsData`, como en `BarraContinua.cs:257-280`.
 - [ ] **Paso 2: medir en Revit** con el pórtico de la maqueta. Anotar los valores en "Hallazgos" de este plan:
   - qué `RebarTerminationOrientation` hace que el gancho de arriba doble hacia abajo y el de abajo hacia arriba;
   - si el largo total de Revit (`TotalLength` ÷ cantidad) da el `Largo` del tablero, y cuánto difiere con los tipos de barra de la plantilla de Carlos.

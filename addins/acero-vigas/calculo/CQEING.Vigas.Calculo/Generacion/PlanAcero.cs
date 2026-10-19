@@ -8,6 +8,7 @@ namespace CQEING.Vigas.Calculo.Generacion;
 /// <paramref name="YCorte"/>, su centro en el corte (ver <see cref="MarcoPortico"/>). <paramref name="Pieza"/> es el id del
 /// tablero (<c>S1</c>, <c>BI2</c>) y se repite en todas sus barras físicas. Los ganchos doblan siempre hacia adentro de
 /// la viga: hacia abajo en la capa superior y hacia arriba en la inferior. <paramref name="Host"/> es el id de la viga.
+/// <paramref name="Largo"/> es el del tablero, con los ganchos, para compararlo con el de Revit (decisión 8).
 /// </summary>
 public sealed record PiezaLongitudinal(
     string Pieza,
@@ -19,7 +20,8 @@ public sealed record PiezaLongitudinal(
     int Hasta,
     TipoGancho GanchoInicio,
     TipoGancho GanchoFin,
-    string Host);
+    string Host,
+    int Largo);
 
 /// <summary>
 /// Una corrida de estribos iguales de un tramo, para crear como un conjunto de Revit (#85). <paramref name="Pieza"/> es el
