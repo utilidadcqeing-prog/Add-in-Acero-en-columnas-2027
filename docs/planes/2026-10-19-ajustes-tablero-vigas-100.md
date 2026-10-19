@@ -250,9 +250,9 @@
 
 **Archivos:** `alzado.js`.
 
-- [ ] **Paso 1:** función `niveles(p)` que da la `y` de la viga, de cada fila de barras, de los bastones y de los traslapos según cuántas filas y bastones hay (decisión 14). Reemplaza las `y` fijas (52/58, 112/118, 70/100, 45/106, 40–130).
-- [ ] **Paso 2:** la línea 1-1, los 3 puntos, los botones de gancho, los rótulos y el ajuste a la vista usan esas `y`.
-- [ ] **Paso 3:** `node --check`. Commit `feat(vigas): la viga del alzado crece con las filas y los bastones (#100)`.
+- [x] **Paso 1:** función `niveles(p)` que da la `y` de la viga, de cada fila de barras, de los bastones y de los traslapos según cuántas filas y bastones hay (decisión 14). Reemplaza las `y` fijas (52/58, 112/118, 70/100, 45/106, 40–130).
+- [x] **Paso 2:** la línea 1-1, los 3 puntos, los botones de gancho, los rótulos y el ajuste a la vista usan esas `y`.
+- [x] **Paso 3:** `node --check`. Commit `feat(vigas): la viga del alzado crece con las filas y los bastones (#100)`.
 
 ### Tarea 12: prueba en Revit y cierre
 
@@ -308,6 +308,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Tarea 9: menú **Capas** igual al de la maqueta, junto al zoom. Se guarda en `localStorage` (`cqeing.vigas.capas`, con try/catch; sin almacenamiento dura lo que dure la página). Por defecto todo prendido salvo *Sección de columnas* (llega con la tarea 10). *Línea de media luz*: las líneas punteadas de cada luz. *Corte 1-1*: la franja, la línea, sus flechas, el "1-1" y la zona para agarrarla (apagada no se puede arrastrar). *Textos*: rótulos de barras, bastones, traslapos y la sección; las luces, los voladizos y los ejes quedan. *Estribos*: sus líneas y sus textos (los textos también se van con *Textos*). Interruptor `#4 · ½"`: rótulos, cantidad de estribos y leyenda; C# manda los dos textos (`DiametroVista.NombrePulgadas` nuevo). La rueda sobre el menú no hace zoom. El corte y el panel siguen en `#` (el interruptor es del alzado).
   - Aparte (Juan, 19-oct, con captura): la lista de barras abierta toma todo el alto que sobra en la columna del centro, en vez de 150 px (commit `1341afa`).
   - Tarea 10: `PorticoLeido.FondosDeApoyo` (mm, de lado a lado de la huella; `Unir` ya junta esos rangos) y `ApoyoVista.Seccion` = `"40×50"` (ancho a lo largo × fondo, en cm), en lugar de `Ancho` / `Fondo` sueltos: así el texto sale de C#. Vacía en un apoyo que es viga o sin fondos. El alzado la escribe en y = 176, debajo de cada columna, solo con la capa *Sección de columnas* prendida. 606 pruebas en verde.
+  - Tarea 11, como la maqueta y no con una función `niveles(p)`: `ex = 14 × (filas de arriba − 1 + filas de abajo − 1)` (de `superior.porFila` / `inferior.porFila`), `Y(y) = y > 85 ? y + ex : y` y `FH = 170 + ex` para voltear la cimentación. Todo lo que va debajo del eje de la viga baja `ex`: barras y traslapos de abajo, bastones de abajo, la viga, las columnas, la media luz, la franja y la línea 1-1, la línea de estribos, las luces, la sección de columnas y los ejes; el ajuste a la vista usa `CH = 204 + ex`. Ruling: los bastones no suman escalón, porque en el alzado van en un solo nivel por cara (las filas se ven en el corte). Falta verlo en Revit (Review Focus 5).
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).
