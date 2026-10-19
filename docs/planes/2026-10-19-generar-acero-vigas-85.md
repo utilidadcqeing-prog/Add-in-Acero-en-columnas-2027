@@ -134,6 +134,23 @@ Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo
 | E7 | ⏳ Revit abierto | Ya se pueden elegir (E8); falta generarlos y revisarlos. |
 | E8 | ✅ en código, falta verlo en Revit | Tarea 8b, abajo. |
 
+### Cuarta prueba en Revit: E2, adicionales y medidas (2026-10-19, "Pórtico C · N+6.70", 57 barras, revisado por MCP)
+
+> Solo registrados, **sin resolver**. Juan agregó en el corte un cerrado (arriba 1, arriba 2, abajo 1, abajo 2) y un abierto (abajo 3, arriba 3).
+
+**Lo que salió bien:**
+- **E2 resuelto en Revit:** el lazo arranca y cierra en la esquina de arriba a la izquierda. Los dos ganchos de 135° abrazan esa barra y sus colas entran al núcleo (de (3290, 6625) a (3373, 6602) y de (3343, 6572) a (3302, 6612)). El lado de arriba queda continuo. Revit reconoció la forma "31" del documento.
+- **El cerrado adicional E1 se generó:** su eje va de X 3290 a 3382 y abraza la barra de esquina y la del medio. La del medio se alineó a X 3365.9, como dice el motor.
+
+**Hallazgos:**
+
+| # | Hallazgo | Motivo |
+|---|---|---|
+| E9 | **El abierto no se generó, y el tablero no lo dijo.** La lista lo muestra como "Adicional 2 · Abierto · abajo 3, arriba 3", pero el corte dice "1 adicional" y en Revit solo está E1. | Abajo 3 y arriba 3 son las barras de la esquina derecha: esa rama ya es la del estribo cerrado de las esquinas. El motor lo descarta con el aviso `IgualAlCerrado` (*"El adicional abraza las mismas barras que el cerrado de las esquinas (o una de sus ramas). No se agrega."*). La regla está bien; lo que falla es que el tablero muestra un solo aviso a la vez, y la lista no marca el adicional descartado ni deja elegir esa combinación sin advertir. |
+| E10 | **El bastón BS1 quedó encima de la barra de esquina S1: los dos en X 3308, Z 6630.** Antes se montaba 6 mm (E4); ahora coinciden. | BS1 está en la fila 2 debajo de la esquina de arriba a la izquierda, que es la esquina de los ganchos del estribo (E2). Revit pega al doblez de esa esquina las dos barras, la corrida y el bastón, y las deja en el mismo punto. |
+| E11 | **Medida de E3:** en las esquinas normales Revit corre la barra 4.0 mm en cada dirección hacia adentro (abajo a la izquierda: de 3302.5, 6407.5 a 3306.5, 6411.5). En la esquina de los ganchos la corre 5.5 mm de lado y 12.5 mm hacia abajo (S1 en 3308, 6630). La del medio de arriba bajó 4 mm (6638.5). | El estribo "10 B 400 S" se dobla con un diámetro de 40: radio interior 20. La barra de 16 queda tocando el arco: su centro queda a 20 − 8 / √2 ≈ 11.5 mm de cada cara interior, en vez de 8. Eso da 3.5 mm; Revit da 4.0. En la esquina de los ganchos el doblez es de 135° y empuja más. Con estas medidas el tablero podría poner las esquinas donde las deja Revit (E3 y E4), pero falta decidir si el corte del tablero debe mostrar esa corrección. |
+| E12 | **El estribo cerrado mide 0.98 m en Revit y 1.07 m en el tablero** (antes 0.96; la diferencia bajó de 0.11 a 0.09 m). | Revit: 4 lados rectos (105 + 210 + 110 + 205) + 3 esquinas redondeadas (3 × 39) + 2 ganchos (doblez 59 + cola 57 cada uno) = 0.98. El tablero suma el perímetro con esquinas en punta (2 × (160.5 + 260.5) = 842) más 2 × B (2 × 113). Cuenta dos veces la esquina de los ganchos (el B ya trae el doblez de 135° alrededor de esa esquina, unos 60 mm) y no descuenta el redondeo de las otras tres (unos 11 mm cada una). Cómo se mide el estribo para el despiece es decisión de Carlos: cambia los kg. |
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
