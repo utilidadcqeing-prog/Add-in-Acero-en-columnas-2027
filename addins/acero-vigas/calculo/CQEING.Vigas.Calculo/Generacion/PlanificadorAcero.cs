@@ -51,8 +51,24 @@ public static class PlanificadorAcero
                 b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta))));
         }
 
-        List<int> diametros = barras.Concat(bastones).Select(x => x.Diametro).Distinct().Order().ToList();
-        return new PlanAcero(idPortico, barras, bastones, sinLugar, diametros);
+        List<GrupoEstribos> estribos = Estribos(c.Estribos, u);
+        List<int> diametros = barras.Concat(bastones).Select(x => x.Diametro).Concat(estribos.Select(e => e.Diametro)).Distinct().Order().ToList();
+        return new PlanAcero(idPortico, barras, bastones, sinLugar, estribos, diametros);
+    }
+
+    /// <summary>Una corrida por cada tramo y estribo, con las caras del corte (las mismas en todo el pórtico).</summary>
+    private static List<GrupoEstribos> Estribos(ResultadoEstribos re, UbicacionPortico u)
+    {
+        var grupos = new List<GrupoEstribos>();
+        foreach (EstriboEnPortico e in re.Estribos)
+        {
+            if (re.EnSeccion.FirstOrDefault(s => s.Id == e.Id) is not { } caras)
+                continue;
+            grupos.AddRange(CorridasEstribos.Partir(e.Posiciones).Select(c => new GrupoEstribos(e.Id, e.Tramo, e.Tipo, e.Diametro, e.Gancho,
+                caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba, c,
+                MarcoPortico.VigaEn(u, c.Primero + (c.Cantidad - 1) * c.Separacion / 2) ?? throw new InvalidOperationException("El pórtico no tiene vigas."))));
+        }
+        return grupos;
     }
 
     /// <summary>Un diámetro hacia el centro del corte; la barra que está justo en el centro, hacia +X.</summary>

@@ -63,7 +63,7 @@ public class PlanificadorAceroTests
 
         Assert.Equal(3, s1.Count(p => p.Diametro == 5));
         Assert.Equal(2, s1.Count(p => p.Diametro == 4));
-        Assert.Equal([4, 5], Planificar(o).Diametros.Order());
+        Assert.Equal([3, 4, 5], Planificar(o).Diametros.Order()); // el #3 es el de los estribos
     }
 
     [Fact]
@@ -155,6 +155,47 @@ public class PlanificadorAceroTests
         PiezaLongitudinal enB = plan.Bastones.First(b => b.Capa == Posicion.Superior && (b.Desde + b.Hasta) / 2 == 4400);
         Assert.Equal("101", enB.Host);
         Assert.All(plan.Barras, b => Assert.Contains(b.Host, new[] { "101", "102", "103", "104" }));
+    }
+
+    [Fact]
+    public void Estribos_UnGrupoPorCorridaConLasCarasDelCorte()
+    {
+        PorticoCalculado c = Calcular();
+
+        PlanAcero plan = Planificar();
+
+        foreach (EstriboEnPortico e in c.Estribos.Estribos)
+        {
+            List<GrupoEstribos> grupos = plan.Estribos.Where(g => g.Pieza == e.Id && g.Tramo == e.Tramo).ToList();
+            EstriboEnSeccion caras = c.Estribos.EnSeccion.Single(s => s.Id == e.Id);
+            Assert.Equal(CorridasEstribos.Partir(e.Posiciones), grupos.Select(g => g.Corrida));
+            Assert.All(grupos, g => Assert.Equal((e.Tipo, e.Diametro, e.Gancho, caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba),
+                (g.Tipo, g.Diametro, g.Gancho, g.Izquierda, g.Derecha, g.Abajo, g.Arriba)));
+        }
+        Assert.Equal(c.Estribos.Cantidad, plan.Estribos.Sum(g => g.Corrida.Cantidad));
+        Assert.Contains(3, plan.Diametros);
+    }
+
+    [Fact]
+    public void Estribos_ElHostEsLaVigaDeSuTramo()
+    {
+        PlanAcero plan = Planificar();
+
+        Assert.All(plan.Estribos.Where(g => g.Tramo == "A-B"), g => Assert.Equal("101", g.Host));
+        Assert.All(plan.Estribos.Where(g => g.Tramo == "C-D"), g => Assert.Equal("103", g.Host));
+        Assert.All(plan.Estribos.Where(g => g.Tramo.StartsWith("Voladizo")), g => Assert.Equal("104", g.Host));
+    }
+
+    [Fact]
+    public void Estribos_ElAdicionalAbiertoEsUnaRama()
+    {
+        var adicional = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)]);
+        var o = OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(Adicionales: [adicional]) };
+
+        List<GrupoEstribos> e1 = Planificar(o).Estribos.Where(g => g.Pieza == "E1").ToList();
+
+        Assert.NotEmpty(e1);
+        Assert.All(e1, g => Assert.Equal((TipoEstribo.Abierto, g.Izquierda), (g.Tipo, g.Derecha)));
     }
 
     [Fact]

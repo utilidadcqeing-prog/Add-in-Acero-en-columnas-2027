@@ -218,7 +218,8 @@
   - `public static class CorridasEstribos { public static IReadOnlyList<Corrida> Partir(IReadOnlyList<double> posiciones, double tolerancia = 1); }`
   - `public sealed record GrupoEstribos(string Pieza, TipoEstribo Tipo, int Diametro, GanchoEstribo Gancho, double Izquierda, double Derecha, double Abajo, double Arriba, Corrida Corrida, string Host);` (caras exteriores en el corte, como `EstriboEnSeccion`)
 
-- [ ] **Paso 1: pruebas que fallan.**
+- [x] **Hecho** (2026-10-19): `CorridasEstribosTests` (4) y 3 casos más en `PlanificadorAceroTests`; 759 en verde. `GrupoEstribos` lleva también `Tramo`. La separación de cada corrida es la promedio, para que el ruido de decimales no se acumule. El host es la viga del centro de la corrida.
+- [x] **Paso 1: pruebas que fallan.**
   - `Partir([100, 200, 300, 500, 700, 800, 900])` = `(100, 3, 100)`, `(500, 2, 200)`… Escribir la prueba con el reparto exacto de una luz de la maqueta (zona 0.80 @0.10, centro @0.20) sacado de `MotorEstribos`, y comprobar que la suma de `Cantidad` es igual a `Posiciones.Count`.
   - `Partir([350])` = `(350, 1, 0)`; `Partir([])` = vacío.
   - `PlanificadorAceroTests.EstribosPorTramo`: un `GrupoEstribos` por corrida de cada `EstriboEnPortico`, con las caras de su `EstriboEnSeccion` (mismo `Id`), y `Host` = la viga del tramo.

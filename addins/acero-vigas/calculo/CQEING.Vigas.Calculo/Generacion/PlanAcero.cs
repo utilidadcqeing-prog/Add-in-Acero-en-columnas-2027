@@ -22,13 +22,35 @@ public sealed record PiezaLongitudinal(
     string Host);
 
 /// <summary>
+/// Una corrida de estribos iguales de un tramo, para crear como un conjunto de Revit (#85). <paramref name="Pieza"/> es el
+/// id del tablero (<c>E</c> el cerrado de las esquinas, <c>E1</c>… los adicionales). <paramref name="Izquierda"/>,
+/// <paramref name="Derecha"/>, <paramref name="Abajo"/> y <paramref name="Arriba"/> son sus caras exteriores en el corte,
+/// en mm, como <see cref="EstriboEnSeccion"/>; en el abierto, izquierda y derecha son la X de su rama.
+/// <paramref name="Host"/> es la viga del tramo.
+/// </summary>
+public sealed record GrupoEstribos(
+    string Pieza,
+    string Tramo,
+    TipoEstribo Tipo,
+    int Diametro,
+    GanchoEstribo Gancho,
+    double Izquierda,
+    double Derecha,
+    double Abajo,
+    double Arriba,
+    Corrida Corrida,
+    string Host);
+
+/// <summary>
 /// Todo lo que se crea en Revit para un pórtico. <paramref name="Portico"/> es su id en el tablero.
-/// <paramref name="Diametros"/> son los distintos que se usan (para buscar los tipos de barra);
-/// <paramref name="BastonesSinLugar"/>, los bastones que no caben en el corte y no se crean (el tablero ya lo avisa).
+/// <paramref name="Diametros"/> son los distintos que se usan, también los de los estribos (para buscar los tipos de
+/// barra); <paramref name="BastonesSinLugar"/>, los bastones que no caben en el corte y no se crean (el tablero ya lo
+/// avisa).
 /// </summary>
 public sealed record PlanAcero(
     string Portico,
     IReadOnlyList<PiezaLongitudinal> Barras,
     IReadOnlyList<PiezaLongitudinal> Bastones,
     IReadOnlyList<string> BastonesSinLugar,
+    IReadOnlyList<GrupoEstribos> Estribos,
     IReadOnlyList<int> Diametros);
