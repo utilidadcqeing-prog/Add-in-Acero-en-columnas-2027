@@ -187,9 +187,9 @@
 
 **Archivos:** `Tablero/web/tablero.js`, `Tablero/VentanaTablero.xaml(.cs)` si el tamaño mínimo de la ventana lo pide.
 
-- [ ] **Paso 1:** en Revit, con la ventana a 1366 × 768 y el pórtico de Carlos, ver qué tiene scroll (hallazgo 5). Anotarlo.
-- [ ] **Paso 2:** el alzado toma el alto que sobra; el panel del elemento se compacta como en la maqueta (decisión 6). Solo la lista de pórticos conserva scroll propio.
-- [ ] **Paso 3:** `node --check`. Commit `fix(vigas): el tablero cabe en la ventana sin scroll (#100)`.
+- [x] **Paso 1:** en Revit, con la ventana a 1366 × 768 y el pórtico de Carlos, ver qué tiene scroll (hallazgo 5). Anotarlo.
+- [x] **Paso 2:** el alzado toma el alto que sobra; el panel del elemento se compacta como en la maqueta (decisión 6). Solo la lista de pórticos conserva scroll propio.
+- [x] **Paso 3:** `node --check`. Commit `fix(vigas): el tablero cabe en la ventana sin scroll (#100)`.
 
 ### Tarea 5: colores del recubrimiento en el corte
 
@@ -297,6 +297,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Paso 1 hecho después del commit del arreglo (Revit no respondía al principio): el hallazgo 1 se confirma en el modelo de Carlos (ejes A y C a 125 mm). La prueba `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` pasó a usar ese caso exacto: viga de 25 con su línea en la cara de columnas de 25.
 - [ ] Fase B (tareas 3–5).
   - Tarea 3: como en la maqueta, `k = fitZ / z` (en el ajuste k = 1, así que nada cambia de tamaño al abrir). Trazos con `non-scaling-stroke`; `font-size`, el borde blanco del rótulo del arrastre, los radios de los círculos de ejes y de los 3 puntos, la zona para agarrar la línea 1-1, sus flechas y los márgenes de los textos, por k. Solo el alzado tiene zoom: el corte y los esquemas de `tablero.js` no escalan, así que no cambian. El rayado de zonas (sin posiciones de estribos) queda escalando, porque es un relleno; C# y la demostración siempre mandan posiciones, y la tarea 8 lo quita. Falta verlo en Revit (tarea 12).
+  - Tarea 4, medido en Revit por el MCP (19-oct, equipo de Juan): el WebView mide 1280 × 649 DIP y el zoom 0.72, así que la página queda en 1774 × 901. En los 4 pasos del panel no se desborda nada: solo tienen scroll la lista de pórticos y la lista de barras abierta (las dos permitidas). **El "scroll" que vio Carlos era el rebote del touchpad**: WebView2 estiraba la página entera y la soltaba (en la captura de Juan, arriba cortada y una franja gris abajo). Arreglo en `index.html`: `html, body { overflow: hidden }` y `overscroll-behavior: none` en todo. Juan lo probó en Revit: la página queda fija. No hizo falta compactar el panel.
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).
