@@ -105,6 +105,18 @@ Modelo de prueba con dos pórticos generados: "Pórtico A · N+3.70" y "Pórtico
 
 La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servicio MCP ya abre su propia transacción: para probar sin dejar rastro hay que usar `SubTransaction` y deshacerla.
 
+### Segunda prueba en Revit, con los ganchos propios (2026-10-19, "Pórtico C · N+6.70", revisado por MCP)
+
+- **Los largos ya coinciden con el tablero:** S1 4.00, S2 4.50, S3 5.00, S4 4.50, I1 3.00, I2 4.50, I3 5.00, I4 5.50 y los bastones 2.00. Todos múltiplos de 0.50. El resumen ya no avisa diferencias.
+- **Ganchos propios:** las puntas del borde usan "CQEING 90° #5" (multiplicador 16.45); las de traslapo, ninguno. Sigue sin duplicados (31 barras).
+- **Nuevo hallazgo: el gancho no cabe en el alto de la viga.** La viga `VIG_25X35` va de Z 6350 a 6700 (350 de alto):
+  - el gancho de S1 baja de 6643 a 6339 (eje de la barra): la barra sale 19 mm por debajo de la cara inferior, contando su radio;
+  - el de I1 sube de 6407 a 6711: sale 19 mm por encima de la cara superior;
+  - con B = 278 del #5, el gancho necesita unos 32 cm de alto, más los dos recubrimientos. En una viga de 35 cm no cabe;
+  - el tablero tampoco lo detecta: solo suma B al largo.
+
+**Pendiente con Carlos:** qué se hace cuando el gancho de 90° no cabe en el alto de la viga. Opciones: (a) dejar el B del cuadro y que el tablero avise; (b) cortar la extensión para que el gancho quede dentro del recubrimiento, con otro largo; (c) otra regla de Carlos.
+
 **Las casillas de los tramos** (pregunta de Juan, 2026-10-19): no limitan lo que se genera. Sirven para darle a esos tramos otra configuración de estribos (#83 y #90). "Generar" crea siempre el pórtico completo, porque las barras corridas cruzan los tramos. Los estribos de los tramos marcados ya salen con su configuración en el plan (tarea 4) y se crean en la tarea 8.
 
 ## Decisiones
