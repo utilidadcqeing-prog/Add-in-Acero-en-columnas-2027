@@ -215,10 +215,10 @@
       this.cambiar({ cambios: { ...s.cambios, movidos, ganchos }, bastPuntas: puntas, confirmVol: null });
     }
 
-    say(t) {
+    say(t, ms = 2600) {
       this.setState({ toast: t });
       clearTimeout(this._t);
-      this._t = setTimeout(() => this.setState({ toast: '' }), 2600);
+      this._t = setTimeout(() => this.setState({ toast: '' }), ms);
     }
 
     // Un mensaje de C# que no es la vista: un aviso, o la respuesta a "Guardar y bloquear".
@@ -650,7 +650,8 @@
         pickInRevit: () => enviar({ tipo: 'seleccionarEnRevit' }),
         showInRevit: () => { if (P) enviar({ tipo: 'verEnRevit', id: P.id }); },
         open3d: () => { if (P) enviar({ tipo: 'abrir3d', id: P.id }); },
-        generate: () => this.say(LLEGA(85)),
+        // #85, tarea 5: el pórtico abierto, sin confirmar; la confirmación y varios pórticos llegan con la tarea 10.
+        generate: () => { if (P) enviar({ tipo: 'generar', ids: [P.id] }); },
       };
     }
 
@@ -1231,6 +1232,8 @@
       if (m.tipo === 'vista') this.setState({ vista: m.vista });
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
       else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
+      // #85, tarea 5: el resumen como aviso largo; la tarjeta del resumen llega con la tarea 10.
+      else if (m.tipo === 'generado' && this.tablero) this.tablero.say(m.texto.split('\n').join(' · '), 10000);
     }
 
     render() {

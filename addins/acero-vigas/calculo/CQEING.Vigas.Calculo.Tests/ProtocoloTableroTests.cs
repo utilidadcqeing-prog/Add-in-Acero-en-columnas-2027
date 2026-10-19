@@ -157,4 +157,49 @@ public class ProtocoloTableroTests
     {
         Assert.Equal("""{"tipo":"aviso","texto":"Hola \"tú\""}""", ProtocoloTablero.Aviso("Hola \"tú\""));
     }
+
+    [Fact]
+    public void LeeGenerar()
+    {
+        MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1","Pórtico 2"]}""");
+
+        Assert.Equal(["Pórtico 1", "Pórtico 2"], Assert.IsType<Generar>(m).Ids);
+        Assert.IsType<Desconocido>(ProtocoloTablero.Leer("""{"tipo":"generar"}"""));
+    }
+
+    [Fact]
+    public void TextoDeUnaDiferenciaDeLargo_UnaLineaPorPiezaYDiametro()
+    {
+        IReadOnlyList<string> t = ProtocoloTablero.Textos([
+            new DiferenciaLargo("Pórtico 2", "S1", 5, 6320, 6280),
+            new DiferenciaLargo("Pórtico 2", "S1", 5, 6320, 6280),
+            new DiferenciaLargo("Pórtico 2", "S1", 4, 6310, 6280),
+        ]);
+
+        Assert.Equal([
+            "S1 (Pórtico 2): Revit da 6.32 m y el tablero 6.28 m. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
+            "S1 (Pórtico 2): Revit da 6.31 m y el tablero 6.28 m. El gancho del tipo de barra #4 en Revit no coincide con el cuadro de Reglas.",
+        ], t);
+    }
+
+    [Fact]
+    public void ElResumenTraeSuTexto()
+    {
+        var r = new ResumenGeneracion(2, 48, 7, 112, ["Pórtico 3: el modelo no tiene un tipo de barra para el #9."],
+            [new DiferenciaLargo("Pórtico 2", "S1", 5, 6320, 6280)]);
+
+        JsonElement raiz = JsonDocument.Parse(ProtocoloTablero.Resumen(r)).RootElement;
+
+        Assert.Equal("generado", raiz.GetProperty("tipo").GetString());
+        Assert.Equal(
+            "Se generó el acero de 2 pórticos: 48 barras, 7 bastones y 112 estribos.\n" +
+            "Pórtico 3: el modelo no tiene un tipo de barra para el #9.\n" +
+            "S1 (Pórtico 2): Revit da 6.32 m y el tablero 6.28 m. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
+            raiz.GetProperty("texto").GetString());
+        Assert.Equal("Se generó el acero de 1 pórtico: 3 barras, 0 bastones y 1 estribo.",
+            JsonDocument.Parse(ProtocoloTablero.Resumen(new ResumenGeneracion(1, 3, 0, 1, [], []))).RootElement.GetProperty("texto").GetString());
+        Assert.Equal("No se generó ningún pórtico.\nPórtico 3: no se puede generar; revisa los avisos del tablero.",
+            JsonDocument.Parse(ProtocoloTablero.Resumen(new ResumenGeneracion(0, 0, 0, 0, ["Pórtico 3: no se puede generar; revisa los avisos del tablero."], [])))
+                .RootElement.GetProperty("texto").GetString());
+    }
 }

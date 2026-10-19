@@ -1,5 +1,6 @@
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
+using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using CQEING.Vigas.Calculo.Modelo;
@@ -29,7 +30,7 @@ internal sealed class PuenteTablero
         this.ventana = ventana;
         this.uiapp = uiapp;
         leido = uiapp.ActiveUIDocument?.Document;
-        sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "");
+        sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "", NominalesDelModelo);
 
         ventana.MensajeRecibido += json => acciones.Encolar(app => Atender(app, ProtocoloTablero.Leer(json)));
         acciones.Fallo += texto => ventana.Enviar(ProtocoloTablero.Aviso($"No se pudo hacer en Revit: {texto}"));
@@ -48,8 +49,20 @@ internal sealed class PuenteTablero
                 ventana.Enviar(js.Json);
             else if (salida is ARevit(AccionRevit accion, IReadOnlyList<string> vigas) && !desdeRevit)
                 Hacer(app, accion, vigas);
+            else if (salida is AGenerar generar)
+                // TEMPORAL (#85, tarea 5): la creación en Revit llega con las tareas 6 y 7; por ahora solo se dice qué se haría.
+                ventana.Enviar(ProtocoloTablero.Resumen(new ResumenGeneracion(0, 0, 0, 0,
+                    [.. generar.Saltados, .. generar.Porticos.Select(p =>
+                        $"{p.Id}: listo para generar {p.Plan.Barras.Count} barras, {p.Plan.Bastones.Count} bastones y " +
+                        $"{p.Plan.Estribos.Sum(e => e.Corrida.Cantidad)} estribos; la creación en Revit todavía no está.")], [])));
         }
     }
+
+    /// <summary>El diámetro nominal de cada tipo de barra del documento leído, en mm (#85).</summary>
+    private IEnumerable<double> NominalesDelModelo() => leido is null
+        ? []
+        : new FilteredElementCollector(leido).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
+            .Select(t => LectorModelo.Mm(t.BarNominalDiameter)).ToList();
 
     private void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {

@@ -251,7 +251,12 @@
   - `public sealed record DiferenciaLargo(string Portico, string Pieza, int Diametro, int LargoRevit, int LargoTablero);` (mm; decisión 8)
   - `public static IReadOnlyList<string> Textos(IReadOnlyList<DiferenciaLargo> d)` en `ProtocoloTablero`: una línea por pórtico, pieza y diámetro, con el texto de la decisión 8.
 
-- [ ] **Paso 1: pruebas que fallan.**
+- [x] **Hecho** (2026-10-19): 3 pruebas en `ProtocoloTableroTests`, 5 en `SesionTableroTests` y `DiametrosDisponiblesTests` (2); 769 en verde. Cambios sobre lo previsto:
+  - la sesión recibe `Func<IEnumerable<double>> nominalesDelModelo` (el diámetro nominal en mm de cada tipo de barra) y los traduce a `#n` con sus reglas vigentes, con `DiametrosDisponibles.De` (tolerancia 0.5 mm);
+  - `PorticoAGenerar` lleva también la `UbicacionPortico`, que necesita el lado de Revit;
+  - `ProtocoloTablero.Resumen` manda `texto` ya armado (una línea por cosa), que la página muestra como aviso de 10 s;
+  - mientras llegan las tareas 6 y 7, `PuenteTablero` contesta "generar" con lo que se generaría (barras, bastones y estribos por pórtico), marcado `TEMPORAL`.
+- [x] **Paso 1: pruebas que fallan.**
   - `ProtocoloTableroTests.LeeGenerar`: `{"tipo":"generar","ids":["Pórtico 1","Pórtico 2"]}` → `Generar` con los dos ids.
   - `SesionTableroTests.GenerarUsaLasOpcionesGuardadas`: después de `Calcular("Pórtico 1", o)`, `Generar(["Pórtico 1"])` da un `AGenerar` cuyo plan se armó con `o`.
   - `SesionTableroTests.GenerarSaltaLosQueTienenError`: un pórtico con filas que no caben va a `Saltados`, no a `Porticos`.

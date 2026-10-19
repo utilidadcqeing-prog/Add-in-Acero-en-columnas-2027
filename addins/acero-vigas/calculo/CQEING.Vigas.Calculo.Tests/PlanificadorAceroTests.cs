@@ -13,7 +13,7 @@ namespace CQEING.Vigas.Calculo.Tests;
 public class PlanificadorAceroTests
 {
     /// <summary>Las vigas van de cara a cara de las columnas de 0.40, y la última hasta la punta del voladizo.</summary>
-    private static PorticoLeido Portico(TipoViga tipo = TipoViga.Aerea) => ArmadorVistaTests.Portico1(tipo: tipo) with
+    internal static PorticoLeido Portico(TipoViga tipo = TipoViga.Aerea) => ArmadorVistaTests.Portico1(tipo: tipo) with
     {
         Ubicacion = new UbicacionPortico(1, 0, 0, 0, 3000, 3500, 300, 500,
             [new("101", -200, 4200), new("102", 4600, 7700), new("103", 8100, 12100), new("104", 12500, 14000)]),

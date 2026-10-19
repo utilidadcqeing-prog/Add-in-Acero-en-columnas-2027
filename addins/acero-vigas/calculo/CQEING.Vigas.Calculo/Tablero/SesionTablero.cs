@@ -1,3 +1,4 @@
+using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
 
@@ -11,6 +12,15 @@ public sealed record AJs(string Json) : Salida;
 
 /// <summary>Una acción en Revit sobre las vigas de un pórtico (ids de elemento como texto).</summary>
 public sealed record ARevit(AccionRevit Accion, IReadOnlyList<string> Vigas) : Salida;
+
+/// <summary>
+/// "Generar en Revit" (#85): los pórticos que sí se generan, con su plan, y los que se saltan, cada uno con su motivo
+/// (un texto por línea para el resumen).
+/// </summary>
+public sealed record AGenerar(IReadOnlyList<PorticoAGenerar> Porticos, IReadOnlyList<string> Saltados) : Salida;
+
+/// <summary>Un pórtico para generar: <paramref name="Vigas"/> son las suyas, para borrar lo que el add-in creó antes en ellas.</summary>
+public sealed record PorticoAGenerar(string Id, IReadOnlyList<string> Vigas, UbicacionPortico Ubicacion, PlanAcero Plan);
 
 public enum AccionRevit
 {
@@ -27,8 +37,11 @@ public enum AccionRevit
 /// <summary>
 /// El estado del tablero de un documento (#83), sin Revit: los pórticos leídos, las opciones de cada uno, el que está
 /// abierto, las reglas y si está "En vivo". Atiende los mensajes de la página y dice qué contestar y qué hacer en Revit.
+/// <paramref name="nominalesDelModelo"/> da el diámetro nominal en mm de cada tipo de barra del modelo (#85); null = todos los de las
+/// reglas.
 /// </summary>
-public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas almacen, string proyecto)
+public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas almacen, string proyecto,
+    Func<IEnumerable<double>>? nominalesDelModelo = null)
 {
     private readonly Dictionary<string, OpcionesTablero> opciones = [];
     private ResultadoLectura lectura = new([], []);
@@ -82,10 +95,47 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 return [Vista()];
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
+            case Generar(IReadOnlyList<string> ids):
+                return [AGenerar(ids)];
             default:
                 return [];
         }
     }
+
+    /// <summary>
+    /// Arma lo que se genera de cada pórtico con las opciones que tiene en el tablero (o las de base). Se saltan los que ya
+    /// no están, los que el tablero no deja generar y los que usan un diámetro sin tipo de barra en el modelo.
+    /// </summary>
+    private AGenerar AGenerar(IReadOnlyList<string> ids)
+    {
+        HashSet<int> disponibles = Disponibles().ToHashSet();
+        var aGenerar = new List<PorticoAGenerar>();
+        var saltados = new List<string>();
+        foreach (string id in ids.Distinct())
+        {
+            if (Buscar(id) is not { } p)
+            {
+                saltados.Add($"{id}: ya no está en el modelo.");
+                continue;
+            }
+            if (PlanificadorAcero.Planificar(id, p, opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto, reglas.Reglas) is not { } plan
+                || p.Ubicacion is null)
+            {
+                saltados.Add($"{id}: no se puede generar; revisa los avisos del tablero.");
+                continue;
+            }
+            if (plan.Diametros.Where(d => !disponibles.Contains(d)).ToList() is { Count: > 0 } faltan)
+            {
+                saltados.Add($"{id}: el modelo no tiene un tipo de barra para el {string.Join(", ", faltan.Select(d => $"#{d}"))}.");
+                continue;
+            }
+            aGenerar.Add(new PorticoAGenerar(id, p.Vigas, p.Ubicacion, plan));
+        }
+        return new AGenerar(aGenerar, saltados);
+    }
+
+    private IReadOnlyList<int> Disponibles() =>
+        nominalesDelModelo is null ? reglas.Reglas.PorDiametro.Keys.Order().ToList() : DiametrosDisponibles.De(nominalesDelModelo(), reglas.Reglas);
 
     /// <summary>
     /// Vuelve a leer el modelo (otro documento, o el mismo con cambios). Las opciones de cada pórtico se conservan
@@ -167,6 +217,6 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
             ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
             : l with { Id = p.Id }).ToList();
-        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos)));
+        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos, Disponibles())));
     }
 }

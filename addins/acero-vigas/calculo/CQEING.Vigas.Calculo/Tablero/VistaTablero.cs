@@ -6,9 +6,10 @@ namespace CQEING.Vigas.Calculo.Tablero;
 /// <summary>
 /// Todo el tablero: la lista de pórticos, el abierto (null = ninguno) y las reglas. <paramref name="Elegidos"/> son los
 /// ids de los pórticos elegidos con "Seleccionar en Revit": la lista muestra solo esos (null = todos).
+/// <paramref name="DiametrosDisponibles"/> son los que tienen tipo de barra en el modelo (#85).
 /// </summary>
 public sealed record VistaTablero(string Proyecto, IReadOnlyList<PorticoEnLista> Porticos, VistaPortico? Actual, VistaReglas Reglas, bool EnVivo,
-    IReadOnlyList<string>? Elegidos = null);
+    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null);
 
 /// <summary>Un pórtico en la columna izquierda. <paramref name="Sub"/> es como <c>"Eje 1 · A a D + voladizo"</c>.</summary>
 public sealed record PorticoEnLista(string Id, string Nombre, string Sub, string Tipo, IReadOnlyList<TramoEnLista> Tramos);

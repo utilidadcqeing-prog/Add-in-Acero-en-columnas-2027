@@ -292,4 +292,66 @@ public sealed class SesionTableroTests : IDisposable
     {
         Assert.Empty(Sesion().Manejar(new Desconocido("otro")));
     }
+
+    private SesionTablero ConUbicacion(IReadOnlyList<double>? nominales = null)
+    {
+        lectura = new([PlanificadorAceroTests.Portico()], []);
+        var s = new SesionTablero(() => lectura, new AlmacenReglas(Path.Combine(carpeta, "reglas.json")), "Proyecto de prueba",
+            nominales is null ? null : () => nominales);
+        s.Manejar(new Listo());
+        return s;
+    }
+
+    [Fact]
+    public void GenerarUsaLasOpcionesGuardadasDelPortico()
+    {
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] }));
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<AGenerar>());
+
+        PorticoAGenerar p = Assert.Single(g.Porticos);
+        Assert.Equal(("Pórtico 1", 4), (p.Id, p.Plan.Barras.Count(b => b.Pieza == "S1")));
+        Assert.Equal(["101", "102", "103", "104"], p.Vigas);
+        Assert.Empty(g.Saltados);
+    }
+
+    [Fact]
+    public void GenerarSaltaLosQueNoSePuedenGenerar()
+    {
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(30, 8)] }));
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1", "Pórtico 9"])).OfType<AGenerar>());
+
+        Assert.Empty(g.Porticos);
+        Assert.Equal(["Pórtico 1: no se puede generar; revisa los avisos del tablero.", "Pórtico 9: ya no está en el modelo."], g.Saltados);
+    }
+
+    [Fact]
+    public void GenerarSaltaElPorticoConUnDiametroSinTipoEnElModelo()
+    {
+        SesionTablero s = ConUbicacion([9.525, 12.7]);
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<AGenerar>());
+
+        Assert.Empty(g.Porticos);
+        Assert.Equal(["Pórtico 1: el modelo no tiene un tipo de barra para el #5."], g.Saltados);
+    }
+
+    [Fact]
+    public void LaVistaTraeLosDiametrosDelModelo()
+    {
+        JsonElement v = VistaDe([ConUbicacion([9.525, 12.7, 15.875, 16]).Vista()]);
+
+        Assert.Equal([3, 4, 5], v.GetProperty("diametrosDisponibles").EnumerateArray().Select(x => x.GetInt32()));
+    }
+
+    [Fact]
+    public void SinLectorDeDiametros_SonLosDeLasReglas()
+    {
+        JsonElement v = VistaDe([ConUbicacion().Vista()]);
+
+        Assert.Equal(Reglas.Generales.PorDiametro.Keys.Order(), v.GetProperty("diametrosDisponibles").EnumerateArray().Select(x => x.GetInt32()));
+    }
 }
