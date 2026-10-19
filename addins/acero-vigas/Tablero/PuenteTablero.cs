@@ -49,12 +49,8 @@ internal sealed class PuenteTablero
                 ventana.Enviar(js.Json);
             else if (salida is ARevit(AccionRevit accion, IReadOnlyList<string> vigas) && !desdeRevit)
                 Hacer(app, accion, vigas);
-            else if (salida is AGenerar generar)
-                // TEMPORAL (#85, tarea 5): la creación en Revit llega con las tareas 6 y 7; por ahora solo se dice qué se haría.
-                ventana.Enviar(ProtocoloTablero.Resumen(new ResumenGeneracion(0, 0, 0, 0,
-                    [.. generar.Saltados, .. generar.Porticos.Select(p =>
-                        $"{p.Id}: listo para generar {p.Plan.Barras.Count} barras, {p.Plan.Bastones.Count} bastones y " +
-                        $"{p.Plan.Estribos.Sum(e => e.Corrida.Cantidad)} estribos; la creación en Revit todavía no está.")], [])));
+            else if (salida is AGenerar(var porticos, var saltados, Reglas reglas) && leido is not null)
+                ventana.Enviar(ProtocoloTablero.Resumen(GeneradorAcero.Generar(leido, porticos, saltados, reglas)));
         }
     }
 

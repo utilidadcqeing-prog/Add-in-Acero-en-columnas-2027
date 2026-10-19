@@ -15,9 +15,9 @@ public sealed record ARevit(AccionRevit Accion, IReadOnlyList<string> Vigas) : S
 
 /// <summary>
 /// "Generar en Revit" (#85): los pórticos que sí se generan, con su plan, y los que se saltan, cada uno con su motivo
-/// (un texto por línea para el resumen).
+/// (un texto por línea para el resumen). <paramref name="Reglas"/> son las vigentes, para buscar los tipos de barra.
 /// </summary>
-public sealed record AGenerar(IReadOnlyList<PorticoAGenerar> Porticos, IReadOnlyList<string> Saltados) : Salida;
+public sealed record AGenerar(IReadOnlyList<PorticoAGenerar> Porticos, IReadOnlyList<string> Saltados, Reglas Reglas) : Salida;
 
 /// <summary>Un pórtico para generar: <paramref name="Vigas"/> son las suyas, para borrar lo que el add-in creó antes en ellas.</summary>
 public sealed record PorticoAGenerar(string Id, IReadOnlyList<string> Vigas, UbicacionPortico Ubicacion, PlanAcero Plan);
@@ -131,7 +131,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             }
             aGenerar.Add(new PorticoAGenerar(id, p.Vigas, p.Ubicacion, plan));
         }
-        return new AGenerar(aGenerar, saltados);
+        return new AGenerar(aGenerar, saltados, reglas.Reglas);
     }
 
     private IReadOnlyList<int> Disponibles() =>

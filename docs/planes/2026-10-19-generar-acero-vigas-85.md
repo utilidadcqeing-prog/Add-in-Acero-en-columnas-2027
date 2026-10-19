@@ -283,7 +283,13 @@
   - `internal static class MarcaAcero { public static void Marcar(Element e, string portico, string pieza); public static ElementFilter Filtro(); public static int BorrarAnteriores(Document doc, IEnumerable<string> vigas); }` (decisión 6; Guid nuevo, `VendorId` "CQEING")
   - `internal static class GeneradorAcero { public static ResumenGeneracion Generar(Document doc, IReadOnlyList<PorticoAGenerar> porticos, Reglas r); }`
 
-- [ ] **Paso 1:** implementar `MarcaAcero`, `TiposAcero` y el esqueleto de `GeneradorAcero`: abre la transacción "Vigas: generar acero" con un `IFailuresPreprocessor` que borra las advertencias (decisión 3), borra lo anterior de cada pórtico y confirma.
+- [x] **Hecho en código** (2026-10-19), compila para 2026 y 2027 sin advertencias. Cambios sobre lo previsto:
+  - `MarcaAcero.BorrarAnteriores(doc, portico, vigas)` borra las barras marcadas cuyo host es una viga del pórtico **o** cuya marca dice ese pórtico (por si la viga cambió). Esquema con `VendorId` "CQEING", el del manifiesto, y escritura solo del fabricante;
+  - `GeneradorAcero.Generar(doc, porticos, saltados, reglas)`: los saltados van primero en las fallas. `AGenerar` lleva las `Reglas` vigentes;
+  - el gancho nuevo se crea con 12 diámetros de largo recto en barras y 6 en estribos; solo si el proyecto no tiene uno de ese ángulo y estilo;
+  - mientras falta la tarea 7, generar solo borra lo anterior y lo dice en el resumen (`TEMPORAL`).
+- [ ] **Pendiente:** el paso 3 (borrado en Revit) se prueba junto con la tarea 7, cuando ya haya barras marcadas.
+- [x] **Paso 1:** implementar `MarcaAcero`, `TiposAcero` y el esqueleto de `GeneradorAcero`: abre la transacción "Vigas: generar acero" con un `IFailuresPreprocessor` que borra las advertencias (decisión 3), borra lo anterior de cada pórtico y confirma.
 - [ ] **Paso 2:** `rtk dotnet build addins/acero-vigas/CQEING.Vigas.csproj -c Debug -p:RevitVersion=2026` sin errores ni advertencias nuevas.
 - [ ] **Paso 3: en Revit.** Crear a mano un `Rebar` en una viga y marcarlo con un comando de diagnóstico temporal; generar; comprobar que se borra el marcado y no uno sin marca. Borrar la viga y regenerar: no revienta.
 - [ ] **Paso 4:** commit `feat(vigas): tipos de barra, marca y borrado al regenerar (#85)`.
