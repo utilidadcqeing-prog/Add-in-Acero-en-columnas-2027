@@ -76,7 +76,7 @@
 ## Hallazgos del código
 
 1. **"Pórtico sin eje"** sale cuando ninguna rejilla es **colineal** con la línea de vigas a 50 mm o menos (`AgrupadorPorticos.cs:36` y `51`, `ToleranciaLinea = 50`). Si la viga está corrida del eje (al borde de la columna, excéntrica), no lo encuentra aunque la rejilla pase por todas sus columnas. **Confirmado** en el modelo de Carlos (`PROY_JULIO_BETO`, 19-oct): las vigas `VIG_25X35` de los ejes **A** y **C** (niveles N+3.70 y N+6.70) están justificadas a la izquierda / derecha, con su línea en la cara de las columnas `COL_25X30` y a **125 mm** de la rejilla, que pasa por el centro de las columnas. Las de B y 1–4 van centradas (0 mm). Las viguetas `VT_10X35` / `VB_10X35` no van sobre ningún eje y siguen "sin eje".
-2. **Voladizo como columna:** una viga que cruza la línea cuenta como apoyo si una viga del pórtico **termina sobre ella** sin columna ni muro (`TerminaSobre`, `AgrupadorPorticos.cs:260`). La viga de borde en la punta de un voladizo cumple eso, así que el voladizo queda como luz y su punta como apoyo. **Hipótesis**, se confirma con el modelo de Carlos.
+2. **Voladizo como columna:** una viga que cruza la línea cuenta como apoyo si una viga del pórtico **termina sobre ella** sin columna ni muro (`TerminaSobre`, `AgrupadorPorticos.cs:260`). La viga de borde en la punta de un voladizo cumple eso, así que el voladizo queda como luz y su punta como apoyo. **Confirmado** en el modelo de Carlos (19-oct): en N+3.70 los ejes A, B y C siguen pasada la columna del eje 4 (y = 11460) hasta y = 13110, donde cruza la viga de borde `VB_10X35` 389000. Esa viga no descansa en ninguna columna ni muro (alrededor solo hay vigas y el DWG). Lo mismo pasa al otro extremo con 388864 (eje B) y 388891 (eje C).
 3. Además el alzado pinta **todo** apoyo como columna de alto completo (`alzado.js:349`), aunque `PorticoLeido.TiposDeApoyo` dice si es columna, muro o viga.
 4. Grosor: los trazos están dentro del `scale(z)` (`alzado.js:279`). `vector-effect="non-scaling-stroke"` deja el grosor fijo sin tocar la geometría. Los textos también crecen (pregunta 1).
 5. Scroll: la columna de la derecha (`tablero.js:857`, `overflow: auto`) y la tabla de barras (`tablero.js:823`, `max-height: 150px`) tienen scroll propio; el tamaño de la página sale de `pageW` / `pageH` (`tablero.js:647`). Se mide en Revit cuál es el que vio Carlos (paso 1 de la tarea 4).
@@ -91,6 +91,7 @@
 2. **Nombre del pórtico** (nuestra): si no hay rejilla colineal, se toma la rejilla **paralela** más cercana que pase por dentro de las huellas de los apoyos del pórtico. Si no hay ninguna, sigue "Pórtico sin eje N" con su aviso.
 3. **Viga de borde en la punta del voladizo** (Carlos 1:28:31, *"es un armazón, no un apoyo"*; Juan, 19-oct: *"debe ser más por voladizo"*): lo que pasa de la **primera / última columna o muro** del pórtico es voladizo. Una viga que cruza ahí es armazón, no apoyo. Una viga que cruza solo puede ser apoyo **entre** dos columnas o muros del pórtico (como hoy, con `TerminaSobre`).
    - ~~Una viga que cruza solo es apoyo si ella misma descansa en al menos una columna o muro.~~ Cambiada el 19-oct por Juan: la regla va por el voladizo, no por lo que carga la viga.
+   - Excepción (Juan, 19-oct, al programar la tarea 2): pasada la primera / última columna o muro, una viga que cruza **sí** es apoyo si ella misma descansa en una columna o muro (cargadora). Así sigue en pie la prueba de #81 `UnaVigaQueTerminaSobreOtraViga_LaTomaComoApoyo`, que si no, saldría como un voladizo de 3.50 m. La viga de borde del modelo de Carlos no descansa en nada y queda como armazón.
 4. **Apoyo que es viga** (nuestra): se dibuja como la sección de la viga que cruza (a la altura de la viga), no como columna de alto completo.
 5. **Grosor y textos fijos** (Carlos 1:11:23; Juan, 19-oct: *"los textos también"*): `non-scaling-stroke` en todo trazo del alzado y del corte, y los textos con el mismo tamaño en pantalla a cualquier zoom (`font-size` y el borde blanco del texto divididos por `z`). La posición del texto sí sigue al dibujo.
 6. **Sin scroll** (Carlos 1:29:10): la página, el alzado y el panel del elemento caben en la ventana desde **1366 × 768**. La lista de pórticos de la izquierda puede tener scroll propio (crece con el modelo). Lo que no quepa en el panel de la derecha se compacta o pasa a un desplegable, no a scroll.
@@ -165,11 +166,11 @@
 
 **Archivos:** `AgrupadorPorticos.cs`, `AgrupadorPorticosTests.cs`, `Tablero/web/alzado.js`.
 
-- [ ] **Paso 1:** en el modelo de Carlos, mirar qué hay en la punta del voladizo del eje A (viga de borde, otra cosa). Anotar en Hallazgos.
-- [ ] **Paso 2:** pruebas que fallan: `LaVigaDeBordeDeUnVoladizoNoEsApoyo` (queda voladizo, no luz) y `UnaVigaQueCruzaEntreDosColumnasSigueSiendoApoyo`.
-- [ ] **Paso 3:** en `Agrupar`, después de `Unir`, quitar de `propios` las vigas que quedan antes de la primera o después de la última columna o muro (decisión 3). Si no queda ninguna columna ni muro, se avisa `SinApoyos` como hoy.
-- [ ] **Paso 4:** en el alzado, un apoyo de tipo viga se dibuja como sección de viga (decisión 4); la vista ya trae `TiposDeApoyo`, se pasa al apoyo si hace falta.
-- [ ] **Paso 5:** pruebas en verde. Commit `fix(vigas): la viga de borde de un voladizo no se lee como apoyo (#100)`.
+- [x] **Paso 1:** en el modelo de Carlos, mirar qué hay en la punta del voladizo del eje A (viga de borde, otra cosa). Anotar en Hallazgos.
+- [x] **Paso 2:** pruebas que fallan: `LaVigaDeBordeDeUnVoladizoNoEsApoyo` (queda voladizo, no luz) y `UnaVigaQueCruzaEntreDosColumnasSigueSiendoApoyo`.
+- [x] **Paso 3:** en `Agrupar`, después de `Unir`, quitar de `propios` las vigas que quedan antes de la primera o después de la última columna o muro (decisión 3). Si no queda ninguna columna ni muro, se avisa `SinApoyos` como hoy.
+- [x] **Paso 4:** en el alzado, un apoyo de tipo viga se dibuja como sección de viga (decisión 4); la vista ya trae `TiposDeApoyo`, se pasa al apoyo si hace falta.
+- [x] **Paso 5:** pruebas en verde. Commit `fix(vigas): la viga de borde de un voladizo no se lee como apoyo (#100)`.
 
 ### Fase B: base del dibujo
 
@@ -290,7 +291,8 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Versión 24 (Juan: *"Ojalá sobre la misma barra… falta esto"*): el rótulo va **pegado a su barra**, encima de las de arriba y debajo de las de abajo, con un borde del color del fondo para que se lea sobre las líneas; antes salía fuera de la viga. Los bastones también llevan el suyo (`1#5L= 2.00`), del lado de adentro de la viga.
   - Versiones 25–28 (Juan: *"no lo veo"*): **el motor de la maqueta no pinta un `{{hueco}}` dentro de un `<text>` de SVG** (probado con textos de muestra: los fijos salen y los de hueco no). Por eso los rótulos nunca se vieron, ni siquiera el del arrastre de #84. Ahora van como etiquetas HTML encima del dibujo, en px de pantalla (así también quedan fijos al zoom). Visto en Chrome: rótulos de barras, bastones y traslapos, estribos y `30×50`. **En el tablero real (Preact) esto no pasa**: allí siguen siendo `<text>` con `font-size / z`.
   - No está en la maqueta: el apoyo que es viga (decisión 4), porque la maqueta no tiene ese caso.
-- [ ] Fase A (tareas 1–2).
+- [x] Fase A (tareas 1–2).
+  - Tarea 2: `SinArmazonDeVoladizos` (después de `Unir`) quita las vigas que cruzan antes de la primera o después de la última columna o muro, salvo las cargadoras (`Descansa`: se pisan en planta con una columna o muro que llega a su altura). La vista gana `ApoyoVista.EsViga` y el alzado lo dibuja a la altura de la viga (y 40–130) en lugar de columna completa. Pruebas nuevas: `LaVigaDeBordeDeUnVoladizoNoEsApoyo`, `UnaVigaQueCruzaEntreDosColumnasSigueSiendoApoyo`, `UnApoyoQueEsVigaSeMarcaEnLaVista`. 581 en verde.
   - Tarea 1 (pasos 2–4): `EjeQuePasaPorLosApoyos` toma la rejilla paralela más cercana que pasa por dentro de **todas** las columnas y muros del pórtico (no cuenta las vigas que cruzan). `Soporte` guarda también su rango de lado a lado (`NormalDesde`–`NormalHasta`); `Unir` junta esos rangos. `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma` pasó desde el inicio: queda como guarda para que el arreglo no tome ejes de más. 578 pruebas en verde.
   - Paso 1 hecho después del commit del arreglo (Revit no respondía al principio): el hallazgo 1 se confirma en el modelo de Carlos (ejes A y C a 125 mm). La prueba `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` pasó a usar ese caso exacto: viga de 25 con su línea en la cara de columnas de 25.
 - [ ] Fase B (tareas 3–5).

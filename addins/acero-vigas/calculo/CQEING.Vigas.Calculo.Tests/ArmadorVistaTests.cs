@@ -48,6 +48,17 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void UnApoyoQueEsVigaSeMarcaEnLaVista()
+    {
+        PorticoLeido p = Portico1();
+        p = p with { TiposDeApoyo = [TipoApoyo.Columna, TipoApoyo.Viga, TipoApoyo.Muro, TipoApoyo.Columna] };
+
+        VistaPortico v = Armar(p: p);
+
+        Assert.Equal([false, true, false, false], v.Apoyos.Select(a => a.EsViga));
+    }
+
+    [Fact]
     public void LaListaNombraElPorticoComoLaMaqueta()
     {
         PorticoEnLista l = ArmadorVista.EnLista(Portico1());

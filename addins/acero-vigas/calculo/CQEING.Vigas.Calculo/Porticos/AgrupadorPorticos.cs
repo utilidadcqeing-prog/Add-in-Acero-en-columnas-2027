@@ -39,8 +39,8 @@ public static class AgrupadorPorticos
             {
                 List<Tramo> cadena = cadenas[i];
                 double desde = cadena.Min(t => t.Desde), hasta = cadena.Max(t => t.Hasta);
-                List<Soporte> propios = Unir(soportes.Where(s => s.Hasta >= desde - ToleranciaContacto && s.Desde <= hasta + ToleranciaContacto)
-                    .Where(s => s.Tipo != TipoApoyo.Viga || TerminaSobre(cadena, s, soportes)));
+                List<Soporte> propios = SinArmazonDeVoladizos(Unir(soportes.Where(s => s.Hasta >= desde - ToleranciaContacto && s.Desde <= hasta + ToleranciaContacto)
+                    .Where(s => s.Tipo != TipoApoyo.Viga || TerminaSobre(cadena, s, soportes))), modelo);
                 if (propios.Count == 0)
                 {
                     avisos.Add(new AvisoLectura(TipoAvisoLectura.SinApoyos, string.Join(", ", cadena.Select(t => t.Viga.Id))));
@@ -281,6 +281,31 @@ public static class AgrupadorPorticos
     private static bool TerminaSobre(List<Tramo> cadena, Soporte viga, List<Soporte> soportes) =>
         cadena.SelectMany(t => new[] { t.Desde, t.Hasta })
             .Any(punta => Contiene(viga, punta) && !soportes.Any(s => s.Tipo != TipoApoyo.Viga && Contiene(s, punta)));
+
+    /// <summary>
+    /// Lo que pasa de la primera / última columna o muro es voladizo: una viga que cruza ahí es armazón, no apoyo,
+    /// salvo que ella misma descanse en una columna o muro (cargadora). Decisión 3 del plan
+    /// docs/planes/2026-10-19-ajustes-tablero-vigas-100.md.
+    /// </summary>
+    private static List<Soporte> SinArmazonDeVoladizos(List<Soporte> soportes, ModeloLeido modelo)
+    {
+        int primero = soportes.FindIndex(s => s.Tipo != TipoApoyo.Viga), ultimo = soportes.FindLastIndex(s => s.Tipo != TipoApoyo.Viga);
+        return soportes.Where((s, i) => s.Tipo != TipoApoyo.Viga || (primero >= 0 && i > primero && i < ultimo)
+            || modelo.Vigas.FirstOrDefault(v => v.Id == s.Id) is VigaLeida v && modelo.Apoyos.Any(a => Descansa(v, a))).ToList();
+    }
+
+    /// <summary>La viga descansa en el apoyo si se pisan en planta y el apoyo llega a la altura de la viga.</summary>
+    private static bool Descansa(VigaLeida v, ApoyoLeido a)
+    {
+        if (a.ZArriba < v.ZAbajo - ToleranciaContacto || a.ZAbajo > v.ZArriba)
+            return false;
+        double dx = v.Hasta.X - v.Desde.X, dy = v.Hasta.Y - v.Desde.Y;
+        double largo = Math.Sqrt(dx * dx + dy * dy), ux = dx / largo, uy = dy / largo;
+        double A(Punto p) => (p.X - v.Desde.X) * ux + (p.Y - v.Desde.Y) * uy;
+        double N(Punto p) => -(p.X - v.Desde.X) * uy + (p.Y - v.Desde.Y) * ux;
+        return a.Huella.Max(A) >= -ToleranciaContacto && a.Huella.Min(A) <= largo + ToleranciaContacto
+            && a.Huella.Max(N) >= -v.Ancho / 2 - ToleranciaContacto && a.Huella.Min(N) <= v.Ancho / 2 + ToleranciaContacto;
+    }
 
     private static bool Contiene(Soporte s, double t) => t >= s.Desde - ToleranciaContacto && t <= s.Hasta + ToleranciaContacto;
 

@@ -147,6 +147,37 @@ public class AgrupadorPorticosTests
     }
 
     [Fact]
+    public void LaVigaDeBordeDeUnVoladizoNoEsApoyo()
+    {
+        // Como el eje A del modelo de Carlos: pasada la última columna (5), la viga sigue hasta 5000 y en la punta
+        // cruza la viga de borde, que no descansa en ninguna columna: es armazón y queda voladizo.
+        var modelo = new ModeloLeido(Ejes,
+            [Viga("v1", 0, 3500, 3500, Piso2), Viga("v2", 3500, 5000, 3500, Piso2),
+             new VigaLeida("borde", new(5000, -2000), new(5000, 2000), 3150, 3500, 100, Piso2)],
+            [Columna("c1", 0, 0, 300, 0, 3500), Columna("c2", 3500, 0, 300, 0, 3500)]);
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(modelo).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Columna, TipoApoyo.Columna], p.TiposDeApoyo);
+        Assert.Equal(1350, p.Portico.VoladizoFinal);
+        Assert.Equal(["Viga A-5", "Voladizo 5"], p.Tramos.Select(t => t.Nombre));
+    }
+
+    [Fact]
+    public void UnaVigaQueCruzaEntreDosColumnasSigueSiendoApoyo()
+    {
+        // Entre las columnas de A y 6, la viga del eje 1 termina en 5 sobre una viga que cruza y no tiene columnas.
+        var modelo = new ModeloLeido(Ejes,
+            [Viga("v1", 0, 3500, 3500, Piso2), Viga("v2", 3500, 7000, 3500, Piso2),
+             new VigaLeida("cruza", new(3500, -2000), new(3500, 2000), 3100, 3500, 300, Piso2)],
+            [Columna("c1", 0, 0, 300, 0, 3500), Columna("c3", 7000, 0, 300, 0, 3500)]);
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(modelo).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Columna, TipoApoyo.Viga, TipoApoyo.Columna], p.TiposDeApoyo);
+    }
+
+    [Fact]
     public void UnMuroDeCargaQueCruzaLaViga_EsApoyo_YUnoALoLargoNo()
     {
         ApoyoLeido muroQueCruza = new("m1", TipoApoyo.Muro, [new(3440, -2000), new(3560, -2000), new(3560, 2000), new(3440, 2000)], 0, 3500, Direccion: new(0, 1));

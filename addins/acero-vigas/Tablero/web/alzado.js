@@ -142,7 +142,8 @@
       const stx = posEst ? posEst.map(X) : [];
 
       const ap = p.apoyos;
-      const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda) }));
+      // un apoyo que es viga se dibuja como su sección, a la altura de la viga; las columnas y muros, de alto completo
+      const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda), y: a.esViga ? 40 : 14, h: a.esViga ? 90 : 152 }));
       const luces = ap.slice(1).map((a, i) => ({ x: X((ap[i].x + a.x) / 2), lt: 'luz ' + f2(a.caraIzquierda - ap[i].caraDerecha) }));
       const vols = [];
       if (ap.length && p.inicio < ap[0].caraIzquierda - 1e-9) vols.push({ a: p.inicio, z: ap[0].caraIzquierda });
@@ -346,7 +347,7 @@
         ${v.st.map((z) => html`<line x1="${z.x1}" y1="85" x2="${z.x2}" y2="85" stroke="#C3CAD2" stroke-width="80" stroke-dasharray="${z.da}"></line>`)}
         ${v.stx.map((x) => html`<line x1="${x}" y1="45" x2="${x}" y2="125" stroke="#C3CAD2" stroke-width="1"></line>`)}
       </g>
-      ${v.cols.map((c) => html`<rect x="${c.x}" y="14" width="${c.w}" height="152" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1"></rect>`)}
+      ${v.cols.map((c) => html`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1"></rect>`)}
       ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3"></line>`)}
       <g transform="${v.flip}">
         ${v.l.filter((x) => x.isC).map(lap)}

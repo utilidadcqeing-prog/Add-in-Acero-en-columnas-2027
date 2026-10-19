@@ -19,8 +19,11 @@ public sealed record PorticoEnLista(string Id, string Nombre, string Sub, string
 /// </summary>
 public sealed record TramoEnLista(string Id, string Nombre, double Desde, double Hasta);
 
-/// <summary>Un apoyo en el alzado: la x de su eje y de sus caras.</summary>
-public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, double CaraDerecha);
+/// <summary>
+/// Un apoyo en el alzado: la x de su eje y de sus caras. <paramref name="EsViga"/>: una viga que cruza; se dibuja como
+/// su sección y no como columna (decisión 4 del plan docs/planes/2026-10-19-ajustes-tablero-vigas-100.md).
+/// </summary>
+public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, double CaraDerecha, bool EsViga = false);
 
 /// <summary>
 /// Una barra corrida. <paramref name="Capa"/> es <c>"arriba"</c> o <c>"abajo"</c>; <paramref name="Recta"/> es como
