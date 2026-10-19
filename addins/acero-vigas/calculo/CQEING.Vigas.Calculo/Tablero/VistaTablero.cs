@@ -31,14 +31,17 @@ public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, doub
 /// <paramref name="GanchoInicioTipo"/> y <paramref name="GanchoFinTipo"/> son <c>"90°"</c>, <c>"135°"</c>, <c>"180°"</c> o
 /// <c>""</c>; <paramref name="PuntaInicioEnBorde"/> / <paramref name="PuntaFinEnBorde"/>: ahí van los botones de gancho (#84).
 /// <paramref name="Color"/> es el de su diámetro (<see cref="Modelo.ColoresDiametro"/>); con dos diámetros, el del más grueso.
+/// <paramref name="Rotulo"/> y <paramref name="RotuloPulgadas"/> son los de DC-CAD (<see cref="Tablero.Rotulo"/>): la
+/// página elige cuál pinta (#100).
 /// </summary>
 public sealed record BarraVista(string Id, string Capa, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
     string Recta, bool Manual, bool LlegaAlVoladizo, string Cantidad, double Kg,
     string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false,
-    string Color = "");
+    string Color = "", string Rotulo = "", string RotuloPulgadas = "");
 
+/// <summary>Un traslapo; <paramref name="Rotulo"/> es su largo con 2 decimales, como <c>"1.20"</c>.</summary>
 public sealed record TraslapoVista(string Id, string BarraIzquierda, string BarraDerecha, string Capa, double Desde, double Hasta,
-    double Minimo, string Diametro, bool Manual);
+    double Minimo, string Diametro, bool Manual, string Rotulo = "");
 
 /// <summary>
 /// Un bastón. <paramref name="Donde"/> es como <c>"Centrado en la columna B"</c> o <c>"Centro de la luz A-B"</c>;
@@ -47,10 +50,19 @@ public sealed record TraslapoVista(string Id, string BarraIzquierda, string Barr
 public sealed record BastonVista(string Id, double Eje, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
     string Donde, string Cantidad, double Kg, bool Cortado,
     string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false,
-    string Color = "");
+    string Color = "", string Rotulo = "", string RotuloPulgadas = "");
 
-/// <summary>Una zona de estribos en el alzado; <paramref name="Junta"/> = la de confinamiento, junto a una columna.</summary>
-public sealed record ZonaEstribos(double Desde, double Hasta, bool Junta);
+/// <summary>
+/// Una zona de estribos en el alzado, del primer al último estribo; <paramref name="Junta"/> = la de confinamiento,
+/// junto a una columna. Su rótulo, como DC-CAD (#100): <paramref name="Cantidad"/> como <c>"9e#3"</c> (y
+/// <paramref name="CantidadPulgadas"/>, <c>"9eØ⅜\""</c>), <paramref name="Separacion"/> como <c>"@.10"</c> y
+/// <paramref name="Largo"/> como <c>"L=0.95"</c>, de la cara de la columna al último estribo (vacío en el centro).
+/// </summary>
+public sealed record ZonaEstribos(double Desde, double Hasta, bool Junta, string Cantidad = "", string CantidadPulgadas = "",
+    string Separacion = "", string Largo = "");
+
+/// <summary>La sección de un tramo, como <c>"30×50"</c> (cm), en la mitad del tramo (<paramref name="X"/>, m).</summary>
+public sealed record SeccionEnAlzado(double X, string Texto);
 
 /// <summary>
 /// El reparto de una cara en filas (#88). <paramref name="Error"/> es el nombre de <see cref="Modelo.ErrorCara"/>
@@ -105,6 +117,7 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// sección en el corte 1-1: barras corridas, bastones que pasan por ahí y estribos de ese tramo (<paramref name="Corte"/>).
 /// <paramref name="PosicionesEstribos"/> es el centro de cada estribo cerrado, en m, para dibujarlos en el alzado donde van.
 /// <paramref name="Diametros"/> son los de las barras y bastones del pórtico, del más grueso al más delgado (la leyenda).
+/// <paramref name="Secciones"/>: la de cada tramo, para escribirla arriba de él.
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -131,7 +144,8 @@ public sealed record VistaPortico(
     bool SePuedeGenerar,
     CorteVista? Corte = null,
     IReadOnlyList<double>? PosicionesEstribos = null,
-    IReadOnlyList<DiametroVista>? Diametros = null);
+    IReadOnlyList<DiametroVista>? Diametros = null,
+    IReadOnlyList<SeccionEnAlzado>? Secciones = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).

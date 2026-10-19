@@ -154,8 +154,30 @@ public class DistribuidorEstribosTests
         Assert.Equal([250.0], Posiciones("A-B", p: portico));
     }
 
-    private static IReadOnlyList<ZonaTramo> Zonas(string nombre, ConfigEstribos? c = null, Portico? p = null) =>
+    private static IReadOnlyList<ZonaTramo> ZonasCompletas(string nombre, ConfigEstribos? c = null, Portico? p = null) =>
         DistribuidorEstribos.Zonas(TramoDe(p ?? Datos.PorticoMaqueta(), nombre), c ?? General, Estribo3);
+
+    /// <summary>Solo dónde va cada zona; lo de su rótulo se prueba aparte.</summary>
+    private static IReadOnlyList<ZonaTramo> Zonas(string nombre, ConfigEstribos? c = null, Portico? p = null) =>
+        ZonasCompletas(nombre, c, p).Select(z => new ZonaTramo(z.Desde, z.Hasta, z.Junta)).ToList();
+
+    /// <summary>
+    /// El rótulo de cada zona (#100): la zona se queda con el estribo que comparte con el centro; la L va de la cara de
+    /// la columna al último estribo de la zona (A-B: caras en 200 y 4200).
+    /// </summary>
+    [Fact]
+    public void CadaZonaCuentaSusEstribosYSuLargoDesdeLaCara()
+    {
+        IReadOnlyList<ZonaTramo> z = ZonasCompletas("A-B");
+
+        Assert.Equal((8, 8), (z[0].Cantidad, z[2].Cantidad));
+        Assert.Equal((100, 100), (z[0].Separacion, z[2].Separacion));
+        Assert.Equal(754.75, z[0].Largo!.Value, 6);
+        Assert.Equal(754.75, z[2].Largo!.Value, 6);
+        Assert.Null(z[1].Largo);
+        Assert.True(z[1].Separacion <= General.SeparacionCentro);
+        Assert.Equal(Posiciones("A-B").Count, z.Sum(x => x.Cantidad));
+    }
 
     /// <summary>Las zonas que pinta el alzado (#83): las de columna a la separación exacta y el centro, en mm.</summary>
     [Fact]

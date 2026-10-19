@@ -223,10 +223,10 @@
 
 **Archivos:** `Rotulo.cs` (o donde quedó `Rotulo.De` en #84), `ArmadorVista`, `alzado.js`, `demo.js`, pruebas.
 
-- [ ] **Paso 1:** pruebas en C#: cada barra y bastón trae `Rotulo` y `RotuloPulgadas`; cada zona de estribos trae `9e#3`, `@.10` y `L=0.95` (de la cara de la columna al último estribo); cada luz trae su sección `30×50`; el traslapo, su largo a 2 decimales.
-- [ ] **Paso 2:** C# los arma (decisiones 7 y 8).
-- [ ] **Paso 3:** el alzado los pinta: rótulo sobre cada barra, largo en cada traslapo, la línea con rayitas de los estribos en lugar de cada raya (la línea 1-1 sigue usando `posicionesEstribos`) y la sección arriba de cada luz.
-- [ ] **Paso 4:** `node --check` y pruebas en verde. Commit `feat(vigas): rótulos de barras, traslapos, estribos y sección como DC-CAD (#100)`.
+- [x] **Paso 1:** pruebas en C#: cada barra y bastón trae `Rotulo` y `RotuloPulgadas`; cada zona de estribos trae `9e#3`, `@.10` y `L=0.95` (de la cara de la columna al último estribo); cada luz trae su sección `30×50`; el traslapo, su largo a 2 decimales.
+- [x] **Paso 2:** C# los arma (decisiones 7 y 8).
+- [x] **Paso 3:** el alzado los pinta: rótulo sobre cada barra, largo en cada traslapo, la línea con rayitas de los estribos en lugar de cada raya (la línea 1-1 sigue usando `posicionesEstribos`) y la sección arriba de cada luz.
+- [x] **Paso 4:** `node --check` y pruebas en verde. Commit `feat(vigas): rótulos de barras, traslapos, estribos y sección como DC-CAD (#100)`.
 
 ### Fase E: capas y escala
 
@@ -302,6 +302,8 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
 - [ ] Fase C (tareas 6–7).
   - Tarea 6: `Modelo/ColoresDiametro.cs` (`De`, `SinColor` = `#5E6670`). `Color` en `BarraVista`, `BastonVista` y `BarraSeccion` (también los bastones en proyección); `VistaPortico.Diametros` = `DiametroVista(Nombre, Color)` de barras y bastones, del más grueso al más delgado, sin los estribos. Ruling: una corrida con dos diámetros (3 #5 + 2 #4) lleva el color del **más grueso**. Si falta un diámetro en las reglas, la vista vacía sale con `Diametros` null: la página lo trata como lista vacía (tarea 7). 587 pruebas en verde.
   - Tarea 7, como la maqueta: corrida 2.4 px (elegida 3.4) y bastón 1.7 px (elegido 3), los dos con el color de su diámetro; la elegida conserva su color y lleva un halo gris (`#16191D` al 22 %, 10 px) detrás. Solo al arrastrarla pasa a azul o ámbar (el elemento vivo). Traslapo en gris `#5E6670` (elegido o a mano en azul, con aviso en ámbar). Leyenda: una bolita por diámetro + traslapo. Corte: cada barra con su color (el tamaño ya era a escala) y la leyenda debajo del título. Panel: las bolitas de cada fila con el color de sus barras y una bolita junto al selector de diámetro; el dibujo del recubrimiento con el color de la barra. `demo.js` tiene la misma tabla que C#. Falta verlo en Revit: el DLL con los colores (tarea 6) necesita cerrar Revit para compilar.
+- [ ] Fase D (tarea 8).
+  - Tarea 8: `Rotulo.EnPulgadas` y `Rotulo.Pulgadas`; `Rotulo` / `RotuloPulgadas` en `BarraVista` y `BastonVista`; `TraslapoVista.Rotulo` (`"1.20"`); `ZonaEstribos` con `Cantidad` (`"8e#3"`), `CantidadPulgadas`, `Separacion` (`"@.10"`) y `Largo` (`"L=0.75"`); `VistaPortico.Secciones` (`SeccionEnAlzado`, `"30×50"` en la mitad de cada tramo, de `TramoLeido`). `DistribuidorEstribos.Zonas` cuenta los estribos de cada zona sobre las posiciones reales (el que comparte una zona con el centro es de la zona) y da la separación real: el centro reparte sin pasar de la suya, así que puede salir `@.17`. Ruling: como en la maqueta, `L=` va debajo junto a la separación (`@.10 L=0.75`), no al lado; el centro no lleva `L`; si todo el tramo va como zona, tampoco. En el alzado, los estribos dejan de dibujarse uno por uno: una línea por zona en y = 148 con rayitas, la cantidad encima y la separación debajo; la sección en y = 9; los textos con borde del fondo. 603 pruebas en verde. Falta verlo en Revit (Review Focus 3 y 4: la línea 1-1 sin rayas y los rótulos que se tapan en luces cortas).
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).

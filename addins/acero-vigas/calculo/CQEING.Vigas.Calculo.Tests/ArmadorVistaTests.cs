@@ -63,6 +63,54 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void CadaBarraYBastonTraeSuRotuloEnNumeroYEnPulgadas()
+    {
+        VistaPortico v = Armar();
+
+        Assert.All(v.Barras, b => Assert.Matches(b.GanchoInicio || b.GanchoFin ? @"^3#5L= \d+\.\d\d/\d+\.\d\d$" : @"^3#5L= \d+\.\d\d$", b.Rotulo));
+        Assert.All(v.Barras, b => Assert.Equal(b.Rotulo.Replace("3#5", "3Ø⅝\""), b.RotuloPulgadas));
+        Assert.Contains(v.Barras, b => b.Rotulo.Contains('/'));
+        Assert.All(v.Bastones, b => Assert.Matches(@"^\d+#\d+L= \d+\.\d\d(/\d+\.\d\d)?$", b.Rotulo));
+        Assert.All(v.Bastones, b => Assert.Contains("Ø", b.RotuloPulgadas));
+    }
+
+    [Fact]
+    public void ElTraslapoTraeSuLargoA2Decimales()
+    {
+        VistaPortico v = Armar();
+
+        Assert.All(v.Traslapos, t => Assert.Equal((t.Hasta - t.Desde).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), t.Rotulo));
+    }
+
+    [Fact]
+    public void CadaZonaDeEstribosTraeCantidadSeparacionYLargoDesdeLaCara()
+    {
+        VistaPortico v = Armar();
+        IReadOnlyList<double> pos = v.PosicionesEstribos!;
+        int EnZona(ZonaEstribos z) => pos.Count(x => x >= z.Desde - 1e-6 && x <= z.Hasta + 1e-6);
+
+        // la primera zona: junto a la cara derecha de la columna A, a la separación de la zona (0.10)
+        ZonaEstribos primera = v.Zonas[0];
+        Assert.True(primera.Junta);
+        Assert.Equal($"{EnZona(primera)}e#3", primera.Cantidad);
+        Assert.Equal("@.10", primera.Separacion);
+        Assert.Equal("L=" + (primera.Hasta - v.Apoyos[0].CaraDerecha).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), primera.Largo);
+        // el centro no lleva L, y entre todas las zonas están todos los estribos una sola vez
+        Assert.All(v.Zonas.Where(z => !z.Junta), z => Assert.Equal("", z.Largo));
+        Assert.Equal(pos.Count, v.Zonas.Sum(z => int.Parse(z.Cantidad.Split('e')[0])));
+    }
+
+    [Fact]
+    public void CadaTramoTraeSuSeccionEnLaMitad()
+    {
+        VistaPortico v = Armar();
+
+        Assert.Equal(["30×50", "30×50", "30×50", "30×50"], v.Secciones!.Select(s => s.Texto));
+        Assert.Equal((v.Apoyos[0].CaraDerecha + v.Apoyos[1].CaraIzquierda) / 2, v.Secciones![0].X, 6);
+        Assert.Equal((v.Apoyos[^1].CaraDerecha + v.Fin) / 2, v.Secciones![^1].X, 6);
+    }
+
+    [Fact]
     public void UnaCorridaConDosDiametrosLlevaElColorDelMasGrueso()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };

@@ -51,10 +51,35 @@ internal static class DistribuidorEstribos
 
     /// <summary>
     /// Las zonas de <paramref name="t"/> en mm, de izquierda a derecha, para el alzado del tablero (#83): las de
-    /// confinamiento junto a las columnas (<see cref="ZonaTramo.Junta"/>) y el centro.
+    /// confinamiento junto a las columnas (<see cref="ZonaTramo.Junta"/>) y el centro, con lo que dice su rótulo
+    /// (#100): cuántos estribos, cada cuánto y hasta dónde llega la zona desde la cara.
     /// </summary>
-    internal static IReadOnlyList<ZonaTramo> Zonas(Tramo t, ConfigEstribos c, double diametroEstribo) =>
-        Segmentos(t, c, diametroEstribo).Select(s => new ZonaTramo(s.Desde, s.Hasta, s.Junta)).ToList();
+    internal static IReadOnlyList<ZonaTramo> Zonas(Tramo t, ConfigEstribos c, double diametroEstribo)
+    {
+        IReadOnlyList<Segmento> segmentos = Segmentos(t, c, diametroEstribo);
+        IReadOnlyList<double> posiciones = Posiciones(t, c, diametroEstribo);
+        bool Dentro(double x, Segmento s) => x >= s.Desde - ToleranciaMm && x <= s.Hasta + ToleranciaMm;
+        // El estribo que comparten una zona y el centro es de la zona: se cuentan primero las zonas.
+        var libres = posiciones.ToList();
+        var cantidades = new int[segmentos.Count];
+        foreach (int i in Enumerable.Range(0, segmentos.Count).OrderByDescending(i => segmentos[i].Junta))
+        {
+            List<double> suyos = libres.Where(x => Dentro(x, segmentos[i])).ToList();
+            suyos.ForEach(x => libres.Remove(x));
+            cantidades[i] = suyos.Count;
+        }
+        return segmentos.Select((s, i) =>
+        {
+            // La separación real: el centro reparte sin pasar de la suya, así que puede quedar más junta.
+            int espacios = posiciones.Count(x => Dentro(x, s)) - 1;
+            double separacion = s.Exacta ? s.Separacion : espacios > 0 ? (s.Hasta - s.Desde) / espacios : 0;
+            double? largo = s.Junta && s.Exacta ? (s.DesdeLaDerecha ? t.CaraDerecha - s.Desde : s.Hasta - t.CaraIzquierda) : null;
+            return new ZonaTramo(s.Desde, s.Hasta, s.Junta, cantidades[i], separacion, largo);
+        }).ToList();
+    }
+
+    /// <summary>Para comparar posiciones en mm que salen de sumas con decimales.</summary>
+    private const double ToleranciaMm = 1e-6;
 
     /// <summary>
     /// Un trozo del tramo: una zona va a la separación exacta desde su columna (<paramref name="DesdeLaDerecha"/> si

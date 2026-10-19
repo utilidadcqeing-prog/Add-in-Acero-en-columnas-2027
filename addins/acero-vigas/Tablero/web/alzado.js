@@ -113,8 +113,10 @@
         const pts = conGanchos(X(bar.desde), X(bar.hasta), y, dir, ti, tf, 22);
         const isSel = bar.id === sel && !selLap;
         // el color es el de su diámetro (C#, #100); la elegida va igual, con un halo detrás. Solo al arrastrarla cambia.
+        // el rótulo de DC-CAD (C#, #100) va sobre la misma barra: encima de las de arriba y debajo de las de abajo
+        const yS = inv ? 170 - y : y, top = isC !== inv;
         return { id: bar.id, y, isC, pts, isSel, col: isSel && cur ? colVivo : bar.color || '#3F4A57', sw: isSel ? 3.4 : 2.4, pick: pickBar(bar.id),
-          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: bar.capa === 'arriba' ? 33 : 150, lt: bar.id + ' · ' + f2(bar.largo) };
+          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: top ? yS - 3 * k : yS + 10 * k, lt: bar.rotulo || '' };
       });
 
       const warnLap = warn ? this.props.warnLap : '';
@@ -124,7 +126,10 @@
         // gris, para no confundirse con los colores de los diámetros (el naranja de antes chocaba con el #4)
         const vivo = vivos.includes(t.id);
         const c = vivo ? colVivo : isSel || isMan ? '#1F5FAF' : (isWarn ? '#B26B00' : '#5E6670');
-        return { isC: arribaAntes(t.capa), x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel || vivo ? 0.24 : 0.12, sw: isSel || vivo ? 2.4 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id) };
+        // su largo con 2 decimales, en el medio del empalme
+        const isC = arribaAntes(t.capa), yc = isC ? 54 : 115;
+        return { isC, x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel || vivo ? 0.24 : 0.12, sw: isSel || vivo ? 2.4 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id),
+          lx: (X(t.desde) + X(t.hasta)) / 2, ly: (inv ? 170 - yc : yc) + 3.2 * k, lt: t.rotulo || '' };
       });
 
       // bastones: los de arriba en y = 70 y los de abajo en y = 100, con el gancho hacia adentro de la viga. Una punta
@@ -139,18 +144,23 @@
         const pts = conGanchos(xa, xz, y, dir, ti, tf, 16);
         const isSel = bs.id === sel && !selLap;
         // del color de su diámetro, como la corrida; se distingue por el trazo, más delgado (decisión 9)
-        return { id: bs.id, y, top, pts, isSel, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : 1.7, pick: pickBar(bs.id) };
+        // su rótulo, del lado de adentro de la viga
+        const yS = inv ? 170 - y : y, arriba = top !== inv;
+        return { id: bs.id, y, top, pts, isSel, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : 1.7, pick: pickBar(bs.id),
+          lx: (xa + xz) / 2, ly: arriba ? yS + 10 * k : yS - 3 * k, lt: bs.rotulo || '' };
       });
       // la selección va con un halo detrás y no con otro color: el azul ya es del #8 (#100)
       const halo = selLap ? null : (b.find((x) => x.isSel) || t.find((x) => x.isSel) || null);
       const ley = (p.diametros || []).map((d) => ({ c: d.color, t: d.nombre }));
 
-      // estribos: una raya por cada estribo real, donde va (Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba y la
-      // línea 1-1, que va de estribo en estribo, no caía en las rayas). Sin posiciones, el rayado de zonas de la maqueta:
-      // es un relleno y crece con el zoom, a diferencia de las líneas (C# y la demostración siempre mandan posiciones).
-      const posEst = p.posicionesEstribos || null;
-      const st = posEst ? [] : p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
-      const stx = posEst ? posEst.map(X) : [];
+      // estribos como DC-CAD (Carlos, #100): debajo de la viga, una línea por zona con una rayita en cada punta,
+      // "9e#3" encima y "@.10 L=0.95" debajo, en lugar de una raya por estribo. La línea 1-1 sigue saltando de estribo
+      // en estribo con las posiciones que manda C# (corte.puntos).
+      const yE = 148;
+      const st = p.zonas.map((z) => ({ d: 'M' + X(z.desde) + ' ' + yE + 'H' + X(z.hasta) + 'M' + X(z.desde) + ' ' + (yE - 3 * k) + 'v' + 6 * k
+        + 'M' + X(z.hasta) + ' ' + (yE - 3 * k) + 'v' + 6 * k, x: (X(z.desde) + X(z.hasta)) / 2,
+        a: z.cantidad || '', b: [z.separacion, z.largo].filter(Boolean).join(' ') }));
+      const secs = (p.secciones || []).map((s) => ({ x: X(s.x), t: s.texto }));
 
       const ap = p.apoyos;
       // un apoyo que es viga se dibuja como su sección, a la altura de la viga; las columnas y muros, de alto completo
@@ -292,7 +302,7 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, stx, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
+        b, l, t, st, yE, secs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
         hdMove: (e) => {
           const h = this.state.hd;
@@ -349,17 +359,15 @@
       const k = v.k, NS = 'non-scaling-stroke';
       const lap = (x) => html`<rect x="${x.x}" y="${x.isC ? 45 : 106}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" vector-effect="${NS}" style="cursor: pointer" onClick=${x.pick}></rect>`;
       const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick}></polyline>`;
-      const rotulo = (x) => html`<text x="${x.lx}" y="${x.ly}" text-anchor="middle" font-size="${10 * k}" font-family="IBM Plex Mono, monospace" fill="${x.col}">${x.lt}</text>`;
+      // los textos llevan un borde del color del fondo para leerse sobre las líneas (#100)
+      const texto = (x, y, t, col, tam, peso) => (t ? html`<text x="${x}" y="${y}" text-anchor="middle" font-size="${tam * k}" font-weight="${peso}" font-family="IBM Plex Mono, monospace" fill="${col}" stroke="#F1F3F5" stroke-width="${3.5 * k}" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${t}</text>` : null);
+      const rotulo = (x) => texto(x.lx, x.ly, x.lt, x.col, 10, 500);
       return html`
 <div style="position: relative; width: ${v.wpx}; height: ${v.hpx}; overflow: hidden; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #16191D; cursor: ${v.cursor}; user-select: none; touch-action: none" onPointerDown=${v.down} onPointerMove=${v.move} onPointerUp=${v.up} onPointerLeave=${v.up} onWheel=${v.wheel} onDblClick=${v.fitView}>
   <svg width="${v.w}" height="${v.h}" style="display: block" role="img" aria-label="Alzado del pórtico con barras, traslapos, bastones y estribos">
     <g transform="${v.view}">
       <rect x="${v.beamX}" y="40" width="${v.beamW}" height="90" fill="#F1F3F5" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>
       ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="90" fill="#E9ECEF" stroke="none"></rect>`)}
-      <g visibility="${v.stVis}">
-        ${v.st.map((z) => html`<line x1="${z.x1}" y1="85" x2="${z.x2}" y2="85" stroke="#C3CAD2" stroke-width="80" stroke-dasharray="${z.da}"></line>`)}
-        ${v.stx.map((x) => html`<line x1="${x}" y1="45" x2="${x}" y2="125" stroke="#C3CAD2" stroke-width="1" vector-effect="${NS}"></line>`)}
-      </g>
       ${v.cols.map((c) => html`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>`)}
       ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3" vector-effect="${NS}"></line>`)}
       <g transform="${v.flip}">
@@ -379,8 +387,15 @@
           ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="${11 * k}" fill="transparent" aria-label=${o.tip} style="cursor: ${o.cur}" onPointerDown=${o.down} onPointerMove=${v.hdMove} onPointerUp=${v.hdUp} onPointerCancel=${v.hdCancel}><title>${o.tip}</title></circle>`)}
         </g>` : null}
       </g>
-      ${v.b.filter((x) => x.isC).map(rotulo)}
-      ${v.b.filter((x) => !x.isC).map(rotulo)}
+      <g visibility="${v.stVis}">
+        ${v.st.map((z) => html`<path d="${z.d}" stroke="#5E6670" stroke-width="1" fill="none" vector-effect="${NS}"></path>`)}
+        ${v.st.map((z) => texto(z.x, v.yE - 4 * k, z.a, '#3F4A57', 9, 400))}
+        ${v.st.map((z) => texto(z.x, v.yE + 10 * k, z.b, '#3F4A57', 9, 400))}
+      </g>
+      ${v.secs.map((s) => texto(s.x, 9, s.t, '#5E6670', 9, 400))}
+      ${v.l.map((x) => texto(x.lx, x.ly, x.lt, '#3F4A57', 9, 600))}
+      ${v.t.map((x) => texto(x.lx, x.ly, x.lt, x.col, 9, 400))}
+      ${v.b.map(rotulo)}
       ${v.fantasma ? html`<text x="${v.fantasma.lx}" y="${v.fantasma.ly}" text-anchor="middle" font-size="${12 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.fantasma.col}" stroke="#FAFBFC" stroke-width="${4 * k}" paint-order="stroke" pointer-events="none">${v.fantasma.lt}</text>` : null}
       <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
       <rect x="${v.cut.bandX}" y="40" width="${v.cut.bandW}" height="90" fill="${v.cut.c}" fill-opacity="0.08" pointer-events="none"></rect>

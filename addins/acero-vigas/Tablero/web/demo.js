@@ -107,14 +107,20 @@
       const grados = (tipo) => ({ De90: '90°', De135: '135°', De180: '180°' })[tipo] || '';
       // corridas (#84): el gancho de cada punta del borde; sin "Sin" (vuelve a 90°) y, en la demostración, con el mismo largo
       const tipoCorrida = (clave) => (gch[clave] && gch[clave] !== 'Sin' ? grados(gch[clave]) : '90°');
+      // rótulo de DC-CAD, como Rotulo en C#: "3#5L= 2.80/3.00" (recto / total) o un solo largo sin gancho
+      const PULG = { 2: '¼"', 3: '⅜"', 4: '½"', 5: '⅝"', 6: '¾"', 7: '⅞"', 8: '1"', 9: '1⅛"', 10: '1¼"', 11: '1⅜"' };
+      const rotulo = (rows, recto, total, pulg) => rows.map((r) => r.cantidad + (pulg ? 'Ø' + PULG[r.diametro] : '#' + r.diametro)).join('+')
+        + 'L= ' + f2(recto) + (Math.abs(total - recto) > 1e-6 ? '/' + f2(total) : '');
       const capa = (lista, pre, rows, nombre) => {
         lista.forEach((b, i) => barras.push({ id: pre + (i + 1), capa: nombre, desde: b.a, hasta: b.b, ganchoInicio: !!b.hs, ganchoFin: !!b.he,
+          rotulo: rotulo(rows, b.b - b.a, b.len, false), rotuloPulgadas: rotulo(rows, b.b - b.a, b.len, true),
           largo: b.len, recta: b.recta, manual: false, llegaAlVoladizo: !!b.vol, cantidad: qtyOf(rows), kg: b.len * kgRow(rows),
           ganchoInicioTipo: b.hs ? tipoCorrida(pre + '.inicio') : '', ganchoFinTipo: b.he ? tipoCorrida(pre + '.fin') : '',
           puntaInicioEnBorde: !!b.hs, puntaFinEnBorde: !!b.he, color: colorDe(Math.max(...rows.map((r) => r.diametro))) }));
         for (let i = 0; i + 1 < lista.length; i++) {
           traslapos.push({ id: pre + (i + 1) + '–' + pre + (i + 2), barraIzquierda: pre + (i + 1), barraDerecha: pre + (i + 2), capa: nombre,
-            desde: lista[i + 1].a, hasta: lista[i].b, minimo: num(regla(rows[0].diametro).t, 0), diametro: '#' + rows[0].diametro, manual: false });
+            desde: lista[i + 1].a, hasta: lista[i].b, minimo: num(regla(rows[0].diametro).t, 0), diametro: '#' + rows[0].diametro, manual: false,
+            rotulo: f2(lista[i].b - lista[i + 1].a) });
         }
       };
       capa(G.c, pc, cRows, capaC);
@@ -131,7 +137,7 @@
         if (!t) return;
         const inc = Math.max(0, Math.ceil((cm.traslapos[id] / 1000 - (t.hasta - t.desde)) / M - 1e-9) * M);
         const b = barras.find((x) => x.id === t.barraDerecha);
-        Object.assign(t, { desde: t.desde - inc, manual: true });
+        Object.assign(t, { desde: t.desde - inc, manual: true, rotulo: f2(t.hasta - t.desde + inc) });
         Object.assign(b, { desde: b.desde - inc, kg: b.kg / b.largo * (b.largo + inc), largo: b.largo + inc });
       });
       // traslapos arrastrados: se corren enteros; crece la barra de su izquierda y se acorta la de su derecha
@@ -178,7 +184,8 @@
           return { id: b.id, eje: b.eje, desde: a, hasta: z, ganchoInicio: gA > 0, ganchoFin: gZ > 0, largo: len, donde: b.donde,
             cantidad: st.cantidad + ' #' + st.diametro, kg: len * st.cantidad * kgOf(st.diametro), cortado: cutA || cutZ, n: st.cantidad,
             ganchoInicioTipo: grados(ti), ganchoFinTipo: grados(tf), puntaInicioEnBorde: cutA, puntaFinEnBorde: cutZ,
-            color: colorDe(st.diametro), diametro: st.diametro };
+            color: colorDe(st.diametro), diametro: st.diametro,
+            rotulo: rotulo([st], z - a, len, false), rotuloPulgadas: rotulo([st], z - a, len, true) };
         }).filter((b) => b.n > 0);
 
       // sección y reparto en filas (#88)
@@ -302,6 +309,24 @@
         tramo: tramoCorte ? tramoCorte[0] : '', permitidos, proyeccion: [], aviso: null, puntos };
 
       const kg = barras.reduce((s, b) => s + b.kg, 0) + bastones.reduce((s, b) => s + b.kg, 0) + kgE;
+      // el rótulo de cada zona de estribos, como ArmadorVista en C#: las zonas se quedan con el estribo que comparten con
+      // el centro; la L va de la cara de la columna al último estribo de la zona
+      const libres = posicionesEstribos.slice();
+      const cuenta = new Map();
+      G.zonas.map((z, i) => [z, i]).sort((p, q) => q[0][2] - p[0][2]).forEach(([[d, h], i]) => {
+        const suyos = libres.filter((x) => x >= d - 0.051 && x <= h + 0.051);
+        suyos.forEach((x) => libres.splice(libres.indexOf(x), 1));
+        cuenta.set(i, suyos.length);
+      });
+      const sep = (m) => '@' + f2(m).replace(/^0/, '');
+      const zonas = G.zonas.map(([desde, hasta, junta], i) => {
+        const luz = G.luces.find(([, a, b]) => desde >= a - 1e-9 && hasta <= b + 0.05);
+        const pegadaIzq = luz && Math.abs(desde - luz[1]) < 0.1;
+        return { desde, hasta, junta: !!junta, cantidad: cuenta.get(i) + 'e#' + e0.diametro, cantidadPulgadas: cuenta.get(i) + 'eØ' + PULG[e0.diametro],
+          separacion: sep((junta ? e0.separacionZona : e0.separacionCentro) / 1000),
+          largo: junta && luz ? 'L=' + f2(pegadaIzq ? hasta - luz[1] : luz[2] - desde) : '' };
+      });
+      const secciones = G.luces.map(([, a, b, vol]) => ({ x: (a + (vol ? G.fin : b)) / 2, texto: '30×50' }));
       // los de la leyenda: barras y bastones, del más grueso al más delgado
       const diametros = [...new Set(o.superior.concat(o.inferior).map((r) => r.diametro).concat(bastones.map((b) => b.diametro)))]
         .sort((p, q) => q - p).map((d) => ({ nombre: '#' + d, color: colorDe(d) }));
@@ -309,7 +334,7 @@
         id, tipo, inicio: G.inicio, fin: G.fin,
         apoyos: G.apoyos.map(([eje, x, caraIzquierda, caraDerecha]) => ({ eje, x, caraIzquierda, caraDerecha })),
         barras, traslapos, bastones: bastones.map(({ n, diametro, ...b }) => b), diametros,
-        zonas: G.zonas.map(([desde, hasta, junta]) => ({ desde, hasta, junta: !!junta })),
+        zonas, secciones,
         superior: sup, inferior: inf,
         izquierda: { kg: kgFace.izq, existe: true }, derecha: { kg: kgFace.der, existe: true }, caraUsada: side, caraMasEconomica: cheaper,
         seccion: { anchoCm: 30, altoCm: 50, barras: barrasSec,
