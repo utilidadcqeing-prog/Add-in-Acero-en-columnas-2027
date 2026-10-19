@@ -13,17 +13,15 @@ namespace CQEING.Vigas.Revit;
 /// <list type="bullet">
 /// <item>el cerrado sale mejor con la forma de estribo del documento (<c>CreateFromRebarShape</c> + <c>ScaleToBox</c>);
 /// una forma elegida por nombre puede traer diagonales, así que se mide y se descarta si las tiene;</item>
-/// <item>sin forma, <c>CreateFromCurves</c> con el arranque a mitad de un lado y un quiebre pequeño: si el lazo arranca en
-/// una esquina, el gancho se come el doblez de esa esquina; dos curvas colineales dan null;</item>
+/// <item>sin forma, <c>CreateFromCurves</c> con el lazo de cuatro lados. En columnas arrancaba a mitad de un lado para que
+/// el gancho no se comiera el doblez de la esquina; en la viga eso dejaba abierto el lado de arriba (hallazgo E2), así
+/// que arranca en la esquina de arriba a la izquierda, donde los ganchos de 135° abrazan la barra de esquina;</item>
 /// <item>después de repartir hay que regenerar antes de leer cuántos quedaron.</item>
 /// </list>
 /// El estribo de la viga es vertical y perpendicular a su eje (el de la columna era horizontal).
 /// </summary>
 internal static class CreadorEstribos
 {
-    /// <summary>1.5 cm hacia adentro: el quiebre que le da a Revit una esquina de verdad a mitad del lado.</summary>
-    private const double DesvioQuiebreMm = 15;
-
     /// <summary>1 mm: un lado que se mueve en las dos direcciones del corte más que esto es una diagonal.</summary>
     private const double ToleranciaDiagonalMm = 1;
 
@@ -93,16 +91,17 @@ internal static class CreadorEstribos
             }
         }
 
-        // Sin forma (o con una que trae diagonales): el lazo por curvas, arrancando a mitad del lado de arriba.
+        // Sin forma (o con una que trae diagonales): el lazo por curvas, arrancando y cerrando en la esquina de arriba a la
+        // izquierda. Ahí no hay doblez de 90°: los dos ganchos de 135° abrazan la barra de esquina, como en obra
+        // (hallazgo E2: en columnas arrancaba a mitad de un lado y en la viga dejaba abierto el lado de arriba, con la
+        // barra del medio sin estribo). Todos los ganchos en la misma esquina ("corrido", #90).
         XYZ P(double xc, double yc) => CreadorBarras.Punto(u, x, xc, yc);
-        double medio = (izq + der) / 2;
         var curvas = new List<Curve>
         {
-            Line.CreateBound(P(medio, arriba - DesvioQuiebreMm), P(der, arriba)),
+            Line.CreateBound(P(izq, arriba), P(der, arriba)),
             Line.CreateBound(P(der, arriba), P(der, abajo)),
             Line.CreateBound(P(der, abajo), P(izq, abajo)),
             Line.CreateBound(P(izq, abajo), P(izq, arriba)),
-            Line.CreateBound(P(izq, arriba), P(medio, arriba - DesvioQuiebreMm)),
         };
         using var terminaciones = new BarTerminationsData(doc)
         {
