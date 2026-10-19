@@ -10,7 +10,7 @@ namespace practicacq.Modelo;
 /// <c>FilteredElementCollector(doc).OfClass(typeof(RebarBarType))</c> /
 /// <c>RebarHookType</c> y devolviendo el <c>.Name</c> de cada uno — el mismo
 /// nombre que <see cref="ConfigTramo.TipoBarraNombre"/> y
-/// <see cref="ConfigLongitudinal.TipoBarraANombre"/> guardan como texto.
+/// <see cref="ConfigLongitudinal.TipoBarraEsquinasNombre"/> guardan como texto.
 /// </summary>
 public interface IProveedorTipos
 {

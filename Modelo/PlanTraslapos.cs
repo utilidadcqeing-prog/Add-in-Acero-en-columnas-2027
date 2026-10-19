@@ -68,34 +68,71 @@ public static class PlanTraslapos
 
     /// <param name="EnTramosDelOtro">El tipo no tenía tramos propios y traslapa en los del otro (spec, regla 2).</param>
     /// <param name="Motivo">Por qué no hay solución, en lenguaje llano; null si la hay.</param>
+    /// <param name="Grupo">"A" o "B": en qué tramos traslapa (alternancia del anillo).</param>
+    /// <param name="DiametroMm">El diámetro de las barras de este plan: dentro de un mismo grupo puede haber varios (esquinas #5 y caras #4, por ejemplo).</param>
     public sealed record PlanTipo(
-        string Nombre, IReadOnlyList<Pieza> Piezas, IReadOnlyList<Traslapo> Traslapos,
+        string Grupo, double DiametroMm, IReadOnlyList<Pieza> Piezas, IReadOnlyList<Traslapo> Traslapos,
         double? SolapeMinimo, bool EnTramosDelOtro, string? Motivo)
     {
         public bool TieneSolucion => Motivo is null;
+
+        /// <summary>"A · #5", o el diámetro si la barra no está en el cuadro.</summary>
+        public string Nombre => CuadroVarillas.PorDiametro(DiametroMm) is { } v
+            ? $"{Grupo} · #{v.Numero}"
+            : $"{Grupo} · Ø {DiametroMm:0.#} mm";
     }
 
-    public sealed record Resultado(PlanTipo A, PlanTipo B)
+    /// <summary>
+    /// Un plan por cada diámetro de cada grupo. El número de barra se elige
+    /// por posición (esquinas / cara X / cara Y) y la alternancia A/B decide
+    /// dónde traslapa, así que un grupo puede tener barras de varios
+    /// diámetros, cada una con su solape y su gancho -- 19-oct, ver
+    /// docs/planes/2026-10-19-barras-por-cara-de-vuelta.md.
+    /// </summary>
+    public sealed record Resultado(IReadOnlyList<PlanTipo> A, IReadOnlyList<PlanTipo> B)
     {
-        public bool TieneSolucion => A.TieneSolucion && B.TieneSolucion;
+        public IEnumerable<PlanTipo> Todos => A.Concat(B);
+
+        public bool TieneSolucion => Todos.All(p => p.TieneSolucion);
+
+        /// <summary>El plan de las barras de ese grupo y ese diámetro.</summary>
+        public PlanTipo De(bool grupoA, double diametroMm) =>
+            (grupoA ? A : B).First(p => Math.Abs(p.DiametroMm - diametroMm) < ToleranciaDiametro);
     }
 
-    public static Resultado Calcular(Columna columna, double diametroAMm, double diametroBMm, Opciones opciones)
+    private const double ToleranciaDiametro = 1e-6;
+
+    public static Resultado Calcular(Columna columna, IEnumerable<double> diametrosAMm, IEnumerable<double> diametrosBMm, Opciones opciones)
     {
-        Resultado resultado = CalcularCon(columna, diametroAMm, diametroBMm, opciones);
+        List<double> diametrosA = Distintos(diametrosAMm), diametrosB = Distintos(diametrosBMm);
+
+        Resultado resultado = CalcularCon(columna, diametrosA, diametrosB, opciones);
         if (resultado.TieneSolucion || opciones.LargoComercial >= LargoComercialMayor - 1e-9) return resultado;
 
         // Spec, sección 6: si con 6 m no hay forma, se dice si con 12 sí la hay.
         // No se cambia solo: la elección sigue siendo del usuario.
-        Resultado con12 = CalcularCon(columna, diametroAMm, diametroBMm, opciones with { LargoComercial = LargoComercialMayor });
+        Resultado con12 = CalcularCon(columna, diametrosA, diametrosB, opciones with { LargoComercial = LargoComercialMayor });
         if (!con12.TieneSolucion) return resultado;
 
         static PlanTipo Sugerir(PlanTipo p) =>
             p.TieneSolucion ? p : p with { Motivo = $"{p.Motivo} Con barras de 12 m sí se puede." };
-        return new Resultado(Sugerir(resultado.A), Sugerir(resultado.B));
+        return new Resultado(resultado.A.Select(Sugerir).ToList(), resultado.B.Select(Sugerir).ToList());
     }
 
-    private static Resultado CalcularCon(Columna columna, double diametroAMm, double diametroBMm, Opciones opciones)
+    /// <summary>Atajo para un solo diámetro por grupo (toda la columna con el mismo número, y las pruebas).</summary>
+    public static Resultado Calcular(Columna columna, double diametroAMm, double diametroBMm, Opciones opciones) =>
+        Calcular(columna, new[] { diametroAMm }, new[] { diametroBMm }, opciones);
+
+    /// <summary>Sin repetidos, de la más gruesa a la más fina (el orden en que se dibujan).</summary>
+    private static List<double> Distintos(IEnumerable<double> diametros)
+    {
+        var distintos = new List<double>();
+        foreach (double d in diametros.OrderByDescending(d => d))
+            if (!distintos.Any(x => Math.Abs(x - d) < ToleranciaDiametro)) distintos.Add(d);
+        return distintos;
+    }
+
+    private static Resultado CalcularCon(Columna columna, List<double> diametrosA, List<double> diametrosB, Opciones opciones)
     {
         // Un dato de columna roto (remate por debajo del arranque) no puede
         // tirar una excepción dentro de Revit: sale sin solución, con el motivo.
@@ -103,15 +140,18 @@ public static class PlanTraslapos
         {
             string motivo = $"la columna remata en {columna.ZFin:0.00} m, por debajo de donde arranca la barra " +
                             $"({columna.ZInicio:0.00} m): hay que revisar el modelo.";
-            return new Resultado(Fallido("A", null, false, motivo), Fallido("B", null, false, motivo));
+            return new Resultado(
+                diametrosA.Select(d => Fallido("A", d, null, false, motivo)).ToList(),
+                diametrosB.Select(d => Fallido("B", d, null, false, motivo)).ToList());
         }
 
-        CuadroVarillas.Varilla? varillaA = CuadroVarillas.PorDiametro(diametroAMm);
-        CuadroVarillas.Varilla? varillaB = CuadroVarillas.PorDiametro(diametroBMm);
-
-        double? solapeA = varillaA?.Traslapo, solapeB = varillaB?.Traslapo;
-        if (opciones.SolapeMayorDeLosDos && solapeA is double sa && solapeB is double sb)
-            solapeA = solapeB = Math.Max(sa, sb);
+        // "El mayor de la columna": todas las barras con el solape más grande
+        // del cuadro entre los números que se usan (si el cuadro los conoce todos).
+        List<double?> solapes = diametrosA.Concat(diametrosB).Select(d => CuadroVarillas.PorDiametro(d)?.Traslapo).ToList();
+        double? solapeComun = opciones.SolapeMayorDeLosDos && solapes.Count > 0 && solapes.All(s => s is not null)
+            ? solapes.Max()
+            : null;
+        double? Solape(double diametro) => solapeComun ?? CuadroVarillas.PorDiametro(diametro)?.Traslapo;
 
         // Ordinal de los tramos libres de TODA la columna, de abajo hacia
         // arriba, desde 1: el mismo que usaba el generador antes de esto.
@@ -125,18 +165,27 @@ public static class PlanTraslapos
         // El tramo libre 1 es siempre de B, así que solo A puede quedarse sin
         // tramos propios (columna de un piso). Entonces se calcula primero B y
         // A va en lo que B dejó libre (spec, regla 2).
+        List<PlanTipo> planesB = diametrosB
+            .Select(d => Resolver("B", columna, d, Solape(d), opciones, deB, enTramosDelOtro: false))
+            .ToList();
+
+        // Con varios diámetros en B, A tiene que esquivar los traslapos de
+        // todos: cualquiera de ellos puede ser vecino de una barra A.
         if (deA.Count == 0 && deB.Count > 0)
         {
-            PlanTipo b = Resolver("B", columna, varillaB, diametroBMm, solapeB, opciones, deB, enTramosDelOtro: false);
-            PlanTipo a = b.TieneSolucion
-                ? Resolver("A", columna, varillaA, diametroAMm, solapeA, opciones, Restar(deB, b.Traslapos), enTramosDelOtro: true)
-                : Fallido("A", solapeA, true, $"el tipo A no tiene tramos propios y va en los del B, que no tiene solución. {b.Motivo}");
-            return new Resultado(a, b);
+            PlanTipo? fallido = planesB.FirstOrDefault(b => !b.TieneSolucion);
+            List<Rango> huecos = Restar(deB, planesB.SelectMany(b => b.Traslapos).ToList());
+            List<PlanTipo> planesA = diametrosA
+                .Select(d => fallido is null
+                    ? Resolver("A", columna, d, Solape(d), opciones, huecos, enTramosDelOtro: true)
+                    : Fallido("A", d, Solape(d), true, $"el tipo A no tiene tramos propios y va en los del B, que no tiene solución. {fallido.Motivo}"))
+                .ToList();
+            return new Resultado(planesA, planesB);
         }
 
         return new Resultado(
-            Resolver("A", columna, varillaA, diametroAMm, solapeA, opciones, deA, enTramosDelOtro: false),
-            Resolver("B", columna, varillaB, diametroBMm, solapeB, opciones, deB, enTramosDelOtro: false));
+            diametrosA.Select(d => Resolver("A", columna, d, Solape(d), opciones, deA, enTramosDelOtro: false)).ToList(),
+            planesB);
     }
 
     /// <summary>Un tramo (o un pedazo de tramo) donde puede ir un traslapo; <see cref="Centro"/> es el del tramo entero.</summary>
@@ -165,22 +214,22 @@ public static class PlanTraslapos
     }
 
     private static PlanTipo Resolver(
-        string nombre, Columna columna, CuadroVarillas.Varilla? varilla, double diametroMm, double? solape,
+        string grupo, Columna columna, double diametroMm, double? solape,
         Opciones opciones, List<Rango> rangos, bool enTramosDelOtro)
     {
-        if (varilla is null)
-            return Fallido(nombre, null, enTramosDelOtro,
-                $"la barra del tipo {nombre} (Ø {diametroMm:0.#} mm) no está en el cuadro de la empresa: " +
+        if (CuadroVarillas.PorDiametro(diametroMm) is not { } varilla)
+            return Fallido(grupo, diametroMm, null, enTramosDelOtro,
+                $"la barra Ø {diametroMm:0.#} mm del tipo {grupo} no está en el cuadro de la empresa: " +
                 "no se conoce su gancho ni su solape.");
 
         var calculo = new Busqueda(columna, columna.ConGanchos ? varilla.Gancho90 : 0, solape, opciones, rangos);
         return calculo.Resolver() is { } plan
-            ? new PlanTipo(nombre, plan.Piezas, plan.Traslapos, solape, enTramosDelOtro, null)
-            : Fallido(nombre, solape, enTramosDelOtro, calculo.Motivo(nombre, varilla, enTramosDelOtro));
+            ? new PlanTipo(grupo, diametroMm, plan.Piezas, plan.Traslapos, solape, enTramosDelOtro, null)
+            : Fallido(grupo, diametroMm, solape, enTramosDelOtro, calculo.Motivo(grupo, varilla, enTramosDelOtro));
     }
 
-    private static PlanTipo Fallido(string nombre, double? solape, bool enTramosDelOtro, string motivo) =>
-        new(nombre, Array.Empty<Pieza>(), Array.Empty<Traslapo>(), solape, enTramosDelOtro, motivo);
+    private static PlanTipo Fallido(string grupo, double diametroMm, double? solape, bool enTramosDelOtro, string motivo) =>
+        new(grupo, diametroMm, Array.Empty<Pieza>(), Array.Empty<Traslapo>(), solape, enTramosDelOtro, motivo);
 
     /// <summary>
     /// La búsqueda de un tipo, en milímetros enteros medidos a lo largo de la
@@ -417,8 +466,9 @@ public static class PlanTraslapos
             return (piezas, traslapos);
         }
 
-        public string Motivo(string nombre, CuadroVarillas.Varilla varilla, bool enTramosDelOtro)
+        public string Motivo(string grupo, CuadroVarillas.Varilla varilla, bool enTramosDelOtro)
         {
+            string nombre = $"{grupo} (#{varilla.Numero})";
             string largoCorte = $"{_h / 1000.0:0.00} m";
             string barras = $"varillas de hasta {_opciones.LargoComercial:0.#} m (en múltiplos de {_opciones.Redondeo:0.00} m)";
 
@@ -427,7 +477,7 @@ public static class PlanTraslapos
                        $"y su largo de corte ({largoCorte}) no entra justo en una sola de las {barras}.";
 
             string donde = enTramosDelOtro ? "un hueco libre de los tramos del otro tipo"
-                : $"un tramo libre {(nombre == "A" ? "par" : "impar")}";
+                : $"un tramo libre {(grupo == "A" ? "par" : "impar")}";
 
             if (_ventanas.Count == 0)
                 return $"tipo {nombre}: no hay ningún {donde.Replace("un ", "")} donde traslapar, y su largo de corte " +

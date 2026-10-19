@@ -19,6 +19,7 @@
     <Compile Include="..\..\Modelo\ColumnaContexto.cs" Link="Modelo\ColumnaContexto.cs" />
     <Compile Include="..\..\Modelo\ConfigLongitudinal.cs" Link="Modelo\ConfigLongitudinal.cs" />
     <Compile Include="..\..\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
+    <Compile Include="..\..\Modelo\PosicionBarra.cs" Link="Modelo\PosicionBarra.cs" />
     <Compile Include="..\..\Modelo\NombreEmpalme.cs" Link="Modelo\NombreEmpalme.cs" />
   </ItemGroup>
 

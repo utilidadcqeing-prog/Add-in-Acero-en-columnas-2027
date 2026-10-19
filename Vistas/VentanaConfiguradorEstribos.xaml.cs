@@ -214,8 +214,9 @@ public partial class VentanaConfiguradorEstribos : Window
         List<string> nombresDeBarra = barras.Select(b => b.Nombre).ToList();
 
         ComboTipoBarra.ItemsSource = nombresDeBarra;
-        ComboBarraA.ItemsSource = nombresDeBarra;
-        ComboBarraB.ItemsSource = nombresDeBarra;
+        ComboBarraCaraX.ItemsSource = nombresDeBarra;
+        ComboBarraCaraY.ItemsSource = nombresDeBarra;
+        ComboBarraEsquinas.ItemsSource = nombresDeBarra;
         _barras = barras;
 
         // Cada combo de gancho ve SOLO los de su estilo: en Revit un gancho
@@ -272,8 +273,13 @@ public partial class VentanaConfiguradorEstribos : Window
 
         // Cualquier cambio que mueva los traslapos recalcula la pestaña
         // «Traslapos». Cableado acá y no en el XAML por lo mismo que los de
-        // arriba. El recubrimiento no participa: no cambia las alturas.
-        foreach (ComboBox combo in new[] { ComboBarraA, ComboBarraB, ComboLongitudBarra, ComboRedondeo, ComboSolape })
+        // arriba. El recubrimiento no participa: no cambia las alturas. La
+        // cantidad de barras sí: decide qué números caen en A y cuáles en B.
+        foreach (ComboBox combo in new[]
+                 {
+                     ComboBarraCaraX, ComboBarraCaraY, ComboBarraEsquinas, ComboBarrasX, ComboBarrasY,
+                     ComboLongitudBarra, ComboRedondeo, ComboSolape,
+                 })
             combo.SelectionChanged += (_, _) => { if (!_mostrandoLongitudinal) RecalcularTraslapos(); };
 
         RefrescarConfiguracionesGuardadas();
@@ -451,7 +457,7 @@ public partial class VentanaConfiguradorEstribos : Window
         // aparte y viven por columna. Cargar la configuración los lleva a la
         // columna activa, si no el resumen que se muestra sería mentira.
         ConfigLongitudinal longitudinal = guardada.Longitudinal.Copiar();
-        bool eraVieja = longitudinal.MigrarBarrasAB();
+        bool eraVieja = longitudinal.MigrarBarrasPorCara();
         if (_columnaIdActiva is string idColumna) _longitudinalPorColumna[idColumna] = longitudinal;
         MostrarLongitudinalEnPanel(longitudinal);
 
@@ -462,7 +468,7 @@ public partial class VentanaConfiguradorEstribos : Window
         TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel ({menores.ToLowerInvariant().TrimEnd('.')}). " +
                            "Todavía no se aplicó a ningún tramo: para eso, aprieta Aceptar.";
         if (eraVieja)
-            TextoEstado.Text += " Era una configuración anterior a los tipos A/B: A tomó la barra de esquinas y B la de cara; revísalas.";
+            TextoEstado.Text += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
     }
 
     private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
@@ -944,12 +950,12 @@ public partial class VentanaConfiguradorEstribos : Window
     /// <summary>Barra por defecto del estribo: #3 (William, 11-sep).</summary>
     private const int NumeroVarillaEstribo = 3;
 
-    /// <summary>Barra por defecto de la longitudinal, tipos A y B: #4 ("todo número cuatro por defecto").</summary>
+    /// <summary>Barra por defecto de la longitudinal, esquinas y caras: #4 ("todo número cuatro por defecto").</summary>
     private const int NumeroVarillaLongitudinal = 4;
 
     /// <summary>Opciones del combo «Solape mínimo»: <see cref="ConfigLongitudinal.SolapeMayorDeLosDos"/> false / true.</summary>
     private const string TextoSolapeCadaDiametro = "El de cada diámetro";
-    private const string TextoSolapeMayor = "El mayor de los dos tipos (A y B)";
+    private const string TextoSolapeMayor = "El mayor de la columna";
 
     /// <summary>
     /// El tipo de barra de esa varilla, o el primero de la lista si el
@@ -1066,8 +1072,9 @@ public partial class VentanaConfiguradorEstribos : Window
     {
         BarrasPorCaraX = ComboBarrasX.SelectedItem as int? ?? 2,
         BarrasPorCaraY = ComboBarrasY.SelectedItem as int? ?? 2,
-        TipoBarraANombre = ComboBarraA.SelectedItem as string,
-        TipoBarraBNombre = ComboBarraB.SelectedItem as string,
+        TipoBarraCaraXNombre = ComboBarraCaraX.SelectedItem as string,
+        TipoBarraCaraYNombre = ComboBarraCaraY.SelectedItem as string,
+        TipoBarraEsquinasNombre = ComboBarraEsquinas.SelectedItem as string,
         LongitudComercialBarra = ComboLongitudBarra.SelectedItem as double? ?? 12.0,
         RedondeoVarillas = ComboRedondeo.SelectedItem as double? ?? PlanTraslapos.RedondeoPorDefecto,
         SolapeMayorDeLosDos = Equals(ComboSolape.SelectedItem, TextoSolapeMayor),
@@ -1084,8 +1091,9 @@ public partial class VentanaConfiguradorEstribos : Window
         {
             ComboBarrasX.SelectedItem = cfg.BarrasPorCaraX;
             ComboBarrasY.SelectedItem = cfg.BarrasPorCaraY;
-            ComboBarraA.SelectedItem = cfg.TipoBarraANombre;
-            ComboBarraB.SelectedItem = cfg.TipoBarraBNombre;
+            ComboBarraCaraX.SelectedItem = cfg.TipoBarraCaraXNombre;
+            ComboBarraCaraY.SelectedItem = cfg.TipoBarraCaraYNombre;
+            ComboBarraEsquinas.SelectedItem = cfg.TipoBarraEsquinasNombre;
             ComboLongitudBarra.SelectedItem = cfg.LongitudComercialBarra;
 
             // Un redondeo que no está en la lista (configuración editada a mano)
@@ -1119,19 +1127,24 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
+        // Mismo anillo que el generador: las posiciones pares son A y las
+        // impares B, y cada una lleva la barra de su cara.
         ConfigLongitudinal cfg = LeerLongitudinalDelPanel();
-        double? diametroA = _barras.FirstOrDefault(b => b.Nombre == cfg.TipoBarraANombre)?.DiametroMm;
-        double? diametroB = _barras.FirstOrDefault(b => b.Nombre == cfg.TipoBarraBNombre)?.DiametroMm;
-        if (diametroA is null || diametroB is null)
+        List<double?> diametros = cfg.Anillo()
+            .Select(p => _barras.FirstOrDefault(b => b.Nombre == cfg.BarraDe(p))?.DiametroMm)
+            .ToList();
+        if (diametros.Any(d => d is null))
         {
-            PanelDeTraslapos.MostrarMensaje("Elige la barra A y la barra B para ver los traslapos.");
+            PanelDeTraslapos.MostrarMensaje("Elige la barra de las esquinas, de la cara X y de la cara Y para ver los traslapos.");
             return;
         }
 
         PlanTraslapos.Resultado plan = PlanTraslapos.Calcular(
-            PlanTraslapos.Columna.De(_columnaActiva), diametroA.Value, diametroB.Value,
+            PlanTraslapos.Columna.De(_columnaActiva),
+            diametros.Where((_, i) => i % 2 == 0).Select(d => d!.Value),
+            diametros.Where((_, i) => i % 2 == 1).Select(d => d!.Value),
             new PlanTraslapos.Opciones(cfg.LongitudComercialBarra, cfg.RedondeoVarillas, cfg.SolapeMayorDeLosDos));
-        PanelDeTraslapos.Mostrar(_columnaActiva, plan, cfg.TipoBarraANombre!, cfg.TipoBarraBNombre!);
+        PanelDeTraslapos.Mostrar(_columnaActiva, plan);
     }
 
     private static string ResumenEstribosMenores(ConfigLongitudinal cfg)
@@ -1149,8 +1162,9 @@ public partial class VentanaConfiguradorEstribos : Window
         BarrasPorCaraX = 2,
         BarrasPorCaraY = 2,
         // Issue #60: "todo número cuatro por defecto" (William, 11-sep).
-        TipoBarraANombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
-        TipoBarraBNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
+        TipoBarraCaraXNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
+        TipoBarraCaraYNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
+        TipoBarraEsquinasNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
         LongitudComercialBarra = 12.0,
         // Anclaje en la zapata: estándar de 90°, también de la reunión del 10-sep.
         TipoGanchoLongitudinalNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estandar, 90)?.Nombre,

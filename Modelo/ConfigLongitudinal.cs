@@ -21,16 +21,19 @@ public sealed class ConfigLongitudinal
     public int BarrasPorCaraY { get; set; }
 
     /// <summary>
-    /// Barra de las posiciones de tipo A: las pares del anillo del perímetro,
-    /// empezando por la esquina inferior izquierda. A y B se alternan "una sí,
-    /// una no" y traslapan en tramos distintos (A en los pares, B en los
-    /// impares) -- docs/planes/2026-10-17-diseno-metodologia-traslapos.md.
-    /// Reemplaza a la elección por cara (esquinas / cara X / cara Y).
+    /// Barra de las cuatro esquinas. El número de barra se elige por posición
+    /// (esquinas / cara X / cara Y) y no por tipo A/B: elegirlo por A/B fue un
+    /// malentendido, corregido por Luciano el 19-oct. La alternancia A/B sigue,
+    /// pero solo decide en qué tramos traslapa cada barra, no su número --
+    /// docs/planes/2026-10-19-barras-por-cara-de-vuelta.md.
     /// </summary>
-    public string? TipoBarraANombre { get; set; }
+    public string? TipoBarraEsquinasNombre { get; set; }
 
-    /// <summary>Barra de las posiciones de tipo B: las impares del anillo. Ver <see cref="TipoBarraANombre"/>.</summary>
-    public string? TipoBarraBNombre { get; set; }
+    /// <summary>Barra de las intermedias de las caras paralelas al eje X (inferior y superior).</summary>
+    public string? TipoBarraCaraXNombre { get; set; }
+
+    /// <summary>Barra de las intermedias de las caras paralelas al eje Y (izquierda y derecha).</summary>
+    public string? TipoBarraCaraYNombre { get; set; }
 
     /// <summary>
     /// Todo largo de corte de varilla (ganchos incluidos) es múltiplo de esto,
@@ -40,19 +43,17 @@ public sealed class ConfigLongitudinal
     public double RedondeoVarillas { get; set; } = PlanTraslapos.RedondeoPorDefecto;
 
     /// <summary>
-    /// true: A y B traslapan con el mayor de sus dos solapes del cuadro;
-    /// false: cada uno con el de su diámetro.
+    /// true: todas las barras de la columna traslapan con el mayor solape del
+    /// cuadro entre los números que se usan; false: cada una con el de su
+    /// diámetro.
     /// </summary>
     public bool SolapeMayorDeLosDos { get; set; }
 
-    /// <summary>OBSOLETO: solo para leer configuraciones guardadas antes de los tipos A/B. Ver <see cref="MigrarBarrasAB"/>.</summary>
-    public string? TipoBarraEsquinasNombre { get; set; }
+    /// <summary>OBSOLETO: solo para leer configuraciones guardadas con barras por tipo A/B (17 al 19-oct). Ver <see cref="MigrarBarrasPorCara"/>.</summary>
+    public string? TipoBarraANombre { get; set; }
 
-    /// <summary>OBSOLETO: ver <see cref="TipoBarraEsquinasNombre"/>.</summary>
-    public string? TipoBarraCaraXNombre { get; set; }
-
-    /// <summary>OBSOLETO: ver <see cref="TipoBarraEsquinasNombre"/>.</summary>
-    public string? TipoBarraCaraYNombre { get; set; }
+    /// <summary>OBSOLETO: ver <see cref="TipoBarraANombre"/>.</summary>
+    public string? TipoBarraBNombre { get; set; }
 
     /// <summary>
     /// Gancho del anclaje inferior, donde la longitudinal entra a la zapata
@@ -97,27 +98,63 @@ public sealed class ConfigLongitudinal
     public string? TipoEmpalmeNombre { get; set; }
 
     /// <summary>
+    /// Pasa una configuración guardada con barras por tipo A/B al formato por
+    /// posición: esquinas = A, caras X e Y = B (en la esquina inferior
+    /// izquierda, que es A, arranca la alternancia). Devuelve true si cambió
+    /// algo, para avisar.
+    /// </summary>
+    public bool MigrarBarrasPorCara()
+    {
+        if (TipoBarraEsquinasNombre is not null || TipoBarraCaraXNombre is not null || TipoBarraCaraYNombre is not null) return false;
+        if (TipoBarraANombre is null && TipoBarraBNombre is null) return false;
+
+        TipoBarraEsquinasNombre = TipoBarraANombre ?? TipoBarraBNombre;
+        TipoBarraCaraXNombre = TipoBarraCaraYNombre = TipoBarraBNombre ?? TipoBarraANombre;
+        return true;
+    }
+
+    /// <summary>
+    /// Posición de cada barra en el anillo del perímetro, en el orden en que se
+    /// recorre: esquina inferior izquierda, cara inferior de izquierda a
+    /// derecha, esquina inferior derecha, cara derecha de abajo hacia arriba,
+    /// esquina superior derecha, cara superior de derecha a izquierda, esquina
+    /// superior izquierda y cara izquierda de arriba hacia abajo. Las pares son
+    /// tipo A y las impares tipo B (alternancia de traslapos del 11-sep). Lo
+    /// usan la ventana (qué números caen en A y cuáles en B) y el generador
+    /// (qué barra va en cada posición): el mismo orden en los dos lados.
+    /// </summary>
+    public IReadOnlyList<PosicionBarra> Anillo()
+    {
+        int columnas = System.Math.Max(0, BarrasPorCaraX / 2);
+        int filas = System.Math.Max(0, BarrasPorCaraY / 2);
+
+        var anillo = new List<PosicionBarra>();
+        for (int vuelta = 0; vuelta < 2; vuelta++)
+        {
+            anillo.Add(PosicionBarra.Esquina);
+            anillo.AddRange(Enumerable.Repeat(PosicionBarra.CaraX, columnas));
+            anillo.Add(PosicionBarra.Esquina);
+            anillo.AddRange(Enumerable.Repeat(PosicionBarra.CaraY, filas));
+        }
+
+        return anillo;
+    }
+
+    /// <summary>El nombre de la barra elegida para esa posición.</summary>
+    public string? BarraDe(PosicionBarra posicion) => posicion switch
+    {
+        PosicionBarra.Esquina => TipoBarraEsquinasNombre,
+        PosicionBarra.CaraX => TipoBarraCaraXNombre,
+        _ => TipoBarraCaraYNombre,
+    };
+
+    /// <summary>
     /// Copia independiente, listas incluidas. Hace falta para las
     /// configuraciones guardadas (<see cref="ConfiguracionGuardada"/>): si la
     /// configuración compartiera las listas de grapas/cajas con la columna de
     /// la que salió, seguir editando los estribos menores de esa columna
     /// cambiaría también la configuración guardada, sin que nadie lo pida.
     /// </summary>
-    /// <summary>
-    /// Pasa una configuración guardada antes de los tipos A/B al formato
-    /// nuevo: A = la barra de esquinas, B = la de cara X (o la de cara Y si no
-    /// había de cara X). Devuelve true si cambió algo, para avisar.
-    /// </summary>
-    public bool MigrarBarrasAB()
-    {
-        if (TipoBarraANombre is not null || TipoBarraBNombre is not null) return false;
-        if (TipoBarraEsquinasNombre is null && TipoBarraCaraXNombre is null && TipoBarraCaraYNombre is null) return false;
-
-        TipoBarraANombre = TipoBarraEsquinasNombre ?? TipoBarraCaraXNombre ?? TipoBarraCaraYNombre;
-        TipoBarraBNombre = TipoBarraCaraXNombre ?? TipoBarraCaraYNombre ?? TipoBarraEsquinasNombre;
-        return true;
-    }
-
     public ConfigLongitudinal Copiar() => new()
     {
         BarrasPorCaraX = BarrasPorCaraX,

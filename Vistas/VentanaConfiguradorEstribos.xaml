@@ -307,15 +307,18 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Tipos A y B: se alternan "una sí, una no" alrededor del
-                         perímetro y traslapan en tramos distintos. Reemplazan a
-                         la elección por cara (esquinas / X / Y). -->
-                    <TextBlock Text="Tipo barra A:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraA" Height="24" />
+                    <!-- El número de barra se elige por posición. La alternancia
+                         A/B de los traslapos sigue, pero no decide el número
+                         (Luciano, 19-oct). -->
+                    <TextBlock Text="Tipo barra cara X:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraCaraX" Height="24" />
 
-                    <TextBlock Text="Tipo barra B:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraB" Height="24" />
-                    <TextBlock Text="A y B se alternan alrededor del perímetro (una sí, una no), empezando por la esquina inferior izquierda con A."
+                    <TextBlock Text="Tipo barra cara Y:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraCaraY" Height="24" />
+
+                    <TextBlock Text="Tipo barra esquinas:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraEsquinas" Height="24" />
+                    <TextBlock Text="Los traslapos se alternan alrededor del perímetro (una barra sí, una no): A y B traslapan en tramos distintos."
                                TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
 
                     <TextBlock Text="Longitud de barra comercial (m):" Style="{StaticResource Etiqueta}" />
@@ -326,7 +329,7 @@
 
                     <TextBlock Text="Solape mínimo de los traslapos:" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboSolape" Height="24" />
-                    <TextBlock Text="El dibujo de A y B, con el largo de cada varilla y cada traslapo, está en la pestaña «Traslapos» de la elevación."
+                    <TextBlock Text="El dibujo de A y B por número de barra, con el largo de cada varilla y cada traslapo, está en la pestaña «Traslapos» de la elevación."
                                TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
 
                     <!-- Igual que el del estribo: el anclaje en la zapata es
