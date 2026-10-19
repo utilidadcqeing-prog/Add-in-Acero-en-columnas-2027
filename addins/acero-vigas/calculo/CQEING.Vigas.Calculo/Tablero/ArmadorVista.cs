@@ -151,6 +151,7 @@ public static class ArmadorVista
         TipoAviso.MueveUnaEsquina => $"El estribo {a.Elemento} movería una barra de esquina, que abraza el cerrado obligatorio.",
         TipoAviso.NoSePuedeAlinear => $"El estribo {a.Elemento} no cabe: las barras no quedan con la distancia libre.",
         TipoAviso.IgualAlCerrado => $"El estribo {a.Elemento} ya es el cerrado de las esquinas.",
+        TipoAviso.RepiteOtroAdicional => $"El estribo {a.Elemento} abraza las mismas barras que otro adicional.",
         _ => a.Elemento,
     };
 

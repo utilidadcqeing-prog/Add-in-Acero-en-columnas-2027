@@ -68,25 +68,33 @@ internal static class AlineadorEstribos
             [Posicion.Inferior] = Filas(e, seccion.Inferior),
         });
         var figuras = new List<EstriboEnSeccion>();
+        // Las ramas (barra de arriba, barra de abajo) de los adicionales ya puestos (hallazgo E14).
+        var ramas = new HashSet<(PuntoBarra Arriba, PuntoBarra Abajo)>();
         foreach ((string id, EstriboAdicional adicional) in adicionales)
         {
             // Se prueba sobre una copia: si el adicional no se puede poner, nada se mueve.
             Corte prueba = corte.Copia();
-            if (Poner(e, prueba, id, adicional, out EstriboEnSeccion? figura) is { } problema)
+            if (Poner(e, prueba, id, adicional, ramas, out EstriboEnSeccion? figura, out var suyas) is { } problema)
             {
                 avisos.Add(new Aviso(problema, id));
                 continue;
             }
             corte = prueba;
             figuras.Add(figura!);
+            ramas.UnionWith(suyas);
         }
         return (new ResultadoSeccion(ConX(seccion.Superior, corte.De(Posicion.Superior)), ConX(seccion.Inferior, corte.De(Posicion.Inferior))), figuras);
     }
 
-    /// <summary>Pone <paramref name="adicional"/> en <paramref name="corte"/>; devuelve el problema si no se puede.</summary>
-    private static TipoAviso? Poner(EntradaSeccion e, Corte corte, string id, EstriboAdicional adicional, out EstriboEnSeccion? figura)
+    /// <summary>
+    /// Pone <paramref name="adicional"/> en <paramref name="corte"/>; devuelve el problema si no se puede.
+    /// <paramref name="ocupadas"/> son las ramas de los adicionales ya puestos; <paramref name="suyas"/>, las de este.
+    /// </summary>
+    private static TipoAviso? Poner(EntradaSeccion e, Corte corte, string id, EstriboAdicional adicional,
+        IReadOnlySet<(PuntoBarra Arriba, PuntoBarra Abajo)> ocupadas, out EstriboEnSeccion? figura, out List<(PuntoBarra Arriba, PuntoBarra Abajo)> suyas)
     {
         figura = null;
+        suyas = [];
         List<PuntoBarra> elegidas = adicional.Barras.Distinct().ToList();
         if (!elegidas.All(corte.Existe))
             return TipoAviso.BarraNoExiste;
@@ -103,6 +111,11 @@ internal static class AlineadorEstribos
             corte.EsEsquina(a) && corte.EsEsquina(b) && (a.Numero == 1) == (b.Numero == 1);
         if (verticales.All(v => EsRamaDelCerrado(v.Manda, v.Otra)))
             return TipoAviso.IgualAlCerrado;
+        // Un abierto en la rama de otro adicional, o un cerrado con sus dos ramas ya puestas, abraza barras que ya están
+        // abrazadas (hallazgo E14).
+        List<(PuntoBarra Arriba, PuntoBarra Abajo)> propias = arriba.Zip(abajo).ToList();
+        if (propias.All(ocupadas.Contains))
+            return TipoAviso.RepiteOtroAdicional;
 
         // Todas las x de destino salen del corte antes de mover nada: la que manda en una vertical no se mueve por la otra.
         var destinos = elegidas.ToDictionary(b => b, corte.X);
@@ -129,6 +142,7 @@ internal static class AlineadorEstribos
             corte.De(b).Alineada[b.Numero - 1] = true;
 
         figura = Figura(e, corte, id, adicional.Tipo, verticales.Select(v => v.Manda).ToList(), elegidas);
+        suyas = propias;
         return null;
     }
 

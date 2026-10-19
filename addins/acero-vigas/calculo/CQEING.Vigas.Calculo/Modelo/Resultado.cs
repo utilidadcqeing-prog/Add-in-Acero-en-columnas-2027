@@ -87,6 +87,11 @@ public enum TipoAviso
     NoSePuedeAlinear,
     /// <summary>El adicional abraza las mismas barras que el cerrado de las esquinas (o una de sus ramas). No se agrega.</summary>
     IgualAlCerrado,
+    /// <summary>
+    /// El adicional repite otro adicional ya puesto: un abierto en la rama de otro, o un cerrado con las mismas dos ramas
+    /// (hallazgo E14 del plan docs/planes/2026-10-19-generar-acero-vigas-85.md). No se agrega.
+    /// </summary>
+    RepiteOtroAdicional,
 }
 
 /// <summary>Por qué un traslapo quedó largo.</summary>
