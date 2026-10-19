@@ -26,12 +26,17 @@ public sealed class ProveedorTiposReal : IProveedorTipos
     /// nombre no se puede, cada modelo los escribe distinto. Ver
     /// <see cref="TipoBarra.PorDefecto"/>.
     /// </summary>
+    /// <remarks>
+    /// Las propias del add-in ("#2 CQEING" … "#8 CQEING") van primero y por
+    /// número -- alfabético pondría la #2 al lado de la #20 de otra plantilla.
+    /// </remarks>
     public IReadOnlyList<TipoBarra> ListarBarras() =>
         new FilteredElementCollector(_doc)
             .OfClass(typeof(RebarBarType))
             .Cast<RebarBarType>()
             .Select(t => new TipoBarra(t.Name, EstandarCQ.DiametroMm(t)))
-            .OrderBy(b => b.Nombre)
+            .OrderBy(b => CuadroVarillas.PorNombrePropio(b.Nombre)?.Numero ?? int.MaxValue)
+            .ThenBy(b => b.Nombre)
             .ToList();
 
     /// <summary>

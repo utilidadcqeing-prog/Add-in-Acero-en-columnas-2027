@@ -24,10 +24,17 @@ public sealed record TipoBarra(string Nombre, double DiametroMm)
     /// lista, pero avisando -- elegir otra barra en silencio es justamente el
     /// problema que esto viene a resolver.
     /// </summary>
+    /// <remarks>
+    /// Primero el tipo propio del add-in ("#4 CQEING"), si el modelo lo tiene;
+    /// si no (el usuario dijo que no a agregarlos), el primero de ese diámetro,
+    /// como antes del 19-oct.
+    /// </remarks>
     public static TipoBarra? PorDefecto(IEnumerable<TipoBarra> barras, int numeroVarilla)
     {
         if (CuadroVarillas.DiametroDe(numeroVarilla) is not double diametro) return null;
 
-        return barras.FirstOrDefault(b => Math.Abs(b.DiametroMm - diametro) < CuadroVarillas.ToleranciaMm);
+        string propio = CuadroVarillas.NombrePropio(numeroVarilla);
+        return barras.FirstOrDefault(b => b.Nombre == propio)
+            ?? barras.FirstOrDefault(b => Math.Abs(b.DiametroMm - diametro) < CuadroVarillas.ToleranciaMm);
     }
 }

@@ -22,8 +22,13 @@ public static class EstandarCQ
     /// Busca la varilla del cuadro que corresponde a ese tipo de barra, o null si el
     /// diámetro no es ninguno de los normalizados.
     /// </summary>
+    /// <remarks>
+    /// Un tipo propio ("#4 CQEING") se resuelve por nombre; cualquier otro,
+    /// por diámetro como siempre, para no romper los modelos que siguen
+    /// usando las barras de su plantilla.
+    /// </remarks>
     public static CuadroVarillas.Varilla? Buscar(RebarBarType tipo) =>
-        CuadroVarillas.PorDiametro(DiametroMm(tipo));
+        CuadroVarillas.PorNombrePropio(tipo.Name) ?? CuadroVarillas.PorDiametro(DiametroMm(tipo));
 
     /// <summary>El diámetro nominal del tipo de barra, en milímetros.</summary>
     public static double DiametroMm(RebarBarType tipo) =>

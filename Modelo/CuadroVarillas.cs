@@ -68,4 +68,17 @@ public static class CuadroVarillas
     /// <summary>El diámetro nominal de la varilla número N, o null si ese número no está en el cuadro.</summary>
     public static double? DiametroDe(int numero) =>
         Cuadro.FirstOrDefault(v => v.Numero == numero)?.DiametroMm;
+
+    /// <summary>
+    /// Nombre del tipo de barra propio del add-in para la varilla número N
+    /// ("#4 CQEING"). Se busca por NOMBRE y no por diámetro porque por diámetro
+    /// una barra métrica pasa por nuestra: la "16 B 400 S" de una plantilla
+    /// europea queda a 0,1 mm de la #5 (19-oct). Ver
+    /// <c>docs/planes/2026-10-19-varillas-propias-cqeing.md</c>.
+    /// </summary>
+    public static string NombrePropio(int numero) => $"#{numero} CQEING";
+
+    /// <summary>La varilla del cuadro cuyo tipo propio se llama así, o null si el nombre no es uno de los nuestros.</summary>
+    public static Varilla? PorNombrePropio(string nombre) =>
+        Cuadro.FirstOrDefault(v => NombrePropio(v.Numero) == nombre);
 }
