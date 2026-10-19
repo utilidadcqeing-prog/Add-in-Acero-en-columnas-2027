@@ -93,7 +93,36 @@ dotnet test CQEING-Addins.sln
 powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin cuadro-cantidades -Revit 2026
 ```
 
+11. (2026-10-19) **El «servicio principal» es la API local de CQEING** (`CQEING_BaseDeDatos`, `CQIngenieria.API`,
+    `dotnet run --launch-profile http`, puerto 5187, con PostgreSQL). El `.env` de desarrollo del Cuadro apunta a
+    `http://localhost:5187`: si la API no está encendida, el Cuadro dice «Servidor no disponible». Para cada usuario
+    hace falta el `.env` con la dirección de la API que use (local o la del servidor) y la misma `API_KEY` que ella.
+12. (2026-10-19) En un equipo con 7,7 GB de RAM, Revit 2026 con *Snowdon Towers Sample Structural* y sus vínculos
+    dejó de responder un rato al abrir el Cuadro (el journal mostraba 640 MB libres). Descargando los vínculos
+    abrió bien. El journal también muestra «Assembly version conflict» (el add-in pide librerías 8.0 y Revit 2026.5
+    ya tiene cargadas las 10.0): es un aviso, el comando se ejecuta igual y lo mismo pasa con otros add-ins.
+
 ## Estado
 
 - [x] Plan revisado con el usuario (2026-10-19: traerlo al monorepo, Revit 2026 y 2027).
-- [ ] Pasos 1 a 7.
+- [x] Pasos 1 a 6. PR #106 unido a `main` (`20b3f41`).
+- [x] Revit real (compilación local con `desplegar-local.ps1`, API local encendida): **2026** abre, carga un
+      presupuesto y no hay aviso de duplicado; **2027** lo mismo. En 2027 se retiró el `CQEING_CuadroCantidades.addin` viejo.
+- [x] Paso 7: etiqueta `cuadro-cantidades-v1.8.0` (publicar.yml en verde; ZIP de 13 MB para 2026 y 2027 +
+      `manifest.json`). El gestor la ve en GitHub real. Prueba del usuario desde el gestor: **2026** instala, abre y
+      carga un presupuesto; **2027** lo mismo.
+
+### Criterios de aceptación
+
+- ✅ Código en `addins/cuadro-cantidades/` con `addin.json` (2026 y 2027, heredado `CQEING_CuadroCantidades.addin`).
+- ✅ Compila para 2026 y 2027; el ZIP lleva todas las dependencias.
+- ✅ `.env` en `%APPDATA%\CQEING_CuadroCantidades\.env` (o el viejo de `C:\CQEING\CuadroCantidades`), nunca en el paquete.
+- ✅ `cuadro-cantidades-v1.8.0` publicada; el gestor la muestra e instala. (La actualización a una versión nueva se
+  verá con la próxima versión del Cuadro: usa el mismo camino ya probado en la #76.)
+- ✅ Revit 2026 y 2027: abre, se conecta a la API, sin aviso de duplicado; el `.addin` viejo se retiró.
+
+### Pendiente
+
+- Pedir que se cambie la `API_KEY` (hallazgo 1).
+- Avisar que el desarrollo del Cuadro sigue en `addins/cuadro-cantidades/` del monorepo.
+- Repartir el `.env` a los usuarios: va en `%APPDATA%\CQEING_CuadroCantidades\.env`.
