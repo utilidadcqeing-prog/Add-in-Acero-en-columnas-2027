@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>CQEING Cuadro de Cantidades</Name>
+    <!-- El gestor reescribe esta ruta como absoluta a la carpeta de la versión instalada. -->
+    <Assembly>CQEING_CuadroCantidades.dll</Assembly>
+    <!-- El mismo id que la instalación vieja (Instalar.bat): el gestor retira ese .addin, así que no se duplica. -->
+    <AddInId>6B1E1591-19F5-46C4-B880-35F2ED80D2EC</AddInId>
+    <FullClassName>CQEING_CuadroCantidades.App.RevitApplication</FullClassName>
+    <VendorId>CQEI</VendorId>
+    <VendorDescription>CQEING</VendorDescription>
+  </AddIn>
+</RevitAddIns>

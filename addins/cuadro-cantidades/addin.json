@@ -1,0 +1,8 @@
+{
+  "id": "cuadro-cantidades",
+  "nombre": "Cuadro de cantidades",
+  "descripcion": "Cantidades del modelo por actividad del presupuesto, con imágenes para la web.",
+  "proyecto": "CQEING_CuadroCantidades.csproj",
+  "revit": ["2026", "2027"],
+  "heredados": ["CQEING_CuadroCantidades.addin"]
+}
