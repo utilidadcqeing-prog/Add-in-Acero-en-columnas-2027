@@ -557,10 +557,14 @@ La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servi
 **Interfaces:**
 - Produce: `internal static class FiltrosColor { public static void Aplicar(Document doc, IEnumerable<View> vistas, IEnumerable<int> diametros, Reglas r); }`
 
-- [ ] **Paso 1: prueba que falla.** `ColoresDiametroTests.Rgb`: `Rgb(5)` = `(0xD3, 0x2F, 0x2F)`; `Rgb(99)` da el de `SinColor`.
-- [ ] **Paso 2:** correr → falla; implementar `Rgb`; correr → pasa.
-- [ ] **Paso 3:** implementar `FiltrosColor` (decisión 9). Si el filtro ya existe, se actualiza su color, no se crea otro. Se aplica a la vista activa y a `AccionesRevit.Nombre3d` si existe.
-- [ ] **Paso 4: en Revit.** El #5 sale rojo y el #4 naranja en planta, alzado y 3D, y regenerar no duplica filtros.
+- [x] **Paso 1: prueba que falla.** `ColoresDiametroTests.Rgb`: `Rgb(5)` = `(0xD3, 0x2F, 0x2F)`; `Rgb(99)` da el de `SinColor`.
+- [x] **Paso 2:** correr → falla; implementar `Rgb`; correr → pasa.
+- [x] **Paso 3:** implementar `FiltrosColor` (decisión 9). Si el filtro ya existe, se actualiza su color, no se crea otro. Se aplica a la vista activa y a `AccionesRevit.Nombre3d` si existe. Hecho (2026-10-19), compila para 2026 y 2027, desplegado en 2026. Cómo quedó:
+  - recibe `TiposAcero` en vez de `Reglas`: la regla usa el diámetro nominal del tipo de barra del modelo (`REBAR_BAR_DIAMETER`, tolerancia 0.5 mm), que es el que lleva la barra;
+  - color en líneas de proyección y de corte, y relleno sólido en superficie y corte;
+  - corre dentro de la transacción de generar: un Ctrl+Z también quita los filtros nuevos;
+  - una vista cuya plantilla controla los filtros no se toca y el resumen lo dice; una hoja o una tabla se saltan.
+- [x] **Paso 4: en Revit.** El #5 sale rojo y el #4 naranja en planta, alzado y 3D, y regenerar no duplica filtros. Probado (2026-10-19, por MCP): "CQEING Acero #3" agarra los 25 estribos (10 B 400 S, B8860B) y "CQEING Acero #5" las 16 barras (16 B 400 S, D32F2F); un solo filtro por diámetro, aplicado a `{3D}` y a "CQEING Vigas 3D". Juan dio la tarea por lista. Las demás vistas toman el color cuando los filtros se meten en su plantilla.
 - [ ] **Paso 5:** commit `feat(vigas): colores por diámetro en Revit (#85)`.
 
 ### Tarea 10: el botón en la página

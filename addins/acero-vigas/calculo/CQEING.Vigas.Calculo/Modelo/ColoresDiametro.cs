@@ -24,4 +24,11 @@ public static class ColoresDiametro
 
     /// <summary>El color de <paramref name="diametro"/> (en octavos de pulgada), como <c>"#D32F2F"</c>.</summary>
     public static string De(int diametro) => Tabla.GetValueOrDefault(diametro, SinColor);
+
+    /// <summary>El mismo color en sus tres canales, para los filtros de vista de Revit.</summary>
+    public static (byte R, byte G, byte B) Rgb(int diametro)
+    {
+        int n = Convert.ToInt32(De(diametro)[1..], 16);
+        return ((byte)(n >> 16), (byte)(n >> 8), (byte)n);
+    }
 }

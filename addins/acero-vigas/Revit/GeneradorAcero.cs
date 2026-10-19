@@ -3,6 +3,7 @@ using Autodesk.Revit.DB.Structure;
 using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Tablero;
+using CQEING.Vigas.Tablero;
 
 namespace CQEING.Vigas.Revit;
 
@@ -76,6 +77,13 @@ internal static class GeneradorAcero
             volteados |= CreadorEstribos.CorregirAbierto(conjunto, p.Ubicacion, g);
         if (volteados)
             doc.Regenerate();
+
+        // Colores por diámetro (decisión 9) en la vista activa y en la 3D del tablero, dentro de la misma transacción.
+        IEnumerable<int> diametros = creadas.Select(c => c.Pieza.Diametro).Concat(estribos.Select(e => e.Grupo.Diametro));
+        View[] vistas = new[] { doc.ActiveView }
+            .Concat(new FilteredElementCollector(doc).OfClass(typeof(View3D)).Cast<View>().Where(v => !v.IsTemplate && v.Name == AccionesRevit.Nombre3d))
+            .OfType<View>().ToArray();
+        fallas.AddRange(FiltrosColor.Aplicar(doc, vistas, diametros, tipos));
 
         // Lo que Revit rechace al confirmar se quita y se anota (ver ManejoDeFallas), sin cuadros de error.
         manejo.Nuestras = creadas.ToDictionary(c => c.Barra.Id, c => $"{c.Pieza.Pieza} ({c.Portico.Id})")
