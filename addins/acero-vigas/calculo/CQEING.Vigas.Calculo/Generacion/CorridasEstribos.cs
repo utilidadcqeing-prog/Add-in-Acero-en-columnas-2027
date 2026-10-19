@@ -1,3 +1,5 @@
+using CQEING.Vigas.Calculo.Modelo;
+
 namespace CQEING.Vigas.Calculo.Generacion;
 
 /// <summary>
@@ -13,6 +15,27 @@ public sealed record Corrida(double Primero, int Cantidad, double Separacion);
 /// </summary>
 public static class CorridasEstribos
 {
+    /// <summary>
+    /// Una corrida por zona del motor (<c>DistribuidorEstribos.Zonas</c>), como el rótulo del tablero: el estribo que
+    /// comparten una zona y el centro es de la zona (hallazgo E6). Se reparten primero las zonas junto a las columnas.
+    /// Si alguna posición queda fuera de las zonas, se vuelve a <see cref="Partir"/>, que no pierde ninguna.
+    /// </summary>
+    public static IReadOnlyList<Corrida> PorZonas(IReadOnlyList<double> posiciones, IReadOnlyList<ZonaTramo> zonas, double tolerancia = 1)
+    {
+        var libres = posiciones.ToList();
+        var suyas = new List<double>[zonas.Count];
+        foreach (int i in Enumerable.Range(0, zonas.Count).OrderByDescending(i => zonas[i].Junta))
+        {
+            suyas[i] = libres.Where(x => x >= zonas[i].Desde - tolerancia && x <= zonas[i].Hasta + tolerancia).ToList();
+            suyas[i].ForEach(x => libres.Remove(x));
+        }
+        if (libres.Count > 0)
+            return Partir(posiciones, tolerancia);
+        return suyas.Where(s => s.Count > 0)
+            .Select(s => new Corrida(s[0], s.Count, s.Count > 1 ? (s[^1] - s[0]) / (s.Count - 1) : 0))
+            .ToList();
+    }
+
     /// <param name="posiciones">De menor a mayor, como las da el motor de estribos.</param>
     /// <param name="tolerancia">Cuánto puede variar una separación dentro de la misma corrida, en mm.</param>
     public static IReadOnlyList<Corrida> Partir(IReadOnlyList<double> posiciones, double tolerancia = 1)

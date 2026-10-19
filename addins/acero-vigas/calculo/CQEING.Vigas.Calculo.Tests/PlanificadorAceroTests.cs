@@ -168,7 +168,12 @@ public class PlanificadorAceroTests
         {
             List<GrupoEstribos> grupos = plan.Estribos.Where(g => g.Pieza == e.Id && g.Tramo == e.Tramo).ToList();
             EstriboEnSeccion caras = c.Estribos.EnSeccion.Single(s => s.Id == e.Id);
-            Assert.Equal(CorridasEstribos.Partir(e.Posiciones), grupos.Select(g => g.Corrida));
+            // Por zonas (hallazgo E6): las mismas posiciones, y en una luz las dos zonas con la misma cantidad.
+            List<double> rehechas = grupos.SelectMany(g => Enumerable.Range(0, g.Corrida.Cantidad).Select(k => g.Corrida.Primero + k * g.Corrida.Separacion)).ToList();
+            Assert.Equal(e.Posiciones.Count, rehechas.Count);
+            Assert.All(e.Posiciones.Zip(rehechas), z => Assert.Equal(z.First, z.Second, 1));
+            if (!e.Tramo.StartsWith("Voladizo") && grupos.Count == 3)
+                Assert.Equal(grupos[0].Corrida.Cantidad, grupos[2].Corrida.Cantidad);
             Assert.All(grupos, g => Assert.Equal((e.Tipo, e.Diametro, e.Gancho, caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba),
                 (g.Tipo, g.Diametro, g.Gancho, g.Izquierda, g.Derecha, g.Abajo, g.Arriba)));
         }

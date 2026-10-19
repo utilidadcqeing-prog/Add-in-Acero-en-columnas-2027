@@ -1,3 +1,4 @@
+using CQEING.Vigas.Calculo.Estribos;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
 using CQEING.Vigas.Calculo.Seccion;
@@ -51,20 +52,29 @@ public static class PlanificadorAcero
                 b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
         }
 
-        List<GrupoEstribos> estribos = Estribos(c.Estribos, u);
+        List<GrupoEstribos> estribos = Estribos(c, p.Portico, o.Estribos, r, u);
         List<int> diametros = barras.Concat(bastones).Select(x => x.Diametro).Concat(estribos.Select(e => e.Diametro)).Distinct().Order().ToList();
         return new PlanAcero(idPortico, barras, bastones, sinLugar, estribos, diametros);
     }
 
-    /// <summary>Una corrida por cada tramo y estribo, con las caras del corte (las mismas en todo el pórtico).</summary>
-    private static List<GrupoEstribos> Estribos(ResultadoEstribos re, UbicacionPortico u)
+    /// <summary>
+    /// Una corrida por cada zona de cada tramo y estribo (hallazgo E6: como el rótulo del tablero), con las caras del corte
+    /// (las mismas en todo el pórtico). La configuración de cada tramo es la suya si está marcado, o la general.
+    /// </summary>
+    private static List<GrupoEstribos> Estribos(PorticoCalculado calculo, Portico portico, ConfigEstribos general, Reglas r, UbicacionPortico u)
     {
+        ResultadoEstribos re = calculo.Estribos;
+        Dictionary<string, Tramo> tramos = DistribuidorEstribos.Tramos(portico).ToDictionary(t => t.Nombre);
         var grupos = new List<GrupoEstribos>();
         foreach (EstriboEnPortico e in re.Estribos)
         {
             if (re.EnSeccion.FirstOrDefault(s => s.Id == e.Id) is not { } caras)
                 continue;
-            grupos.AddRange(CorridasEstribos.Partir(e.Posiciones).Select(c => new GrupoEstribos(e.Id, e.Tramo, e.Tipo, e.Diametro, e.Gancho,
+            ConfigEstribos config = calculo.PorTramo?.GetValueOrDefault(e.Tramo) ?? general;
+            IReadOnlyList<Corrida> corridas = tramos.TryGetValue(e.Tramo, out Tramo? tramo)
+                ? CorridasEstribos.PorZonas(e.Posiciones, DistribuidorEstribos.Zonas(tramo, config, r.PorDiametro[config.Diametro].Diametro))
+                : CorridasEstribos.Partir(e.Posiciones);
+            grupos.AddRange(corridas.Select(c => new GrupoEstribos(e.Id, e.Tramo, e.Tipo, e.Diametro, e.Gancho,
                 caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba, c,
                 MarcoPortico.VigaEn(u, c.Primero + (c.Cantidad - 1) * c.Separacion / 2) ?? throw new InvalidOperationException("El pórtico no tiene vigas."))));
         }
