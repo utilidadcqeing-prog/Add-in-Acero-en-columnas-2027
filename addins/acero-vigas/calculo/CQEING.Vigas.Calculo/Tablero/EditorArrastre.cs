@@ -22,7 +22,7 @@ public static class EditorArrastre
         var g = new GeometriaPortico(e.Portico, e.RecubrimientoPuntas);
         SolucionCapa? capa = new[] { r.Superior, r.Inferior }.FirstOrDefault(c => c?.Barras.Any(b => b.Id == elemento) == true);
         if (capa is not null)
-            return DeBarra(e.Reglas, g, capa, elemento, punto);
+            return DeBarra(e.Reglas, MotorVigas.GeometriaDe(e, capa.Capa, g), capa, elemento, punto);
         Baston? baston = r.Bastones.FirstOrDefault(b => b.Id == elemento);
         return baston is null ? [] : DeBaston(e, g, baston, punto);
     }

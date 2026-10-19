@@ -5,8 +5,8 @@ namespace CQEING.Vigas.Calculo.Tests;
 public class AvisosTests
 {
     /// <summary>
-    /// La maqueta con el eje D en 11.55 m. Si la capa de abajo traslapa al final de la luz, I3–I4 queda en 1.272
-    /// (0.372 sobre el mínimo) porque I4 entra al voladizo y solo puede crecer; al inicio de la luz ningún traslapo
+    /// La maqueta con el eje D en 11.55 m. Si la capa de abajo traslapa al final de la luz, I3–I4 queda en 1.288
+    /// (0.388 sobre el mínimo) porque I4 entra al voladizo y solo puede crecer; al inicio de la luz ningún traslapo
     /// pasa de 0.30 y se gasta un módulo menos: 0.50 × 3 × 1.552 = 4.656 kg.
     /// </summary>
     private static EntradaVigas DEnOnceCincuenta(Cara? cara) => new(
@@ -20,7 +20,7 @@ public class AvisosTests
         ResultadoVigas r = MotorVigas.Calcular(DEnOnceCincuenta(Cara.Final));
 
         Aviso aviso = Assert.Single(r.Avisos, EsTraslapoLargoDeAbajo);
-        Assert.Equal(("I3–I4", 1272, 372, CausaAviso.VecinaDeFrontera), (aviso.Elemento, aviso.Largo, aviso.Exceso, aviso.Causa));
+        Assert.Equal(("I3–I4", 1288, 388, CausaAviso.VecinaDeFrontera), (aviso.Elemento, aviso.Largo, aviso.Exceso, aviso.Causa));
         Assert.NotNull(aviso.Alternativa);
         Assert.Equal(Cara.Inicio, aviso.Alternativa.Cara);
         Assert.True(aviso.Alternativa.LoEvita);

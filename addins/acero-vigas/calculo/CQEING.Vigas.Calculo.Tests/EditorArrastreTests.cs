@@ -92,7 +92,7 @@ public class EditorArrastreTests
 
         IReadOnlyList<Salto> saltos = Saltos(e, "I3", PuntoArrastre.Izquierda);
 
-        Salto alVoladizo = saltos.Single(s => s.X == 7.228);
+        Salto alVoladizo = saltos.Single(s => s.X == 7.212);
         Assert.True(alVoladizo.EnVoladizo);
         Assert.True(alVoladizo.Cambios[0].EnVoladizo);
         Assert.DoesNotContain(saltos, s => s.X is > 5.5 and < 7.0);
@@ -103,12 +103,12 @@ public class EditorArrastreTests
     public void DentroDelVoladizoNoVuelveAPreguntar()
     {
         var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 6800)], VoladizoFinal: 2500);
-        EntradaVigas e = Maqueta(new CambiosManuales(Movidos: new Dictionary<string, TraslapoMovido> { ["I2–I3"] = new(7228, true) }))
+        EntradaVigas e = Maqueta(new CambiosManuales(Movidos: new Dictionary<string, TraslapoMovido> { ["I2–I3"] = new(7212, true) }))
             with { Portico = portico, CaraElegida = Cara.Final };
 
         IReadOnlyList<Salto> saltos = Saltos(e, "I3", PuntoArrastre.Izquierda);
 
-        Salto otro = saltos.Single(s => s.X == 7.728);
+        Salto otro = saltos.Single(s => s.X == 7.712);
         Assert.False(otro.EnVoladizo);
         Assert.True(otro.Cambios[0].EnVoladizo);
     }

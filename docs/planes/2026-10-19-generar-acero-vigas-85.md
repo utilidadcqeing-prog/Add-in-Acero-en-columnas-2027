@@ -225,6 +225,13 @@ Resumen que mostró el tablero: *"Se generó el acero de 1 pórtico: 32 barras, 
 - Ninguna barra corrida ni bastón queda atada a un estribo.
 - **Ojo:** después de generar, la viga 392694 (C N+6.70) quedó corrida (+5.7 mm en X, −18.6 en Y; caras en 3250.7 y 3500.7, la de abajo en 3245 y 3495). El acero se generó con la viga en el eje C (centro 3370) y no se movió con ella. Con la viga corrida, el add-in ya no la reconoce como pórtico (sale en los avisos). Hay que devolverla al eje antes de regenerar.
 
+### Décima prueba en Revit: ganchos de arriba y de abajo superpuestos (2026-10-19, pórticos C N+3.70 y N+6.70)
+
+| # | Hallazgo | Motivo / estado |
+|---|---|---|
+| E18 | **La pata del gancho de arriba y la de abajo de la misma punta quedan en el mismo eje.** En la punta del voladizo 1 (Y −1233), S1 baja de 6603 a 6339 e I1 sube de 6447 a 6711, las dos en X 3302.4, 3370.0 y 3437.6: 156 mm de barra de 16 mm en el mismo lugar. S4 e I4 hacen lo mismo en la otra punta. | Las dos capas terminaban en el mismo borde (`GeometriaPortico.InicioBarras` y `FinBarras`) y cada gancho dobla hacia adentro. **✅ en código** (Juan: "opción 1", ganchos anidados): `MotorVigas.GeometriaDe` hace terminar la capa de abajo la mitad del diámetro de arriba más la mitad del de abajo antes (16 mm con #5 y #5). Su pata queda pegada por dentro a la de arriba. El núcleo deja el largo en múltiplo como siempre: lo absorben los traslapos de abajo (I3–I4 de la maqueta pasa de 1.272 a 1.288). `EditorArrastre` usa el mismo borde por capa. Falta verlo en Revit. |
+| — | Los ganchos siguen saliendo de la viga (S1 baja hasta 6339, por debajo de la cara inferior en 6350). | Es el "gancho que no cabe", pendiente con Carlos. |
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
@@ -575,10 +582,12 @@ La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servi
 - Modificar: `addins/acero-vigas/Tablero/web/demo.js` (los mismos campos en la demostración)
 - Actualizar la maqueta con la tarjeta de confirmación y el resumen, antes de tocar la página (regla de #100: la maqueta es la referencia).
 
-- [ ] **Paso 1:** la tarjeta de confirmación de la decisión 4, con el estilo de las tarjetas de aviso de la maqueta. **Generar** envía `{tipo:'generar', ids}`.
-- [ ] **Paso 2:** al llegar `generado`, el aviso de la maqueta con el resumen: *"Se generaron 2 pórticos: 48 barras, 7 bastones y 112 estribos."* y, si hay, las fallas, los saltados y las diferencias de largo con Revit, una por línea.
-- [ ] **Paso 3:** las listas de diámetros muestran solo `diametrosDisponibles`, con su texto en pulgadas como hoy.
-- [ ] **Paso 4: en Revit.** Ningún texto se corta ni se parte en dos líneas; sin scroll (#100).
+> 2026-10-19, Juan: "sin tocar maqueta ni nada que sea aquí". La maqueta no se actualiza en esta tarea: la tarjeta de confirmación copia el estilo de la del voladizo, que ya está en la maqueta.
+
+- [x] **Paso 1:** la tarjeta de confirmación de la decisión 4, con el estilo de las tarjetas de aviso de la maqueta. **Generar** envía `{tipo:'generar', ids}`. Con la lista filtrada por "Seleccionar en Revit" van todos los de la lista; si no, el pórtico abierto. Texto: *"Se generará el acero de Pórtico C. Lo que el add-in generó antes en él se reemplaza."* o *"…de 3 pórticos. … en ellos se reemplaza."*
+- [x] **Paso 2:** al llegar `generado`, el aviso de la maqueta con el resumen: *"Se generaron 2 pórticos: 48 barras, 7 bastones y 112 estribos."* y, si hay, las fallas, los saltados y las diferencias de largo con Revit, una por línea. (Ya estaba desde la tarea 5; abrir la confirmación cierra el resumen anterior.)
+- [x] **Paso 3:** las listas de diámetros muestran solo `diametrosDisponibles`, con su texto en pulgadas como hoy. Barras del #3 al #8, bastones del #3 al #8 y estribo #3 y #4; el elegido se queda aunque el modelo no tenga su tipo. La demostración trae del #3 al #8 y responde a `generar`.
+- [x] **Paso 4: en Revit.** Ningún texto se corta ni se parte en dos líneas; sin scroll (#100). Juan: "parece todo bien" (2026-10-19).
 - [ ] **Paso 5:** commit `feat(vigas): Generar en Revit desde el tablero (#85)`.
 
 ### Tarea 11: prueba de aceptación en Revit

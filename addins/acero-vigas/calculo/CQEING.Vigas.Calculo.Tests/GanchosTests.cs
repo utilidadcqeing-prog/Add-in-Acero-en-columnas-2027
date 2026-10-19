@@ -30,6 +30,20 @@ public class GanchosTests
     }
 
     [Fact]
+    public void LosGanchosDeAbajoQuedanAnidadosDentroDeLosDeArriba()
+    {
+        // #85, novena prueba en Revit: con las dos capas hasta el mismo borde, la pata del gancho de arriba y la de abajo
+        // quedaban en el mismo punto. La de abajo termina un diámetro antes (centro a centro: la mitad de cada uno).
+        ResultadoVigas r = MotorVigas.Calcular(Entrada());
+        (int Desde, int Hasta) Puntas(Posicion capa) =>
+            (r.Barras.Where(b => b.Capa == capa).Min(b => b.Desde), r.Barras.Where(b => b.Capa == capa).Max(b => b.Hasta));
+
+        Assert.Equal((-150, 13950), Puntas(Posicion.Superior));
+        Assert.Equal((-150 + 16, 13950 - 16), Puntas(Posicion.Inferior));
+        Assert.All(r.Barras, b => Assert.Equal(0, b.Largo % 500));
+    }
+
+    [Fact]
     public void Gancho180EnElInicioCambiaElLargoYSigueEnMultiplo()
     {
         Barra antes = Barra(MotorVigas.Calcular(Entrada()), "S1");

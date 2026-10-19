@@ -280,7 +280,7 @@ public class ArmadorVistaTests
         VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico));
 
         AvisoVista a = Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('I'));
-        Assert.Equal("El traslapo I3–I4 queda en 1.27, 0.37 por encima del mínimo. I4 termina en el voladizo y solo puede crecer. "
+        Assert.Equal("El traslapo I3–I4 queda en 1.29, 0.39 por encima del mínimo. I4 termina en el voladizo y solo puede crecer. "
             + "Si el traslapo va al inicio de la luz no pasa, y además se ahorran 5 kg.", a.Texto);
     }
 
