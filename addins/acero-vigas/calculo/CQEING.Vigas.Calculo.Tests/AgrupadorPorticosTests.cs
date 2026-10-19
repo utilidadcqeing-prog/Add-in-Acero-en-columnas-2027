@@ -215,11 +215,12 @@ public class AgrupadorPorticosTests
     [Fact]
     public void UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla()
     {
-        // Viga al borde de las columnas: su línea queda a 150 mm del eje 1, que sí pasa por el centro de las columnas.
+        // Como los ejes A y C del modelo de Carlos: viga de 25 justificada a un lado, con su línea en la cara de las
+        // columnas de 25 y a 125 mm del eje 1, que sí pasa por el centro de las columnas.
         ModeloLeido m = EjeUnoPiso2() with
         {
-            Vigas = [Viga("v1", 0, 3500, 3500, Piso2, y: 150), Viga("v2", 3500, 7000, 3500, Piso2, y: 150)],
-            Apoyos = [Columna("c1", 0, 0, 400, 0, 3500), Columna("c2", 3500, 0, 400, 0, 3500), Columna("c3", 7000, 0, 400, 0, 3500)],
+            Vigas = [Viga("v1", 0, 3500, 3500, Piso2, y: -125), Viga("v2", 3500, 7000, 3500, Piso2, y: -125)],
+            Apoyos = [Columna("c1", 0, 0, 250, 0, 3500), Columna("c2", 3500, 0, 250, 0, 3500), Columna("c3", 7000, 0, 250, 0, 3500)],
         };
 
         ResultadoLectura r = AgrupadorPorticos.Agrupar(m);

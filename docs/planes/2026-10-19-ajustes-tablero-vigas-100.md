@@ -75,7 +75,7 @@
 
 ## Hallazgos del código
 
-1. **"Pórtico sin eje"** sale cuando ninguna rejilla es **colineal** con la línea de vigas a 50 mm o menos (`AgrupadorPorticos.cs:36` y `51`, `ToleranciaLinea = 50`). Si la viga está corrida del eje (al borde de la columna, excéntrica), no lo encuentra aunque la rejilla pase por todas sus columnas. **Hipótesis**, se confirma con el modelo de Carlos antes de programar.
+1. **"Pórtico sin eje"** sale cuando ninguna rejilla es **colineal** con la línea de vigas a 50 mm o menos (`AgrupadorPorticos.cs:36` y `51`, `ToleranciaLinea = 50`). Si la viga está corrida del eje (al borde de la columna, excéntrica), no lo encuentra aunque la rejilla pase por todas sus columnas. **Confirmado** en el modelo de Carlos (`PROY_JULIO_BETO`, 19-oct): las vigas `VIG_25X35` de los ejes **A** y **C** (niveles N+3.70 y N+6.70) están justificadas a la izquierda / derecha, con su línea en la cara de las columnas `COL_25X30` y a **125 mm** de la rejilla, que pasa por el centro de las columnas. Las de B y 1–4 van centradas (0 mm). Las viguetas `VT_10X35` / `VB_10X35` no van sobre ningún eje y siguen "sin eje".
 2. **Voladizo como columna:** una viga que cruza la línea cuenta como apoyo si una viga del pórtico **termina sobre ella** sin columna ni muro (`TerminaSobre`, `AgrupadorPorticos.cs:260`). La viga de borde en la punta de un voladizo cumple eso, así que el voladizo queda como luz y su punta como apoyo. **Hipótesis**, se confirma con el modelo de Carlos.
 3. Además el alzado pinta **todo** apoyo como columna de alto completo (`alzado.js:349`), aunque `PorticoLeido.TiposDeApoyo` dice si es columna, muro o viga.
 4. Grosor: los trazos están dentro del `scale(z)` (`alzado.js:279`). `vector-effect="non-scaling-stroke"` deja el grosor fijo sin tocar la geometría. Los textos también crecen (pregunta 1).
@@ -156,7 +156,7 @@
 
 **Archivos:** `calculo/CQEING.Vigas.Calculo/Porticos/AgrupadorPorticos.cs`, `calculo/CQEING.Vigas.Calculo.Tests/AgrupadorPorticosTests.cs`.
 
-- [ ] **Paso 1:** abrir el modelo de Carlos y medir por el MCP de Revit la distancia entre la línea de las vigas del eje A y su rejilla. Anotar en Hallazgos si confirma el hallazgo 1 o es otra cosa.
+- [x] **Paso 1:** abrir el modelo de Carlos y medir por el MCP de Revit la distancia entre la línea de las vigas del eje A y su rejilla. Anotar en Hallazgos si confirma el hallazgo 1 o es otra cosa.
 - [x] **Paso 2:** pruebas que fallan: `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` (viga a 150 mm del eje, columnas centradas en el eje) y `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma`.
 - [x] **Paso 3:** en `Agrupar`, si no hay eje colineal, buscar la rejilla paralela más cercana que pase por dentro de las huellas de los apoyos (decisión 2).
 - [x] **Paso 4:** `rtk dotnet test CQEING-Addins.sln -c Release` en verde. Commit `fix(vigas): el pórtico toma el nombre de la rejilla aunque la viga esté corrida del eje (#100)`.
@@ -292,7 +292,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - No está en la maqueta: el apoyo que es viga (decisión 4), porque la maqueta no tiene ese caso.
 - [ ] Fase A (tareas 1–2).
   - Tarea 1 (pasos 2–4): `EjeQuePasaPorLosApoyos` toma la rejilla paralela más cercana que pasa por dentro de **todas** las columnas y muros del pórtico (no cuenta las vigas que cruzan). `Soporte` guarda también su rango de lado a lado (`NormalDesde`–`NormalHasta`); `Unir` junta esos rangos. `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma` pasó desde el inicio: queda como guarda para que el arreglo no tome ejes de más. 578 pruebas en verde.
-  - Pendiente el **paso 1**: Revit no respondía por el MCP el 19-oct. Falta medir en el modelo de Carlos si el eje A es una viga corrida del eje (hallazgo 1); si es otra cosa, este arreglo no basta.
+  - Paso 1 hecho después del commit del arreglo (Revit no respondía al principio): el hallazgo 1 se confirma en el modelo de Carlos (ejes A y C a 125 mm). La prueba `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` pasó a usar ese caso exacto: viga de 25 con su línea en la cara de columnas de 25.
 - [ ] Fase B (tareas 3–5).
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
