@@ -191,6 +191,8 @@
       if (ap.length && p.fin > ap[ap.length - 1].caraDerecha + 1e-9) vols.push({ a: ap[ap.length - 1].caraDerecha, z: p.fin });
       const vol = vols.map((o) => ({ x: X(o.a), w: X(o.z) - X(o.a), lx: X((o.a + o.z) / 2), lt: 'voladizo ' + f2(o.z - o.a) }));
       const ejes = ap.map((a) => ({ x: X(a.x), eje: a.eje }));
+      // capa "Sección de columnas" (decisión 13): ancho × fondo debajo de cada columna; el ancho ya se ve en el dibujo
+      const colSecs = capas.colsec ? ap.filter((a) => a.seccion).map((a) => ({ x: X(a.x), t: a.seccion })) : [];
 
       // corte 1-1 (#91): la línea se arrastra y se pega a los tramos permitidos que manda C#; la franja muestra la
       // profundidad hacia el lado que mira y las flechas, hacia dónde mira.
@@ -322,7 +324,7 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, yE, secs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
+        b, l, t, st, yE, secs, colSecs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
         hdMove: (e) => {
           const h = this.state.hd;
@@ -421,6 +423,7 @@
       ${v.l.map((x) => texto(x.lx, x.ly, x.lt, '#3F4A57', 9, 600))}
       ${v.t.map((x) => texto(x.lx, x.ly, x.lt, x.col, 9, 400))}
       ${v.b.map(rotulo)}` : null}
+      ${v.colSecs.map((c) => texto(c.x, 176, c.t, '#3F4A57', 9, 500))}
       ${v.fantasma ? html`<text x="${v.fantasma.lx}" y="${v.fantasma.ly}" text-anchor="middle" font-size="${12 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.fantasma.col}" stroke="#FAFBFC" stroke-width="${4 * k}" paint-order="stroke" pointer-events="none">${v.fantasma.lt}</text>` : null}
       <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
       ${v.corteOn ? html`

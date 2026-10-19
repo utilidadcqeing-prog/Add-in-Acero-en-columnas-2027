@@ -118,7 +118,8 @@ public static class AgrupadorPorticos
 
         return new PorticoLeido(nombre, eje, nivel?.Nombre, TipoDe(nivel),
             new Portico(apoyos, voladizoInicio, voladizoFinal),
-            soportes.Select(s => s.Tipo).ToList(), tramos, cadena.Select(t => t.Viga.Id).ToList());
+            soportes.Select(s => s.Tipo).ToList(), tramos, cadena.Select(t => t.Viga.Id).ToList(),
+            soportes.Select(s => Math.Round(s.NormalHasta - s.NormalDesde)).ToList());
 
         TramoLeido Tramo(string nombreTramo, double a, double b, bool voladizo)
         {

@@ -332,7 +332,8 @@
         .sort((p, q) => q - p).map((d) => ({ nombre: '#' + d, color: colorDe(d), nombrePulgadas: PULG[d] }));
       return {
         id, tipo, inicio: G.inicio, fin: G.fin,
-        apoyos: G.apoyos.map(([eje, x, caraIzquierda, caraDerecha]) => ({ eje, x, caraIzquierda, caraDerecha })),
+        apoyos: G.apoyos.map(([eje, x, caraIzquierda, caraDerecha]) => ({ eje, x, caraIzquierda, caraDerecha,
+          seccion: Math.round((caraDerecha - caraIzquierda) * 100) + '×40' })),
         barras, traslapos, bastones: bastones.map(({ n, diametro, ...b }) => b), diametros,
         zonas, secciones,
         superior: sup, inferior: inf,

@@ -147,6 +147,20 @@ public class AgrupadorPorticosTests
     }
 
     [Fact]
+    public void CadaApoyoTraeSuFondo_LoQueMideDeLadoALado()
+    {
+        // Columnas de 400 a lo largo de la viga y 500 de lado a lado (decisión 13 del plan de #100).
+        static ApoyoLeido Rect(string id, double x) =>
+            new(id, TipoApoyo.Columna, [new(x - 200, -250), new(x + 200, -250), new(x + 200, 250), new(x - 200, 250)], 0, 3500);
+        var modelo = new ModeloLeido(Ejes, [Viga("v1", 0, 3500, 3500, Piso2)], [Rect("c1", 0), Rect("c2", 3500)]);
+
+        PorticoLeido p = Assert.Single(AgrupadorPorticos.Agrupar(modelo).Porticos);
+
+        Assert.Equal([500.0, 500.0], p.FondosDeApoyo!);
+        Assert.Equal(400, p.Portico.Apoyos[0].CaraDerecha - p.Portico.Apoyos[0].CaraIzquierda);
+    }
+
+    [Fact]
     public void LaVigaDeBordeDeUnVoladizoNoEsApoyo()
     {
         // Como el eje A del modelo de Carlos: pasada la última columna (5), la viga sigue hasta 5000 y en la punta

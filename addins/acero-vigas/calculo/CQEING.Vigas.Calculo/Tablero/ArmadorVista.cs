@@ -35,8 +35,13 @@ public static class ArmadorVista
         TipoViga tipo = o.Tipo ?? p.Tipo;
         Portico portico = p.Portico;
         var avisos = new List<Aviso>();
-        var apoyos = portico.Apoyos.Select((a, i) => new ApoyoVista(a.Eje, M(a.PosicionEje), M(a.CaraIzquierda), M(a.CaraDerecha),
-            i < p.TiposDeApoyo.Count && p.TiposDeApoyo[i] == TipoApoyo.Viga)).ToList();
+        var apoyos = portico.Apoyos.Select((a, i) =>
+        {
+            bool esViga = i < p.TiposDeApoyo.Count && p.TiposDeApoyo[i] == TipoApoyo.Viga;
+            string seccion = !esViga && p.FondosDeApoyo is { } fondos && i < fondos.Count
+                ? $"{F((a.CaraDerecha - a.CaraIzquierda) / 10.0, "0.#")}×{F(fondos[i] / 10, "0.#")}" : "";
+            return new ApoyoVista(a.Eje, M(a.PosicionEje), M(a.CaraIzquierda), M(a.CaraDerecha), esViga, seccion);
+        }).ToList();
         double inicio = M(portico.Apoyos[0].CaraIzquierda - portico.VoladizoInicio);
         double fin = M(portico.Apoyos[^1].CaraDerecha + portico.VoladizoFinal);
 

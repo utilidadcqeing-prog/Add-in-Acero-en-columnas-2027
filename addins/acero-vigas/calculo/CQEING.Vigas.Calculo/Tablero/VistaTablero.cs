@@ -22,8 +22,10 @@ public sealed record TramoEnLista(string Id, string Nombre, double Desde, double
 /// <summary>
 /// Un apoyo en el alzado: la x de su eje y de sus caras. <paramref name="EsViga"/>: una viga que cruza; se dibuja como
 /// su sección y no como columna (decisión 4 del plan docs/planes/2026-10-19-ajustes-tablero-vigas-100.md).
+/// <paramref name="Seccion"/>: ancho × fondo en cm, como <c>"40×50"</c>, para la capa "Sección de columnas" (decisión
+/// 13); vacía en un apoyo que es viga o si no se sabe el fondo.
 /// </summary>
-public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, double CaraDerecha, bool EsViga = false);
+public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, double CaraDerecha, bool EsViga = false, string Seccion = "");
 
 /// <summary>
 /// Una barra corrida. <paramref name="Capa"/> es <c>"arriba"</c> o <c>"abajo"</c>; <paramref name="Recta"/> es como

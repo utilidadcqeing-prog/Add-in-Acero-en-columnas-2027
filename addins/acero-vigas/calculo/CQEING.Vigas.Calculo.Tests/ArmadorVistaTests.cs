@@ -122,6 +122,28 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void CadaColumnaTraeSuSeccionAnchoPorFondo()
+    {
+        PorticoLeido p = Portico1();
+        p = p with
+        {
+            TiposDeApoyo = [TipoApoyo.Columna, TipoApoyo.Viga, TipoApoyo.Columna, TipoApoyo.Columna],
+            FondosDeApoyo = [500, 300, 500, 450],
+        };
+
+        VistaPortico v = Armar(p: p);
+
+        // las columnas de la maqueta miden 400 a lo largo de la viga; la que es viga no lleva sección de columna
+        Assert.Equal(["40×50", "", "40×50", "40×45"], v.Apoyos.Select(a => a.Seccion));
+    }
+
+    [Fact]
+    public void SinFondosLaSeccionVaVacia()
+    {
+        Assert.All(Armar().Apoyos, a => Assert.Equal("", a.Seccion));
+    }
+
+    [Fact]
     public void UnApoyoQueEsVigaSeMarcaEnLaVista()
     {
         PorticoLeido p = Portico1();

@@ -242,9 +242,9 @@
 
 **Archivos:** `AgrupadorPorticos.cs` / `ModeloLeido.cs` (ancho y fondo del apoyo desde la huella), `ArmadorVista`, `alzado.js`, pruebas.
 
-- [ ] **Paso 1:** prueba: un apoyo de 400 × 500 trae `Ancho = 0.40` y `Fondo = 0.50`.
-- [ ] **Paso 2:** C# lo manda y el alzado pinta `40×50` debajo de cada columna, en la capa *Sección de columnas* (decisión 13).
-- [ ] **Paso 3:** pruebas en verde. Commit `feat(vigas): sección de las columnas como capa (#100)`.
+- [x] **Paso 1:** prueba: un apoyo de 400 × 500 trae `Ancho = 0.40` y `Fondo = 0.50`.
+- [x] **Paso 2:** C# lo manda y el alzado pinta `40×50` debajo de cada columna, en la capa *Sección de columnas* (decisión 13).
+- [x] **Paso 3:** pruebas en verde. Commit `feat(vigas): sección de las columnas como capa (#100)`.
 
 ### Tarea 11: altura dinámica
 
@@ -306,6 +306,8 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Tarea 8: `Rotulo.EnPulgadas` y `Rotulo.Pulgadas`; `Rotulo` / `RotuloPulgadas` en `BarraVista` y `BastonVista`; `TraslapoVista.Rotulo` (`"1.20"`); `ZonaEstribos` con `Cantidad` (`"8e#3"`), `CantidadPulgadas`, `Separacion` (`"@.10"`) y `Largo` (`"L=0.75"`); `VistaPortico.Secciones` (`SeccionEnAlzado`, `"30×50"` en la mitad de cada tramo, de `TramoLeido`). `DistribuidorEstribos.Zonas` cuenta los estribos de cada zona sobre las posiciones reales (el que comparte una zona con el centro es de la zona) y da la separación real: el centro reparte sin pasar de la suya, así que puede salir `@.17`. Ruling: como en la maqueta, `L=` va debajo junto a la separación (`@.10 L=0.75`), no al lado; el centro no lleva `L`; si todo el tramo va como zona, tampoco. En el alzado, los estribos dejan de dibujarse uno por uno: una línea por zona en y = 148 con rayitas, la cantidad encima y la separación debajo; la sección en y = 9; los textos con borde del fondo. 603 pruebas en verde. Falta verlo en Revit (Review Focus 3 y 4: la línea 1-1 sin rayas y los rótulos que se tapan en luces cortas).
 - [ ] Fase E (tareas 9–11).
   - Tarea 9: menú **Capas** igual al de la maqueta, junto al zoom. Se guarda en `localStorage` (`cqeing.vigas.capas`, con try/catch; sin almacenamiento dura lo que dure la página). Por defecto todo prendido salvo *Sección de columnas* (llega con la tarea 10). *Línea de media luz*: las líneas punteadas de cada luz. *Corte 1-1*: la franja, la línea, sus flechas, el "1-1" y la zona para agarrarla (apagada no se puede arrastrar). *Textos*: rótulos de barras, bastones, traslapos y la sección; las luces, los voladizos y los ejes quedan. *Estribos*: sus líneas y sus textos (los textos también se van con *Textos*). Interruptor `#4 · ½"`: rótulos, cantidad de estribos y leyenda; C# manda los dos textos (`DiametroVista.NombrePulgadas` nuevo). La rueda sobre el menú no hace zoom. El corte y el panel siguen en `#` (el interruptor es del alzado).
+  - Aparte (Juan, 19-oct, con captura): la lista de barras abierta toma todo el alto que sobra en la columna del centro, en vez de 150 px (commit `1341afa`).
+  - Tarea 10: `PorticoLeido.FondosDeApoyo` (mm, de lado a lado de la huella; `Unir` ya junta esos rangos) y `ApoyoVista.Seccion` = `"40×50"` (ancho a lo largo × fondo, en cm), en lugar de `Ancho` / `Fondo` sueltos: así el texto sale de C#. Vacía en un apoyo que es viga o sin fondos. El alzado la escribe en y = 176, debajo de cada columna, solo con la capa *Sección de columnas* prendida. 606 pruebas en verde.
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).
