@@ -28,7 +28,10 @@ internal static class GeneradorAcero
             return new ResumenGeneracion(0, 0, 0, 0, fallas, []);
 
         TiposAcero tipos = TiposAcero.Leer(doc, r);
+        RebarShape? formaEstribo = CreadorEstribos.FormaEstribo(doc);
+        var formasMalas = new HashSet<ElementId>();
         var creadas = new List<Creada>();
+        var estribos = new List<Rebar>();
         using var t = new Transaction(doc, NombreTransaccion);
         FailureHandlingOptions opciones = t.GetFailureHandlingOptions();
         opciones.SetFailuresPreprocessor(new SinAdvertencias());
@@ -47,6 +50,16 @@ internal static class GeneradorAcero
                 else
                     fallas.Add($"{pieza.Pieza} ({p.Id}): Revit no pudo crear la barra #{pieza.Diametro}.");
             }
+            foreach (GrupoEstribos g in p.Plan.Estribos)
+            {
+                if (CrearEstribos(doc, p, g, tipos, formaEstribo, formasMalas) is { } conjunto)
+                {
+                    MarcaAcero.Marcar(conjunto, p.Id, $"{g.Pieza} {g.Tramo}");
+                    estribos.Add(conjunto);
+                }
+                else
+                    fallas.Add($"{g.Pieza} de {g.Tramo} ({p.Id}): Revit no pudo crear los estribos #{g.Diametro}.");
+            }
         }
 
         // Los ganchos se miran con la geometría ya regenerada; se regenera una vez más solo si se volteó alguno.
@@ -61,12 +74,26 @@ internal static class GeneradorAcero
             .Select(c => new DiferenciaLargo(c.Portico.Id, c.Pieza.Pieza, c.Pieza.Diametro, CreadorBarras.LargoEnRevit(c.Barra), c.Pieza.Largo))
             .Where(d => Math.Abs(d.LargoRevit - d.LargoTablero) > ToleranciaLargo)
             .ToList();
+        // Ya regenerado: NumberOfBarPositions cuenta los estribos que de verdad quedaron (columnas: sin regenerar, uno menos).
+        int cantidadEstribos = estribos.Sum(e => e.NumberOfBarPositions);
         t.Commit();
 
-        // TEMPORAL (#85, tarea 7): los estribos se crean en la tarea 8.
-        fallas.Add("Los estribos llegan con la tarea 8: por ahora solo se crean barras y bastones.");
-        return new ResumenGeneracion(porticos.Count, creadas.Count(c => !c.EsBaston), creadas.Count(c => c.EsBaston), 0,
+        return new ResumenGeneracion(porticos.Count, creadas.Count(c => !c.EsBaston), creadas.Count(c => c.EsBaston), cantidadEstribos,
             fallas.Distinct().ToList(), diferencias);
+    }
+
+    private static Rebar? CrearEstribos(Document doc, PorticoAGenerar p, GrupoEstribos g, TiposAcero tipos, RebarShape? forma, HashSet<ElementId> formasMalas)
+    {
+        if (tipos.Barra(g.Diametro) is not { } barra)
+            return null;
+        try
+        {
+            return CreadorEstribos.Crear(doc, p.Ubicacion, g, barra, tipos, forma, formasMalas);
+        }
+        catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private static Rebar? Crear(Document doc, PorticoAGenerar p, PiezaLongitudinal pieza, TiposAcero tipos)

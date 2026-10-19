@@ -117,6 +117,12 @@ La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servi
 
 **Pendiente con Carlos:** qué se hace cuando el gancho de 90° no cabe en el alto de la viga. Opciones: (a) dejar el B del cuadro y que el tablero avise; (b) cortar la extensión para que el gancho quede dentro del recubrimiento, con otro largo; (c) otra regla de Carlos.
 
+**Propuesta para Carlos** (2026-10-19, práctica general de NSR-10 / ACI 318; Juan la aprobó para preguntarla):
+- **Apoyo de borde con columna que sigue hacia el lado de la cola:** el gancho queda completo (B del cuadro). La cola entra a la columna: pasar de la cara de la viga es normal, y las colas de arriba y de abajo se cruzan en el nudo. En la prueba, S1 e I1 en el eje 1 son este caso.
+- **Punta del voladizo, o nudo sin columna hacia ese lado (por ejemplo la cola de abajo en el último piso):** el gancho es constructivo (momento cero en la punta). La cola se recorta hasta el recubrimiento de la cara opuesta y el tablero muestra ese largo. En la prueba, S4 e I4 en la punta del voladizo son este caso.
+- **Aviso** si el recorte deja la cola por debajo de 12 diámetros (mínimo del gancho de 90°).
+- **A confirmar:** en la punta del voladizo, ¿recortar la cola o bajar la barra hasta la otra capa? ¿Qué hace con los ganchos de abajo del último piso?
+
 **Las casillas de los tramos** (pregunta de Juan, 2026-10-19): no limitan lo que se genera. Sirven para darle a esos tramos otra configuración de estribos (#83 y #90). "Generar" crea siempre el pórtico completo, porque las barras corridas cruzan los tramos. Los estribos de los tramos marcados ya salen con su configuración en el plan (tarea 4) y se crean en la tarea 8.
 
 ## Decisiones
@@ -380,7 +386,15 @@ La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servi
 - Consume: `GrupoEstribos`, `MarcoPortico.AlModelo`, `TiposAcero.GanchoEstribo`.
 - Produce: `internal static class CreadorEstribos { public static Rebar? Crear(Document doc, UbicacionPortico u, GrupoEstribos g, TiposAcero tipos); }`
 
-- [ ] **Paso 1:** implementar.
+- [x] **Hecho en código** (2026-10-19), compila para 2026 y 2027; desplegado en Revit 2026. Cómo quedó:
+  - **cerrado:** forma de estribo del documento (por nombre, como columnas) con `CreateFromRebarShape` + `ScaleToBox`. El origen es la esquina derecha de abajo del eje del estribo; `xVec` hacia la cara izquierda y `yVec` hacia arriba, así la normal queda hacia +x. Si la forma trae una diagonal se borra y se usa el lazo por curvas (arranque a mitad del lado de arriba con un quiebre de 15 mm hacia adentro);
+  - **abierto:** una rama vertical con `CreateFromCurves` estilo Standard y el gancho propio de 135° (o 90°) del diámetro;
+  - **ganchos propios de estribo:** `CQEING Estribo 135° #3`, estilo de estribo, extensión E del cuadro (57 mm en el #3) o 6 diámetros si el cuadro no la trae;
+  - **reparto:** `SetLayoutAsNumberWithSpacing` por corrida, o uno solo. Se cuentan con `NumberOfBarPositions` después de regenerar;
+  - marca `"E A-B"` (pieza y tramo); la falla de una corrida va al resumen y se sigue;
+  - el largo de los estribos todavía no se compara con el tablero: primero se mide en Revit cómo lo cuenta.
+- [ ] **Pendiente: prueba en Revit** (paso 2).
+- [x] **Paso 1:** implementar.
   - **Cerrado:** el rectángulo del eje del estribo (las caras exteriores menos medio diámetro) en el plano perpendicular a la viga en `Corrida.Primero`. Primero `CreateFromRebarShape` + `ScaleToBox` con la forma de estribo cerrado del documento; si no hay o falla, `CreateFromCurves` con el quiebre a mitad de lado.
   - **Abierto:** una rama vertical con ganchos en las dos puntas, con la forma de grapa del documento si la hay (como `GeometriaSeccion.BuscarFormaGrapa` de columnas).
   - **Reparto:** con `Cantidad > 1`, `SetLayoutAsNumberWithSpacing(Cantidad, Separacion, …)` en la dirección `+x`; con 1, sin reparto. Regenerar antes de leer cuántos quedaron.

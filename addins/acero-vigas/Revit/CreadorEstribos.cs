@@ -1,0 +1,148 @@
+using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Structure;
+using CQEING.Vigas.Calculo.Generacion;
+using CQEING.Vigas.Calculo.Modelo;
+using CQEING.Vigas.Calculo.Porticos;
+
+namespace CQEING.Vigas.Revit;
+
+/// <summary>
+/// Crea en Revit una corrida de estribos del plan (#85, tarea 8 del plan docs/planes/2026-10-19-generar-acero-vigas-85.md):
+/// un conjunto de Revit en el plano del corte, repartido a lo largo de la viga. Lo que se trae del add-in de columnas
+/// (decisión 11), medido allá contra Revit real:
+/// <list type="bullet">
+/// <item>el cerrado sale mejor con la forma de estribo del documento (<c>CreateFromRebarShape</c> + <c>ScaleToBox</c>);
+/// una forma elegida por nombre puede traer diagonales, así que se mide y se descarta si las tiene;</item>
+/// <item>sin forma, <c>CreateFromCurves</c> con el arranque a mitad de un lado y un quiebre pequeño: si el lazo arranca en
+/// una esquina, el gancho se come el doblez de esa esquina; dos curvas colineales dan null;</item>
+/// <item>después de repartir hay que regenerar antes de leer cuántos quedaron.</item>
+/// </list>
+/// El estribo de la viga es vertical y perpendicular a su eje (el de la columna era horizontal).
+/// </summary>
+internal static class CreadorEstribos
+{
+    /// <summary>1.5 cm hacia adentro: el quiebre que le da a Revit una esquina de verdad a mitad del lado.</summary>
+    private const double DesvioQuiebreMm = 15;
+
+    /// <summary>1 mm: un lado que se mueve en las dos direcciones del corte más que esto es una diagonal.</summary>
+    private const double ToleranciaDiagonalMm = 1;
+
+    /// <summary>La forma de estribo cerrado del documento (mismo criterio por nombre que columnas); null si no hay.</summary>
+    public static RebarShape? FormaEstribo(Document doc) =>
+        new FilteredElementCollector(doc).OfClass(typeof(RebarShape)).Cast<RebarShape>()
+            .FirstOrDefault(f => f.RebarStyle == RebarStyle.StirrupTie &&
+                (f.Name.Contains("T1") || f.Name == "51" || f.Name.Contains("Estribo") || f.Name.Contains("Stirrup")));
+
+    /// <summary>
+    /// Null si Revit no pudo. <paramref name="forma"/> es la de <see cref="FormaEstribo"/>; si resulta tener diagonales se
+    /// agrega a <paramref name="formasMalas"/> y se usa el camino de curvas.
+    /// </summary>
+    public static Rebar? Crear(Document doc, UbicacionPortico u, GrupoEstribos g, RebarBarType barra, TiposAcero tipos,
+        RebarShape? forma, HashSet<ElementId> formasMalas)
+    {
+        if (doc.GetElement(new ElementId(long.Parse(g.Host))) is not Element host)
+            return null;
+        double d = LectorModelo.Mm(barra.BarNominalDiameter);
+        Rebar? r = g.Tipo == TipoEstribo.Cerrado
+            ? Cerrado(doc, u, g, barra, tipos, host, d, forma, formasMalas)
+            : Abierto(doc, u, g, barra, tipos, host, d);
+        if (r is null)
+            return null;
+
+        RebarShapeDrivenAccessor acceso = r.GetShapeDrivenAccessor();
+        if (g.Corrida.Cantidad > 1)
+            acceso.SetLayoutAsNumberWithSpacing(g.Corrida.Cantidad, CreadorBarras.Pies(g.Corrida.Separacion),
+                barsOnNormalSide: true, includeFirstBar: true, includeLastBar: true);
+        else
+            acceso.SetLayoutAsSingle();
+        return r;
+    }
+
+    private static Rebar? Cerrado(Document doc, UbicacionPortico u, GrupoEstribos g, RebarBarType barra, TiposAcero tipos,
+        Element host, double d, RebarShape? forma, HashSet<ElementId> formasMalas)
+    {
+        // El eje del estribo: las caras exteriores del corte, medio diámetro hacia adentro.
+        double izq = g.Izquierda + d / 2, der = g.Derecha - d / 2, abajo = g.Abajo + d / 2, arriba = g.Arriba - d / 2;
+        double x = g.Corrida.Primero;
+        RebarHookType gancho = tipos.GanchoEstribo(g.Gancho, g.Diametro);
+
+        if (forma is not null && !formasMalas.Contains(forma.Id))
+        {
+            // xVec hacia la cara izquierda (+n) e yVec hacia arriba: la normal (xVec × yVec) queda hacia +x, que es hacia
+            // donde se reparten. El origen es la esquina derecha de abajo.
+            XYZ origen = CreadorBarras.Punto(u, x, der, abajo);
+            XYZ n = CreadorBarras.Lateral(u);
+            Rebar? conForma = Rebar.CreateFromRebarShape(doc, forma, barra, host, origen, n, XYZ.BasisZ);
+            if (conForma is not null)
+            {
+                conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(der - izq), XYZ.BasisZ * CreadorBarras.Pies(arriba - abajo));
+                try
+                {
+                    conForma.SetHookTypeId(0, gancho.Id);
+                    conForma.SetHookTypeId(1, gancho.Id);
+                }
+                catch (Autodesk.Revit.Exceptions.ArgumentException)
+                {
+                    // la forma puede no tener posiciones de gancho: no bloquea
+                }
+                doc.Regenerate();
+                if (!TieneDiagonal(conForma, u))
+                    return conForma;
+                doc.Delete(conForma.Id);
+                formasMalas.Add(forma.Id);
+            }
+        }
+
+        // Sin forma (o con una que trae diagonales): el lazo por curvas, arrancando a mitad del lado de arriba.
+        XYZ P(double xc, double yc) => CreadorBarras.Punto(u, x, xc, yc);
+        double medio = (izq + der) / 2;
+        var curvas = new List<Curve>
+        {
+            Line.CreateBound(P(medio, arriba - DesvioQuiebreMm), P(der, arriba)),
+            Line.CreateBound(P(der, arriba), P(der, abajo)),
+            Line.CreateBound(P(der, abajo), P(izq, abajo)),
+            Line.CreateBound(P(izq, abajo), P(izq, arriba)),
+            Line.CreateBound(P(izq, arriba), P(medio, arriba - DesvioQuiebreMm)),
+        };
+        using var terminaciones = new BarTerminationsData(doc)
+        {
+            HookTypeIdAtStart = gancho.Id,
+            HookTypeIdAtEnd = gancho.Id,
+        };
+        return Rebar.CreateFromCurves(doc, RebarStyle.StirrupTie, barra, host, Direccion(u), curvas, terminaciones,
+            useExistingShapeIfPossible: true, createNewShape: true);
+    }
+
+    /// <summary>Una rama vertical entre la barra de abajo y la de arriba, con ganchos de 135° en las dos puntas.</summary>
+    private static Rebar? Abierto(Document doc, UbicacionPortico u, GrupoEstribos g, RebarBarType barra, TiposAcero tipos, Element host, double d)
+    {
+        double x = g.Corrida.Primero, xc = g.Izquierda;
+        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, xc, g.Abajo + d / 2), CreadorBarras.Punto(u, x, xc, g.Arriba - d / 2));
+        RebarHookType? gancho = tipos.Gancho(g.Gancho == GanchoEstribo.De135 ? TipoGancho.De135 : TipoGancho.De90, g.Diametro);
+        using var terminaciones = new BarTerminationsData(doc);
+        if (gancho is not null)
+        {
+            terminaciones.HookTypeIdAtStart = gancho.Id;
+            terminaciones.HookTypeIdAtEnd = gancho.Id;
+        }
+        return Rebar.CreateFromCurves(doc, RebarStyle.Standard, barra, host, Direccion(u), new List<Curve> { linea }, terminaciones,
+            useExistingShapeIfPossible: true, createNewShape: true);
+    }
+
+    private static XYZ Direccion(UbicacionPortico u) => new(u.Ux, u.Uy, 0);
+
+    /// <summary>Un lado recto que se mueve a la vez de lado y de alto en el corte: la forma trae una diagonal.</summary>
+    private static bool TieneDiagonal(Rebar r, UbicacionPortico u)
+    {
+        XYZ n = CreadorBarras.Lateral(u);
+        foreach (Curve c in r.GetCenterlineCurves(false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, 0))
+        {
+            if (c is not Line linea)
+                continue;
+            XYZ v = linea.GetEndPoint(1) - linea.GetEndPoint(0);
+            if (Math.Abs(LectorModelo.Mm(v.DotProduct(n))) > ToleranciaDiagonalMm && Math.Abs(LectorModelo.Mm(v.Z)) > ToleranciaDiagonalMm)
+                return true;
+        }
+        return false;
+    }
+}
