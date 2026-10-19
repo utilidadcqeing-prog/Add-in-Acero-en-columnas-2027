@@ -95,6 +95,16 @@ Modelo de prueba con dos pórticos generados: "Pórtico A · N+3.70" y "Pórtico
    - el aviso de la decisión 8 se queda: si aun así Revit no da el largo, el resumen lo dice;
    - los estribos tendrán el suyo (`CQEING Estribo 135° #3`) en la tarea 8.
 
+**Gancho propio medido en Revit** (2026-10-19, por MCP, en una subtransacción deshecha: el modelo no cambió). Barra "16 B 400 S" (d = 16, doblado del gancho 64), línea recta de 3000 mm con gancho al inicio:
+
+| Gancho | B del cuadro (#5) | Multiplicador | Largo en Revit | Esperado |
+|---|---|---|---|---|
+| 90° | 278 | 16.45 | 3278.0 | 3278 |
+| 135° | 189 | 8.92 | 3189.0 | 3189 |
+| 180° | 238 | 10.02 | 3238.0 | 3238 |
+
+La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servicio MCP ya abre su propia transacción: para probar sin dejar rastro hay que usar `SubTransaction` y deshacerla.
+
 **Las casillas de los tramos** (pregunta de Juan, 2026-10-19): no limitan lo que se genera. Sirven para darle a esos tramos otra configuración de estribos (#83 y #90). "Generar" crea siempre el pórtico completo, porque las barras corridas cruzan los tramos. Los estribos de los tramos marcados ya salen con su configuración en el plan (tarea 4) y se crean en la tarea 8.
 
 ## Decisiones
