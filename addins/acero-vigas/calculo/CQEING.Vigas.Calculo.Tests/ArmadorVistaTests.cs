@@ -48,6 +48,31 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void LaVistaTraeElColorDeCadaDiametroYLosDiametrosParaLaLeyenda()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5)], Inferior = [new GrupoBarras(3, 4)] };
+
+        VistaPortico v = Armar(o);
+
+        Assert.All(v.Barras.Where(b => b.Capa == "arriba"), b => Assert.Equal(ColoresDiametro.De(5), b.Color));
+        Assert.All(v.Barras.Where(b => b.Capa == "abajo"), b => Assert.Equal(ColoresDiametro.De(4), b.Color));
+        Assert.All(v.Bastones, b => Assert.Equal(ColoresDiametro.De(int.Parse(b.Cantidad.Split('#')[1])), b.Color));
+        Assert.All(v.Seccion.Barras.Where(b => !b.Baston), b => Assert.Equal(ColoresDiametro.De(b.Arriba ? 5 : 4), b.Color));
+        Assert.Equal(["#5", "#4"], v.Diametros!.Select(d => d.Nombre));
+        Assert.Equal([ColoresDiametro.De(5), ColoresDiametro.De(4)], v.Diametros!.Select(d => d.Color));
+    }
+
+    [Fact]
+    public void UnaCorridaConDosDiametrosLlevaElColorDelMasGrueso()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };
+
+        VistaPortico v = Armar(o);
+
+        Assert.All(v.Barras.Where(b => b.Capa == "arriba"), b => Assert.Equal(ColoresDiametro.De(5), b.Color));
+    }
+
+    [Fact]
     public void UnApoyoQueEsVigaSeMarcaEnLaVista()
     {
         PorticoLeido p = Portico1();

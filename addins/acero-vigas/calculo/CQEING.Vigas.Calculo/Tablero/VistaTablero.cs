@@ -30,10 +30,12 @@ public sealed record ApoyoVista(string Eje, double X, double CaraIzquierda, doub
 /// <c>"5.80 + gancho"</c> o <c>"recta"</c>; <paramref name="Cantidad"/> como <c>"3 #5"</c>.
 /// <paramref name="GanchoInicioTipo"/> y <paramref name="GanchoFinTipo"/> son <c>"90°"</c>, <c>"135°"</c>, <c>"180°"</c> o
 /// <c>""</c>; <paramref name="PuntaInicioEnBorde"/> / <paramref name="PuntaFinEnBorde"/>: ahí van los botones de gancho (#84).
+/// <paramref name="Color"/> es el de su diámetro (<see cref="Modelo.ColoresDiametro"/>); con dos diámetros, el del más grueso.
 /// </summary>
 public sealed record BarraVista(string Id, string Capa, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
     string Recta, bool Manual, bool LlegaAlVoladizo, string Cantidad, double Kg,
-    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false);
+    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false,
+    string Color = "");
 
 public sealed record TraslapoVista(string Id, string BarraIzquierda, string BarraDerecha, string Capa, double Desde, double Hasta,
     double Minimo, string Diametro, bool Manual);
@@ -44,7 +46,8 @@ public sealed record TraslapoVista(string Id, string BarraIzquierda, string Barr
 /// </summary>
 public sealed record BastonVista(string Id, double Eje, double Desde, double Hasta, bool GanchoInicio, bool GanchoFin, double Largo,
     string Donde, string Cantidad, double Kg, bool Cortado,
-    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false);
+    string GanchoInicioTipo = "", string GanchoFinTipo = "", bool PuntaInicioEnBorde = false, bool PuntaFinEnBorde = false,
+    string Color = "");
 
 /// <summary>Una zona de estribos en el alzado; <paramref name="Junta"/> = la de confinamiento, junto a una columna.</summary>
 public sealed record ZonaEstribos(double Desde, double Hasta, bool Junta);
@@ -64,7 +67,10 @@ public sealed record OpcionCaraVista(double Kg, bool Existe);
 /// (<paramref name="Baston"/>) son <c>"bs1"</c>… arriba y <c>"bi1"</c>… abajo, y no se eligen para estribos (#91).
 /// </summary>
 public sealed record BarraSeccion(string Id, string Nombre, bool Arriba, int Fila, double X, double Y, double D, bool Esquina,
-    bool Baston = false);
+    bool Baston = false, string Color = "");
+
+/// <summary>Un diámetro que hay en el pórtico, para la leyenda: <c>"#5"</c> y su color.</summary>
+public sealed record DiametroVista(string Nombre, string Color);
 
 /// <summary>Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba.</summary>
 public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo);
@@ -98,6 +104,7 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// <c>"der"</c> (al final). <paramref name="Kg"/> suma barras, bastones y estribos. <paramref name="Seccion"/> es la
 /// sección en el corte 1-1: barras corridas, bastones que pasan por ahí y estribos de ese tramo (<paramref name="Corte"/>).
 /// <paramref name="PosicionesEstribos"/> es el centro de cada estribo cerrado, en m, para dibujarlos en el alzado donde van.
+/// <paramref name="Diametros"/> son los de las barras y bastones del pórtico, del más grueso al más delgado (la leyenda).
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -123,7 +130,8 @@ public sealed record VistaPortico(
     int Estribos,
     bool SePuedeGenerar,
     CorteVista? Corte = null,
-    IReadOnlyList<double>? PosicionesEstribos = null);
+    IReadOnlyList<double>? PosicionesEstribos = null,
+    IReadOnlyList<DiametroVista>? Diametros = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).

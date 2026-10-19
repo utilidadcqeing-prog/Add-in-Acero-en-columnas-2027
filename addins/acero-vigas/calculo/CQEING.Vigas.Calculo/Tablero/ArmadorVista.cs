@@ -62,13 +62,16 @@ public static class ArmadorVista
 
         var barras = rv.Barras.Select(b => new BarraVista(b.Id, Capa(b.Capa), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg,
-            Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin)).ToList();
+            Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin,
+            ColoresDiametro.De(b.Grupos.Max(g => g.Diametro)))).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
             M(t.Minimo), $"#{t.Diametro}", t.Manual)).ToList();
         var bastones = rv.Bastones.Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Donde(p, b), Cantidad([b.Grupo]), b.Kg,
             b.LargoRecto < CalculadorBastones.LargoDe(o.Bastones, b.Id),
-            Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde)).ToList();
+            Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde, ColoresDiametro.De(b.Grupo.Diametro))).ToList();
+        var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
+            .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d))).ToList();
 
         bool seccionSinError = re.Seccion.Superior.Error == ErrorCara.Ninguno && re.Seccion.Inferior.Error == ErrorCara.Ninguno;
         bool sePuede = rv.Superior is not null && rv.Inferior is not null && seccionSinError && !avisos.Any(a => Bloquean.Contains(a.Tipo));
@@ -81,7 +84,8 @@ public static class ArmadorVista
             enCorte, ListaEstribos(p, o, re), Textos(avisos, rv),
             rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, sePuede,
             CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
-            re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList());
+            re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList(),
+            diametros);
     }
 
     /// <summary>El gancho como lo escribe la página: "90°", "135°", "180°" o "" (sin gancho).</summary>
@@ -218,7 +222,8 @@ public static class ArmadorVista
     {
         double alto = Alto(p);
         BarraSeccion Barra(string id, string nombre, bool arriba, int fila, BarraEnSeccion b, bool esquina, bool baston) =>
-            new(id, nombre, arriba, fila, Cm(b.X), Cm(alto - b.Y), Cm(r.PorDiametro[b.Diametro].Diametro), esquina, baston);
+            new(id, nombre, arriba, fila, Cm(b.X), Cm(alto - b.Y), Cm(r.PorDiametro[b.Diametro].Diametro), esquina, baston,
+                ColoresDiametro.De(b.Diametro));
         IEnumerable<BarraSeccion> Cara(CaraSeccion c, bool arriba)
         {
             string letra = arriba ? "a" : "b", nombre = arriba ? "arriba" : "abajo";

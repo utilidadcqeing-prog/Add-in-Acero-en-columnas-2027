@@ -204,9 +204,9 @@
 
 **Archivos:** `calculo/CQEING.Vigas.Calculo/Modelo/ColoresDiametro.cs` (nuevo), `ArmadorVista`, pruebas `ColoresDiametroTests.cs` y `ArmadorVistaTests.cs`.
 
-- [ ] **Paso 1:** pruebas: cada diámetro del #3 al #11 tiene un color distinto; uno fuera de la tabla devuelve un gris; la vista trae `Color` en cada barra, bastón y barra del corte, y `Diametros` (los del pórtico, para la leyenda).
-- [ ] **Paso 2:** `ColoresDiametro.De(int diametro)` con la tabla de la decisión 9, y la vista con los colores.
-- [ ] **Paso 3:** pruebas en verde. Commit `feat(vigas): un color por diámetro, el mismo para el tablero y Revit (#100)`.
+- [x] **Paso 1:** pruebas: cada diámetro del #3 al #11 tiene un color distinto; uno fuera de la tabla devuelve un gris; la vista trae `Color` en cada barra, bastón y barra del corte, y `Diametros` (los del pórtico, para la leyenda).
+- [x] **Paso 2:** `ColoresDiametro.De(int diametro)` con la tabla de la decisión 9, y la vista con los colores.
+- [x] **Paso 3:** pruebas en verde. Commit `feat(vigas): un color por diámetro, el mismo para el tablero y Revit (#100)`.
 
 ### Tarea 7: colores y leyenda en el alzado y el corte
 
@@ -299,6 +299,8 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Tarea 3: como en la maqueta, `k = fitZ / z` (en el ajuste k = 1, así que nada cambia de tamaño al abrir). Trazos con `non-scaling-stroke`; `font-size`, el borde blanco del rótulo del arrastre, los radios de los círculos de ejes y de los 3 puntos, la zona para agarrar la línea 1-1, sus flechas y los márgenes de los textos, por k. Solo el alzado tiene zoom: el corte y los esquemas de `tablero.js` no escalan, así que no cambian. El rayado de zonas (sin posiciones de estribos) queda escalando, porque es un relleno; C# y la demostración siempre mandan posiciones, y la tarea 8 lo quita. Falta verlo en Revit (tarea 12).
   - Tarea 4, medido en Revit por el MCP (19-oct, equipo de Juan): el WebView mide 1280 × 649 DIP y el zoom 0.72, así que la página queda en 1774 × 901. En los 4 pasos del panel no se desborda nada: solo tienen scroll la lista de pórticos y la lista de barras abierta (las dos permitidas). **El "scroll" que vio Carlos era el rebote del touchpad**: WebView2 estiraba la página entera y la soltaba (en la captura de Juan, arriba cortada y una franja gris abajo). Arreglo en `index.html`: `html, body { overflow: hidden }` y `overscroll-behavior: none` en todo. Juan lo probó en Revit: la página queda fija. No hizo falta compactar el panel.
   - Tarea 5: el dibujo del recubrimiento del panel, igual a la maqueta (decisión 11 corregida), detrás de *Ver el dibujo*; el texto de arriba ya dice el "al eje". La barra va en gris oscuro `#3F4A57` hasta la tarea 7, que le pone el color del diámetro (`recBarCol`). El estribo del corte, en `#8A939D`. Falta verlo en Revit.
+- [ ] Fase C (tareas 6–7).
+  - Tarea 6: `Modelo/ColoresDiametro.cs` (`De`, `SinColor` = `#5E6670`). `Color` en `BarraVista`, `BastonVista` y `BarraSeccion` (también los bastones en proyección); `VistaPortico.Diametros` = `DiametroVista(Nombre, Color)` de barras y bastones, del más grueso al más delgado, sin los estribos. Ruling: una corrida con dos diámetros (3 #5 + 2 #4) lleva el color del **más grueso**. Si falta un diámetro en las reglas, la vista vacía sale con `Diametros` null: la página lo trata como lista vacía (tarea 7). 587 pruebas en verde.
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).
