@@ -147,6 +147,51 @@ public class AgrupadorPorticosTests
     }
 
     [Fact]
+    public void CadaApoyoTraeSuFondo_LoQueMideDeLadoALado()
+    {
+        // Columnas de 400 a lo largo de la viga y 500 de lado a lado (decisión 13 del plan de #100).
+        static ApoyoLeido Rect(string id, double x) =>
+            new(id, TipoApoyo.Columna, [new(x - 200, -250), new(x + 200, -250), new(x + 200, 250), new(x - 200, 250)], 0, 3500);
+        var modelo = new ModeloLeido(Ejes, [Viga("v1", 0, 3500, 3500, Piso2)], [Rect("c1", 0), Rect("c2", 3500)]);
+
+        PorticoLeido p = Assert.Single(AgrupadorPorticos.Agrupar(modelo).Porticos);
+
+        Assert.Equal([500.0, 500.0], p.FondosDeApoyo!);
+        Assert.Equal(400, p.Portico.Apoyos[0].CaraDerecha - p.Portico.Apoyos[0].CaraIzquierda);
+    }
+
+    [Fact]
+    public void LaVigaDeBordeDeUnVoladizoNoEsApoyo()
+    {
+        // Como el eje A del modelo de Carlos: pasada la última columna (5), la viga sigue hasta 5000 y en la punta
+        // cruza la viga de borde, que no descansa en ninguna columna: es armazón y queda voladizo.
+        var modelo = new ModeloLeido(Ejes,
+            [Viga("v1", 0, 3500, 3500, Piso2), Viga("v2", 3500, 5000, 3500, Piso2),
+             new VigaLeida("borde", new(5000, -2000), new(5000, 2000), 3150, 3500, 100, Piso2)],
+            [Columna("c1", 0, 0, 300, 0, 3500), Columna("c2", 3500, 0, 300, 0, 3500)]);
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(modelo).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Columna, TipoApoyo.Columna], p.TiposDeApoyo);
+        Assert.Equal(1350, p.Portico.VoladizoFinal);
+        Assert.Equal(["Viga A-5", "Voladizo 5"], p.Tramos.Select(t => t.Nombre));
+    }
+
+    [Fact]
+    public void UnaVigaQueCruzaEntreDosColumnasSigueSiendoApoyo()
+    {
+        // Entre las columnas de A y 6, la viga del eje 1 termina en 5 sobre una viga que cruza y no tiene columnas.
+        var modelo = new ModeloLeido(Ejes,
+            [Viga("v1", 0, 3500, 3500, Piso2), Viga("v2", 3500, 7000, 3500, Piso2),
+             new VigaLeida("cruza", new(3500, -2000), new(3500, 2000), 3100, 3500, 300, Piso2)],
+            [Columna("c1", 0, 0, 300, 0, 3500), Columna("c3", 7000, 0, 300, 0, 3500)]);
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(modelo).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Columna, TipoApoyo.Viga, TipoApoyo.Columna], p.TiposDeApoyo);
+    }
+
+    [Fact]
     public void UnMuroDeCargaQueCruzaLaViga_EsApoyo_YUnoALoLargoNo()
     {
         ApoyoLeido muroQueCruza = new("m1", TipoApoyo.Muro, [new(3440, -2000), new(3560, -2000), new(3560, 2000), new(3440, 2000)], 0, 3500, Direccion: new(0, 1));
@@ -210,6 +255,41 @@ public class AgrupadorPorticosTests
         PorticoLeido p = Assert.Single(r.Porticos);
         Assert.Equal(("Pórtico sin eje 1", null), (p.Nombre, p.Eje));
         Assert.Contains(new AvisoLectura(TipoAvisoLectura.SinEje, "Pórtico sin eje 1 · N+3.50 Piso 2"), r.Avisos);
+    }
+
+    [Fact]
+    public void UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla()
+    {
+        // Como los ejes A y C del modelo de Carlos: viga de 25 justificada a un lado, con su línea en la cara de las
+        // columnas de 25 y a 125 mm del eje 1, que sí pasa por el centro de las columnas.
+        ModeloLeido m = EjeUnoPiso2() with
+        {
+            Vigas = [Viga("v1", 0, 3500, 3500, Piso2, y: -125), Viga("v2", 3500, 7000, 3500, Piso2, y: -125)],
+            Apoyos = [Columna("c1", 0, 0, 250, 0, 3500), Columna("c2", 3500, 0, 250, 0, 3500), Columna("c3", 7000, 0, 250, 0, 3500)],
+        };
+
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(m);
+
+        PorticoLeido p = Assert.Single(r.Porticos);
+        Assert.Equal(("Pórtico 1", "1"), (p.Nombre, p.Eje));
+        Assert.DoesNotContain(r.Avisos, a => a.Tipo == TipoAvisoLectura.SinEje);
+    }
+
+    [Fact]
+    public void UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma()
+    {
+        // El eje B va a 200 mm de la viga pero por fuera de las columnas (850–1150).
+        ModeloLeido m = EjeUnoPiso2() with
+        {
+            Ejes = [.. Ejes, new("B", new(-2000, 800), new(8000, 800))],
+            Vigas = [Viga("v1", 0, 3500, 3500, Piso2, y: 1000), Viga("v2", 3500, 7000, 3500, Piso2, y: 1000)],
+            Apoyos = [Columna("c1", 0, 1000, 300, 0, 3500), Columna("c2", 3500, 1000, 300, 0, 3500), Columna("c3", 7000, 1000, 300, 0, 3500)],
+        };
+
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(m);
+
+        PorticoLeido p = Assert.Single(r.Porticos);
+        Assert.Equal(("Pórtico sin eje 1", null), (p.Nombre, p.Eje));
     }
 
     [Fact]

@@ -47,16 +47,35 @@
     baston: { Izquierda: 'Arrastra para cambiar el largo por esta punta', Centro: 'Arrastra para correr el bastón', Derecha: 'Arrastra para cambiar el largo por esta punta' },
   };
 
+  // Capas (#100, Carlos 1:07:24–1:08:17): lo que se apaga para seguir trabajando sin salir del dibujo. Lo elegido es de
+  // cada usuario y se queda en esta página (decisión 12): no viaja a C#.
+  const CAPAS = [['media', 'Línea de media luz'], ['corte', 'Corte 1-1'], ['textos', 'Textos'], ['estribos', 'Estribos'], ['colsec', 'Sección de columnas']];
+  const CAPAS0 = { media: true, corte: true, textos: true, estribos: true, colsec: false, pulgadas: false };
+  const CLAVE_CAPAS = 'cqeing.vigas.capas';
+  const leerCapas = () => {
+    try { return { ...CAPAS0, ...JSON.parse(window.localStorage.getItem(CLAVE_CAPAS) || '{}') }; } catch (e) { return { ...CAPAS0 }; }
+  };
+  const guardarCapas = (c) => {
+    try { window.localStorage.setItem(CLAVE_CAPAS, JSON.stringify(c)); } catch (e) { /* sin almacenamiento: dura lo que dure la página */ }
+  };
+
   class Alzado extends Component {
     constructor(props) {
       super(props);
-      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', rk: '', hd: null };
+      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', rk: '', hd: null,
+        capas: leerCapas(), capasOpen: false };
       // Esc mientras se arrastra un punto: el elemento queda como estaba
       this.esc = (e) => { if (e.key === 'Escape') this.soltarPunto(false); };
     }
 
     componentWillUnmount() {
       window.removeEventListener('keydown', this.esc);
+    }
+
+    cambiarCapas(cambio) {
+      const capas = { ...this.state.capas, ...cambio };
+      guardarCapas(capas);
+      this.setState({ capas });
     }
 
     // Termina el arrastre de un punto; con `aplicar`, avisa el salto donde quedó (si mueve algo).
@@ -75,13 +94,23 @@
       const inv = !!this.props.invert, warn = !!this.props.warn;
       const showSt = this.props.showStirrups ?? true;
       const X = (m) => 30 + 52 * (m - p.inicio);
-      const CH = 204;
+      // altura dinámica (Carlos 1:06:04, decisión 14): la viga crece un escalón de 14 por cada fila de más, arriba o
+      // abajo, y todo lo que va debajo de su eje (y = 85) baja con ella. Sigue sin ser a escala ("no es real").
+      const filasDe = (cara) => (cara && cara.porFila && cara.porFila.length) || 1;
+      const ex = 14 * (filasDe(p.superior) - 1 + filasDe(p.inferior) - 1);
+      const Y = (y) => (y > 85 ? y + ex : y);
+      const FH = 170 + ex;
+      const CH = 204 + ex;
       const r0 = this.props.rangeFrom ?? p.inicio, r1 = this.props.rangeTo ?? p.fin;
       const x0 = X(r0 - 0.3), x1 = X(r1 + 0.3), dx = x1 - x0;
       const fitZ = Math.min((W - 24) / dx, (H - 60) / CH);
       const fit = { z: fitZ, tx: (W - dx * fitZ) / 2 - x0 * fitZ, ty: 30 + (H - 56 - CH * fitZ) / 2 };
       const rk = r0 + ':' + r1;
       const v = (this.state.z == null || this.state.rk !== rk) ? fit : this.state;
+      // Carlos (1:11:23): líneas y textos del mismo tamaño a cualquier zoom. Los trazos van con non-scaling-stroke; los
+      // textos, radios y márgenes que dependen del tamaño en pantalla se multiplican por k (en el ajuste, k = 1).
+      const k = fitZ / v.z;
+      const capas = this.state.capas, pulg = capas.pulgadas;
       const sel = this.props.sel ?? this.state.selLocal;
       const selLap = this.props.selLap ?? this.state.selLapLocal;
       const manualLaps = String(this.props.lapsManual || '').split(',');
@@ -104,21 +133,29 @@
       const b = p.barras.map((bar) => {
         const isC = arribaAntes(bar.capa);
         const i = enCapa[isC ? 'C' : 'F']++;
-        const y = isC ? (i % 2 ? 58 : 52) : (i % 2 ? 112 : 118);
+        const y = Y(isC ? (i % 2 ? 58 : 52) : (i % 2 ? 112 : 118));
         const dir = isC ? 1 : -1;
         const ti = bar.ganchoInicio ? bar.ganchoInicioTipo || '90°' : '', tf = bar.ganchoFin ? bar.ganchoFinTipo || '90°' : '';
         const pts = conGanchos(X(bar.desde), X(bar.hasta), y, dir, ti, tf, 22);
         const isSel = bar.id === sel && !selLap;
-        return { id: bar.id, y, isC, pts, col: isSel ? colVivo : '#3F4A57', sw: isSel ? 4.2 : 2.6, pick: pickBar(bar.id),
-          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: bar.capa === 'arriba' ? 33 : 150, lt: bar.id + ' · ' + f2(bar.largo) };
+        // el color es el de su diámetro (C#, #100); la elegida va igual, con un halo detrás. Solo al arrastrarla cambia.
+        // el rótulo de DC-CAD (C#, #100) va sobre la misma barra: encima de las de arriba y debajo de las de abajo
+        const yS = inv ? FH - y : y, top = isC !== inv;
+        return { id: bar.id, y, isC, pts, isSel, col: isSel && cur ? colVivo : bar.color || '#3F4A57', sw: isSel ? 3.4 : 2.4, pick: pickBar(bar.id),
+          lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: top ? yS - 3 * k : yS + 10 * k, lt: (pulg ? bar.rotuloPulgadas : bar.rotulo) || '' };
       });
 
       const warnLap = warn ? this.props.warnLap : '';
       const l = p.traslapos.map((t) => {
         const isSel = t.id === selLap, isMan = manualLaps.includes(t.id);
         const isWarn = t.id === warnLap && !isMan;
-        const c = vivos.includes(t.id) ? colVivo : isSel || isMan ? '#1F5FAF' : (isWarn ? '#B26B00' : '#C77A12');
-        return { isC: arribaAntes(t.capa), x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel ? 0.28 : 0.16, sw: isSel ? 2.6 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id) };
+        // gris, para no confundirse con los colores de los diámetros (el naranja de antes chocaba con el #4)
+        const vivo = vivos.includes(t.id);
+        const c = vivo ? colVivo : isSel || isMan ? '#1F5FAF' : (isWarn ? '#B26B00' : '#5E6670');
+        // su largo con 2 decimales, en el medio del empalme
+        const isC = arribaAntes(t.capa), ry = Y(isC ? 45 : 106), yc = ry + 9;
+        return { isC, ry, x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel || vivo ? 0.24 : 0.12, sw: isSel || vivo ? 2.4 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id),
+          lx: (X(t.desde) + X(t.hasta)) / 2, ly: (inv ? FH - yc : yc) + 3.2 * k, lt: t.rotulo || '' };
       });
 
       // bastones: los de arriba en y = 70 y los de abajo en y = 100, con el gancho hacia adentro de la viga. Una punta
@@ -127,36 +164,51 @@
       const ADENTRO = 6;
       const t = p.bastones.map((bs) => {
         const top = (bs.id.indexOf('BS') === 0) !== inv;
-        const y = top ? 70 : 100, dir = top ? 1 : -1;
+        const y = Y(top ? 70 : 100), dir = top ? 1 : -1;
         const xa = X(bs.desde) + (bs.ganchoInicio ? ADENTRO : 0), xz = X(bs.hasta) - (bs.ganchoFin ? ADENTRO : 0);
         const ti = bs.ganchoInicio ? bs.ganchoInicioTipo || '90°' : '', tf = bs.ganchoFin ? bs.ganchoFinTipo || '90°' : '';
         const pts = conGanchos(xa, xz, y, dir, ti, tf, 16);
         const isSel = bs.id === sel && !selLap;
-        return { id: bs.id, y, top, pts, col: isSel ? colVivo : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
+        // del color de su diámetro, como la corrida; se distingue por el trazo, más delgado (decisión 9)
+        // su rótulo, del lado de adentro de la viga
+        const yS = inv ? FH - y : y, arriba = top !== inv;
+        return { id: bs.id, y, top, pts, isSel, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : 1.7, pick: pickBar(bs.id),
+          lx: (xa + xz) / 2, ly: arriba ? yS + 10 * k : yS - 3 * k, lt: (pulg ? bs.rotuloPulgadas : bs.rotulo) || '' };
       });
+      // la selección va con un halo detrás y no con otro color: el azul ya es del #8 (#100)
+      const halo = selLap ? null : (b.find((x) => x.isSel) || t.find((x) => x.isSel) || null);
+      const ley = (p.diametros || []).map((d) => ({ c: d.color, t: (pulg && d.nombrePulgadas) || d.nombre }));
 
-      // estribos: una raya por cada estribo real, donde va (Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba y la
-      // línea 1-1, que va de estribo en estribo, no caía en las rayas). Sin posiciones, el rayado de zonas de la maqueta.
-      const posEst = p.posicionesEstribos || null;
-      const st = posEst ? [] : p.zonas.map((z) => ({ x1: X(z.desde), x2: X(z.hasta), da: z.junta ? '1 4.2' : '1 9.4' }));
-      const stx = posEst ? posEst.map(X) : [];
+      // estribos como DC-CAD (Carlos, #100): debajo de la viga, una línea por zona con una rayita en cada punta,
+      // "9e#3" encima y "@.10 L=0.95" debajo, en lugar de una raya por estribo. La línea 1-1 sigue saltando de estribo
+      // en estribo con las posiciones que manda C# (corte.puntos).
+      const yE = Y(148);
+      const st = p.zonas.map((z) => ({ d: 'M' + X(z.desde) + ' ' + yE + 'H' + X(z.hasta) + 'M' + X(z.desde) + ' ' + (yE - 3 * k) + 'v' + 6 * k
+        + 'M' + X(z.hasta) + ' ' + (yE - 3 * k) + 'v' + 6 * k, x: (X(z.desde) + X(z.hasta)) / 2,
+        // la L va en una tercera línea: junto a la separación no cabía y se montaba con la zona vecina en cada columna
+        a: (pulg ? z.cantidadPulgadas : z.cantidad) || '', b: z.separacion || '', c: z.largo || '' }));
+      const secs = (p.secciones || []).map((s) => ({ x: X(s.x), t: s.texto }));
 
       const ap = p.apoyos;
-      const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda) }));
+      // un apoyo que es viga se dibuja como su sección, a la altura de la viga; las columnas y muros, de alto completo
+      const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda), y: a.esViga ? 40 : 14, h: (a.esViga ? 90 : 152) + ex }));
       const luces = ap.slice(1).map((a, i) => ({ x: X((ap[i].x + a.x) / 2), lt: 'luz ' + f2(a.caraIzquierda - ap[i].caraDerecha) }));
       const vols = [];
       if (ap.length && p.inicio < ap[0].caraIzquierda - 1e-9) vols.push({ a: p.inicio, z: ap[0].caraIzquierda });
       if (ap.length && p.fin > ap[ap.length - 1].caraDerecha + 1e-9) vols.push({ a: ap[ap.length - 1].caraDerecha, z: p.fin });
       const vol = vols.map((o) => ({ x: X(o.a), w: X(o.z) - X(o.a), lx: X((o.a + o.z) / 2), lt: 'voladizo ' + f2(o.z - o.a) }));
       const ejes = ap.map((a) => ({ x: X(a.x), eje: a.eje }));
+      // capa "Sección de columnas" (decisión 13): ancho × fondo debajo de cada columna; el ancho ya se ve en el dibujo
+      const colSecs = capas.colsec ? ap.filter((a) => a.seccion).map((a) => ({ x: X(a.x), t: a.seccion })) : [];
 
       // corte 1-1 (#91): la línea se arrastra y se pega a los tramos permitidos que manda C#; la franja muestra la
       // profundidad hacia el lado que mira y las flechas, hacia dónde mira.
       const corte = this.props.corte;
       const cutM = this.props.cutLive ?? (corte ? corte.x : p.inicio);
       const prof = corte ? corte.profundidad : 0, dirC = corte && corte.mirando === 'izquierda' ? -1 : 1;
+      const ka = k * dirC;
       const cut = { x: X(cutM), c: '#1F5FAF', bandX: Math.min(X(cutM), X(cutM + dirC * prof)), bandW: 52 * prof,
-        arrow: (y) => 'M' + X(cutM) + ' ' + y + 'h' + (8 * dirC) + 'm' + (-3 * dirC) + ' -3l' + (3 * dirC) + ' 3l' + (-3 * dirC) + ' 3' };
+        arrow: (y) => 'M' + X(cutM) + ' ' + y + 'h' + (8 * ka) + 'm' + (-3 * ka) + ' ' + (-3 * k) + 'l' + (3 * ka) + ' ' + (3 * k) + 'l' + (-3 * ka) + ' ' + (3 * k) };
       const permitidos = corte ? corte.permitidos : [];
       const puntos = corte && corte.puntos ? corte.puntos : [];
       // como CalculadoraCorte en C#: de estribo en estribo (AlPunto); sin estribos, el punto permitido más cercano
@@ -193,7 +245,7 @@
         [['inicio', datoSel.desde, datoSel.puntaInicioEnBorde, datoSel.ganchoInicioTipo], ['fin', datoSel.hasta, datoSel.puntaFinEnBorde, datoSel.ganchoFinTipo]]
           .filter(([, , enBorde]) => enBorde)
           .forEach(([punta, m, , actual]) => {
-            const xs = v.tx + X(m) * v.z, ys = v.ty + (inv ? 170 - dib.y : dib.y) * v.z;
+            const xs = v.tx + X(m) * v.z, ys = v.ty + (inv ? FH - dib.y : dib.y) * v.z;
             const clave = esBarra ? datoSel.id[0] + '.' + punta : datoSel.id + '.' + punta;
             const vigente = actual || (esBarra ? '90°' : 'Sin');
             ganchos.push({
@@ -250,12 +302,12 @@
         if (cur) {
           // el elemento donde estaba, punteado, y el rótulo con los dos largos donde quedaría
           const viejo = (esBarra ? p0.barras : p0.bastones).find((x) => x.id === sel);
-          const top = esBarra ? dib.isC !== inv : dib.top, yS = inv ? 170 - dib.y : dib.y;
+          const top = esBarra ? dib.isC !== inv : dib.top, yS = inv ? FH - dib.y : dib.y;
           const ti = viejo.ganchoInicio ? viejo.ganchoInicioTipo || '90°' : '', tf = viejo.ganchoFin ? viejo.ganchoFinTipo || '90°' : '';
           fantasma = {
             pts: conGanchos(X(viejo.desde), X(viejo.hasta), dib.y, esBarra ? (dib.isC ? 1 : -1) : (dib.top ? 1 : -1), ti, tf, esBarra ? 22 : 16),
-            laps: p0.traslapos.filter((x) => vivos.includes(x.id)).map((x) => ({ x: X(x.desde), w: X(x.hasta) - X(x.desde), y: arribaAntes(x.capa) ? 45 : 106 })),
-            lx: (X(datoSel.desde) + X(datoSel.hasta)) / 2, ly: top ? yS - 14 : yS + 24, lt: cur.rotulo, col: colVivo,
+            laps: p0.traslapos.filter((x) => vivos.includes(x.id)).map((x) => ({ x: X(x.desde), w: X(x.hasta) - X(x.desde), y: Y(arribaAntes(x.capa) ? 45 : 106) })),
+            lx: (X(datoSel.desde) + X(datoSel.hasta)) / 2, ly: top ? yS - 14 * k : yS + 24 * k, lt: cur.rotulo, col: colVivo,
           };
           if (esBarra) {
             foot = p.traslapos.filter((x) => vivos.includes(x.id)).map((x) => 'Traslapo ' + x.id + ' de ' + f2(x.desde) + ' a ' + f2(x.hasta) + ' m').join(' · ') + ' · ' + cur.rotulo;
@@ -277,9 +329,13 @@
         w: W, h: H, wpx: W + 'px', hpx: H + 'px',
         cursor: this.state.drag ? 'grabbing' : 'grab',
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
-        flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
+        flip: inv ? 'translate(0 ' + FH + ') scale(1 -1)' : 'translate(0 0)',
+        // las y de lo que va debajo del eje de la viga, con la altura dinámica
+        beamH: 90 + ex, midY2: 158 + ex, cutY2: 152 + ex, cutH: 158 + ex, yLuz: 178 + ex,
+        // la sección de columnas va en el pedazo de columna sobre la viga: abajo chocaba con el texto de un voladizo corto
+        yColSec: 30, yEje: 192 + ex,
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, stx, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol,
+        b, l, t, st, yE, secs, colSecs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
         hdMove: (e) => {
           const h = this.state.hd;
@@ -292,9 +348,13 @@
         hdUp: () => this.soltarPunto(true),
         hdCancel: () => this.soltarPunto(false),
         beamX: X(p.inicio), beamW: X(p.fin) - X(p.inicio),
-        stVis: showSt ? 'visible' : 'hidden',
+        stVis: showSt && capas.estribos ? 'visible' : 'hidden',
+        mediaOn: capas.media, corteOn: capas.corte, textosOn: capas.textos, estTextos: capas.estribos && capas.textos,
+        capasOpen: this.state.capasOpen, toggleCapas: () => this.setState({ capasOpen: !this.state.capasOpen }),
+        capasList: CAPAS.map(([clave, texto]) => ({ texto, on: !!capas[clave], toggle: () => this.cambiarCapas({ [clave]: !capas[clave] }) })),
+        pulg, setNum: () => this.cambiarCapas({ pulgadas: false }), setPulg: () => this.cambiarCapas({ pulgadas: true }),
         warnText: wl ? 'traslapo ' + f2(wl.hasta - wl.desde) + ' · +' + f2(wl.hasta - wl.desde - wl.minimo) : '',
-        warnX: wl ? X((wl.desde + wl.hasta) / 2) : 0, warnY: inv ? 100 : 82,
+        warnX: wl ? X((wl.desde + wl.hasta) / 2) : 0, warnY: inv ? FH - 70 : 82,
         zoomPct: Math.round((v.z / fitZ) * 100) + '%',
         stop: (e) => e.stopPropagation(),
         cutDown: (e) => {
@@ -333,50 +393,61 @@
 
     render() {
       const v = this.valores();
-      const lap = (x) => html`<rect x="${x.x}" y="${x.isC ? 45 : 106}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" style="cursor: pointer" onClick=${x.pick}></rect>`;
-      const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick}></polyline>`;
-      const rotulo = (x) => html`<text x="${x.lx}" y="${x.ly}" text-anchor="middle" font-size="10" font-family="IBM Plex Mono, monospace" fill="${x.col}">${x.lt}</text>`;
+      const k = v.k, NS = 'non-scaling-stroke';
+      const lap = (x) => html`<rect x="${x.x}" y="${x.ry}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" vector-effect="${NS}" style="cursor: pointer" onClick=${x.pick}></rect>`;
+      const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick}></polyline>`;
+      // los textos llevan un borde del color del fondo para leerse sobre las líneas (#100)
+      const texto = (x, y, t, col, tam, peso) => (t ? html`<text x="${x}" y="${y}" text-anchor="middle" font-size="${tam * k}" font-weight="${peso}" font-family="IBM Plex Mono, monospace" fill="${col}" stroke="#F1F3F5" stroke-width="${3.5 * k}" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${t}</text>` : null);
+      const rotulo = (x) => texto(x.lx, x.ly, x.lt, x.col, 10, 500);
       return html`
 <div style="position: relative; width: ${v.wpx}; height: ${v.hpx}; overflow: hidden; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #16191D; cursor: ${v.cursor}; user-select: none; touch-action: none" onPointerDown=${v.down} onPointerMove=${v.move} onPointerUp=${v.up} onPointerLeave=${v.up} onWheel=${v.wheel} onDblClick=${v.fitView}>
   <svg width="${v.w}" height="${v.h}" style="display: block" role="img" aria-label="Alzado del pórtico con barras, traslapos, bastones y estribos">
     <g transform="${v.view}">
-      <rect x="${v.beamX}" y="40" width="${v.beamW}" height="90" fill="#F1F3F5" stroke="#9AA3AD" stroke-width="1"></rect>
-      ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="90" fill="#E9ECEF" stroke="none"></rect>`)}
-      <g visibility="${v.stVis}">
-        ${v.st.map((z) => html`<line x1="${z.x1}" y1="85" x2="${z.x2}" y2="85" stroke="#C3CAD2" stroke-width="80" stroke-dasharray="${z.da}"></line>`)}
-        ${v.stx.map((x) => html`<line x1="${x}" y1="45" x2="${x}" y2="125" stroke="#C3CAD2" stroke-width="1"></line>`)}
-      </g>
-      ${v.cols.map((c) => html`<rect x="${c.x}" y="14" width="${c.w}" height="152" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1"></rect>`)}
-      ${v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="158" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3"></line>`)}
+      <rect x="${v.beamX}" y="40" width="${v.beamW}" height="${v.beamH}" fill="#F1F3F5" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>
+      ${v.vol.map((o) => html`<rect x="${o.x}" y="40" width="${o.w}" height="${v.beamH}" fill="#E9ECEF" stroke="none"></rect>`)}
+      ${v.cols.map((c) => html`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>`)}
+      ${v.mediaOn ? v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="${v.midY2}" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3" vector-effect="${NS}"></line>`) : null}
       <g transform="${v.flip}">
         ${v.l.filter((x) => x.isC).map(lap)}
         ${v.l.filter((x) => !x.isC).map(lap)}
+        ${v.halo ? html`<polyline points="${v.halo.pts}" fill="none" stroke="#16191D" stroke-opacity="0.22" stroke-width="10" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
         ${v.b.filter((x) => x.isC).map(barra)}
         ${v.b.filter((x) => !x.isC).map(barra)}
         ${v.t.filter((x) => x.top).map(barra)}
         ${v.t.filter((x) => !x.top).map(barra)}
         ${v.fantasma ? html`
-        ${v.fantasma.laps.map((x) => html`<rect x="${x.x}" y="${x.y}" width="${x.w}" height="18" fill="none" stroke="#9AA3AD" stroke-width="1.2" stroke-dasharray="4 3" pointer-events="none"></rect>`)}
-        <polyline points="${v.fantasma.pts}" fill="none" stroke="#9AA3AD" stroke-width="1.6" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
+        ${v.fantasma.laps.map((x) => html`<rect x="${x.x}" y="${x.y}" width="${x.w}" height="18" fill="none" stroke="#9AA3AD" stroke-width="1.2" stroke-dasharray="4 3" vector-effect="${NS}" pointer-events="none"></rect>`)}
+        <polyline points="${v.fantasma.pts}" fill="none" stroke="#9AA3AD" stroke-width="1.6" stroke-dasharray="5 4" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
         ${v.puntos3 ? html`
         <g>
-          ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="5" fill="${o.fill}" stroke="${o.stroke}" stroke-width="1.6" pointer-events="none"></circle>`)}
-          ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="11" fill="transparent" aria-label=${o.tip} style="cursor: ${o.cur}" onPointerDown=${o.down} onPointerMove=${v.hdMove} onPointerUp=${v.hdUp} onPointerCancel=${v.hdCancel}><title>${o.tip}</title></circle>`)}
+          ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="${5 * k}" fill="${o.fill}" stroke="${o.stroke}" stroke-width="1.6" vector-effect="${NS}" pointer-events="none"></circle>`)}
+          ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="${11 * k}" fill="transparent" aria-label=${o.tip} style="cursor: ${o.cur}" onPointerDown=${o.down} onPointerMove=${v.hdMove} onPointerUp=${v.hdUp} onPointerCancel=${v.hdCancel}><title>${o.tip}</title></circle>`)}
         </g>` : null}
       </g>
-      ${v.b.filter((x) => x.isC).map(rotulo)}
-      ${v.b.filter((x) => !x.isC).map(rotulo)}
-      ${v.fantasma ? html`<text x="${v.fantasma.lx}" y="${v.fantasma.ly}" text-anchor="middle" font-size="12" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.fantasma.col}" stroke="#FAFBFC" stroke-width="4" paint-order="stroke" pointer-events="none">${v.fantasma.lt}</text>` : null}
-      <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
-      <rect x="${v.cut.bandX}" y="40" width="${v.cut.bandW}" height="90" fill="${v.cut.c}" fill-opacity="0.08" pointer-events="none"></rect>
-      <line x1="${v.cut.x}" y1="18" x2="${v.cut.x}" y2="152" stroke="${v.cut.c}" stroke-width="1.6" stroke-dasharray="6 3" pointer-events="none"></line>
-      <path d="${v.cut.arrow(18)}" stroke="${v.cut.c}" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
-      <path d="${v.cut.arrow(152)}" stroke="${v.cut.c}" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
-      <text x="${v.cut.x}" y="12" text-anchor="middle" font-size="10" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}" pointer-events="none">1-1</text>
-      <rect x="${v.cut.x - 7}" y="2" width="14" height="158" fill="transparent" style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>
-      ${v.luces.map((m) => html`<text x="${m.x}" y="178" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#5E6670">${m.lt}</text>`)}
-      ${v.vol.map((o) => html`<text x="${o.lx}" y="178" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#5E6670">${o.lt}</text>`)}
-      ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="192" r="8" fill="#FFFFFF" stroke="#9AA3AD"></circle><text x="${e.x}" y="195.5" text-anchor="middle" font-size="9" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}
+      <g visibility="${v.stVis}">
+        ${v.st.map((z) => html`<path d="${z.d}" stroke="#5E6670" stroke-width="1" fill="none" vector-effect="${NS}"></path>`)}
+        ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE - 4 * k, z.a, '#3F4A57', 9, 400)) : null}
+        ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 10 * k, z.b, '#3F4A57', 9, 400)) : null}
+        ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 20 * k, z.c, '#3F4A57', 9, 400)) : null}
+      </g>
+      ${v.textosOn ? html`
+      ${v.secs.map((s) => texto(s.x, 9, s.t, '#5E6670', 9, 400))}
+      ${v.l.map((x) => texto(x.lx, x.ly, x.lt, '#3F4A57', 9, 600))}
+      ${v.t.map((x) => texto(x.lx, x.ly, x.lt, x.col, 9, 400))}
+      ${v.b.map(rotulo)}` : null}
+      ${v.colSecs.map((c) => texto(c.x, v.yColSec, c.t, '#3F4A57', 9, 500))}
+      ${v.fantasma ? html`<text x="${v.fantasma.lx}" y="${v.fantasma.ly}" text-anchor="middle" font-size="${12 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.fantasma.col}" stroke="#FAFBFC" stroke-width="${4 * k}" paint-order="stroke" pointer-events="none">${v.fantasma.lt}</text>` : null}
+      <text x="${v.warnX}" y="${v.warnY}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="#B26B00">${v.warnText}</text>
+      ${v.corteOn ? html`
+      <rect x="${v.cut.bandX}" y="40" width="${v.cut.bandW}" height="${v.beamH}" fill="${v.cut.c}" fill-opacity="0.08" pointer-events="none"></rect>
+      <line x1="${v.cut.x}" y1="18" x2="${v.cut.x}" y2="${v.cutY2}" stroke="${v.cut.c}" stroke-width="1.6" stroke-dasharray="6 3" vector-effect="${NS}" pointer-events="none"></line>
+      <path d="${v.cut.arrow(18)}" stroke="${v.cut.c}" stroke-width="1.6" vector-effect="${NS}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
+      <path d="${v.cut.arrow(v.cutY2)}" stroke="${v.cut.c}" stroke-width="1.6" vector-effect="${NS}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
+      <text x="${v.cut.x}" y="${18 - 6 * k}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}" pointer-events="none">1-1</text>
+      <rect x="${v.cut.x - 7 * k}" y="2" width="${14 * k}" height="${v.cutH}" fill="transparent" style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>` : null}
+      ${v.luces.map((m) => html`<text x="${m.x}" y="${v.yLuz}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#5E6670">${m.lt}</text>`)}
+      ${v.vol.map((o) => html`<text x="${o.lx}" y="${v.yLuz}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#5E6670">${o.lt}</text>`)}
+      ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="${v.yEje}" r="${8 * k}" fill="#FFFFFF" stroke="#9AA3AD" vector-effect="${NS}"></circle><text x="${e.x}" y="${v.yEje + 3.5 * k}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}
     </g>
   </svg>
   ${v.ganchos.map((g) => html`
@@ -386,13 +457,35 @@
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d=${o.icono} stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>${o.texto}
     </button>`)}
   </div>`)}
-  <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 160}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
+  <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 260}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
     <span>${v.caption}</span>
-    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #3F4A57"></span>corrida</span>
-    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #0F7B6C"></span>bastón</span>
-    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(199,122,18,0.25); border: 1px solid #C77A12"></span>traslapo</span>
+    ${v.ley.map((d) => html`<span style="display: flex; align-items: center; gap: 4px"><span style="width: 9px; height: 9px; border-radius: 50%; background: ${d.c}"></span>${d.t}</span>`)}
+    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(94,102,112,0.14); border: 1px solid #5E6670"></span>traslapo</span>
   </div>
-  <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 2px; align-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; padding: 2px" onPointerDown=${v.stop} onDblClick=${v.stop}>
+  <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 6px; align-items: flex-start" onPointerDown=${v.stop} onDblClick=${v.stop} onWheel=${v.stop}>
+  <div style="position: relative">
+    <button type="button" aria-expanded=${v.capasOpen ? 'true' : 'false'} aria-controls="capas-menu" onClick=${v.toggleCapas} style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 1px solid #D9DDE2; border-radius: 6px; background: ${v.capasOpen ? '#E8F0FA' : '#FFFFFF'}; font: inherit; font-size: 12px; color: #16191D; cursor: pointer">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5l5.5 3L7 7.5 1.5 4.5zM1.5 7.2L7 10.2l5.5-3M1.5 9.8L7 12.8l5.5-3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"></path></svg>
+      Capas
+      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </button>
+    ${v.capasOpen ? html`
+    <div id="capas-menu" style="position: absolute; top: 40px; right: 0; width: 224px; display: flex; flex-direction: column; gap: 2px; padding: 8px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 8px 24px rgba(22, 25, 29, 0.16); font-size: 12px; z-index: 2">
+      ${v.capasList.map((c) => html`
+      <label style="display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 4px; border-radius: 4px; cursor: pointer; color: #16191D">
+        <input type="checkbox" checked=${c.on} onChange=${c.toggle} style="width: 15px; height: 15px; margin: 0; accent-color: #1F5FAF" />${c.texto}
+      </label>`)}
+      <div style="height: 1px; margin: 4px 0; background: #EEF0F2"></div>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 2px 4px">
+        <span style="flex: 1; color: #3F4A57">Diámetro</span>
+        <div role="group" aria-label="Cómo se escribe el diámetro" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+          <button type="button" aria-pressed=${v.pulg ? 'false' : 'true'} onClick=${v.setNum} style="height: 28px; padding: 0 10px; border: 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; ${v.pulg ? 'background: #FFFFFF; color: #16191D' : 'background: #1F5FAF; color: #FFFFFF'}">#4</button>
+          <button type="button" aria-pressed=${v.pulg ? 'true' : 'false'} onClick=${v.setPulg} style="height: 28px; padding: 0 10px; border: 0; border-left: 1px solid #C9CFD6; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: pointer; ${v.pulg ? 'background: #1F5FAF; color: #FFFFFF' : 'background: #FFFFFF; color: #16191D'}">½"</button>
+        </div>
+      </div>
+    </div>` : null}
+  </div>
+  <div style="display: flex; gap: 2px; align-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; padding: 2px">
     <button type="button" aria-label="Alejar" onClick=${v.zoomOut} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7h8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"></path></svg>
     </button>
@@ -403,6 +496,7 @@
     <button type="button" aria-label="Ajustar a la vista" onClick=${v.fitView} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
     </button>
+  </div>
   </div>
   <div style="position: absolute; bottom: 6px; left: 10px; right: 10px; font-size: 11px; line-height: 1.35; color: ${v.footCol}; pointer-events: none">${v.foot}</div>
 </div>`;

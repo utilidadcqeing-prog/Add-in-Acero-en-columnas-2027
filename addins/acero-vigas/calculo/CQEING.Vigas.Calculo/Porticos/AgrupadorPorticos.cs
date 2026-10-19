@@ -39,22 +39,40 @@ public static class AgrupadorPorticos
             {
                 List<Tramo> cadena = cadenas[i];
                 double desde = cadena.Min(t => t.Desde), hasta = cadena.Max(t => t.Hasta);
-                List<Soporte> propios = Unir(soportes.Where(s => s.Hasta >= desde - ToleranciaContacto && s.Desde <= hasta + ToleranciaContacto)
-                    .Where(s => s.Tipo != TipoApoyo.Viga || TerminaSobre(cadena, s, soportes)));
+                List<Soporte> propios = SinArmazonDeVoladizos(Unir(soportes.Where(s => s.Hasta >= desde - ToleranciaContacto && s.Desde <= hasta + ToleranciaContacto)
+                    .Where(s => s.Tipo != TipoApoyo.Viga || TerminaSobre(cadena, s, soportes))), modelo);
                 if (propios.Count == 0)
                 {
                     avisos.Add(new AvisoLectura(TipoAvisoLectura.SinApoyos, string.Join(", ", cadena.Select(t => t.Viga.Id))));
                     continue;
                 }
 
-                string nombre = ejePropio is null
+                EjeLeido? eje = ejePropio ?? EjeQuePasaPorLosApoyos(linea, modelo.Ejes, propios);
+                string nombre = eje is null
                     ? $"Pórtico sin eje {++sinEje}"
-                    : $"Pórtico {ejePropio.Nombre}{(cadenas.Count > 1 ? (char)('a' + i) : "")}";
+                    : $"Pórtico {eje.Nombre}{(cadenas.Count > 1 ? (char)('a' + i) : "")}";
 
-                porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, ejePropio?.Nombre, desde, hasta, avisos));
+                porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, eje?.Nombre, desde, hasta, avisos));
             }
         }
         return new ResultadoLectura(porticos, avisos);
+    }
+
+    /// <summary>
+    /// Viga corrida del eje (al borde de la columna, excéntrica): la rejilla paralela más cercana que pasa por dentro
+    /// de todas las columnas y muros del pórtico, o null (decisión 2 del plan docs/planes/2026-10-19-ajustes-tablero-vigas-100.md).
+    /// </summary>
+    private static EjeLeido? EjeQuePasaPorLosApoyos(Linea linea, IReadOnlyList<EjeLeido> ejes, List<Soporte> soportes)
+    {
+        List<Soporte> firmes = soportes.Where(s => s.Tipo != TipoApoyo.Viga).ToList();
+        if (firmes.Count == 0)
+            return null;
+        return ejes.Where(e => linea.EsParalela(e.Hasta.X - e.Desde.X, e.Hasta.Y - e.Desde.Y))
+            .Select(e => (Eje: e, Distancia: linea.Normal(e.Desde) - linea.Desplazamiento))
+            .Where(c => firmes.All(s => c.Distancia >= s.NormalDesde && c.Distancia <= s.NormalHasta))
+            .OrderBy(c => Math.Abs(c.Distancia))
+            .Select(c => c.Eje)
+            .FirstOrDefault();
     }
 
     private static PorticoLeido Armar(Linea linea, IReadOnlyList<EjeLeido> ejes, List<Tramo> cadena, List<Soporte> soportes,
@@ -100,7 +118,8 @@ public static class AgrupadorPorticos
 
         return new PorticoLeido(nombre, eje, nivel?.Nombre, TipoDe(nivel),
             new Portico(apoyos, voladizoInicio, voladizoFinal),
-            soportes.Select(s => s.Tipo).ToList(), tramos, cadena.Select(t => t.Viga.Id).ToList());
+            soportes.Select(s => s.Tipo).ToList(), tramos, cadena.Select(t => t.Viga.Id).ToList(),
+            soportes.Select(s => Math.Round(s.NormalHasta - s.NormalDesde)).ToList());
 
         TramoLeido Tramo(string nombreTramo, double a, double b, bool voladizo)
         {
@@ -128,8 +147,11 @@ public static class AgrupadorPorticos
     /// <summary>Una viga sobre la línea, medida a lo largo de ella (Desde &lt; Hasta).</summary>
     private sealed record Tramo(VigaLeida Viga, double Desde, double Hasta);
 
-    /// <summary>Un apoyo sobre la línea: el rango de su huella medido a lo largo de ella.</summary>
-    private sealed record Soporte(string Id, TipoApoyo Tipo, double Desde, double Hasta);
+    /// <summary>
+    /// Un apoyo sobre la línea: el rango de su huella medido a lo largo de ella (Desde–Hasta) y de lado a lado
+    /// (NormalDesde–NormalHasta, con signo desde la línea).
+    /// </summary>
+    private sealed record Soporte(string Id, TipoApoyo Tipo, double Desde, double Hasta, double NormalDesde, double NormalHasta);
 
     /// <summary>Vigas del mismo nivel sobre una misma línea, con la línea en dirección +X o +Y.</summary>
     private sealed class Linea
@@ -186,13 +208,13 @@ public static class AgrupadorPorticos
             return -(ox * gy - oy * gx) / denominador;
         }
 
-        /// <summary>Si la huella cruza la línea en planta, el rango que ocupa a lo largo de ella.</summary>
-        public (double Desde, double Hasta)? Cruza(IReadOnlyList<Punto> huella)
+        /// <summary>Si la huella cruza la línea en planta, el rango que ocupa a lo largo de ella y de lado a lado.</summary>
+        public (double Desde, double Hasta, double NormalDesde, double NormalHasta)? Cruza(IReadOnlyList<Punto> huella)
         {
             double minimo = huella.Min(p => Normal(p) - Desplazamiento), maximo = huella.Max(p => Normal(p) - Desplazamiento);
             if (minimo > SolapeMinimoEnAlto || maximo < -SolapeMinimoEnAlto)
                 return null;
-            return (huella.Min(A), huella.Max(A));
+            return (huella.Min(A), huella.Max(A), minimo, maximo);
         }
 
         public bool SeSolapaEnAlto(double zAbajo, double zArriba) =>
@@ -232,16 +254,16 @@ public static class AgrupadorPorticos
                 continue;
             if (a.Direccion is Punto d && linea.EsParalela(d.X, d.Y))
                 continue;
-            if (linea.Cruza(a.Huella) is var (desde, hasta))
-                soportes.Add(new Soporte(a.Id, a.Tipo, desde, hasta));
+            if (linea.Cruza(a.Huella) is var (desde, hasta, normalDesde, normalHasta))
+                soportes.Add(new Soporte(a.Id, a.Tipo, desde, hasta, normalDesde, normalHasta));
         }
         foreach (VigaLeida v in modelo.Vigas)
         {
             if (linea.Tramos.Any(t => t.Viga == v) || linea.EsParalela(v.Hasta.X - v.Desde.X, v.Hasta.Y - v.Desde.Y)
                 || !linea.SeSolapaEnAlto(v.ZAbajo, v.ZArriba))
                 continue;
-            if (linea.Cruza(Huella(v)) is var (desde, hasta))
-                soportes.Add(new Soporte(v.Id, TipoApoyo.Viga, desde, hasta));
+            if (linea.Cruza(Huella(v)) is var (desde, hasta, normalDesde, normalHasta))
+                soportes.Add(new Soporte(v.Id, TipoApoyo.Viga, desde, hasta, normalDesde, normalHasta));
         }
         return soportes;
     }
@@ -260,6 +282,31 @@ public static class AgrupadorPorticos
     private static bool TerminaSobre(List<Tramo> cadena, Soporte viga, List<Soporte> soportes) =>
         cadena.SelectMany(t => new[] { t.Desde, t.Hasta })
             .Any(punta => Contiene(viga, punta) && !soportes.Any(s => s.Tipo != TipoApoyo.Viga && Contiene(s, punta)));
+
+    /// <summary>
+    /// Lo que pasa de la primera / última columna o muro es voladizo: una viga que cruza ahí es armazón, no apoyo,
+    /// salvo que ella misma descanse en una columna o muro (cargadora). Decisión 3 del plan
+    /// docs/planes/2026-10-19-ajustes-tablero-vigas-100.md.
+    /// </summary>
+    private static List<Soporte> SinArmazonDeVoladizos(List<Soporte> soportes, ModeloLeido modelo)
+    {
+        int primero = soportes.FindIndex(s => s.Tipo != TipoApoyo.Viga), ultimo = soportes.FindLastIndex(s => s.Tipo != TipoApoyo.Viga);
+        return soportes.Where((s, i) => s.Tipo != TipoApoyo.Viga || (primero >= 0 && i > primero && i < ultimo)
+            || modelo.Vigas.FirstOrDefault(v => v.Id == s.Id) is VigaLeida v && modelo.Apoyos.Any(a => Descansa(v, a))).ToList();
+    }
+
+    /// <summary>La viga descansa en el apoyo si se pisan en planta y el apoyo llega a la altura de la viga.</summary>
+    private static bool Descansa(VigaLeida v, ApoyoLeido a)
+    {
+        if (a.ZArriba < v.ZAbajo - ToleranciaContacto || a.ZAbajo > v.ZArriba)
+            return false;
+        double dx = v.Hasta.X - v.Desde.X, dy = v.Hasta.Y - v.Desde.Y;
+        double largo = Math.Sqrt(dx * dx + dy * dy), ux = dx / largo, uy = dy / largo;
+        double A(Punto p) => (p.X - v.Desde.X) * ux + (p.Y - v.Desde.Y) * uy;
+        double N(Punto p) => -(p.X - v.Desde.X) * uy + (p.Y - v.Desde.Y) * ux;
+        return a.Huella.Max(A) >= -ToleranciaContacto && a.Huella.Min(A) <= largo + ToleranciaContacto
+            && a.Huella.Max(N) >= -v.Ancho / 2 - ToleranciaContacto && a.Huella.Min(N) <= v.Ancho / 2 + ToleranciaContacto;
+    }
 
     private static bool Contiene(Soporte s, double t) => t >= s.Desde - ToleranciaContacto && t <= s.Hasta + ToleranciaContacto;
 
@@ -288,7 +335,12 @@ public static class AgrupadorPorticos
         foreach (Soporte s in soportes.OrderBy(s => s.Desde))
         {
             if (unidos.Count > 0 && s.Desde <= unidos[^1].Hasta)
-                unidos[^1] = unidos[^1] with { Hasta = Math.Max(unidos[^1].Hasta, s.Hasta) };
+                unidos[^1] = unidos[^1] with
+                {
+                    Hasta = Math.Max(unidos[^1].Hasta, s.Hasta),
+                    NormalDesde = Math.Min(unidos[^1].NormalDesde, s.NormalDesde),
+                    NormalHasta = Math.Max(unidos[^1].NormalHasta, s.NormalHasta),
+                };
             else
                 unidos.Add(s);
         }

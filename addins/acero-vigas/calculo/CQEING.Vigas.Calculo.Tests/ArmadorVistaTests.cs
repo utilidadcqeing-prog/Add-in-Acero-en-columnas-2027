@@ -48,6 +48,140 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void LaVistaTraeElColorDeCadaDiametroYLosDiametrosParaLaLeyenda()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5)], Inferior = [new GrupoBarras(3, 4)] };
+
+        VistaPortico v = Armar(o);
+
+        Assert.All(v.Barras.Where(b => b.Capa == "arriba"), b => Assert.Equal(ColoresDiametro.De(5), b.Color));
+        Assert.All(v.Barras.Where(b => b.Capa == "abajo"), b => Assert.Equal(ColoresDiametro.De(4), b.Color));
+        Assert.All(v.Bastones, b => Assert.Equal(ColoresDiametro.De(int.Parse(b.Cantidad.Split('#')[1])), b.Color));
+        Assert.All(v.Seccion.Barras.Where(b => !b.Baston), b => Assert.Equal(ColoresDiametro.De(b.Arriba ? 5 : 4), b.Color));
+        Assert.Equal(["#5", "#4"], v.Diametros!.Select(d => d.Nombre));
+        Assert.Equal([ColoresDiametro.De(5), ColoresDiametro.De(4)], v.Diametros!.Select(d => d.Color));
+        Assert.Equal(["⅝\"", "½\""], v.Diametros!.Select(d => d.NombrePulgadas));
+    }
+
+    [Fact]
+    public void CadaBarraYBastonTraeSuRotuloEnNumeroYEnPulgadas()
+    {
+        VistaPortico v = Armar();
+
+        Assert.All(v.Barras, b => Assert.Matches(b.GanchoInicio || b.GanchoFin ? @"^3#5L= \d+\.\d\d/\d+\.\d\d$" : @"^3#5L= \d+\.\d\d$", b.Rotulo));
+        Assert.All(v.Barras, b => Assert.Equal(b.Rotulo.Replace("3#5", "3Ø⅝\""), b.RotuloPulgadas));
+        Assert.Contains(v.Barras, b => b.Rotulo.Contains('/'));
+        Assert.All(v.Bastones, b => Assert.Matches(@"^\d+#\d+L= \d+\.\d\d(/\d+\.\d\d)?$", b.Rotulo));
+        Assert.All(v.Bastones, b => Assert.Contains("Ø", b.RotuloPulgadas));
+    }
+
+    [Fact]
+    public void ElTraslapoTraeSuLargoA2Decimales()
+    {
+        VistaPortico v = Armar();
+
+        Assert.All(v.Traslapos, t => Assert.Equal((t.Hasta - t.Desde).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), t.Rotulo));
+    }
+
+    [Fact]
+    public void CadaZonaDeEstribosTraeCantidadSeparacionYLargoDesdeLaCara()
+    {
+        VistaPortico v = Armar();
+        IReadOnlyList<double> pos = v.PosicionesEstribos!;
+        int EnZona(ZonaEstribos z) => pos.Count(x => x >= z.Desde - 1e-6 && x <= z.Hasta + 1e-6);
+
+        // la primera zona: junto a la cara derecha de la columna A, a la separación de la zona (0.10)
+        ZonaEstribos primera = v.Zonas[0];
+        Assert.True(primera.Junta);
+        Assert.Equal($"{EnZona(primera)}e#3", primera.Cantidad);
+        Assert.Equal("@.10", primera.Separacion);
+        Assert.Equal("L=" + (primera.Hasta - v.Apoyos[0].CaraDerecha).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), primera.Largo);
+        // el centro no lleva L, y entre todas las zonas están todos los estribos una sola vez
+        Assert.All(v.Zonas.Where(z => !z.Junta), z => Assert.Equal("", z.Largo));
+        Assert.Equal(pos.Count, v.Zonas.Sum(z => int.Parse(z.Cantidad.Split('e')[0])));
+    }
+
+    [Fact]
+    public void CadaTramoTraeSuSeccionEnLaMitad()
+    {
+        VistaPortico v = Armar();
+
+        Assert.Equal(["30×50", "30×50", "30×50", "30×50"], v.Secciones!.Select(s => s.Texto));
+        Assert.Equal((v.Apoyos[0].CaraDerecha + v.Apoyos[1].CaraIzquierda) / 2, v.Secciones![0].X, 6);
+        Assert.Equal((v.Apoyos[^1].CaraDerecha + v.Fin) / 2, v.Secciones![^1].X, 6);
+    }
+
+    [Fact]
+    public void UnaCorridaConDosDiametrosLlevaElColorDelMasGrueso()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };
+
+        VistaPortico v = Armar(o);
+
+        Assert.All(v.Barras.Where(b => b.Capa == "arriba"), b => Assert.Equal(ColoresDiametro.De(5), b.Color));
+    }
+
+    [Fact]
+    public void DosBarrasFijasEnLaFila1SeCalculan()
+    {
+        // Juan, 19-oct: con 2 #5 en la Fila 1 y 7 #4 en Auto, al quitar los #4 el panel no se actualizaba
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(2, 5, 1)] };
+
+        VistaPortico v = Armar(o);
+
+        Assert.Equal([2], v.Superior.PorFila);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(7)]
+    [InlineData(9)]
+    [InlineData(10)]
+    [InlineData(15)]
+    [InlineData(20)]
+    public void DosFijasEnLaFila1MasOtrasEnAutoNoRevientan(int n)
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(2, 5, 1), new GrupoBarras(n, 4)] };
+
+        Armar(o);
+    }
+
+    [Fact]
+    public void CadaColumnaTraeSuSeccionAnchoPorFondo()
+    {
+        PorticoLeido p = Portico1();
+        p = p with
+        {
+            TiposDeApoyo = [TipoApoyo.Columna, TipoApoyo.Viga, TipoApoyo.Columna, TipoApoyo.Columna],
+            FondosDeApoyo = [500, 300, 500, 450],
+        };
+
+        VistaPortico v = Armar(p: p);
+
+        // las columnas de la maqueta miden 400 a lo largo de la viga; la que es viga no lleva sección de columna
+        Assert.Equal(["40×50", "", "40×50", "40×45"], v.Apoyos.Select(a => a.Seccion));
+    }
+
+    [Fact]
+    public void SinFondosLaSeccionVaVacia()
+    {
+        Assert.All(Armar().Apoyos, a => Assert.Equal("", a.Seccion));
+    }
+
+    [Fact]
+    public void UnApoyoQueEsVigaSeMarcaEnLaVista()
+    {
+        PorticoLeido p = Portico1();
+        p = p with { TiposDeApoyo = [TipoApoyo.Columna, TipoApoyo.Viga, TipoApoyo.Muro, TipoApoyo.Columna] };
+
+        VistaPortico v = Armar(p: p);
+
+        Assert.Equal([false, true, false, false], v.Apoyos.Select(a => a.EsViga));
+    }
+
+    [Fact]
     public void LaListaNombraElPorticoComoLaMaqueta()
     {
         PorticoEnLista l = ArmadorVista.EnLista(Portico1());

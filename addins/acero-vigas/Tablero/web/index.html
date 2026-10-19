@@ -7,6 +7,10 @@
 <!-- El <style> del helmet de Main.dc.html de la maqueta, tal cual (#83). -->
 <style>
 body{margin:0}
+/* Página fija (Carlos 1:29:10; Juan, 19-oct: "hace como si tuviera scroll"): con el touchpad, WebView2 estiraba la página
+   entera y la soltaba (rebote). Solo las listas con scroll propio se mueven, y sin rebote. */
+html,body{overflow:hidden}
+*{overscroll-behavior:none}
 a{color:#1F5FAF}a:hover{color:#174A8A}
 button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #1F5FAF;outline-offset:1px}
 button:disabled{cursor:not-allowed}

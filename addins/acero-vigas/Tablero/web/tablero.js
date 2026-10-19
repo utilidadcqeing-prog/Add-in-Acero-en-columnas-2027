@@ -79,7 +79,7 @@
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
+      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #8A939D; border-radius: 4px"></div>
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
       ${sec.proy.map((d) => html`
@@ -319,7 +319,10 @@
 
       // capas (#88): el reparto en filas sale del motor
       const maxCapas = Math.max(1, Math.round(num(s.maxCapas, 3)));
-      const layerInfo = (rows, cara) => {
+      // las bolitas de cada fila, con el color del diámetro de las barras del corte en esa fila (#100)
+      const coloresFila = (arriba, i) => (P ? P.seccion.barras : []).filter((b) => !b.baston && b.arriba === arriba && b.fila === i)
+        .sort((p, q) => p.x - q.x).map((b) => b.color || '#3F4A57');
+      const layerInfo = (rows, cara, arriba) => {
         const total = rows.reduce((a, r) => a + r.n, 0);
         const per = cara ? cara.cabenPorFila : 0;
         const filas = cara && cara.porFila.length ? cara.porFila.length : (per ? Math.ceil(total / per) : 99);
@@ -332,24 +335,29 @@
         else { msg = cara.porFila.map((n, i) => 'fila ' + (i + 1) + ': ' + n).join(' · ') + '. La segunda fila va debajo de las esquinas.'; col = '#9A5B00'; }
         const filasVis = [];
         if (cara && cara.error === 'Ninguno' && cara.porFila.length) {
-          cara.porFila.forEach((n, i) => filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, () => ({ c: i === 0 ? '#1F5FAF' : '#7FA6D6' })) }));
+          cara.porFila.forEach((n, i) => {
+            const cs = coloresFila(arriba, i);
+            filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, (_, j) => ({ c: cs[j] || '#3F4A57' })) });
+          });
         } else {
           let left = total;
           const nF = Math.min(Math.max(filas, 1), Math.max(maxCapas, 1) + 1);
           for (let i = 0; i < nF && left > 0; i++) {
             const n = per ? Math.min(per, left) : left;
             const over = i >= maxCapas;
-            filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, () => ({ c: over ? '#B42318' : (i === 0 ? '#1F5FAF' : '#7FA6D6') })) });
+            filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, () => ({ c: over ? '#B42318' : '#9AA3AD' })) });
             left -= n;
           }
         }
         return { total, per, filas, msg, col, filasVis };
       };
-      const supI = layerInfo(s.sup, P && P.superior), infI = layerInfo(s.inf, P && P.inferior);
+      const supI = layerInfo(s.sup, P && P.superior, true), infI = layerInfo(s.inf, P && P.inferior, false);
       // Fila: Auto · 1 … el máximo de filas del paso 1 (decisión 11 del plan de #84)
       const filasOpc = Array.from({ length: Math.max(1, Math.round(num(s.maxCapas, 3))) }, (_, i) => String(i + 1));
+      // el color de un diámetro, de los que mandó C# para la leyenda (uno recién elegido no lo trae hasta recalcular)
+      const colorDe = (d) => { const x = P && P.diametros ? P.diametros.find((y) => y.nombre === d) : null; return x ? x.color : '#C9CFD6'; };
       const mkRows = (key, rows, label) => rows.map((r, i) => ({
-        n: r.n, d: r.d, f: r.f || '', filasOpc, canRemove: rows.length > 1, filaLabel: 'Fila de las ' + r.n + ' ' + r.d + ' ' + label,
+        n: r.n, d: r.d, c: colorDe(r.d), f: r.f || '', filasOpc, canRemove: rows.length > 1, filaLabel: 'Fila de las ' + r.n + ' ' + r.d + ' ' + label,
         setF: (e) => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, f: e.target.value } : x)) }),
         minusLabel: 'Quitar barra ' + label, plusLabel: 'Añadir barra ' + label, selLabel: 'Diámetro ' + label, removeLabel: 'Quitar este diámetro',
         minus: () => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, n: Math.max(1, x.n - 1) } : x)) }),
@@ -479,7 +487,7 @@
       const seccionA = (K) => ({
         wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
         dots: secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
-          c: b.baston ? '#0F7B6C' : (b.arriba ? '#1F5FAF' : '#3F4A57'), ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
+          c: b.color || '#3F4A57', ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
         // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
         proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
         adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
@@ -545,6 +553,7 @@
         isSelBar: kind === 'bar' && !!SB, isSelLap: kind === 'lap' && !!SL, isSelBast: kind === 'bast' && !!SBa, sb, sl, st: stv, draft: s.draft,
         bastDef: s.bastDef, bastSupN: s.bastSupN, bastInfN: s.bastInfN, bastSupD: bastD(s.bastSupD, s.sup), bastInfD: bastD(s.bastInfD, s.inf),
         rulesWarn: s.rulesWarn,
+        // abierta, la lista de barras toma todo el alto que sobra en la columna (Juan, 19-oct: "que la tabla llegue al límite")
         listOpen: s.listOpen, listLabel: s.listOpen ? 'Ocultar' : 'Ver lista', rows: rowsList.concat(estRows),
         estAddList: adicionales.map((ea, i) => ({ name: 'Adicional ' + (i + 1), desc: ea.tipo.replace('Adicional ', '').replace(/^./, (c) => c.toUpperCase()) + ' · ' + ea.detalle,
           removeLabel: 'Quitar adicional ' + (i + 1), remove: () => this.say(LLEGA(91)) })),
@@ -567,6 +576,12 @@
         isBarras: step === 'barras' && !!P, isBastones: step === 'bastones' && !!P, isEstribos: step === 'estribos' && !!P, isCorteStep: step === 'corte' && !!P, isReglas: step === 'reglas', steps,
         layers, rec: s.rec, alEje, recUp: s.recUp, recDown: s.recDown, recSide: s.recSide,
         more: s.more, moreLabel: s.more ? '− Menos opciones' : '+ Más opciones',
+        // el dibujo del recubrimiento (Carlos 1:00:08: "el azul oscuro sobre negro no se entiende"), como la maqueta:
+        // fondo blanco, estribo gris claro, la barra con el color de su diámetro y, detrás de "Ver el dibujo", para no
+        // alargar el panel
+        recDraw: !!s.recDraw, recDrawLabel: s.recDraw ? 'Ocultar el dibujo' : 'Ver el dibujo',
+        recBarCol: (b1 && b1.color) || '#3F4A57', recBarD: s.inf.length ? s.inf[0].d : '',
+        leySec: (P && P.diametros) || [],
         isSep: s.sepMode === 'separada', sepCm: s.sepCm, maxCapas: s.maxCapas,
         segPeg: s.sepMode === 'pegada' ? on : off, segSep: s.sepMode === 'separada' ? on : off,
         segAerea: !isCim ? on : off, segCim: isCim ? on : off,
@@ -600,6 +615,7 @@
         useIzq: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'izq' }); },
         useDer: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'der' }); },
         toggleList: () => this.setState({ listOpen: !s.listOpen }), toggleMore: () => this.setState({ more: !s.more }),
+        toggleRecDraw: () => this.setState({ recDraw: !s.recDraw }),
         setRec: (e) => this.cambiar({ rec: e.target.value }, true), setRecUp: (e) => this.cambiar({ recUp: e.target.value }, true),
         setRecDown: (e) => this.cambiar({ recDown: e.target.value }, true), setRecSide: (e) => this.cambiar({ recSide: e.target.value }, true),
         sepPegada: () => this.cambiar({ sepMode: 'pegada' }), sepSeparada: () => this.cambiar({ sepMode: 'separada' }),
@@ -700,7 +716,7 @@
     </div>
 
     ${v.hasPor ? html`
-      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px">
+      <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px">
         <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap">
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
             <span style="font-size: 18px; font-weight: 600">${v.por.name}</span>
@@ -736,6 +752,9 @@
               <span style="display: flex; align-items: baseline; gap: 8px; white-space: nowrap">
                 <span style="font-weight: 600; font-size: 15px">Corte 1-1</span>
                 ${v.cutTipo ? html`<span style="font-size: 11px; font-weight: 600; color: #1E7A46">Sección más común</span>` : null}
+              </span>
+              <span style="display: flex; gap: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #3F4A57">
+                ${v.leySec.map((d) => html`<span style="display: flex; align-items: center; gap: 5px"><span style="width: 10px; height: 10px; border-radius: 50%; background: ${d.color}"></span>${d.nombre}</span>`)}
               </span>
               <span>A ${v.cutPos} m del eje A · ${v.cutTramo}</span>
               <span>Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
@@ -812,7 +831,7 @@
             <span style="font-size: 12px; color: #5E6670">${v.st.note}</span>` : null}
         </div>
 
-        <div style="display: flex; flex-direction: column; min-height: 0; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
+        <div style="display: flex; flex-direction: column; min-height: 0; ${v.listOpen ? 'flex: 1;' : ''} background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
           <button type="button" onClick=${v.toggleList} style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0; background: transparent; font: inherit; color: #16191D; text-align: left; cursor: pointer; white-space: nowrap">
             <span style="font-weight: 600">Lista de barras</span>
             <span style="color: #5E6670">${v.summary}</span>
@@ -820,7 +839,7 @@
             <span style="color: #1F5FAF">${v.listLabel}</span>
           </button>
           ${v.listOpen ? html`
-            <div style="max-height: 150px; overflow: auto; border-top: 1px solid #D9DDE2">
+            <div style="flex: 1; min-height: 90px; overflow: auto; border-top: 1px solid #D9DDE2">
               ${v.rows.map((r) => html`
                 <button type="button" onClick=${r.pick} style="display: grid; grid-template-columns: 56px 90px 80px 70px minmax(0, 1fr) 70px; gap: 8px; width: 100%; padding: 6px 12px; border: 0; border-bottom: 1px solid #EEF0F2; background: ${r.bg}; font: inherit; font-size: 12px; color: #16191D; text-align: left; cursor: pointer; white-space: nowrap">
                   <span style="font-weight: 600">${r.id}</span>
@@ -884,6 +903,7 @@
                       <button type="button" aria-label=${r.plusLabel} onClick=${r.plus} style="width: 30px; height: 30px; border: 0; background: transparent; font: inherit; cursor: pointer">+</button>
                     </div>
                     <span style="color: #5E6670">barras</span>
+                    <span aria-hidden="true" style="width: 10px; height: 10px; flex-shrink: 0; border-radius: 50%; background: ${r.c}"></span>
                     <select aria-label=${r.selLabel} value=${r.d} onChange=${r.setD} style="flex: 1; height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                       <option value="#3">#3 · 3/8"</option><option value="#4">#4 · 1/2"</option><option value="#5">#5 · 5/8"</option><option value="#6">#6 · 3/4"</option><option value="#7">#7 · 7/8"</option><option value="#8">#8 · 1"</option>
                     </select>
@@ -917,22 +937,23 @@
                 <input id="rec-main" type="text" inputmode="decimal" value=${v.rec} onInput=${v.setRec} style="width: 60px; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />
                 <span style="color: #5E6670">cm</span>
               </div>
+              <span style="font-size: 12px; color: #5E6670">Libre, el que se pone en Revit. Al eje de la barra: ${v.alEje} cm (lo calcula el add-in). <button type="button" onClick=${v.toggleRecDraw} style="padding: 0; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">${v.recDrawLabel}</button></span>
+              ${v.recDraw ? html`
               <svg width="308" height="118" viewBox="0 0 308 118" role="img" aria-label="Recubrimiento libre hasta el estribo y recubrimiento al eje de la barra">
-                <rect x="0" y="0" width="308" height="100" fill="#F1F3F5"></rect>
+                <rect x="0" y="0" width="308" height="100" fill="#FFFFFF" stroke="#D9DDE2"></rect>
                 <line x1="0" y1="100" x2="308" y2="100" stroke="#3F4A57" stroke-width="1.6"></line>
                 <text x="4" y="113" font-size="10" fill="#5E6670" font-family="IBM Plex Mono, monospace">cara de la viga</text>
-                <rect x="16" y="60" width="276" height="8" rx="2" fill="#3F4A57"></rect>
-                <text x="236" y="55" font-size="10" fill="#3F4A57" font-family="IBM Plex Mono, monospace">estribo</text>
-                <circle cx="96" cy="48" r="8" fill="#1F5FAF"></circle>
-                <text x="40" y="36" font-size="10" fill="#1F5FAF" font-family="IBM Plex Mono, monospace">barra</text>
-                <line x1="96" y1="48" x2="96" y2="100" stroke="#1F5FAF" stroke-width="1.2"></line>
-                <line x1="90" y1="48" x2="102" y2="48" stroke="#1F5FAF" stroke-width="1.2"></line>
-                <text x="104" y="86" font-size="11" font-weight="600" fill="#1F5FAF" font-family="IBM Plex Mono, monospace">al eje ${v.alEje} cm</text>
-                <line x1="196" y1="68" x2="196" y2="100" stroke="#B26B00" stroke-width="1.2"></line>
-                <line x1="190" y1="68" x2="202" y2="68" stroke="#B26B00" stroke-width="1.2"></line>
-                <text x="204" y="88" font-size="11" font-weight="600" fill="#B26B00" font-family="IBM Plex Mono, monospace">libre ${v.rec} cm</text>
-              </svg>
-              <span style="font-size: 12px; color: #5E6670">Escribes el <b style="color: #B26B00">libre</b> (el que se pone en Revit). El <b style="color: #1F5FAF">al eje</b> lo calcula el add-in.</span>
+                <rect x="16" y="60" width="276" height="8" rx="2" fill="#C9CFD6" stroke="#8A939D"></rect>
+                <text x="236" y="55" font-size="10" fill="#5E6670" font-family="IBM Plex Mono, monospace">estribo</text>
+                <circle cx="96" cy="48" r="8" fill="${v.recBarCol}"></circle>
+                <text x="40" y="36" font-size="10" fill="#16191D" font-family="IBM Plex Mono, monospace">barra ${v.recBarD}</text>
+                <line x1="112" y1="48" x2="112" y2="100" stroke="#3F4A57" stroke-width="1.2"></line>
+                <line x1="106" y1="48" x2="118" y2="48" stroke="#3F4A57" stroke-width="1.2" stroke-dasharray="2 2"></line>
+                <text x="120" y="86" font-size="11" font-weight="600" fill="#3F4A57" font-family="IBM Plex Mono, monospace">al eje ${v.alEje} cm</text>
+                <line x1="214" y1="68" x2="214" y2="100" stroke="#9A5B00" stroke-width="1.2"></line>
+                <line x1="208" y1="68" x2="220" y2="68" stroke="#9A5B00" stroke-width="1.2"></line>
+                <text x="222" y="88" font-size="11" font-weight="600" fill="#9A5B00" font-family="IBM Plex Mono, monospace">libre ${v.rec} cm</text>
+              </svg>` : null}
             </div>
 
             <button type="button" onClick=${v.toggleMore} style="align-self: flex-start; padding: 0; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">${v.moreLabel}</button>

@@ -50,9 +50,12 @@ public enum TipoTramo
 
 /// <summary>
 /// Una zona de estribos de un tramo, en mm desde el eje A: <paramref name="Junta"/> = la de confinamiento, junto a una
-/// columna; si no, el centro.
+/// columna; si no, el centro. <paramref name="Desde"/> y <paramref name="Hasta"/> son el primer y el último estribo.
+/// <paramref name="Cantidad"/> cuenta los estribos de la zona (el que comparte con el centro es de la zona);
+/// <paramref name="Separacion"/> es la real, en mm; <paramref name="Largo"/>, de la cara de la columna al último estribo
+/// de una zona de confinamiento (null en el centro o si todo el tramo va como zona).
 /// </summary>
-public sealed record ZonaTramo(double Desde, double Hasta, bool Junta);
+public sealed record ZonaTramo(double Desde, double Hasta, bool Junta, int Cantidad = 0, double Separacion = 0, double? Largo = null);
 
 /// <summary>
 /// Una luz libre (<c>"A-B"</c>) o un voladizo (<c>"Voladizo D"</c>), en mm desde el eje A. En un voladizo, una de las

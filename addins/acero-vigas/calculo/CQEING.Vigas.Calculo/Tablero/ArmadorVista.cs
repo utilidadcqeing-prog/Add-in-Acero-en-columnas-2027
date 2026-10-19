@@ -35,7 +35,13 @@ public static class ArmadorVista
         TipoViga tipo = o.Tipo ?? p.Tipo;
         Portico portico = p.Portico;
         var avisos = new List<Aviso>();
-        var apoyos = portico.Apoyos.Select(a => new ApoyoVista(a.Eje, M(a.PosicionEje), M(a.CaraIzquierda), M(a.CaraDerecha))).ToList();
+        var apoyos = portico.Apoyos.Select((a, i) =>
+        {
+            bool esViga = i < p.TiposDeApoyo.Count && p.TiposDeApoyo[i] == TipoApoyo.Viga;
+            string seccion = !esViga && p.FondosDeApoyo is { } fondos && i < fondos.Count
+                ? $"{F((a.CaraDerecha - a.CaraIzquierda) / 10.0, "0.#")}×{F(fondos[i] / 10, "0.#")}" : "";
+            return new ApoyoVista(a.Eje, M(a.PosicionEje), M(a.CaraIzquierda), M(a.CaraDerecha), esViga, seccion);
+        }).ToList();
         double inicio = M(portico.Apoyos[0].CaraIzquierda - portico.VoladizoInicio);
         double fin = M(portico.Apoyos[^1].CaraDerecha + portico.VoladizoFinal);
 
@@ -61,13 +67,18 @@ public static class ArmadorVista
 
         var barras = rv.Barras.Select(b => new BarraVista(b.Id, Capa(b.Capa), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg,
-            Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin)).ToList();
+            Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin,
+            ColoresDiametro.De(b.Grupos.Max(g => g.Diametro)), Rotulo.De(b.Grupos, b.LargoRecto, b.Largo),
+            Rotulo.EnPulgadas(b.Grupos, b.LargoRecto, b.Largo))).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
-            M(t.Minimo), $"#{t.Diametro}", t.Manual)).ToList();
+            M(t.Minimo), $"#{t.Diametro}", t.Manual, F(M(t.Hasta - t.Desde), "0.00"))).ToList();
         var bastones = rv.Bastones.Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Donde(p, b), Cantidad([b.Grupo]), b.Kg,
             b.LargoRecto < CalculadorBastones.LargoDe(o.Bastones, b.Id),
-            Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde)).ToList();
+            Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde, ColoresDiametro.De(b.Grupo.Diametro),
+            Rotulo.De([b.Grupo], b.LargoRecto, b.Largo), Rotulo.EnPulgadas([b.Grupo], b.LargoRecto, b.Largo))).ToList();
+        var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
+            .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d), Rotulo.Pulgadas(d))).ToList();
 
         bool seccionSinError = re.Seccion.Superior.Error == ErrorCara.Ninguno && re.Seccion.Inferior.Error == ErrorCara.Ninguno;
         bool sePuede = rv.Superior is not null && rv.Inferior is not null && seccionSinError && !avisos.Any(a => Bloquean.Contains(a.Tipo));
@@ -80,7 +91,8 @@ public static class ArmadorVista
             enCorte, ListaEstribos(p, o, re), Textos(avisos, rv),
             rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, sePuede,
             CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
-            re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList());
+            re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList(),
+            diametros, p.Tramos.Select(t => new SeccionEnAlzado(M((t.Desde + t.Hasta) / 2.0), $"{F(t.Ancho / 10, "0.#")}×{F(t.Alto / 10, "0.#")}")).ToList());
     }
 
     /// <summary>El gancho como lo escribe la página: "90°", "135°", "180°" o "" (sin gancho).</summary>
@@ -201,11 +213,17 @@ public static class ArmadorVista
             if (!re.Estribos.Any(e => e.Id == MotorEstribos.IdCerrado && e.Tramo == t.Nombre))
                 continue;
             ConfigEstribos c = porTramo?.GetValueOrDefault(t.Nombre) ?? o.Estribos;
+            // el rótulo de DC-CAD (#100): "9e#3", "@.10" y "L=0.95"
             zonas.AddRange(DistribuidorEstribos.Zonas(t, c, r.PorDiametro[c.Diametro].Diametro)
-                .Select(z => new ZonaEstribos(M(z.Desde), M(z.Hasta), z.Junta)));
+                .Select(z => new ZonaEstribos(M(z.Desde), M(z.Hasta), z.Junta, $"{z.Cantidad}e#{c.Diametro}",
+                    $"{z.Cantidad}eØ{Rotulo.Pulgadas(c.Diametro)}", "@" + SinCeroInicial(F(M(z.Separacion), "0.00")),
+                    z.Largo is double l ? "L=" + F(M(l), "0.00") : "")));
         }
         return zonas;
     }
+
+    /// <summary>Como escribe DC-CAD la separación: <c>".10"</c>, no <c>"0.10"</c>.</summary>
+    private static string SinCeroInicial(string texto) => texto.StartsWith("0.", StringComparison.Ordinal) ? texto[1..] : texto;
 
     /// <summary>
     /// La sección en el corte (#91): las barras corridas, los bastones que pasan por ahí y los estribos del tramo del
@@ -217,7 +235,8 @@ public static class ArmadorVista
     {
         double alto = Alto(p);
         BarraSeccion Barra(string id, string nombre, bool arriba, int fila, BarraEnSeccion b, bool esquina, bool baston) =>
-            new(id, nombre, arriba, fila, Cm(b.X), Cm(alto - b.Y), Cm(r.PorDiametro[b.Diametro].Diametro), esquina, baston);
+            new(id, nombre, arriba, fila, Cm(b.X), Cm(alto - b.Y), Cm(r.PorDiametro[b.Diametro].Diametro), esquina, baston,
+                ColoresDiametro.De(b.Diametro));
         IEnumerable<BarraSeccion> Cara(CaraSeccion c, bool arriba)
         {
             string letra = arriba ? "a" : "b", nombre = arriba ? "arriba" : "abajo";

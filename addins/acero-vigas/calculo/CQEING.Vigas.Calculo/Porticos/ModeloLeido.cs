@@ -41,7 +41,8 @@ public sealed record TramoLeido(string Nombre, int Desde, int Hasta, bool EsVola
 
 /// <summary>
 /// Un pórtico listo para el motor: <see cref="Portico"/> es lo que recibe <c>MotorVigas.Calcular</c>; el resto es
-/// lo que muestra la lista de pórticos del tablero.
+/// lo que muestra la lista de pórticos del tablero. <paramref name="FondosDeApoyo"/> es lo que mide cada apoyo de lado a
+/// lado de la viga, en mm (el ancho a lo largo ya está en <see cref="Portico"/>), para la sección de columnas (#100).
 /// </summary>
 public sealed record PorticoLeido(
     string Nombre,
@@ -51,7 +52,8 @@ public sealed record PorticoLeido(
     Portico Portico,
     IReadOnlyList<TipoApoyo> TiposDeApoyo,
     IReadOnlyList<TramoLeido> Tramos,
-    IReadOnlyList<string> Vigas);
+    IReadOnlyList<string> Vigas,
+    IReadOnlyList<double>? FondosDeApoyo = null);
 
 public enum TipoAvisoLectura
 {
