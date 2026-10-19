@@ -95,6 +95,29 @@ Modelo de prueba con dos pórticos generados: "Pórtico A · N+3.70" y "Pórtico
    - el aviso de la decisión 8 se queda: si aun así Revit no da el largo, el resumen lo dice;
    - los estribos tendrán el suyo (`CQEING Estribo 135° #3`) en la tarea 8.
 
+### Tercera prueba en Revit: estribos (2026-10-19, "Pórtico C" en N+3.70 y N+6.70, revisado por MCP)
+
+> Solo registrados, **sin resolver** (Juan: "deja los hallazgos en el .md, no los resuelvas, solo déjalos con el motivo").
+
+Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo "10 B 400 S" (10 mm). 44 barras marcadas en N+6.70 y 42 en N+3.70.
+
+**Lo que salió bien:**
+- **Ubicación del estribo:** su eje va de X 3290 a 3450 y de Z 6395 a 6655, que son las caras de la viga menos 40 de recubrimiento y 5 de medio estribo. Queda en el plano del corte, con la normal hacia +Y, que es hacia donde se reparte.
+- **Host y ganchos:** cada corrida está en su viga y lleva "CQEING Estribo 135° #3" en las dos puntas.
+- **Zonas:** en las luces sale zona, centro y zona (por ejemplo 1-2: 8 @0.10, 9 @0.19 y 7 @0.10). En los voladizos sale la zona junto a la columna y el resto.
+
+**Hallazgos:**
+
+| # | Hallazgo | Motivo |
+|---|---|---|
+| E1 | **No se usó una forma de estribo del documento.** Revit creó una forma nueva, "Forma de armadura 1". | Ninguna forma de estribo del modelo se llama como las que busca el add-in ("T1", "51", "Estribo", "Stirrup"). Se usó el camino de respaldo: el lazo por curvas. |
+| E2 | **Los ganchos del cerrado quedan a mitad del lado de arriba, no en una esquina.** El lado de arriba queda abierto unos 58 mm (X 3341 a 3399) y la barra del medio de arriba (X 3370) cae justo en ese hueco, sin estribo encima. | El lazo por curvas arranca a mitad de un lado, como en columnas, para que el gancho no se coma el doblez de la esquina. En una viga con un número impar de barras arriba, ahí hay una barra. En obra el gancho de 135° va en una esquina, abrazando una barra de esquina. |
+| E3 | **Revit corre las barras de esquina hacia el doblez del estribo.** Las de esquina de S1 quedaron en X 3307 y 3433, Z 6634; el plan las pedía en 3302.5 y 3437.5, Z 6643. La del medio sigue en 6643. Abajo, las de esquina de I1 quedaron en Z 6412 y la del medio en 6408. | Revit pega las barras longitudinales a la curva del doblez del estribo, que tiene un radio mayor que el de la barra. Columnas ya lo había medido (5 a 8 mm hacia adentro). Antes de crear los estribos (segunda prueba) estaban donde las pedía el plan. |
+| E4 | **El bastón BS1 se monta sobre la barra de esquina.** Quedó en X 3303, Z 6625, a 9.8 mm de centro a centro de la barra de esquina corrida, que mide 16. Se traslapan unos 6 mm. | El bastón se ubica con el corte del tablero, pegado debajo de la barra de esquina en su posición original. Revit movió esa barra (E3), pero no al bastón. |
+| E5 | **El estribo mide 0.96 m en Revit y 1.07 m en el tablero** (0.11 m menos; afecta los kg). | El tablero suma 2 × (160.5 + 260.5) + 2 × 113: el perímetro al eje con esquinas en punta, más el B completo del cuadro en cada gancho. Revit redondea las cuatro esquinas y el gancho propio de estribo usa la extensión E (57 mm), no el B. Además el modelo usa barra de 10 mm para el #3 (9.5). |
+| E6 | **Sale una corrida de un solo estribo.** En "E 3-4" de N+6.70 hay una corrida de 2 al inicio (Y 7685, @0.10), una de 17 (@0.20) y una de 1 al final (Y 11255). | El reparto en corridas le da a la corrida anterior el estribo que comparten la zona y el centro. Si la zona tiene solo 2 estribos, queda uno suelto. Las posiciones no cambian: solo hay un conjunto más en Revit. Falta comparar la cantidad con la lista del tablero, porque Juan marcó tramos con otra configuración. |
+| E7 | **No se probaron los estribos adicionales** (E1, E2… abiertos o cerrados). | El pórtico no tenía ninguno. |
+
 **Gancho propio medido en Revit** (2026-10-19, por MCP, en una subtransacción deshecha: el modelo no cambió). Barra "16 B 400 S" (d = 16, doblado del gancho 64), línea recta de 3000 mm con gancho al inicio:
 
 | Gancho | B del cuadro (#5) | Multiplicador | Largo en Revit | Esperado |
