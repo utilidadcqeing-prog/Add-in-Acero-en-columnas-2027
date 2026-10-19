@@ -77,6 +77,21 @@ internal sealed class TiposAcero
     }
 
     /// <summary>
+    /// El gancho del estribo abierto (<c>"CQEING Grapa 135° #3"</c>): estilo de barra, porque la rama es una barra recta
+    /// (como la grapa de columnas), con la cola de estribo, la extensión E del cuadro (57 mm en el #3) o 6 diámetros. Con
+    /// la cola de barra (B completo, 84 mm) la punta quedaba a 25 mm de la cara de la viga (sexta prueba).
+    /// </summary>
+    public RebarHookType? GanchoGrapa(GanchoEstribo g, int numero)
+    {
+        if (Barra(numero) is not { } barra)
+            return null;
+        int grados = g == Calculo.Modelo.GanchoEstribo.De135 ? 135 : 90;
+        double d = LectorModelo.Mm(barra.BarNominalDiameter);
+        double multiplicador = grados == 135 && reglas.PorDiametro[numero].Estribo135.E is int e ? e / d : 6;
+        return Propio($"CQEING Grapa {grados}° #{numero}", RebarStyle.Standard, grados, multiplicador);
+    }
+
+    /// <summary>
     /// El tipo del add-in con ese nombre, creado o puesto al día (si cambió el tipo de barra o las reglas): es del add-in.
     /// Los del proyecto nunca se tocan. Se resuelve una vez por generación.
     /// </summary>

@@ -182,6 +182,19 @@ Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo
 | E15 | **Revit abrió el cuadro "Error: no se puede ignorar" con 2 errores: *"El diámetro de curvatura de armadura es demasiado grande. Utilice un tipo de barra más pequeño."*** El cuadro bloquea Revit (y el MCP) hasta que alguien elige "Suprimir armadura" o "Cancelar". Juan canceló: no quedó nada de esa generación (el gancho "CQEING 135° #3" no existe en el modelo). | Las advertencias se descartaban, pero un **error** seguía al cuadro de Revit. **✅ en código:** `ManejoDeFallas` quita la barra del add-in que tiene el error, lo anota en el resumen (*"E1 de A-B (Pórtico C · N+6.70): Revit no lo pudo crear (…)"*) y confirma lo demás. Falta ver en Revit cuál de los dos adicionales lo provoca: el resumen lo va a decir. |
 | E16 | **El cerrado adicional en las barras 1 y 2 es muy angosto para sus ganchos.** Con 4 #5 en 25 cm las barras quedan a 45 mm entre centros: el cerrado mide 70 mm al eje. Probado por MCP (subtransacción deshecha): Revit lo arma, pero la cola del gancho de 135° de la esquina de arriba a la izquierda termina en X 128 del corte, más allá de su propia rama derecha (X 115). | El gancho de 135° con cola de 57 mm (E del cuadro) va en diagonal hacia el núcleo y, en un estribo de 70 mm, lo atraviesa. Es candidato al error de E15. En obra, un cerrado así de angosto no se usa con ganchos de 135° en la esquina; es pregunta para Carlos (¿ancho mínimo de un cerrado adicional, o los ganchos en otra esquina?). |
 
+### Séptima prueba en Revit: con el manejo de errores (2026-10-19, "Pórtico C · N+6.70", 76 barras)
+
+Resumen que mostró el tablero: *"Se generó el acero de 1 pórtico: 32 barras, 7 bastones y 284 estribos. · E1 de Voladizo 1 (Pórtico C · N+6.70): Revit no lo pudo crear (El diámetro de curvatura de armadura es demasiado grande. Utilice un tipo de barra más pequeño)."*
+
+- **E15 funciona:** no salió el cuadro de Revit; se confirmó todo menos lo que Revit rechazó, y el resumen lo dijo.
+- **Coincide con Revit:** E 98, E1 88 y E2 98 = 284 estribos.
+
+| # | Hallazgo | Motivo / estado |
+|---|---|---|
+| E17 | **Revit rechaza el cerrado adicional E1 (barras 1 y 2) solo en el voladizo 1** (sus 2 conjuntos, 10 estribos). En las luces y en el voladizo 4 sí lo crea. | Sin confirmar: en el voladizo 1 el primer estribo queda a 55 mm de la punta, donde las barras S1 e I1 doblan su gancho de 90°. El cerrado angosto (E16) abraza la barra 1 justo en esa zona, y Revit no puede doblarlo. Los errores solo se ven al confirmar, así que por MCP no se puede reproducir sin dejar rastro. Pendiente con Carlos junto con E16 (ancho mínimo del cerrado adicional y qué pasa en la punta del voladizo). |
+| E13b | **El gancho del abierto daba la vuelta 30 mm por encima de la barra, y su cola terminaba a 25 mm de la cara** (rama en X 123, dobleces centrados en Z 87 y 263 en vez de 58 y 292). | Revit toma la punta de la línea como la cara exterior del doblez, igual que en las barras corridas; y el gancho era el de barra, con cola de 84 mm. **✅ en código y medido por MCP (subtransacción deshecha):** la línea pasa un radio más medio diámetro (30 mm) más allá del centro de cada barra, y el gancho es uno propio de grapa, "CQEING Grapa 135° #3", estilo de barra con la cola E del cuadro (57 mm). Resultado: dobleces centrados en (147.5, 55) y (147.5, 295), con la barra 3 en (147.5, 58) y (147.5, 292); colas que terminan en X 205, a 45 mm de la cara. Con la orientación `Right` dobla al revés (centro en X 97.5) y `CorregirAbierto` lo voltea a `Left`. |
+| E10 | **Sigue:** BS1 y S1 en el mismo punto (X 63, Z 280 del corte). | Ver E10. |
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
