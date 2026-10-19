@@ -103,7 +103,7 @@
 8. **Diámetro en número o en pulgadas** (Carlos): un interruptor `#4 · ½"` en el menú Capas. C# manda los dos textos de cada rótulo; la página elige. En pulgadas, la cantidad va con `Ø`: `3Ø⅝"L= 2.80/3.00`. Pulgadas: `#n` = n/8", simplificado (`#2 ¼"`, `#3 ⅜"`, `#4 ½"`, `#5 ⅝"`, `#6 ¾"`, `#7 ⅞"`, `#8 1"`, `#9 1⅛"`, `#10 1¼"`, `#11 1⅜"`).
 9. **Colores por diámetro** (Carlos: #5 rojo, #4 naranja; el resto, nuestra, aprobada por Juan el 19-oct "por ahora"; se le muestra a Carlos al probar): `#3 amarillo`, `#4 naranja`, `#5 rojo`, `#6 magenta`, `#7 morado`, `#8 azul`, `#9 cian`, `#10 verde`, `#11 café`. Viven en C# (`ColoresDiametro`) y viajan en la vista; #85 los usa en Revit. Corrida y bastón se distinguen por el trazo (bastón un poco más delgado), no por el color. La selección deja de ser azul: va con un halo gris oscuro detrás de la barra, para no confundirse con el #8.
 10. **Leyenda** (Carlos): arriba, una bolita por cada diámetro que hay en el pórtico + su texto (`● #5  ● #4`), en lugar de la de corrida/bastón/traslapo.
-11. **Recubrimiento del corte** (Carlos 1:00:08): la línea del recubrimiento en gris medio punteada sobre el fondo claro del corte, con su texto `r = 4 cm`.
+11. **Dibujo del recubrimiento** (Carlos 1:00:08: *"el azul oscuro sobre negro no se entiende"*; corregida el 19-oct al programar la tarea 5, antes decía "línea punteada en el corte"): es el dibujo del panel derecho, no el corte. Como en la maqueta: fondo blanco, estribo gris claro (`#C9CFD6` / `#8A939D`), barra con el color de su diámetro, "al eje" en gris oscuro y "libre" en ámbar, detrás de *Ver el dibujo*. En el corte, el estribo pasa a gris medio `#8A939D`.
 12. **Capas** (Carlos 1:07:24–1:08:17): botón **Capas ▾** junto al zoom, con casillas: *Media luz*, *Corte 1-1*, *Textos*, *Estribos*, *Sección de columnas*, y el interruptor de la decisión 8. Lo elegido se guarda en la página (por usuario, `localStorage` con try/catch) y no viaja a C#.
 13. **Columnas** (Carlos 1:07:24; Juan, 19-oct: *"lo que recomiendes"*): el ancho ya es real (hallazgo 3), así que el dibujo de la columna ya es su sección a lo largo de la viga. La capa *Sección de columnas* agrega solo el **texto** `40×50` (ancho × fondo) debajo de cada columna; un dibujo de la sección en planta repetiría lo que ya se ve y le quitaría espacio a los rótulos. La vista gana `Apoyo.Ancho` / `Apoyo.Fondo` en m (de la huella).
 14. **Altura dinámica** (Carlos 1:06:04): la altura de la viga en el dibujo = base + un escalón por cada fila extra arriba o abajo y por cada nivel de bastones. Las `y` fijas pasan a salir de una función `niveles(p)`. Sigue sin ser a escala (*"no es real"*).
@@ -195,8 +195,8 @@
 
 **Archivos:** `Tablero/web/tablero.js` (dibujo del corte).
 
-- [ ] **Paso 1:** la línea del recubrimiento como en la decisión 11 y la maqueta.
-- [ ] **Paso 2:** commit `fix(vigas): el recubrimiento del corte se ve sobre el fondo (#100)`.
+- [x] **Paso 1:** la línea del recubrimiento como en la decisión 11 y la maqueta.
+- [x] **Paso 2:** commit `fix(vigas): el recubrimiento del corte se ve sobre el fondo (#100)`.
 
 ### Fase C: colores por diámetro
 
@@ -298,6 +298,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
 - [ ] Fase B (tareas 3–5).
   - Tarea 3: como en la maqueta, `k = fitZ / z` (en el ajuste k = 1, así que nada cambia de tamaño al abrir). Trazos con `non-scaling-stroke`; `font-size`, el borde blanco del rótulo del arrastre, los radios de los círculos de ejes y de los 3 puntos, la zona para agarrar la línea 1-1, sus flechas y los márgenes de los textos, por k. Solo el alzado tiene zoom: el corte y los esquemas de `tablero.js` no escalan, así que no cambian. El rayado de zonas (sin posiciones de estribos) queda escalando, porque es un relleno; C# y la demostración siempre mandan posiciones, y la tarea 8 lo quita. Falta verlo en Revit (tarea 12).
   - Tarea 4, medido en Revit por el MCP (19-oct, equipo de Juan): el WebView mide 1280 × 649 DIP y el zoom 0.72, así que la página queda en 1774 × 901. En los 4 pasos del panel no se desborda nada: solo tienen scroll la lista de pórticos y la lista de barras abierta (las dos permitidas). **El "scroll" que vio Carlos era el rebote del touchpad**: WebView2 estiraba la página entera y la soltaba (en la captura de Juan, arriba cortada y una franja gris abajo). Arreglo en `index.html`: `html, body { overflow: hidden }` y `overscroll-behavior: none` en todo. Juan lo probó en Revit: la página queda fija. No hizo falta compactar el panel.
+  - Tarea 5: el dibujo del recubrimiento del panel, igual a la maqueta (decisión 11 corregida), detrás de *Ver el dibujo*; el texto de arriba ya dice el "al eje". La barra va en gris oscuro `#3F4A57` hasta la tarea 7, que le pone el color del diámetro (`recBarCol`). El estribo del corte, en `#8A939D`. Falta verlo en Revit.
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).

@@ -79,7 +79,7 @@
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #3F4A57; border-radius: 4px"></div>
+      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #8A939D; border-radius: 4px"></div>
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
       ${sec.proy.map((d) => html`
@@ -567,6 +567,11 @@
         isBarras: step === 'barras' && !!P, isBastones: step === 'bastones' && !!P, isEstribos: step === 'estribos' && !!P, isCorteStep: step === 'corte' && !!P, isReglas: step === 'reglas', steps,
         layers, rec: s.rec, alEje, recUp: s.recUp, recDown: s.recDown, recSide: s.recSide,
         more: s.more, moreLabel: s.more ? '− Menos opciones' : '+ Más opciones',
+        // el dibujo del recubrimiento (Carlos 1:00:08: "el azul oscuro sobre negro no se entiende"), como la maqueta:
+        // fondo blanco, estribo gris claro y, detrás de "Ver el dibujo", para no alargar el panel. La barra va en gris
+        // oscuro hasta que lleguen los colores por diámetro de C# (tareas 6 y 7).
+        recDraw: !!s.recDraw, recDrawLabel: s.recDraw ? 'Ocultar el dibujo' : 'Ver el dibujo',
+        recBarCol: '#3F4A57', recBarD: s.inf.length ? s.inf[0].d : '',
         isSep: s.sepMode === 'separada', sepCm: s.sepCm, maxCapas: s.maxCapas,
         segPeg: s.sepMode === 'pegada' ? on : off, segSep: s.sepMode === 'separada' ? on : off,
         segAerea: !isCim ? on : off, segCim: isCim ? on : off,
@@ -600,6 +605,7 @@
         useIzq: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'izq' }); },
         useDer: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'der' }); },
         toggleList: () => this.setState({ listOpen: !s.listOpen }), toggleMore: () => this.setState({ more: !s.more }),
+        toggleRecDraw: () => this.setState({ recDraw: !s.recDraw }),
         setRec: (e) => this.cambiar({ rec: e.target.value }, true), setRecUp: (e) => this.cambiar({ recUp: e.target.value }, true),
         setRecDown: (e) => this.cambiar({ recDown: e.target.value }, true), setRecSide: (e) => this.cambiar({ recSide: e.target.value }, true),
         sepPegada: () => this.cambiar({ sepMode: 'pegada' }), sepSeparada: () => this.cambiar({ sepMode: 'separada' }),
@@ -917,22 +923,23 @@
                 <input id="rec-main" type="text" inputmode="decimal" value=${v.rec} onInput=${v.setRec} style="width: 60px; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />
                 <span style="color: #5E6670">cm</span>
               </div>
+              <span style="font-size: 12px; color: #5E6670">Libre, el que se pone en Revit. Al eje de la barra: ${v.alEje} cm (lo calcula el add-in). <button type="button" onClick=${v.toggleRecDraw} style="padding: 0; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">${v.recDrawLabel}</button></span>
+              ${v.recDraw ? html`
               <svg width="308" height="118" viewBox="0 0 308 118" role="img" aria-label="Recubrimiento libre hasta el estribo y recubrimiento al eje de la barra">
-                <rect x="0" y="0" width="308" height="100" fill="#F1F3F5"></rect>
+                <rect x="0" y="0" width="308" height="100" fill="#FFFFFF" stroke="#D9DDE2"></rect>
                 <line x1="0" y1="100" x2="308" y2="100" stroke="#3F4A57" stroke-width="1.6"></line>
                 <text x="4" y="113" font-size="10" fill="#5E6670" font-family="IBM Plex Mono, monospace">cara de la viga</text>
-                <rect x="16" y="60" width="276" height="8" rx="2" fill="#3F4A57"></rect>
-                <text x="236" y="55" font-size="10" fill="#3F4A57" font-family="IBM Plex Mono, monospace">estribo</text>
-                <circle cx="96" cy="48" r="8" fill="#1F5FAF"></circle>
-                <text x="40" y="36" font-size="10" fill="#1F5FAF" font-family="IBM Plex Mono, monospace">barra</text>
-                <line x1="96" y1="48" x2="96" y2="100" stroke="#1F5FAF" stroke-width="1.2"></line>
-                <line x1="90" y1="48" x2="102" y2="48" stroke="#1F5FAF" stroke-width="1.2"></line>
-                <text x="104" y="86" font-size="11" font-weight="600" fill="#1F5FAF" font-family="IBM Plex Mono, monospace">al eje ${v.alEje} cm</text>
-                <line x1="196" y1="68" x2="196" y2="100" stroke="#B26B00" stroke-width="1.2"></line>
-                <line x1="190" y1="68" x2="202" y2="68" stroke="#B26B00" stroke-width="1.2"></line>
-                <text x="204" y="88" font-size="11" font-weight="600" fill="#B26B00" font-family="IBM Plex Mono, monospace">libre ${v.rec} cm</text>
-              </svg>
-              <span style="font-size: 12px; color: #5E6670">Escribes el <b style="color: #B26B00">libre</b> (el que se pone en Revit). El <b style="color: #1F5FAF">al eje</b> lo calcula el add-in.</span>
+                <rect x="16" y="60" width="276" height="8" rx="2" fill="#C9CFD6" stroke="#8A939D"></rect>
+                <text x="236" y="55" font-size="10" fill="#5E6670" font-family="IBM Plex Mono, monospace">estribo</text>
+                <circle cx="96" cy="48" r="8" fill="${v.recBarCol}"></circle>
+                <text x="40" y="36" font-size="10" fill="#16191D" font-family="IBM Plex Mono, monospace">barra ${v.recBarD}</text>
+                <line x1="112" y1="48" x2="112" y2="100" stroke="#3F4A57" stroke-width="1.2"></line>
+                <line x1="106" y1="48" x2="118" y2="48" stroke="#3F4A57" stroke-width="1.2" stroke-dasharray="2 2"></line>
+                <text x="120" y="86" font-size="11" font-weight="600" fill="#3F4A57" font-family="IBM Plex Mono, monospace">al eje ${v.alEje} cm</text>
+                <line x1="214" y1="68" x2="214" y2="100" stroke="#9A5B00" stroke-width="1.2"></line>
+                <line x1="208" y1="68" x2="220" y2="68" stroke="#9A5B00" stroke-width="1.2"></line>
+                <text x="222" y="88" font-size="11" font-weight="600" fill="#9A5B00" font-family="IBM Plex Mono, monospace">libre ${v.rec} cm</text>
+              </svg>` : null}
             </div>
 
             <button type="button" onClick=${v.toggleMore} style="align-self: flex-start; padding: 0; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">${v.moreLabel}</button>
