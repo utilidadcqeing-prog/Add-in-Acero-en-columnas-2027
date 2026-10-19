@@ -348,6 +348,8 @@
     function vista() {
       return {
         proyecto: '[Nombre del proyecto]', enVivo, reglas, elegidos,
+        // los que tienen tipo de barra en el modelo (#85): en la demostración, del #3 al #8
+        diametrosDisponibles: [3, 4, 5, 6, 7, 8],
         porticos: PORS.map((p) => ({ ...p, tramos: TRAMOS })),
         actual: actual ? armar(actual, opciones[actual] || OPCIONES0) : null,
       };
@@ -486,6 +488,8 @@
           return [msgVista()];
         case 'verEnRevit': return [aviso(nombre(m.id) + ' seleccionado y centrado en Revit')];
         case 'abrir3d': return [aviso('Vista 3D aislada de ' + nombre(m.id) + ' abierta en Revit')];
+        case 'generar': return [{ tipo: 'generado', texto: 'Se generó el acero de ' + (m.ids.length === 1 ? '1 pórtico' : m.ids.length + ' pórticos')
+          + '.\nEn la demostración no se crea nada: en Revit aquí salen las barras, bastones y estribos creados, y lo que no se pudo.' }];
         default: return [];
       }
     }
