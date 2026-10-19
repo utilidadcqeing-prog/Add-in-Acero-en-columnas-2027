@@ -151,6 +151,20 @@ Viga `VIG_25X35`: X 3245–3495, Z 6350–6700 en N+6.70. Estribo #3 con el tipo
 | E11 | **Medida de E3:** en las esquinas normales Revit corre la barra 4.0 mm en cada dirección hacia adentro (abajo a la izquierda: de 3302.5, 6407.5 a 3306.5, 6411.5). En la esquina de los ganchos la corre 5.5 mm de lado y 12.5 mm hacia abajo (S1 en 3308, 6630). La del medio de arriba bajó 4 mm (6638.5). | El estribo "10 B 400 S" se dobla con un diámetro de 40: radio interior 20. La barra de 16 queda tocando el arco: su centro queda a 20 − 8 / √2 ≈ 11.5 mm de cada cara interior, en vez de 8. Eso da 3.5 mm; Revit da 4.0. En la esquina de los ganchos el doblez es de 135° y empuja más. Con estas medidas el tablero podría poner las esquinas donde las deja Revit (E3 y E4), pero falta decidir si el corte del tablero debe mostrar esa corrección. |
 | E12 | **El estribo cerrado mide 0.98 m en Revit y 1.07 m en el tablero** (antes 0.96; la diferencia bajó de 0.11 a 0.09 m). | Revit: 4 lados rectos (105 + 210 + 110 + 205) + 3 esquinas redondeadas (3 × 39) + 2 ganchos (doblez 59 + cola 57 cada uno) = 0.98. El tablero suma el perímetro con esquinas en punta (2 × (160.5 + 260.5) = 842) más 2 × B (2 × 113). Cuenta dos veces la esquina de los ganchos (el B ya trae el doblez de 135° alrededor de esa esquina, unos 60 mm) y no descuenta el redondeo de las otras tres (unos 11 mm cada una). Cómo se mide el estribo para el despiece es decisión de Carlos: cambia los kg. |
 
+### Quinta prueba en Revit: abierto y cerrado adicionales (2026-10-19, "Pórtico C · N+6.70", 70 barras, revisado por MCP)
+
+> Solo registrados, **sin resolver**. Adicionales: abierto en arriba 2 y abajo 2 (E1) y cerrado en arriba 1, abajo 1, arriba 2 y abajo 2 (E2).
+
+**Lo que salió bien:** E, E1 y E2 tienen 13 conjuntos y 98 estribos cada uno: **294 en total, igual que el tablero**. El cerrado adicional E2 abraza las barras 1 y 2, con los ganchos en la esquina, como el principal.
+
+**Hallazgos:**
+
+| # | Hallazgo | Motivo |
+|---|---|---|
+| E13 | **La forma del abierto está mal.** Su rama vertical va en X 3370, a 4 mm del eje de la barra del medio (3365.9): pasa por dentro de la barra. Sus ganchos de 135° doblan hacia la derecha, alejándose de las barras en vez de abrazarlas, y las colas terminan en X 3472, a 23 mm de la cara de la viga (el recubrimiento es 40). Usa el gancho "CQEING 135° #3" (de barra, cola 84 mm) y no el de estribo. | `CreadorEstribos.Abierto` pone la rama en la X que da el corte para el abierto, que es la del eje de las barras (`EstriboEnSeccion.Izquierda = Derecha`), sin correrla el radio de la barra más el del estribo para que quede al lado. La orientación de los ganchos queda en la de Revit (`Right`), sin una corrección como la de las barras corridas (`CorregirGanchos`). El gancho de barra se eligió porque la rama se crea con estilo Standard, como la grapa de columnas. |
+| E14 | **El abierto y el cerrado adicional abrazan la misma barra** (la 2 de arriba y la 2 de abajo), y el tablero los acepta los dos. | El motor solo descarta un adicional que coincide con el estribo de las esquinas (`IgualAlCerrado`), no uno que repite una rama de otro adicional. |
+| E10 | **Sigue:** BS1 y S1 en el mismo punto (X 3308, Z 6630). | Ver E10 arriba. |
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
