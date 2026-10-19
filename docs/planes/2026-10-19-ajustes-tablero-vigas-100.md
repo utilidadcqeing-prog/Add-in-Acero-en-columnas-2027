@@ -43,35 +43,35 @@
 ## Criterios de aceptación
 
 **Maqueta**
-- [ ] La maqueta tiene todo lo de abajo (sin scroll, ventana flotante del corte, rótulos, colores con leyenda, capas, columnas y altura dinámica) y el tablero se ve igual a ella.
+- [x] La maqueta tiene todo lo de abajo (sin scroll, ventana flotante del corte, rótulos, colores con leyenda, capas, columnas y altura dinámica) y el tablero se ve igual a ella.
 
 **Fallos**
-- [ ] El pórtico toma el nombre de la rejilla (`Pórtico A`), también si la viga no está justo sobre el eje.
-- [ ] La punta de un voladizo con una viga de borde no se dibuja ni se calcula como apoyo.
-- [ ] El grosor de las líneas no cambia con el zoom.
-- [ ] El tablero no tiene scroll: todo se ve sin bajar ni subir.
+- [x] El pórtico toma el nombre de la rejilla (`Pórtico A`), también si la viga no está justo sobre el eje.
+- [x] La punta de un voladizo con una viga de borde no se dibuja ni se calcula como apoyo.
+- [x] El grosor de las líneas no cambia con el zoom.
+- [x] El tablero no tiene scroll: todo se ve sin bajar ni subir.
 
 **Rótulos**
-- [ ] Cada barra y bastón muestra `1#4L= 2.30/2.50` (sin gancho, un solo largo), sobre la barra.
-- [ ] El diámetro se puede ver como `#4` o como `½"`.
-- [ ] Cada traslapo muestra su largo con 2 decimales.
-- [ ] Los estribos de cada zona se dibujan como una línea con rayitas, con `9e#3` encima, `@.10` debajo y `L=…` (de la cara de la columna al último estribo).
-- [ ] Arriba, en la mitad de cada luz, la sección de la viga (`30×50`).
+- [x] Cada barra y bastón muestra `1#4L= 2.30/2.50` (sin gancho, un solo largo), sobre la barra.
+- [x] El diámetro se puede ver como `#4` o como `½"`.
+- [x] Cada traslapo muestra su largo con 2 decimales.
+- [x] Los estribos de cada zona se dibujan como una línea con rayitas, con `9e#3` encima, `@.10` debajo y `L=…` (de la cara de la columna al último estribo).
+- [x] Arriba, en la mitad de cada luz, la sección de la viga (`30×50`).
 
 **Colores**
-- [ ] Cada diámetro tiene su color (estándar único) y arriba hay una leyenda con bolita + diámetro.
-- [ ] El corte usa los mismos colores y cada barra va con su diámetro a escala.
-- [ ] El recubrimiento del corte se entiende (no más azul oscuro sobre negro).
+- [x] Cada diámetro tiene su color (estándar único) y arriba hay una leyenda con bolita + diámetro.
+- [x] El corte usa los mismos colores y cada barra va con su diámetro a escala.
+- [x] El recubrimiento del corte se entiende (no más azul oscuro sobre negro).
 
 **Capas y escala**
-- [ ] Un desplegable **Capas** prende y apaga: media luz, corte 1-1, textos, sección de columnas (y estribos).
-- [ ] La sección de las columnas se puede prender como capa.
-- [ ] Columnas con su ancho real; se ve si un traslapo se mete en la columna.
-- [ ] La altura de la viga en el dibujo crece cuando hay más filas o bastones.
+- [x] Un desplegable **Capas** prende y apaga: media luz, corte 1-1, textos, sección de columnas (y estribos).
+- [x] La sección de las columnas se puede prender como capa.
+- [x] Columnas con su ancho real; se ve si un traslapo se mete en la columna.
+- [x] La altura de la viga en el dibujo crece cuando hay más filas o bastones.
 
 **Para todo**
-- [ ] `rtk dotnet test CQEING-Addins.sln -c Release` en verde.
-- [ ] Probado en Revit 2026 con `PROY_JULIO_BETO.rvt` y el modelo con voladizos de Carlos.
+- [x] `rtk dotnet test CQEING-Addins.sln -c Release` en verde.
+- [x] Probado en Revit 2026 con `PROY_JULIO_BETO.rvt` y el modelo con voladizos de Carlos.
 
 ## Hallazgos del código
 

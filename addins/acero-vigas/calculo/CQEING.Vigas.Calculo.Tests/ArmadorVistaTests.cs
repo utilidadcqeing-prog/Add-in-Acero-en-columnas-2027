@@ -122,6 +122,33 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void DosBarrasFijasEnLaFila1SeCalculan()
+    {
+        // Juan, 19-oct: con 2 #5 en la Fila 1 y 7 #4 en Auto, al quitar los #4 el panel no se actualizaba
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(2, 5, 1)] };
+
+        VistaPortico v = Armar(o);
+
+        Assert.Equal([2], v.Superior.PorFila);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    [InlineData(7)]
+    [InlineData(9)]
+    [InlineData(10)]
+    [InlineData(15)]
+    [InlineData(20)]
+    public void DosFijasEnLaFila1MasOtrasEnAutoNoRevientan(int n)
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(2, 5, 1), new GrupoBarras(n, 4)] };
+
+        Armar(o);
+    }
+
+    [Fact]
     public void CadaColumnaTraeSuSeccionAnchoPorFondo()
     {
         PorticoLeido p = Portico1();

@@ -185,7 +185,8 @@
       const yE = Y(148);
       const st = p.zonas.map((z) => ({ d: 'M' + X(z.desde) + ' ' + yE + 'H' + X(z.hasta) + 'M' + X(z.desde) + ' ' + (yE - 3 * k) + 'v' + 6 * k
         + 'M' + X(z.hasta) + ' ' + (yE - 3 * k) + 'v' + 6 * k, x: (X(z.desde) + X(z.hasta)) / 2,
-        a: (pulg ? z.cantidadPulgadas : z.cantidad) || '', b: [z.separacion, z.largo].filter(Boolean).join(' ') }));
+        // la L va en una tercera línea: junto a la separación no cabía y se montaba con la zona vecina en cada columna
+        a: (pulg ? z.cantidadPulgadas : z.cantidad) || '', b: z.separacion || '', c: z.largo || '' }));
       const secs = (p.secciones || []).map((s) => ({ x: X(s.x), t: s.texto }));
 
       const ap = p.apoyos;
@@ -330,7 +331,9 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 ' + FH + ') scale(1 -1)' : 'translate(0 0)',
         // las y de lo que va debajo del eje de la viga, con la altura dinámica
-        beamH: 90 + ex, midY2: 158 + ex, cutY2: 152 + ex, cutH: 158 + ex, yColSec: 176 + ex, yLuz: 178 + ex, yEje: 192 + ex,
+        beamH: 90 + ex, midY2: 158 + ex, cutY2: 152 + ex, cutH: 158 + ex, yLuz: 178 + ex,
+        // la sección de columnas va en el pedazo de columna sobre la viga: abajo chocaba con el texto de un voladizo corto
+        yColSec: 30, yEje: 192 + ex,
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
         b, l, t, st, yE, secs, colSecs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
@@ -425,6 +428,7 @@
         ${v.st.map((z) => html`<path d="${z.d}" stroke="#5E6670" stroke-width="1" fill="none" vector-effect="${NS}"></path>`)}
         ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE - 4 * k, z.a, '#3F4A57', 9, 400)) : null}
         ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 10 * k, z.b, '#3F4A57', 9, 400)) : null}
+        ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 20 * k, z.c, '#3F4A57', 9, 400)) : null}
       </g>
       ${v.textosOn ? html`
       ${v.secs.map((s) => texto(s.x, 9, s.t, '#5E6670', 9, 400))}
