@@ -256,10 +256,10 @@
 
 ### Tarea 12: prueba en Revit y cierre
 
-- [ ] **Paso 1:** `rtk dotnet build addins/acero-vigas/CQEING.Vigas.csproj -c Debug -p:RevitVersion=2026` y `powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-vigas -Revit 2026`.
-- [ ] **Paso 2:** en Revit 2026, con `PROY_JULIO_BETO.rvt` y el modelo de Carlos, recorrer los criterios uno por uno y mirarlos por el MCP de Revit. Anotar en "Estado".
+- [x] **Paso 1:** `rtk dotnet build addins/acero-vigas/CQEING.Vigas.csproj -c Debug -p:RevitVersion=2026` y `powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-vigas -Revit 2026`.
+- [x] **Paso 2:** en Revit 2026, con `PROY_JULIO_BETO.rvt` y el modelo de Carlos, recorrer los criterios uno por uno y mirarlos por el MCP de Revit. Anotar en "Estado".
 - [ ] **Paso 3:** actualizar `traslapos-vigas-notas.md` §13 (con las respuestas del 19-oct), mostrarle a Carlos los colores de la decisión 9 y dejar un comentario en #100 con lo hecho.
-- [ ] **Paso 4:** commit `docs(vigas): ajustes del tablero probados en Revit (#100)`.
+- [x] **Paso 4:** commit `docs(vigas): ajustes del tablero probados en Revit (#100)`.
 
 ## Cómo probarlo
 
@@ -309,7 +309,12 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Aparte (Juan, 19-oct, con captura): la lista de barras abierta toma todo el alto que sobra en la columna del centro, en vez de 150 px (commit `1341afa`).
   - Tarea 10: `PorticoLeido.FondosDeApoyo` (mm, de lado a lado de la huella; `Unir` ya junta esos rangos) y `ApoyoVista.Seccion` = `"40×50"` (ancho a lo largo × fondo, en cm), en lugar de `Ancho` / `Fondo` sueltos: así el texto sale de C#. Vacía en un apoyo que es viga o sin fondos. El alzado la escribe en y = 176, debajo de cada columna, solo con la capa *Sección de columnas* prendida. 606 pruebas en verde.
   - Tarea 11, como la maqueta y no con una función `niveles(p)`: `ex = 14 × (filas de arriba − 1 + filas de abajo − 1)` (de `superior.porFila` / `inferior.porFila`), `Y(y) = y > 85 ? y + ex : y` y `FH = 170 + ex` para voltear la cimentación. Todo lo que va debajo del eje de la viga baja `ex`: barras y traslapos de abajo, bastones de abajo, la viga, las columnas, la media luz, la franja y la línea 1-1, la línea de estribos, las luces, la sección de columnas y los ejes; el ajuste a la vista usa `CH = 204 + ex`. Ruling: los bastones no suman escalón, porque en el alzado van en un solo nivel por cara (las filas se ven en el corte). Falta verlo en Revit (Review Focus 5).
-- [ ] Fase C (tareas 6–7).
-- [ ] Fase D (tarea 8).
+- [x] Fase C (tareas 6–7).
+- [x] Fase D (tarea 8).
+- [x] Tarea 12 (19-oct), por el MCP con capturas del WebView sobre `PROY_JULIO_BETO.rvt`: la lista dice `Pórtico A`, `B` y `C` "1 a 4 + voladizos" en N+3.70 y N+6.70; el Pórtico A tiene voladizos de 1.92 y 1.50 sin columna en la punta; rótulos, traslapos, estribos, `25×35` y la leyenda `● #5` en rojo; pulgadas (`3Ø⅝"L= 4.22/4.50`, `8eØ⅜"`); a 195 % de zoom líneas y textos del mismo tamaño; el corte con barras rojas y estribo gris. 615 pruebas en verde.
+  - Arreglado en la prueba (Review Focus 4): los textos de estribos de dos zonas vecinas se montaban en cada columna (`L=0.7€@.10`); la `L=` pasa a una tercera línea. La sección de columnas chocaba con el texto de un voladizo corto: pasa al pedazo de columna sobre la viga (y = 30).
+  - Abierto (Juan, 19-oct): a veces el panel de barras no se actualiza al quitar un diámetro (captura con 2 #5 en *Fila 1* y las filas de antes). En C# todos esos estados se calculan (`DosBarrasFijasEnLaFila1SeCalculan`, `DosFijasEnLaFila1MasOtrasEnAutoNoRevientan`) y, con un registro de mensajes en vivo, las 13 respuestas llegaron en 5–12 ms. **Sin repetir todavía.**
+  - Pendiente del paso 3: mostrarle los colores a Carlos y el comentario en #100. `traslapos-vigas-notas.md` §13 ya tiene lo hecho.
+  - Visto de paso, fuera de #100: la "sección más común" del Pórtico A cae en el Voladizo 1 (−0.60 m).
 - [ ] Fase E (tareas 9–11).
 - [ ] Probado en Revit (tarea 12).
