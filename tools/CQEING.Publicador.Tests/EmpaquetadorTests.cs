@@ -16,12 +16,14 @@ public class EmpaquetadorTests : IDisposable
         File.WriteAllText(Path.Combine(carpeta, "practicacq.pdb"), "símbolos");
         File.WriteAllText(Path.Combine(carpeta, Empaquetador.ArchivoFramework), "net8.0-windows");
         File.WriteAllText(Path.Combine(carpeta, "Resources", "icono16.png"), "png");
+        File.WriteAllText(Path.Combine(carpeta, Empaquetador.ArchivoConfiguracionLocal), "API_KEY=no-debe-salir");
+        File.WriteAllText(Path.Combine(carpeta, "Resources", Empaquetador.ArchivoConfiguracionLocal), "API_KEY=tampoco");
         for (int i = 0; i < addins; i++) File.WriteAllText(Path.Combine(carpeta, $"a{i}.addin"), "<RevitAddIns/>");
         return carpeta;
     }
 
     [Fact]
-    public void Zip_sin_pdb_ni_framework_y_con_resources()
+    public void Zip_sin_pdb_ni_framework_ni_env_y_con_resources()
     {
         string zip = _tmp.Combinar("p.zip");
         Empaquetador.CrearZip(Compilada(addins: 1), zip);

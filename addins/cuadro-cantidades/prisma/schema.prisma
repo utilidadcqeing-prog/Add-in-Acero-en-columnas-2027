@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Se configura PostgreSQL como el motor principal (usado en la web)
+  url      = env("DATABASE_URL")
+}
+
+// ================= USUARIOS & AUTH =================
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(USER)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+// ================= MAESTROS =================
+
+model Supplier {
+  id        Int                   @id @default(autoincrement())
+  name      String
+  nit       String?               @unique
+  phone     String?
+  email     String?
+  address   String?
+  active    Boolean               @default(true)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  
+  materialPrices MaterialSupplierPrice[]
+}
+
+model Material {
+  id             Int                     @id @default(autoincrement())
+  code           String                  @unique
+  name           String
+  unit           String
+  referencePrice Float?   
+  active         Boolean                 @default(true)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  
+  apuItems       ApuItem[]
+  supplierPrices MaterialSupplierPrice[]
+}
+
+model MaterialSupplierPrice {
+  id            Int      @id @default(autoincrement())
+  materialId    Int
+  supplierId    Int
+  price         Float
+  effectiveDate DateTime @default(now())
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  material      Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([materialId, effectiveDate(sort: Desc)])
+}
+
+model Apu {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique
+  description String
+  unit        String
+  items       ApuItem[]
+  budgetItems BudgetItem[]
+}
+
+model ApuItem {
+  id          Int      @id @default(autoincrement())
+  apuId       Int
+  materialId  Int
+  performance Float
+  apu         Apu      @relation(fields: [apuId], references: [id], onDelete: Cascade)
+  material    Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+}
+
+// ================= PROYECTOS & PRESUPUESTOS (Unificados con Revit) =================
+
+model Project {
+  id                Int      @id @default(autoincrement())
+  name              String
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  
+  // Columnas agregadas para vinculación con el Add-in de Revit
+  revitDocumentPath String?  @map("RevitDocumentPath") // Ruta del archivo local/servidor de Revit
+  projectNumber     String?  @map("ProjectNumber")     // Código/Número identificador del proyecto
+  
+  budgets           Budget[]
+}
+
+model Budget {
+  id        Int             @id @default(autoincrement())
+  projectId Int
+  name      String
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  chapters  BudgetChapter[]
+}
+
+model BudgetChapter {
+  id       Int          @id @default(autoincrement())
+  budgetId Int
+  name     String
+  order    Int
+  budget   Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  items    BudgetItem[]
+}
+
+model BudgetItem {
+  id        Int           @id @default(autoincrement())
+  chapterId Int
+  apuId     Int
+  quantity  Float
+  order     Int
+  chapter   BudgetChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  apu       Apu           @relation(fields: [apuId], references: [id], onDelete: Restrict)
+
+  // Columnas agregadas para almacenamiento de previsualización y metadatos de Revit
+  previewImagePath   String?   @map("PreviewImagePath")
+  lastPreviewUpdate  DateTime? @map("LastPreviewUpdate")
+  elementIdsSnapshot String?   @map("ElementIdsSnapshot")
+  previewImagesJson  String?   @map("PreviewImagesJson")
+
+  // Relación con los elementos físicos del modelo 3D
+  linkedElements     LinkedElement[]
+}
+
+// ================= TABLAS EXCLUSIVAS DEL ADD-IN DE REVIT =================
+
+model LinkedElement {
+  id               Int        @id @default(autoincrement()) @map("Id")
+  budgetItemId     Int        @map("BudgetItemId") // Llave foránea que apunta al BudgetItem de la Web (Int)
+  revitUniqueId    String     @map("RevitUniqueId")
+  category         String     @map("Category")
+  elementName      String     @map("ElementName")
+  elementDataJson  String     @default("{}") @map("ElementDataJson")
+  isDeletedInRevit Boolean    @default(false) @map("IsDeletedInRevit")
+
+  budgetItem       BudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@map("LinkedElements")
+}
+
+model TemplateItem {
+  id       Int    @id @default(autoincrement()) @map("Id")
+  name     String @map("Name")
+  type     String @map("Type") // Actividad, Capitulo
+  dataJson String @default("{}") @map("DataJson")
+
+  @@map("Templates")
+}

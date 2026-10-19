@@ -1,0 +1,109 @@
+<Window
+  x:Class="CQEING_CuadroCantidades.UI.Views.SaveAsWindow"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Title="Guardar Estructura Como"
+  Width="400"
+  Height="200"
+  Background="#F8FAFC"
+  WindowStartupLocation="CenterOwner"
+  ResizeMode="NoResize"
+>
+  <Window.Resources>
+    <!-- Modern Button Style -->
+    <Style x:Key="ModernButtonStyle" TargetType="Button">
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="MinWidth" Value="90"/>
+      <Setter Property="Padding" Value="14,6"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="border" 
+                    Background="{TemplateBinding Background}"
+                    CornerRadius="6"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="border" Property="Opacity" Value="0.85"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="border" Property="Opacity" Value="0.72"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="border" Property="Opacity" Value="0.45"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="16">
+    <!-- Card Wrapper -->
+    <Border Background="White" CornerRadius="8" Padding="24">
+      <Border.Effect>
+        <DropShadowEffect ShadowDepth="1" BlurRadius="4" Opacity="0.08" Color="Black"/>
+      </Border.Effect>
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Instructions -->
+        <TextBlock
+          Grid.Row="0"
+          Margin="0,0,0,12"
+          FontSize="14"
+          FontWeight="SemiBold"
+          Foreground="#1E293B"
+          Text="Ingrese el nombre para la nueva versión de estructura:"
+        />
+
+        <!-- Input Box -->
+        <Border Grid.Row="1" CornerRadius="4" BorderBrush="#E2E8F0" BorderThickness="1" Background="White" Padding="0" VerticalAlignment="Top">
+          <TextBox
+            Height="32"
+            Padding="8,4"
+            FontSize="13"
+            Text="{Binding VersionName, UpdateSourceTrigger=PropertyChanged}"
+            VerticalContentAlignment="Center"
+            BorderThickness="0"
+            Background="Transparent"
+          />
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel
+          Grid.Row="2"
+          Margin="0,16,0,0"
+          HorizontalAlignment="Right"
+          Orientation="Horizontal"
+        >
+          <Button
+            Background="#94A3B8"
+            Command="{Binding CancelCommand}"
+            Content="Cancelar"
+            Margin="0,0,10,0"
+            Style="{StaticResource ModernButtonStyle}"
+          />
+          <Button
+            Background="#10B981"
+            Command="{Binding ConfirmCommand}"
+            Content="Guardar"
+            Style="{StaticResource ModernButtonStyle}"
+          />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

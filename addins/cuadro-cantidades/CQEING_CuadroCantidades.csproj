@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
+  <PropertyGroup>
+    <AssemblyName>CQEING_CuadroCantidades</AssemblyName>
+    <RootNamespace>CQEING_CuadroCantidades</RootNamespace>
+    <Version>1.8.0</Version>
+    <Company>CQEING</Company>
+    <Product>CQEING - Cuadro de cantidades</Product>
+    <Copyright>© CQEING</Copyright>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Revit no resuelve runtimes\<rid>\native vía deps.json: fijar el RID copia e_sqlite3.dll junto al add-in. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="CQEING_CuadroCantidades.addin" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Los documentos de diseño viven junto al código, pero no van en el paquete. -->
+    <None Remove="docs\**;prisma\**;*.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.105.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <!-- EF Core Sqlite 8.0.10 trae SQLitePCLRaw 2.1.6, con una vulnerabilidad alta (NU1903, GHSA-2m69-gcr7-jv3q, hasta 2.1.11): se fija una corregida. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
+  </ItemGroup>
+
+</Project>
