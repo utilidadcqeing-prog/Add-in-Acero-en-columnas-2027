@@ -17,7 +17,7 @@ public static class EditorTablero
 
     public static PreviaVista Previsualizar(PorticoLeido p, OpcionesTablero o, Reglas r, PedidoEdicion pedido)
     {
-        EntradaVigas e = ArmadorVista.EntradaDe(p, o, r);
+        EntradaVigas e = CalculoPortico.EntradaDe(p, o, r);
         IReadOnlyList<OpcionEdicion> opciones = pedido.Accion switch
         {
             AccionEdicion.Barra => Barra(e, pedido.Elemento),

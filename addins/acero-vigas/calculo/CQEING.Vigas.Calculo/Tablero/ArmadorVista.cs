@@ -15,9 +15,6 @@ public static class ArmadorVista
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    /// <summary>Avisos que impiden generar el acero en Revit.</summary>
-    private static readonly TipoAviso[] Bloquean = [TipoAviso.SinTraslapoMinimo, TipoAviso.SinSolucion, TipoAviso.DiametroSinReglas];
-
     public static PorticoEnLista EnLista(PorticoLeido p)
     {
         IReadOnlyList<Apoyo> apoyos = p.Portico.Apoyos;
@@ -46,9 +43,9 @@ public static class ArmadorVista
         double fin = M(portico.Apoyos[^1].CaraDerecha + portico.VoladizoFinal);
 
         // Un diámetro que no está en las reglas haría reventar el reparto de la sección: se avisa y no se calcula.
-        int[] faltan = Diametros(o).Where(d => !r.PorDiametro.ContainsKey(d)).Distinct().Order().ToArray();
-        if (faltan.Length > 0)
+        if (CalculoPortico.Calcular(p, o, r) is not { } c)
         {
+            IReadOnlyList<int> faltan = CalculoPortico.DiametrosSinReglas(o, r);
             avisos.AddRange(faltan.Select(d => new Aviso(TipoAviso.DiametroSinReglas, $"#{d}")));
             var vacia = new CaraVista(0, [], nameof(ErrorCara.Ninguno), 0);
             return new VistaPortico(p.Nombre, NombreTipo(tipo), inicio, fin, apoyos, [], [], [], [], vacia, vacia,
@@ -56,14 +53,8 @@ public static class ArmadorVista
                 new SeccionVista(Cm(Ancho(p)), Cm(Alto(p)), [], []), [], Textos(avisos, null), [], 0, 0, false);
         }
 
-        ResultadoVigas rv = MotorVigas.Calcular(EntradaDe(p, o, r));
-        EntradaSeccion seccion = Seccion(p, o, r);
-        IReadOnlyDictionary<string, ConfigEstribos>? porTramo = o.EstribosMarcados is null
-            ? null
-            : o.TramosMarcados.Distinct().ToDictionary(t => t, _ => o.EstribosMarcados);
-        ResultadoEstribos re = MotorEstribos.Calcular(new EntradaEstribos(portico, seccion, o.Estribos, porTramo));
-        avisos.AddRange(rv.Avisos);
-        avisos.AddRange(re.Avisos);
+        (ResultadoVigas rv, ResultadoEstribos re, EntradaSeccion seccion, var porTramo) = (c.Vigas, c.Estribos, c.Seccion, c.PorTramo);
+        avisos.AddRange(c.Avisos);
 
         var barras = rv.Barras.Select(b => new BarraVista(b.Id, Capa(b.Capa), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg,
@@ -80,8 +71,6 @@ public static class ArmadorVista
         var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
             .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d), Rotulo.Pulgadas(d))).ToList();
 
-        bool seccionSinError = re.Seccion.Superior.Error == ErrorCara.Ninguno && re.Seccion.Inferior.Error == ErrorCara.Ninguno;
-        bool sePuede = rv.Superior is not null && rv.Inferior is not null && seccionSinError && !avisos.Any(a => Bloquean.Contains(a.Tipo));
         OpcionesCorte oc = o.Corte ?? new OpcionesCorte();
         CorteEnPunto corte = CalculadoraCorte.En(portico, rv, re, oc);
         (SeccionVista enCorte, IReadOnlyList<BarraSeccion> proyeccion, string? avisoBastones) = SeccionDe(p, r, re, seccion, corte);
@@ -89,7 +78,7 @@ public static class ArmadorVista
             Zonas(portico, o, porTramo, r, re), Cara(re.Seccion.Superior), Cara(re.Seccion.Inferior),
             Opcion(rv.CaraInicio), Opcion(rv.CaraFinal), Lado(rv.CaraUsada), Lado(rv.CaraMasEconomica),
             enCorte, ListaEstribos(p, o, re), Textos(avisos, rv),
-            rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, sePuede,
+            rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, c.SePuedeGenerar,
             CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
             re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList(),
             diametros, p.Tramos.Select(t => new SeccionEnAlzado(M((t.Desde + t.Hasta) / 2.0), $"{F(t.Ancho / 10, "0.#")}×{F(t.Alto / 10, "0.#")}")).ToList());
@@ -103,10 +92,6 @@ public static class ArmadorVista
         TipoGancho.De180 => "180°",
         _ => "",
     };
-
-    /// <summary>Lo que recibe el motor para el pórtico <paramref name="p"/> con lo que eligió el usuario (también la vista previa, #84).</summary>
-    internal static EntradaVigas EntradaDe(PorticoLeido p, OpcionesTablero o, Reglas r) =>
-        new(p.Portico, o.Tipo ?? p.Tipo, o.Superior, o.Inferior, r, o.Cara, Cambios: o.Cambios, Bastones: o.Bastones);
 
     /// <summary>La pantalla Reglas: los valores en m y kg/m con los decimales de <c>RULES0</c> de la maqueta.</summary>
     public static VistaReglas Reglas(ReglasCargadas c)
@@ -194,14 +179,6 @@ public static class ArmadorVista
 
     private static List<AvisoVista> Textos(IEnumerable<Aviso> avisos, ResultadoVigas? r) =>
         avisos.Select(a => new AvisoVista(a.Tipo.ToString(), a.Elemento, TextoAviso(a, r), a.Alternativa is { LoEvita: true })).ToList();
-
-    private static EntradaSeccion Seccion(PorticoLeido p, OpcionesTablero o, Reglas r)
-    {
-        var rec = new Recubrimientos((o.RecArribaCm ?? o.RecubrimientoCm) * 10, (o.RecAbajoCm ?? o.RecubrimientoCm) * 10,
-            (o.RecLadosCm ?? o.RecubrimientoCm) * 10);
-        return new EntradaSeccion(Ancho(p), Alto(p), rec, o.Estribos.Diametro, o.Superior, o.Inferior, r,
-            (o.SeparacionFilasCm ?? 0) * 10, o.MaximoFilas);
-    }
 
     private static IReadOnlyList<ZonaEstribos> Zonas(Portico portico, OpcionesTablero o, IReadOnlyDictionary<string, ConfigEstribos>? porTramo,
         Reglas r, ResultadoEstribos re)
@@ -313,12 +290,6 @@ public static class ArmadorVista
             })
             .ToList();
     }
-
-    private static IEnumerable<int> Diametros(OpcionesTablero o) =>
-        o.Superior.Concat(o.Inferior).Select(g => g.Diametro)
-            .Concat(new[] { o.Bastones.Superior, o.Bastones.Inferior }.OfType<GrupoBarras>().Select(g => g.Diametro))
-            .Append(o.Estribos.Diametro)
-            .Concat(o.EstribosMarcados is null ? [] : [o.EstribosMarcados.Diametro]);
 
     private static CaraVista Cara(CaraSeccion c) => new(c.CabenPorFila, c.Filas.Select(f => f.Count).ToList(), c.Error.ToString(), c.Maximo);
 
