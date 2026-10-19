@@ -178,10 +178,10 @@
 
 **Archivos:** `Tablero/web/alzado.js`, `Tablero/web/tablero.js` (corte).
 
-- [ ] **Paso 1:** `vector-effect="non-scaling-stroke"` en cada `line`, `polyline`, `rect`, `path` y `circle` dentro del grupo con `scale(z)`; los grosores quedan en px de pantalla (decisión 5).
-- [ ] **Paso 1b:** los textos del grupo con `font-size` (y su `stroke-width` de borde) divididos por `z`, para que se lean igual a cualquier zoom; los círculos de los ejes y los 3 puntos, con el radio dividido por `z`.
-- [ ] **Paso 2:** el rayado de zonas de la maqueta (`stroke-width="80"` con `dasharray`, `alzado.js:346`) no puede quedar fijo: pasa a rayas sueltas o sale con la tarea 8.
-- [ ] **Paso 3:** `node --check` de los dos. Commit `fix(vigas): líneas y textos del mismo tamaño a cualquier zoom (#100)`.
+- [x] **Paso 1:** `vector-effect="non-scaling-stroke"` en cada `line`, `polyline`, `rect`, `path` y `circle` dentro del grupo con `scale(z)`; los grosores quedan en px de pantalla (decisión 5).
+- [x] **Paso 1b:** los textos del grupo con `font-size` (y su `stroke-width` de borde) divididos por `z`, para que se lean igual a cualquier zoom; los círculos de los ejes y los 3 puntos, con el radio dividido por `z`.
+- [x] **Paso 2:** el rayado de zonas de la maqueta (`stroke-width="80"` con `dasharray`, `alzado.js:346`) no puede quedar fijo: pasa a rayas sueltas o sale con la tarea 8.
+- [x] **Paso 3:** `node --check` de los dos. Commit `fix(vigas): líneas y textos del mismo tamaño a cualquier zoom (#100)`.
 
 ### Tarea 4: el tablero sin scroll
 
@@ -296,6 +296,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Tarea 1 (pasos 2–4): `EjeQuePasaPorLosApoyos` toma la rejilla paralela más cercana que pasa por dentro de **todas** las columnas y muros del pórtico (no cuenta las vigas que cruzan). `Soporte` guarda también su rango de lado a lado (`NormalDesde`–`NormalHasta`); `Unir` junta esos rangos. `UnaRejillaParalelaQueNoPasaPorLosApoyosNoSeToma` pasó desde el inicio: queda como guarda para que el arreglo no tome ejes de más. 578 pruebas en verde.
   - Paso 1 hecho después del commit del arreglo (Revit no respondía al principio): el hallazgo 1 se confirma en el modelo de Carlos (ejes A y C a 125 mm). La prueba `UnaVigaCorridaDelEjeTomaElNombreDeLaRejilla` pasó a usar ese caso exacto: viga de 25 con su línea en la cara de columnas de 25.
 - [ ] Fase B (tareas 3–5).
+  - Tarea 3: como en la maqueta, `k = fitZ / z` (en el ajuste k = 1, así que nada cambia de tamaño al abrir). Trazos con `non-scaling-stroke`; `font-size`, el borde blanco del rótulo del arrastre, los radios de los círculos de ejes y de los 3 puntos, la zona para agarrar la línea 1-1, sus flechas y los márgenes de los textos, por k. Solo el alzado tiene zoom: el corte y los esquemas de `tablero.js` no escalan, así que no cambian. El rayado de zonas (sin posiciones de estribos) queda escalando, porque es un relleno; C# y la demostración siempre mandan posiciones, y la tarea 8 lo quita. Falta verlo en Revit (tarea 12).
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).
