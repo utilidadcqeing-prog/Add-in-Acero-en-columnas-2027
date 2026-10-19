@@ -168,17 +168,20 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
-    public void TextoDeUnaDiferenciaDeLargo_UnaLineaPorPiezaYDiametro()
+    public void LasDiferenciasDeLargo_UnaLineaPorPorticoDiametroYDiferencia()
     {
+        // Lo que dio el modelo real (hallazgo del plan): S1, S4 e I1 con el gancho del proyecto, 0.18 m más cortas.
         IReadOnlyList<string> t = ProtocoloTablero.Textos([
-            new DiferenciaLargo("Pórtico 2", "S1", 5, 6320, 6280),
-            new DiferenciaLargo("Pórtico 2", "S1", 5, 6320, 6280),
-            new DiferenciaLargo("Pórtico 2", "S1", 4, 6310, 6280),
+            new DiferenciaLargo("Pórtico A", "S1", 5, 4317, 4500),
+            new DiferenciaLargo("Pórtico A", "S1", 5, 4317, 4500),
+            new DiferenciaLargo("Pórtico A", "S4", 5, 4317, 4500),
+            new DiferenciaLargo("Pórtico A", "I1", 5, 3317, 3500),
+            new DiferenciaLargo("Pórtico A", "S1", 4, 6310, 6280),
         ]);
 
         Assert.Equal([
-            "S1 (Pórtico 2): Revit da 6.32 m y el tablero 6.28 m. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
-            "S1 (Pórtico 2): Revit da 6.31 m y el tablero 6.28 m. El gancho del tipo de barra #4 en Revit no coincide con el cuadro de Reglas.",
+            "Pórtico A, barras #5 (S1, S4 e I1): en Revit miden 0.18 m menos que en el tablero. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
+            "Pórtico A, barras #4 (S1): en Revit miden 0.03 m más que en el tablero. El gancho del tipo de barra #4 en Revit no coincide con el cuadro de Reglas.",
         ], t);
     }
 
@@ -194,7 +197,7 @@ public class ProtocoloTableroTests
         Assert.Equal(
             "Se generó el acero de 2 pórticos: 48 barras, 7 bastones y 112 estribos.\n" +
             "Pórtico 3: el modelo no tiene un tipo de barra para el #9.\n" +
-            "S1 (Pórtico 2): Revit da 6.32 m y el tablero 6.28 m. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
+            "Pórtico 2, barras #5 (S1): en Revit miden 0.04 m más que en el tablero. El gancho del tipo de barra #5 en Revit no coincide con el cuadro de Reglas.",
             raiz.GetProperty("texto").GetString());
         Assert.Equal("Se generó el acero de 1 pórtico: 3 barras, 0 bastones y 1 estribo.",
             JsonDocument.Parse(ProtocoloTablero.Resumen(new ResumenGeneracion(1, 3, 0, 1, [], []))).RootElement.GetProperty("texto").GetString());

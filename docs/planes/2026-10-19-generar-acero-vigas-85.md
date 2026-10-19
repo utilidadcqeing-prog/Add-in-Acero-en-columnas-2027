@@ -68,6 +68,26 @@
   - la marca para regenerar sin duplicar se hace con un esquema de Extensible Storage (`MarcaEstribos.cs`).
 - **Los diámetros de la página están fijos** del #3 al #8 en `tablero.js:908`, `1019`, `1026` y `1061`.
 
+### Primera prueba en Revit (2026-10-19, Juan generó dos veces; revisado por MCP)
+
+Modelo de prueba con dos pórticos generados: "Pórtico A · N+3.70" y "Pórtico A · N+6.70", viga `VIG_25X35` (250 × 350) a lo largo de Y.
+
+- **Sin duplicados.** Hay 62 barras marcadas: 31 por pórtico. Cada barra calculada (`S1`…`S4`, `I1`…`I4`) tiene 3 barras físicas y cada bastón (`BS1`…`BS4`, `BI1`…`BI3`) una. Generar otra vez reemplazó lo anterior.
+- **Ubicación lateral correcta.** La viga va de X −3505 a −3255 (centro −3380). Las barras de esquina quedan en −3448 y −3312, a 57.5 mm de cada cara: 40 de recubrimiento + 9.5 del estribo + 8 de media barra. La del centro, en −3380.
+- **Altura correcta.** La viga va de Z 3350 a 3700. Las barras de arriba quedan en 3643 y las de abajo en 3407, también a 57 mm de la cara.
+- **Ganchos hacia adentro.** El de arriba dobla hacia abajo (3643 → 3523) y el de abajo hacia arriba (3407 → 3527). La corrección automática de la orientación funciona.
+- **Traslapo al lado correcto.** `S2` queda en −3432, −3396 y −3328: 16 mm hacia el centro de las de `S1` (−3448, −3380 y −3312).
+- **Bastón en la fila 2.** `BS1` queda en X −3448, Z 3627: debajo de la barra de esquina, pegado. Es el puesto que da el corte del tablero (en 250 de ancho no cabe en un hueco de la fila 1).
+- **El gancho del proyecto es más corto que el del cuadro de Carlos.** `S1` mide 4.317 m en Revit y 4.50 en el tablero; `I1`, 3.317 y 3.50. La diferencia es de 0.18 m por gancho:
+  - el tipo de gancho del proyecto "Estándar - 90°." tiene multiplicador 5: extensión recta de 5 × 16 = 80 mm, más el arco de 63 mm. En total baja 120 mm;
+  - el cuadro de Carlos pide B = 278 mm para el #5;
+  - todos los tipos de barra tienen el largo del gancho en automático;
+  - el add-in no tocó nada (decisión 8) y el resumen lo avisó.
+- **El modelo de prueba usa barras métricas.** El tipo elegido para el #5 fue "16 B 400 S" (16 mm, a 0.1 mm del 15.9). El #4 (12.7) no tiene tipo: el más cercano es el de 12 mm, a 0.7 mm. El #3 (9.5) cae en el de 10 mm, justo en la tolerancia de 0.5. En un modelo con tipos `#3`…`#8` esto no pasa.
+- **El resumen no se leía.** Salía en una sola línea que se cortaba por los lados, con una frase por barra. Se cambió a una tarjeta con una línea por cosa, que se queda hasta pulsar "Cerrar", y las diferencias se agrupan por pórtico, diámetro y diferencia: *"Pórtico A · N+3.70, barras #5 (S1, S4, I1 e I4): en Revit miden 0.18 m menos que en el tablero…"*.
+
+**Pendiente de decidir (Juan):** cómo hacer que el gancho de Revit dé el B del cuadro sin cambiar los tipos del proyecto. La opción es que el add-in cree sus propios tipos de gancho ("CQEING 90° #5"…) con el multiplicador que da el B de cada diámetro. Son tipos nuevos: no cambian los que ya tiene el proyecto.
+
 ## Decisiones
 
 > Las marcadas **(a confirmar)** son la recomendación; Juan las revisa con el plan antes de programar.

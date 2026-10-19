@@ -119,11 +119,20 @@ public static class ProtocoloTablero
         return JsonSerializer.Serialize(new { tipo = "generado", texto, resumen = r }, Json);
     }
 
-    /// <summary>Una línea por pórtico, pieza y diámetro (las barras físicas iguales dan una sola), en m a 2 decimales.</summary>
+    /// <summary>
+    /// Una línea por pórtico, diámetro y diferencia, con las piezas que la tienen: así los 3 #5 de S1, S4, I1 e I4, que
+    /// difieren por el mismo gancho, dan una sola. En m a 2 decimales.
+    /// </summary>
     public static IReadOnlyList<string> Textos(IReadOnlyList<DiferenciaLargo> diferencias) =>
-        diferencias.DistinctBy(d => (d.Portico, d.Pieza, d.Diametro)).Select(d =>
-            $"{d.Pieza} ({d.Portico}): Revit da {Metros(d.LargoRevit)} m y el tablero {Metros(d.LargoTablero)} m. " +
-            $"El gancho del tipo de barra #{d.Diametro} en Revit no coincide con el cuadro de Reglas.").ToList();
+        diferencias.GroupBy(d => (d.Portico, d.Diametro, Delta: d.LargoRevit - d.LargoTablero)).Select(g =>
+            $"{g.Key.Portico}, barras #{g.Key.Diametro} ({Lista(g.Select(d => d.Pieza).Distinct().ToList())}): en Revit miden " +
+            $"{Metros(Math.Abs(g.Key.Delta))} m {(g.Key.Delta < 0 ? "menos" : "más")} que en el tablero. " +
+            $"El gancho del tipo de barra #{g.Key.Diametro} en Revit no coincide con el cuadro de Reglas.").ToList();
+
+    /// <summary>"S1", "S1 y S4", "S1, S4 e I1": "e" antes de una palabra que suena a "i".</summary>
+    private static string Lista(IReadOnlyList<string> piezas) => piezas.Count == 1
+        ? piezas[0]
+        : $"{string.Join(", ", piezas.Take(piezas.Count - 1))} {(piezas[^1].StartsWith('I') ? "e" : "y")} {piezas[^1]}";
 
     private static string Contar(int n, string uno, string varios) => $"{n} {(n == 1 ? uno : varios)}";
 

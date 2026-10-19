@@ -215,10 +215,10 @@
       this.cambiar({ cambios: { ...s.cambios, movidos, ganchos }, bastPuntas: puntas, confirmVol: null });
     }
 
-    say(t, ms = 2600) {
+    say(t) {
       this.setState({ toast: t });
       clearTimeout(this._t);
-      this._t = setTimeout(() => this.setState({ toast: '' }), ms);
+      this._t = setTimeout(() => this.setState({ toast: '' }), 2600);
     }
 
     // Un mensaje de C# que no es la vista: un aviso, o la respuesta a "Guardar y bloquear".
@@ -596,6 +596,8 @@
         }),
         liveDot: vista.enVivo ? '#1E7A46' : '#9AA3AD', liveText: vista.enVivo ? 'En vivo con Revit' : 'Sin enlace con Revit',
         genOff: !P || !P.sePuedeGenerar, genBg: P && P.sePuedeGenerar ? '#1F5FAF' : '#9AA3AD', hasToast: !!s.toast, toast: s.toast,
+        // #85: el resumen de "Generar en Revit", una línea por cosa; se queda hasta cerrarlo
+        resumen: s.resumen ? { titulo: s.resumen[0], lineas: s.resumen.slice(1) } : null, closeResumen: () => this.setState({ resumen: null }),
         pickEl: (id) => selectBar(id), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
         // gancho de una punta del borde (#84): "S.inicio"… en las corridas, "BS1.inicio"… en los bastones
         onHook: (clave, valor, texto) => {
@@ -1216,6 +1218,14 @@
     </div>` : null}
   ${v.hasToast ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">${v.toast}</div>` : null}
+  ${v.resumen ? html`
+    <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); max-height: 45%; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.25)">
+      <div style="display: flex; align-items: flex-start; gap: 12px">
+        <div style="flex: 1; font-weight: 600">${v.resumen.titulo}</div>
+        <button type="button" onClick=${v.closeResumen} style="height: 26px; padding: 0 10px; border: 1px solid #5E6670; border-radius: 6px; background: transparent; color: #FFFFFF; font: inherit; cursor: pointer">Cerrar</button>
+      </div>
+      ${v.resumen.lineas.length ? html`<ul style="margin: 0; padding-left: 18px; overflow: auto">${v.resumen.lineas.map((l) => html`<li style="margin: 2px 0">${l}</li>`)}</ul>` : null}
+    </div>` : null}
 </div>`;
     }
   }
@@ -1233,7 +1243,7 @@
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
       else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
       // #85, tarea 5: el resumen como aviso largo; la tarjeta del resumen llega con la tarea 10.
-      else if (m.tipo === 'generado' && this.tablero) this.tablero.say(m.texto.split('\n').join(' · '), 10000);
+      else if (m.tipo === 'generado' && this.tablero) this.tablero.setState({ resumen: m.texto.split('\n') });
     }
 
     render() {
