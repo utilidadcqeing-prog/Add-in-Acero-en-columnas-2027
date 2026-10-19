@@ -212,10 +212,10 @@
 
 **Archivos:** `alzado.js`, `tablero.js`, `demo.js`.
 
-- [ ] **Paso 1:** barras y bastones con `Color`; bastón más delgado; selección con halo (decisión 9).
-- [ ] **Paso 2:** la leyenda de bolitas arriba (decisión 10).
-- [ ] **Paso 3:** el corte con los mismos colores y cada barra con su diámetro a escala.
-- [ ] **Paso 4:** `demo.js` manda los colores. `node --check`. Commit `feat(vigas): colores por diámetro con su leyenda en el alzado y el corte (#100)`.
+- [x] **Paso 1:** barras y bastones con `Color`; bastón más delgado; selección con halo (decisión 9).
+- [x] **Paso 2:** la leyenda de bolitas arriba (decisión 10).
+- [x] **Paso 3:** el corte con los mismos colores y cada barra con su diámetro a escala.
+- [x] **Paso 4:** `demo.js` manda los colores. `node --check`. Commit `feat(vigas): colores por diámetro con su leyenda en el alzado y el corte (#100)`.
 
 ### Fase D: rótulos
 
@@ -301,6 +301,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
   - Tarea 5: el dibujo del recubrimiento del panel, igual a la maqueta (decisión 11 corregida), detrás de *Ver el dibujo*; el texto de arriba ya dice el "al eje". La barra va en gris oscuro `#3F4A57` hasta la tarea 7, que le pone el color del diámetro (`recBarCol`). El estribo del corte, en `#8A939D`. Falta verlo en Revit.
 - [ ] Fase C (tareas 6–7).
   - Tarea 6: `Modelo/ColoresDiametro.cs` (`De`, `SinColor` = `#5E6670`). `Color` en `BarraVista`, `BastonVista` y `BarraSeccion` (también los bastones en proyección); `VistaPortico.Diametros` = `DiametroVista(Nombre, Color)` de barras y bastones, del más grueso al más delgado, sin los estribos. Ruling: una corrida con dos diámetros (3 #5 + 2 #4) lleva el color del **más grueso**. Si falta un diámetro en las reglas, la vista vacía sale con `Diametros` null: la página lo trata como lista vacía (tarea 7). 587 pruebas en verde.
+  - Tarea 7, como la maqueta: corrida 2.4 px (elegida 3.4) y bastón 1.7 px (elegido 3), los dos con el color de su diámetro; la elegida conserva su color y lleva un halo gris (`#16191D` al 22 %, 10 px) detrás. Solo al arrastrarla pasa a azul o ámbar (el elemento vivo). Traslapo en gris `#5E6670` (elegido o a mano en azul, con aviso en ámbar). Leyenda: una bolita por diámetro + traslapo. Corte: cada barra con su color (el tamaño ya era a escala) y la leyenda debajo del título. Panel: las bolitas de cada fila con el color de sus barras y una bolita junto al selector de diámetro; el dibujo del recubrimiento con el color de la barra. `demo.js` tiene la misma tabla que C#. Falta verlo en Revit: el DLL con los colores (tarea 6) necesita cerrar Revit para compilar.
 - [ ] Fase C (tareas 6–7).
 - [ ] Fase D (tarea 8).
 - [ ] Fase E (tareas 9–11).

@@ -112,7 +112,8 @@
         const ti = bar.ganchoInicio ? bar.ganchoInicioTipo || '90°' : '', tf = bar.ganchoFin ? bar.ganchoFinTipo || '90°' : '';
         const pts = conGanchos(X(bar.desde), X(bar.hasta), y, dir, ti, tf, 22);
         const isSel = bar.id === sel && !selLap;
-        return { id: bar.id, y, isC, pts, col: isSel ? colVivo : '#3F4A57', sw: isSel ? 4.2 : 2.6, pick: pickBar(bar.id),
+        // el color es el de su diámetro (C#, #100); la elegida va igual, con un halo detrás. Solo al arrastrarla cambia.
+        return { id: bar.id, y, isC, pts, isSel, col: isSel && cur ? colVivo : bar.color || '#3F4A57', sw: isSel ? 3.4 : 2.4, pick: pickBar(bar.id),
           lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: bar.capa === 'arriba' ? 33 : 150, lt: bar.id + ' · ' + f2(bar.largo) };
       });
 
@@ -120,8 +121,10 @@
       const l = p.traslapos.map((t) => {
         const isSel = t.id === selLap, isMan = manualLaps.includes(t.id);
         const isWarn = t.id === warnLap && !isMan;
-        const c = vivos.includes(t.id) ? colVivo : isSel || isMan ? '#1F5FAF' : (isWarn ? '#B26B00' : '#C77A12');
-        return { isC: arribaAntes(t.capa), x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel ? 0.28 : 0.16, sw: isSel ? 2.6 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id) };
+        // gris, para no confundirse con los colores de los diámetros (el naranja de antes chocaba con el #4)
+        const vivo = vivos.includes(t.id);
+        const c = vivo ? colVivo : isSel || isMan ? '#1F5FAF' : (isWarn ? '#B26B00' : '#5E6670');
+        return { isC: arribaAntes(t.capa), x: X(t.desde), w: X(t.hasta) - X(t.desde), c, o: isSel || vivo ? 0.24 : 0.12, sw: isSel || vivo ? 2.4 : (isMan || isWarn ? 1.8 : 1), pick: pickLapFn(t.id) };
       });
 
       // bastones: los de arriba en y = 70 y los de abajo en y = 100, con el gancho hacia adentro de la viga. Una punta
@@ -135,8 +138,12 @@
         const ti = bs.ganchoInicio ? bs.ganchoInicioTipo || '90°' : '', tf = bs.ganchoFin ? bs.ganchoFinTipo || '90°' : '';
         const pts = conGanchos(xa, xz, y, dir, ti, tf, 16);
         const isSel = bs.id === sel && !selLap;
-        return { id: bs.id, y, top, pts, col: isSel ? colVivo : '#0F7B6C', sw: isSel ? 4 : 2.6, pick: pickBar(bs.id) };
+        // del color de su diámetro, como la corrida; se distingue por el trazo, más delgado (decisión 9)
+        return { id: bs.id, y, top, pts, isSel, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : 1.7, pick: pickBar(bs.id) };
       });
+      // la selección va con un halo detrás y no con otro color: el azul ya es del #8 (#100)
+      const halo = selLap ? null : (b.find((x) => x.isSel) || t.find((x) => x.isSel) || null);
+      const ley = (p.diametros || []).map((d) => ({ c: d.color, t: d.nombre }));
 
       // estribos: una raya por cada estribo real, donde va (Juan, 17-oct: al cambiar "cada" el dibujo no cambiaba y la
       // línea 1-1, que va de estribo en estribo, no caía en las rayas). Sin posiciones, el rayado de zonas de la maqueta:
@@ -285,7 +292,7 @@
         view: 'translate(' + v.tx + ' ' + v.ty + ') scale(' + v.z + ')',
         flip: inv ? 'translate(0 170) scale(1 -1)' : 'translate(0 0)',
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, stx, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k,
+        b, l, t, st, stx, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
         hdMove: (e) => {
           const h = this.state.hd;
@@ -358,6 +365,7 @@
       <g transform="${v.flip}">
         ${v.l.filter((x) => x.isC).map(lap)}
         ${v.l.filter((x) => !x.isC).map(lap)}
+        ${v.halo ? html`<polyline points="${v.halo.pts}" fill="none" stroke="#16191D" stroke-opacity="0.22" stroke-width="10" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
         ${v.b.filter((x) => x.isC).map(barra)}
         ${v.b.filter((x) => !x.isC).map(barra)}
         ${v.t.filter((x) => x.top).map(barra)}
@@ -395,9 +403,8 @@
   </div>`)}
   <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 160}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
     <span>${v.caption}</span>
-    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #3F4A57"></span>corrida</span>
-    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 14px; height: 3px; background: #0F7B6C"></span>bastón</span>
-    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(199,122,18,0.25); border: 1px solid #C77A12"></span>traslapo</span>
+    ${v.ley.map((d) => html`<span style="display: flex; align-items: center; gap: 4px"><span style="width: 9px; height: 9px; border-radius: 50%; background: ${d.c}"></span>${d.t}</span>`)}
+    <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(94,102,112,0.14); border: 1px solid #5E6670"></span>traslapo</span>
   </div>
   <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 2px; align-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; padding: 2px" onPointerDown=${v.stop} onDblClick=${v.stop}>
     <button type="button" aria-label="Alejar" onClick=${v.zoomOut} style="width: 28px; height: 28px; border: 0; background: transparent; border-radius: 4px; cursor: pointer; display: grid; place-items: center; color: #16191D">

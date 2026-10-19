@@ -319,7 +319,10 @@
 
       // capas (#88): el reparto en filas sale del motor
       const maxCapas = Math.max(1, Math.round(num(s.maxCapas, 3)));
-      const layerInfo = (rows, cara) => {
+      // las bolitas de cada fila, con el color del diámetro de las barras del corte en esa fila (#100)
+      const coloresFila = (arriba, i) => (P ? P.seccion.barras : []).filter((b) => !b.baston && b.arriba === arriba && b.fila === i)
+        .sort((p, q) => p.x - q.x).map((b) => b.color || '#3F4A57');
+      const layerInfo = (rows, cara, arriba) => {
         const total = rows.reduce((a, r) => a + r.n, 0);
         const per = cara ? cara.cabenPorFila : 0;
         const filas = cara && cara.porFila.length ? cara.porFila.length : (per ? Math.ceil(total / per) : 99);
@@ -332,24 +335,29 @@
         else { msg = cara.porFila.map((n, i) => 'fila ' + (i + 1) + ': ' + n).join(' · ') + '. La segunda fila va debajo de las esquinas.'; col = '#9A5B00'; }
         const filasVis = [];
         if (cara && cara.error === 'Ninguno' && cara.porFila.length) {
-          cara.porFila.forEach((n, i) => filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, () => ({ c: i === 0 ? '#1F5FAF' : '#7FA6D6' })) }));
+          cara.porFila.forEach((n, i) => {
+            const cs = coloresFila(arriba, i);
+            filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, (_, j) => ({ c: cs[j] || '#3F4A57' })) });
+          });
         } else {
           let left = total;
           const nF = Math.min(Math.max(filas, 1), Math.max(maxCapas, 1) + 1);
           for (let i = 0; i < nF && left > 0; i++) {
             const n = per ? Math.min(per, left) : left;
             const over = i >= maxCapas;
-            filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, () => ({ c: over ? '#B42318' : (i === 0 ? '#1F5FAF' : '#7FA6D6') })) });
+            filasVis.push({ label: 'Fila ' + (i + 1), dots: Array.from({ length: n }, () => ({ c: over ? '#B42318' : '#9AA3AD' })) });
             left -= n;
           }
         }
         return { total, per, filas, msg, col, filasVis };
       };
-      const supI = layerInfo(s.sup, P && P.superior), infI = layerInfo(s.inf, P && P.inferior);
+      const supI = layerInfo(s.sup, P && P.superior, true), infI = layerInfo(s.inf, P && P.inferior, false);
       // Fila: Auto · 1 … el máximo de filas del paso 1 (decisión 11 del plan de #84)
       const filasOpc = Array.from({ length: Math.max(1, Math.round(num(s.maxCapas, 3))) }, (_, i) => String(i + 1));
+      // el color de un diámetro, de los que mandó C# para la leyenda (uno recién elegido no lo trae hasta recalcular)
+      const colorDe = (d) => { const x = P && P.diametros ? P.diametros.find((y) => y.nombre === d) : null; return x ? x.color : '#C9CFD6'; };
       const mkRows = (key, rows, label) => rows.map((r, i) => ({
-        n: r.n, d: r.d, f: r.f || '', filasOpc, canRemove: rows.length > 1, filaLabel: 'Fila de las ' + r.n + ' ' + r.d + ' ' + label,
+        n: r.n, d: r.d, c: colorDe(r.d), f: r.f || '', filasOpc, canRemove: rows.length > 1, filaLabel: 'Fila de las ' + r.n + ' ' + r.d + ' ' + label,
         setF: (e) => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, f: e.target.value } : x)) }),
         minusLabel: 'Quitar barra ' + label, plusLabel: 'Añadir barra ' + label, selLabel: 'Diámetro ' + label, removeLabel: 'Quitar este diámetro',
         minus: () => this.cambiar({ [key]: rows.map((x, j) => (j === i ? { ...x, n: Math.max(1, x.n - 1) } : x)) }),
@@ -479,7 +487,7 @@
       const seccionA = (K) => ({
         wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
         dots: secBars.map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px',
-          c: b.baston ? '#0F7B6C' : (b.arriba ? '#1F5FAF' : '#3F4A57'), ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
+          c: b.color || '#3F4A57', ring: 'none', cur: 'default', label: (b.baston ? '' : 'Barra ') + b.nombre, pick: () => {} })),
         // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
         proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
         adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
@@ -568,10 +576,11 @@
         layers, rec: s.rec, alEje, recUp: s.recUp, recDown: s.recDown, recSide: s.recSide,
         more: s.more, moreLabel: s.more ? '− Menos opciones' : '+ Más opciones',
         // el dibujo del recubrimiento (Carlos 1:00:08: "el azul oscuro sobre negro no se entiende"), como la maqueta:
-        // fondo blanco, estribo gris claro y, detrás de "Ver el dibujo", para no alargar el panel. La barra va en gris
-        // oscuro hasta que lleguen los colores por diámetro de C# (tareas 6 y 7).
+        // fondo blanco, estribo gris claro, la barra con el color de su diámetro y, detrás de "Ver el dibujo", para no
+        // alargar el panel
         recDraw: !!s.recDraw, recDrawLabel: s.recDraw ? 'Ocultar el dibujo' : 'Ver el dibujo',
-        recBarCol: '#3F4A57', recBarD: s.inf.length ? s.inf[0].d : '',
+        recBarCol: (b1 && b1.color) || '#3F4A57', recBarD: s.inf.length ? s.inf[0].d : '',
+        leySec: (P && P.diametros) || [],
         isSep: s.sepMode === 'separada', sepCm: s.sepCm, maxCapas: s.maxCapas,
         segPeg: s.sepMode === 'pegada' ? on : off, segSep: s.sepMode === 'separada' ? on : off,
         segAerea: !isCim ? on : off, segCim: isCim ? on : off,
@@ -743,6 +752,9 @@
                 <span style="font-weight: 600; font-size: 15px">Corte 1-1</span>
                 ${v.cutTipo ? html`<span style="font-size: 11px; font-weight: 600; color: #1E7A46">Sección más común</span>` : null}
               </span>
+              <span style="display: flex; gap: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #3F4A57">
+                ${v.leySec.map((d) => html`<span style="display: flex; align-items: center; gap: 5px"><span style="width: 10px; height: 10px; border-radius: 50%; background: ${d.color}"></span>${d.nombre}</span>`)}
+              </span>
               <span>A ${v.cutPos} m del eje A · ${v.cutTramo}</span>
               <span>Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
               <span><b>Arriba</b> · ${v.secTop}</span>
@@ -890,6 +902,7 @@
                       <button type="button" aria-label=${r.plusLabel} onClick=${r.plus} style="width: 30px; height: 30px; border: 0; background: transparent; font: inherit; cursor: pointer">+</button>
                     </div>
                     <span style="color: #5E6670">barras</span>
+                    <span aria-hidden="true" style="width: 10px; height: 10px; flex-shrink: 0; border-radius: 50%; background: ${r.c}"></span>
                     <select aria-label=${r.selLabel} value=${r.d} onChange=${r.setD} style="flex: 1; height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                       <option value="#3">#3 · 3/8"</option><option value="#4">#4 · 1/2"</option><option value="#5">#5 · 5/8"</option><option value="#6">#6 · 3/4"</option><option value="#7">#7 · 7/8"</option><option value="#8">#8 · 1"</option>
                     </select>
