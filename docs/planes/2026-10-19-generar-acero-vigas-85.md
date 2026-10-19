@@ -612,6 +612,7 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin acero-
 - [x] Plan revisado con Juan (2026-10-19): traslapo al lado, pórticos como se recomendó, y los tipos del proyecto no se tocan.
 - [ ] Contarle a Carlos la decisión 2 (traslapo al lado) y su límite en Revit; cerrar la pregunta 2 de #79.
 - [ ] Pendiente con Carlos antes de la tarea 8: el estribo de 135° del #6 al #8 (0.272, 0.316 y 0.362), según #82.
+- [x] **Vista previa 3D del acero** (2026-10-19, Juan: "hagamos lo del 3D"): el botón "3D" dibuja el plan del pórtico con `DirectContext3D` (`Revit/PreviaAcero3D.cs`, geometría en `Generacion/PreviaAcero.cs`), sin crear nada en el modelo; se redibuja al cambiar el pórtico y se quita al generar, al cambiar de documento o al cerrar el tablero. La vista "CQEING Vigas 3D" queda en estilo Sombreado: en alambre Revit no pinta los colores. Pendiente: con el pórtico ya generado, la vista solo muestra la vista previa; las barras reales quedan fuera del aislado.
 - [ ] Tareas 1 a 5 (librería, con pruebas).
 - [ ] Tareas 6 a 10 (Revit y página).
 - [ ] Tarea 11 (aceptación en Revit).

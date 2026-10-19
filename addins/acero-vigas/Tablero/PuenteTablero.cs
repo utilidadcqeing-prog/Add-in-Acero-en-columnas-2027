@@ -51,6 +51,11 @@ internal sealed class PuenteTablero
                 Hacer(app, accion, vigas);
             else if (salida is AGenerar(var porticos, var saltados, Reglas reglas) && leido is not null)
                 ventana.Enviar(ProtocoloTablero.Resumen(GeneradorAcero.Generar(leido, porticos, saltados, reglas)));
+            else if (salida is APrevia3d(var portico, Reglas reglasPrevia) && leido is not null)
+            {
+                PreviaAcero3D.Mostrar(leido, AccionesRevit.Nombre3d, portico, reglasPrevia);
+                app.ActiveUIDocument?.RefreshActiveView();
+            }
         }
     }
 
@@ -131,6 +136,7 @@ internal sealed class PuenteTablero
 
     private void Recargar(UIApplication app)
     {
+        PreviaAcero3D.Quitar();
         sesion.Recargar(app.ActiveUIDocument?.Document?.Title ?? "");
         ventana.Enviar(sesion.Vista().Json);
     }
@@ -202,6 +208,9 @@ internal sealed class PuenteTablero
         barra?.Close();
         try
         {
+            // La vista previa vive mientras el tablero esté abierto.
+            PreviaAcero3D.Quitar();
+            uiapp.ActiveUIDocument?.RefreshActiveView();
             uiapp.SelectionChanged -= AlCambiarSeleccion;
             uiapp.ViewActivated -= AlActivarVista;
             uiapp.Application.DocumentClosing -= AlCerrarDocumento;

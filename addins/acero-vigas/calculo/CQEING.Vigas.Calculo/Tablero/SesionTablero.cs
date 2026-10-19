@@ -19,6 +19,12 @@ public sealed record ARevit(AccionRevit Accion, IReadOnlyList<string> Vigas) : S
 /// </summary>
 public sealed record AGenerar(IReadOnlyList<PorticoAGenerar> Porticos, IReadOnlyList<string> Saltados, Reglas Reglas) : Salida;
 
+/// <summary>
+/// La vista previa 3D del acero (el botón "3D"): el pórtico con su plan, como lo crearía "Generar", para dibujarlo en la
+/// vista 3D sin crear nada en el modelo. <paramref name="Portico"/> null = quitarla.
+/// </summary>
+public sealed record APrevia3d(PorticoAGenerar? Portico, Reglas Reglas) : Salida;
+
 /// <summary>Un pórtico para generar: <paramref name="Vigas"/> son las suyas, para borrar lo que el add-in creó antes en ellas.</summary>
 public sealed record PorticoAGenerar(string Id, IReadOnlyList<string> Vigas, UbicacionPortico Ubicacion, PlanAcero Plan);
 
@@ -49,6 +55,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     private List<string>? elegidos;
     private ReglasCargadas reglas = new(Reglas.Generales, null);
     private string? actual;
+    private string? en3d;
     private bool enVivo = true;
     private string proyecto = proyecto;
 
@@ -77,7 +84,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 if (Buscar(id) is null)
                     return [Vista()];
                 (opciones[id], actual) = (o, id);
-                return [Vista()];
+                return id == en3d ? [Vista(), Previa3d(id)] : [Vista()];
             case Previsualizar(string id, OpcionesTablero o, PedidoEdicion pedido):
                 // no guarda las opciones: es solo ver qué pasaría (#84)
                 return Buscar(id) is { } p ? [new AJs(ProtocoloTablero.Previa(EditorTablero.Previsualizar(p, o, reglas.Reglas, pedido)))] : [];
@@ -86,7 +93,10 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             case VerEnRevit(string id):
                 return Buscar(id) is { } ver ? [new ARevit(AccionRevit.Mostrar, ver.Vigas)] : [];
             case Abrir3d(string id):
-                return Buscar(id) is { } en3d ? [new ARevit(AccionRevit.Abrir3d, en3d.Vigas)] : [];
+                if (Buscar(id) is not { } vigas3d)
+                    return [];
+                en3d = id;
+                return [new ARevit(AccionRevit.Abrir3d, vigas3d.Vigas), Previa3d(id)];
             case CambiarEnVivo(bool activo):
                 enVivo = activo;
                 return [Vista()];
@@ -96,7 +106,11 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
             case Generar(IReadOnlyList<string> ids):
-                return [AGenerar(ids)];
+                // Lo generado ya se ve de verdad: la vista previa encima estorbaría.
+                if (en3d is null)
+                    return [AGenerar(ids)];
+                en3d = null;
+                return [new APrevia3d(null, reglas.Reglas), AGenerar(ids)];
             default:
                 return [];
         }
@@ -134,6 +148,16 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         return new AGenerar(aGenerar, saltados, reglas.Reglas);
     }
 
+    /// <summary>La vista previa del pórtico con sus opciones; sin plan (no se puede generar) queda vacía.</summary>
+    private APrevia3d Previa3d(string id)
+    {
+        PorticoAGenerar? p = Buscar(id) is { Ubicacion: { } u } portico
+            && PlanificadorAcero.Planificar(id, portico, opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto, reglas.Reglas) is { } plan
+            ? new PorticoAGenerar(id, portico.Vigas, u, plan)
+            : null;
+        return new APrevia3d(p, reglas.Reglas);
+    }
+
     private IReadOnlyList<int> Disponibles() =>
         nominalesDelModelo is null ? reglas.Reglas.PorDiametro.Keys.Order().ToList() : DiametrosDisponibles.De(nominalesDelModelo(), reglas.Reglas);
 
@@ -144,6 +168,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     public void Recargar(string? proyectoNuevo = null)
     {
         proyecto = proyectoNuevo ?? proyecto;
+        en3d = null; // la vista previa es del documento anterior: quien recarga la quita en Revit
         lectura = leer();
         porticos = ConId(lectura.Porticos);
         foreach (string nombre in opciones.Keys.Where(n => Buscar(n) is null).ToList())

@@ -317,6 +317,41 @@ public sealed class SesionTableroTests : IDisposable
     }
 
     [Fact]
+    public void El3dPideLaVistaPreviaDelAceroDelPortico()
+    {
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] }));
+
+        IReadOnlyList<Salida> salidas = s.Manejar(new Abrir3d("Pórtico 1"));
+
+        Assert.IsType<ARevit>(salidas[0]);
+        PorticoAGenerar p = Assert.Single(salidas.OfType<APrevia3d>()).Portico!;
+        Assert.Equal(("Pórtico 1", 4), (p.Id, p.Plan.Barras.Count(b => b.Pieza == "S1")));
+    }
+
+    [Fact]
+    public void LaVistaPreviaSigueLosCambiosDeSuPorticoYSeBorraAlGenerar()
+    {
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new Abrir3d("Pórtico 1"));
+
+        APrevia3d cambio = Assert.Single(s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] })).OfType<APrevia3d>());
+        Assert.Equal(4, cambio.Portico!.Plan.Barras.Count(b => b.Pieza == "S1"));
+
+        Assert.Null(Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<APrevia3d>()).Portico);
+        Assert.Empty(s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto)).OfType<APrevia3d>());
+    }
+
+    [Fact]
+    public void SinAbrirEl3dNoHayVistaPrevia()
+    {
+        SesionTablero s = ConUbicacion();
+
+        Assert.Empty(s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto)).OfType<APrevia3d>());
+        Assert.Empty(s.Manejar(new Generar(["Pórtico 1"])).OfType<APrevia3d>());
+    }
+
+    [Fact]
     public void GenerarSaltaLosQueNoSePuedenGenerar()
     {
         SesionTablero s = ConUbicacion();
