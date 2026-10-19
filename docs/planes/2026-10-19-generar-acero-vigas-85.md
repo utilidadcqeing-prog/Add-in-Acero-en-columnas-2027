@@ -195,6 +195,36 @@ Resumen que mostró el tablero: *"Se generó el acero de 1 pórtico: 32 barras, 
 | E13b | **El gancho del abierto daba la vuelta 30 mm por encima de la barra, y su cola terminaba a 25 mm de la cara** (rama en X 123, dobleces centrados en Z 87 y 263 en vez de 58 y 292). | Revit toma la punta de la línea como la cara exterior del doblez, igual que en las barras corridas; y el gancho era el de barra, con cola de 84 mm. **✅ en código y medido por MCP (subtransacción deshecha):** la línea pasa un radio más medio diámetro (30 mm) más allá del centro de cada barra, y el gancho es uno propio de grapa, "CQEING Grapa 135° #3", estilo de barra con la cola E del cuadro (57 mm). Resultado: dobleces centrados en (147.5, 55) y (147.5, 295), con la barra 3 en (147.5, 58) y (147.5, 292); colas que terminan en X 205, a 45 mm de la cara. Con la orientación `Right` dobla al revés (centro en X 97.5) y `CorregirAbierto` lo voltea a `Left`. |
 | E10 | **Sigue:** BS1 y S1 en el mismo punto (X 63, Z 280 del corte). | Ver E10. |
 
+**Experimento E10/E11 en Revit** (2026-10-19, por MCP, en subtransacciones deshechas: el modelo no cambió). Posiciones en la sección Y 195 del voladizo 1; en el tablero S1 va en (3302.5, 6642.5) y BS1 pegada debajo, en (3302.5, 6626.6).
+
+| Prueba | S1 | BS1 | Conclusión |
+|---|---|---|---|
+| Como quedó la generación | 3308, 6630 | 3308, 6630 | Las dos tienen en `RebarPlane` y `Edge` la restricción `ToOtherRebar` al estribo "E Voladizo 1". |
+| Borrar los estribos | 3308, 6630 | 3308, 6630 | Las barras no vuelven solas a su punto. |
+| Bajar BS1 10 mm | — | 3311.5, 6621.5 | Revit la desliza por el arco del doblez: sigue pegada. |
+| Crear BS1 de nuevo después de los estribos, en su punto | — | 3308, 6630 | **El orden no sirve**: al regenerar se vuelve a pegar. |
+| Ajuste global "colocación restringida" apagado | — | 3308, 6630 | Ya estaba apagado; no cambia nada. |
+| Fijar la restricción antes de regenerar | — | 3308, 6630 | Antes de regenerar la barra no tiene handles. |
+| **Regenerar, cambiar `RebarPlane` y `Edge` a `FixedDistanceToHostFace` (`SetPreferredConstraint` con candidatos del host) y mover la barra a su punto** | **3302.5, 6642.5** | **3302.5, 6626.6** | ✅ Quedan donde dice el tablero. |
+
+**Arreglo:** después del primer `Regenerate` de `GeneradorAcero`, a cada barra corrida y bastón se le cambian las restricciones de `RebarPlane` y `Edge` a la cara de la viga; se mueve por la diferencia entre su punto en el corte y el que dejó Revit, y se regenera. Con eso Revit queda igual que el tablero (E10 y E11), y la barra queda 3.5 a 4 mm separada del arco del doblez del estribo, como en el dibujo del tablero.
+
+**Estado** (2026-10-19, Juan: "opción 1", todas las barras donde dice el tablero): ✅ en código (`CreadorBarras.FijarEnSuPunto`, llamado en la pasada de `GeneradorAcero` después del primer `Regenerate`), compila para 2026 y 2027, desplegado en Revit 2026. 
+
+**Corrección de la medida:** las caras de la `VIG_25X35` están en X 3250.7 y 3500.7, no en 3245 como se supuso en el experimento. La X de S1 (3308) ya era la del tablero; lo que Revit corría era la Z (6630 en vez de 6642.5). Las X "3302.5" de la tabla de arriba están mal: el movimiento de prueba corrió las barras 5.6 mm de más en X.
+
+**Octava prueba en Revit** (2026-10-19, "Pórtico C · N+6.70", 3 #5 por cara, sin adicionales, 44 barras, revisado por MCP): ✅ **E10 y E11 resueltos.**
+- Todas las barras corridas y los bastones quedan atados a la cara de la viga (`FixedDistanceToHostFace` en el borde), ninguno al estribo.
+- Esquinas a 57.5 mm de cada cara (X 3308.1 y 3443.2, Z 6642.5 y 6407.4); la del medio en el centro de la viga (3375.7).
+- BS1 en (3308.1, 6626.6), pegada debajo de S1 (15.9 mm); BI1 y BI2 en Z 6423.3, pegadas encima de la fila de abajo.
+- Traslapo al lado: S2 e I2 corridas 15.9 mm de S1 e I1 (3324.0, 3359.8, 3427.3).
+- Estribo: ramas en X 3295.7 y 3455.7, cara exterior a 40 mm de la cara de la viga. E: 13 conjuntos, 98 estribos.
+
+**Novena prueba, con adicionales** (2026-10-19, pórticos A N+3.70 y C N+6.70, 4 #5 por cara, cerrado en 1-2 y abierto en 3):
+- C: E 13/98, abierto 13/98 (dobleces centrados en la X de la barra 3, que queda 2.4 mm dentro del doblez de radio 25), cerrado 11/88 (ramas a 12.4 mm de las barras 1 y 2). Falta el cerrado del voladizo 1: E17.
+- Ninguna barra corrida ni bastón queda atada a un estribo.
+- **Ojo:** después de generar, la viga 392694 (C N+6.70) quedó corrida (+5.7 mm en X, −18.6 en Y; caras en 3250.7 y 3500.7, la de abajo en 3245 y 3495). El acero se generó con la viga en el eje C (centro 3370) y no se movió con ella. Con la viga corrida, el add-in ya no la reconoce como pórtico (sale en los avisos). Hay que devolverla al eje antes de regenerar.
+
 ### Tarea 8b: elegir los estribos adicionales en el corte (hallazgo E8)
 
 > Agregada el 2026-10-19 (Juan: "como tarea dentro de 85"). El motor ya los calculaba (#90) y la generación ya los creaba (tarea 8); faltaba la página.
@@ -208,7 +238,7 @@ Resumen que mostró el tablero: *"Se generó el acero de 1 pórtico: 32 barras, 
 - [x] **La lista** muestra cada adicional con sus barras ("Abierto · arriba 2, abajo 2") y "Quitar".
 - [x] Se quitó el aviso viejo "Esto llega con la #NN".
 - **Límite conocido:** al marcar un tramo, su configuración copia la del pórtico con sus adicionales. Como llegan por JSON, el motor no los reconoce como los mismos y los numera aparte (E1 en el pórtico, E2 en el tramo). No cambia lo que se genera, solo el número de la lista.
-- [ ] **Prueba en Revit:** agregar un cerrado y un abierto, generar y revisar por MCP (E7).
+- [x] **Prueba en Revit:** agregar un cerrado y un abierto, generar y revisar por MCP (E7). Ver la quinta, séptima y octava prueba.
 
 **Gancho propio medido en Revit** (2026-10-19, por MCP, en una subtransacción deshecha: el modelo no cambió). Barra "16 B 400 S" (d = 16, doblado del gancho 64), línea recta de 3000 mm con gancho al inicio:
 
@@ -508,12 +538,12 @@ La fórmula de la decisión 8b da el largo exacto en los tres ángulos. El servi
   - **reparto:** `SetLayoutAsNumberWithSpacing` por corrida, o uno solo. Se cuentan con `NumberOfBarPositions` después de regenerar;
   - marca `"E A-B"` (pieza y tramo); la falla de una corrida va al resumen y se sigue;
   - el largo de los estribos todavía no se compara con el tablero: primero se mide en Revit cómo lo cuenta.
-- [ ] **Pendiente: prueba en Revit** (paso 2).
+- [x] **Probado en Revit** (paso 2, pruebas quinta a octava): los estribos coinciden con el tablero por tramo, y los adicionales abrazan sus barras. Queda E17 con Carlos.
 - [x] **Paso 1:** implementar.
   - **Cerrado:** el rectángulo del eje del estribo (las caras exteriores menos medio diámetro) en el plano perpendicular a la viga en `Corrida.Primero`. Primero `CreateFromRebarShape` + `ScaleToBox` con la forma de estribo cerrado del documento; si no hay o falla, `CreateFromCurves` con el quiebre a mitad de lado.
   - **Abierto:** una rama vertical con ganchos en las dos puntas, con la forma de grapa del documento si la hay (como `GeometriaSeccion.BuscarFormaGrapa` de columnas).
   - **Reparto:** con `Cantidad > 1`, `SetLayoutAsNumberWithSpacing(Cantidad, Separacion, …)` en la dirección `+x`; con 1, sin reparto. Regenerar antes de leer cuántos quedaron.
-- [ ] **Paso 2: en Revit.** En el pórtico aéreo: contar estribos por tramo contra la lista de estribos del tablero, incluido un tramo corto. Agregar un adicional en el corte y comprobar que abraza las mismas barras.
+- [x] **Paso 2: en Revit.** En el pórtico aéreo: contar estribos por tramo contra la lista de estribos del tablero, incluido un tramo corto. Agregar un adicional en el corte y comprobar que abraza las mismas barras.
 - [ ] **Paso 3:** commit `feat(vigas): estribos en Revit (#85)`.
 
 ### Tarea 9: colores por diámetro en Revit

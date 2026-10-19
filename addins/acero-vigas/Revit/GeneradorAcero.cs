@@ -63,11 +63,15 @@ internal static class GeneradorAcero
             }
         }
 
-        // Los ganchos se miran con la geometría ya regenerada; se regenera una vez más solo si se volteó alguno.
+        // Los ganchos y el punto de cada barra se miran con la geometría ya regenerada; se regenera una vez más solo si se
+        // cambió algo.
         doc.Regenerate();
         bool volteados = false;
         foreach (Creada c in creadas)
+        {
+            volteados |= CreadorBarras.FijarEnSuPunto(c.Barra, c.Portico.Ubicacion, c.Pieza);
             volteados |= CreadorBarras.CorregirGanchos(c.Barra, c.Pieza, CreadorBarras.Pies(c.Portico.Ubicacion.ZAbajo + c.Pieza.YCorte));
+        }
         foreach ((Rebar conjunto, PorticoAGenerar p, GrupoEstribos g) in estribos)
             volteados |= CreadorEstribos.CorregirAbierto(conjunto, p.Ubicacion, g);
         if (volteados)

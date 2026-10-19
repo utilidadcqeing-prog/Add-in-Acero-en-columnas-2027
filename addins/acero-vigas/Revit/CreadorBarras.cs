@@ -79,6 +79,38 @@ internal static class CreadorBarras
         return true;
     }
 
+    /// <summary>
+    /// Deja la barra en su punto del corte (E10 y E11 del plan). Al regenerar, Revit ata la barra al doblez del estribo
+    /// más cercano (restricción <c>ToOtherRebar</c> en el plano y el borde) y la corre hasta 12 mm; un bastón pegado a la
+    /// barra de la esquina queda encima de ella. Medido en Revit: crear los estribos antes no lo evita, y antes de
+    /// regenerar la barra no tiene restricciones que cambiar. Por eso se ata a las caras de la viga y se mueve por la
+    /// diferencia con el plan. Llamar después de regenerar. Devuelve si la movió.
+    /// </summary>
+    public static bool FijarEnSuPunto(Rebar r, UbicacionPortico u, PiezaLongitudinal p)
+    {
+        RebarConstraintsManager restricciones = r.GetRebarConstraintsManager();
+        foreach (RebarConstrainedHandle h in restricciones.GetAllConstrainedHandles())
+        {
+            if (h.GetHandleType() is not (RebarHandleType.RebarPlane or RebarHandleType.Edge))
+                continue;
+            if (restricciones.GetConstraintCandidatesForHandle(h, r.GetHostId())
+                    .FirstOrDefault(c => c.GetConstraintType() == RebarConstraintType.FixedDistanceToHostFace) is { } cara)
+                restricciones.SetPreferredConstraint(cara);
+        }
+
+        if (r.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0)
+                .OfType<Line>().MaxBy(l => l.Length) is not { } recta)
+            return false;
+        XYZ planeado = Punto(u, p.Desde, p.XCorte, p.YCorte);
+        XYZ eje = (Punto(u, p.Hasta, p.XCorte, p.YCorte) - planeado).Normalize();
+        XYZ diferencia = planeado - recta.GetEndPoint(0);
+        diferencia -= eje * diferencia.DotProduct(eje); // solo en el plano del corte, no a lo largo
+        if (diferencia.GetLength() < Pies(0.1))
+            return false;
+        ElementTransformUtils.MoveElement(r.Document, r.Id, diferencia);
+        return true;
+    }
+
     /// <summary>El largo de una barra en Revit (con los ganchos), en mm.</summary>
     public static int LargoEnRevit(Rebar r) =>
         (int)Math.Round(LectorModelo.Mm(r.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? r.TotalLength / Math.Max(1, r.Quantity)));
