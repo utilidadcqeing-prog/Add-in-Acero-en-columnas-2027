@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pruebas del cálculo de traslapos (Modelo/PlanTraslapos.cs), sin Revit.
+    Consola sin dependencias: corre con "dotnet run" sobre tools/PruebasTraslapos
+    y sale con código 1 si alguna falla. Los archivos se enlazan, no se copian
+    (mismo criterio que tools/PreviewUI). practicacq.csproj excluye esta carpeta.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Modelo\PlanTraslapos.cs" Link="Modelo\PlanTraslapos.cs" />
+    <Compile Include="..\..\Modelo\CuadroVarillas.cs" Link="Modelo\CuadroVarillas.cs" />
+    <Compile Include="..\..\Modelo\ColumnaContexto.cs" Link="Modelo\ColumnaContexto.cs" />
+    <Compile Include="..\..\Modelo\ConfigLongitudinal.cs" Link="Modelo\ConfigLongitudinal.cs" />
+    <Compile Include="..\..\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
+    <Compile Include="..\..\Modelo\NombreEmpalme.cs" Link="Modelo\NombreEmpalme.cs" />
+  </ItemGroup>
+
+</Project>

@@ -61,6 +61,16 @@
       <DependentUpon>PanelPlantaColumnas.xaml</DependentUpon>
     </Compile>
 
+    <Page Include="..\..\Vistas\PanelTraslapos.xaml">
+      <Link>Vistas\PanelTraslapos.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\Vistas\PanelTraslapos.xaml.cs">
+      <Link>Vistas\PanelTraslapos.xaml.cs</Link>
+      <DependentUpon>PanelTraslapos.xaml</DependentUpon>
+    </Compile>
+
     <Page Include="..\..\Vistas\VentanaEstribosMenores.xaml">
       <Link>Vistas\VentanaEstribosMenores.xaml</Link>
       <SubType>Designer</SubType>

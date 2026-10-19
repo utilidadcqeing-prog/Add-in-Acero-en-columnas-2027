@@ -10,7 +10,7 @@ namespace practicacq.Modelo;
 /// <c>FilteredElementCollector(doc).OfClass(typeof(RebarBarType))</c> /
 /// <c>RebarHookType</c> y devolviendo el <c>.Name</c> de cada uno — el mismo
 /// nombre que <see cref="ConfigTramo.TipoBarraNombre"/> y
-/// <see cref="ConfigLongitudinal.TipoBarraEsquinasNombre"/> guardan como texto.
+/// <see cref="ConfigLongitudinal.TipoBarraANombre"/> guardan como texto.
 /// </summary>
 public interface IProveedorTipos
 {
@@ -28,12 +28,4 @@ public interface IProveedorTipos
     /// defecto. Ver <see cref="TipoGancho"/>.
     /// </summary>
     IReadOnlyList<TipoGancho> ListarGanchos();
-
-    /// <summary>
-    /// Los tipos de empalme del modelo, por nombre -- para el combo "Tipo de
-    /// empalme" de la longitudinal (issue #41). No incluye los propios del
-    /// add-in ("CQ Traslapo #N"): esos son la opción por defecto, que la
-    /// ventana ofrece aparte. Puede venir vacía.
-    /// </summary>
-    IReadOnlyList<string> ListarEmpalmes();
 }

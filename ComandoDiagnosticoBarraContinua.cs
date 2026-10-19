@@ -362,7 +362,7 @@ public class ComandoDiagnosticoBarraContinua : IExternalCommand
             return piezas;
         }
 
-        TiposEmpalme.Resultado tipo = new TiposEmpalme(doc).Resolver(barra, null);
+        TiposEmpalme.Resultado tipo = new TiposEmpalme(doc).Resolver(barra, EstandarCQ.Buscar(barra)?.Traslapo ?? 0.75);
         if (tipo.Aviso is not null) sb.AppendLine($"Aviso del tipo de empalme: {tipo.Aviso}");
         if (tipo.Tipo is null)
         {

@@ -20,10 +20,38 @@ public sealed class ConfigLongitudinal
     /// <summary>Barras por cara paralela al eje Y global. Siempre par.</summary>
     public int BarrasPorCaraY { get; set; }
 
-    /// <summary>Las cuatro esquinas siempre llevan barra — no es opcional, por eso no hay un booleano acá.</summary>
+    /// <summary>
+    /// Barra de las posiciones de tipo A: las pares del anillo del perímetro,
+    /// empezando por la esquina inferior izquierda. A y B se alternan "una sí,
+    /// una no" y traslapan en tramos distintos (A en los pares, B en los
+    /// impares) -- docs/planes/2026-10-17-diseno-metodologia-traslapos.md.
+    /// Reemplaza a la elección por cara (esquinas / cara X / cara Y).
+    /// </summary>
+    public string? TipoBarraANombre { get; set; }
+
+    /// <summary>Barra de las posiciones de tipo B: las impares del anillo. Ver <see cref="TipoBarraANombre"/>.</summary>
+    public string? TipoBarraBNombre { get; set; }
+
+    /// <summary>
+    /// Todo largo de corte de varilla (ganchos incluidos) es múltiplo de esto,
+    /// en metros, para que en obra sea fácil de cortar. Ver
+    /// <see cref="PlanTraslapos.Redondeos"/>.
+    /// </summary>
+    public double RedondeoVarillas { get; set; } = PlanTraslapos.RedondeoPorDefecto;
+
+    /// <summary>
+    /// true: A y B traslapan con el mayor de sus dos solapes del cuadro;
+    /// false: cada uno con el de su diámetro.
+    /// </summary>
+    public bool SolapeMayorDeLosDos { get; set; }
+
+    /// <summary>OBSOLETO: solo para leer configuraciones guardadas antes de los tipos A/B. Ver <see cref="MigrarBarrasAB"/>.</summary>
     public string? TipoBarraEsquinasNombre { get; set; }
 
+    /// <summary>OBSOLETO: ver <see cref="TipoBarraEsquinasNombre"/>.</summary>
     public string? TipoBarraCaraXNombre { get; set; }
+
+    /// <summary>OBSOLETO: ver <see cref="TipoBarraEsquinasNombre"/>.</summary>
     public string? TipoBarraCaraYNombre { get; set; }
 
     /// <summary>
@@ -62,10 +90,9 @@ public sealed class ConfigLongitudinal
     public double LongitudComercialBarra { get; set; } = 12.0;
 
     /// <summary>
-    /// Tipo de empalme de Revit (<c>RebarSpliceType</c>, por nombre) con el que
-    /// se parten las barras longitudinales en sus traslapos -- issue #41. Vacío
-    /// = el por defecto del add-in: un tipo propio por varilla, con el solape
-    /// del cuadro de la empresa (<see cref="CuadroVarillas.Varilla.Traslapo"/>).
+    /// OBSOLETO: el tipo de empalme ya no se elige. Cada traslapo puede tener
+    /// un largo distinto y el add-in crea el tipo que corresponde
+    /// (<c>Logica/TiposEmpalme</c>). Queda solo para leer configuraciones viejas.
     /// </summary>
     public string? TipoEmpalmeNombre { get; set; }
 
@@ -76,6 +103,21 @@ public sealed class ConfigLongitudinal
     /// la que salió, seguir editando los estribos menores de esa columna
     /// cambiaría también la configuración guardada, sin que nadie lo pida.
     /// </summary>
+    /// <summary>
+    /// Pasa una configuración guardada antes de los tipos A/B al formato
+    /// nuevo: A = la barra de esquinas, B = la de cara X (o la de cara Y si no
+    /// había de cara X). Devuelve true si cambió algo, para avisar.
+    /// </summary>
+    public bool MigrarBarrasAB()
+    {
+        if (TipoBarraANombre is not null || TipoBarraBNombre is not null) return false;
+        if (TipoBarraEsquinasNombre is null && TipoBarraCaraXNombre is null && TipoBarraCaraYNombre is null) return false;
+
+        TipoBarraANombre = TipoBarraEsquinasNombre ?? TipoBarraCaraXNombre ?? TipoBarraCaraYNombre;
+        TipoBarraBNombre = TipoBarraCaraXNombre ?? TipoBarraCaraYNombre ?? TipoBarraEsquinasNombre;
+        return true;
+    }
+
     public ConfigLongitudinal Copiar() => new()
     {
         BarrasPorCaraX = BarrasPorCaraX,
@@ -83,6 +125,10 @@ public sealed class ConfigLongitudinal
         TipoBarraEsquinasNombre = TipoBarraEsquinasNombre,
         TipoBarraCaraXNombre = TipoBarraCaraXNombre,
         TipoBarraCaraYNombre = TipoBarraCaraYNombre,
+        TipoBarraANombre = TipoBarraANombre,
+        TipoBarraBNombre = TipoBarraBNombre,
+        RedondeoVarillas = RedondeoVarillas,
+        SolapeMayorDeLosDos = SolapeMayorDeLosDos,
         TipoGanchoLongitudinalNombre = TipoGanchoLongitudinalNombre,
         LongitudComercialBarra = LongitudComercialBarra,
         TipoEmpalmeNombre = TipoEmpalmeNombre,

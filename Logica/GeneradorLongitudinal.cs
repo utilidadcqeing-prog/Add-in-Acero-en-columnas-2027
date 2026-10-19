@@ -22,23 +22,25 @@ using practicacq.Modelo;
 ///    una columna SÍ puede recorrer toda la pila -- medido contra Revit real
 ///    el 7-oct (docs/planes/2026-10-07-factibilidad-barra-continua-41.md); la
 ///    suposición contraria, que obligaba a cortar en cada cambio de columna,
-///    era falsa. Los traslapos solo se generan donde la longitud comercial de
-///    la barra (<see cref="ConfigLongitudinal.LongitudComercialBarra"/>, 6 o
-///    12 m) obliga a cortar, y solo a la mitad de un nivel, alternando niveles
-///    pares/impares entre las posiciones de la sección. Qué barra cae en cada
-///    grupo lo decide su lugar en el ANILLO del perímetro (ver
-///    <see cref="GenerarColumna"/>, lista <c>anillo</c>): "uno sí, uno no"
-///    dando la vuelta, de modo que dos barras VECINAS nunca traslapan a la
-///    misma altura -- regla del equipo, confirmada por Luciano el 11-sep (ver
+///    era falsa. Dónde va cada traslapo y cuánto mide cada varilla lo decide
+///    <see cref="PlanTraslapos"/>, el mismo cálculo que dibuja la ventana
+///    (docs/planes/2026-10-17-diseno-metodologia-traslapos.md): nunca en un
+///    nudo, varillas en múltiplos del redondeo sin pasarse del largo
+///    comercial, solape del cuadro como mínimo. Las posiciones se alternan
+///    "una sí, una no" en el ANILLO del perímetro (ver
+///    <see cref="GenerarColumna"/>, lista <c>anillo</c>): las pares son tipo A
+///    y las impares tipo B, cada tipo con su barra, y traslapan en tramos
+///    distintos -- regla del equipo, confirmada por Luciano el 11-sep (ver
 ///    docs/planes/2026-09-11-alternancia-de-traslapos-por-anillo.md). El
-///    solape y el corrimiento lateral los pone Revit según el tipo de empalme
-///    (<see cref="TiposEmpalme"/>): por defecto uno propio del add-in con el
-///    solape del cuadro de la empresa.
-///  - Las barras longitudinales llevan el gancho de
-///    <see cref="ConfigLongitudinal.TipoGanchoLongitudinalNombre"/> (90°
-///    estándar) en las DOS puntas de la columna -- abajo el anclaje en la
-///    zapata (issue #37) y arriba el remate (issue #59) -- y en ninguna junta
-///    intermedia. Los dos miran hacia el centro de la sección (issue #43).
+///    solape y el corrimiento lateral los pone Revit con un tipo de empalme
+///    propio por largo (<see cref="TiposEmpalme"/>).
+///  - Si la columna arranca sobre zapata, las barras longitudinales llevan
+///    un gancho de 90° en las DOS puntas -- abajo el anclaje en la zapata
+///    (issue #37) y arriba el remate (issue #59) -- y en ninguna junta
+///    intermedia. Es el propio del add-in (<see cref="GanchoLongitudinal"/>),
+///    ajustado al largo del cuadro; el de
+///    <see cref="ConfigLongitudinal.TipoGanchoLongitudinalNombre"/> queda de
+///    respaldo. Los dos miran hacia el centro de la sección (issue #43).
 ///  - Grapas y cajas reutilizan el gancho del tramo (<see cref="ConfigTramo.TipoGanchoNombre"/>)
 ///    en el que se generan -- no hay un campo de gancho propio para
 ///    estribos menores todavía.
@@ -85,6 +87,10 @@ public static class GeneradorLongitudinal
         // del add-in para no crearlos ni reconfigurarlos una vez por varilla.
         var tiposEmpalme = new TiposEmpalme(doc);
 
+        // Igual: el gancho propio de 90° se crea y se ajusta una vez por barra
+        // y por corrida, no una vez por columna.
+        var ganchoPropio = new GanchoLongitudinal(doc);
+
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
 
         // TEMPORAL -- ver BarraContinua.Traza. Queda en un archivo de texto
@@ -93,13 +99,14 @@ public static class GeneradorLongitudinal
         var traza = new System.Text.StringBuilder();
 #if DEBUG
         BarraContinua.Traza = linea => traza.AppendLine(linea);
+        ganchoPropio.Traza = linea => traza.AppendLine(linea);
 #endif
 
         foreach (ColumnaPlan columnaPlan in opciones.Plan.Columnas)
         {
             try
             {
-                GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, tiposEmpalme, cacheHost, res);
+                GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, tiposEmpalme, ganchoPropio, cacheHost, res);
             }
             catch (Exception ex)
             {
@@ -128,6 +135,7 @@ public static class GeneradorLongitudinal
         RebarShape? formaEstribo,
         HashSet<ElementId> formasRechazadas,
         TiposEmpalme tiposEmpalme,
+        GanchoLongitudinal ganchoPropio,
         Dictionary<ElementId, (CurveLoop, double)> cacheHost,
         ResultadoArmado res)
     {
@@ -140,31 +148,45 @@ public static class GeneradorLongitudinal
         // corrida (ver ConstruirPlanArmado).
         if (columnaPlan.Tramos.All(t => t is null)) return;
 
-        if (string.IsNullOrEmpty(cfg.TipoBarraEsquinasNombre) ||
-            !barrasPorNombre.TryGetValue(cfg.TipoBarraEsquinasNombre, out RebarBarType? barraEsquinas))
+        // Una configuración guardada antes de los tipos A/B puede llegar sin
+        // ellos (la ventana ya la migra al cargarla; esto es por si acaso).
+        cfg.MigrarBarrasAB();
+
+        RebarBarType? barraA = BarraPorNombre(cfg.TipoBarraANombre);
+        RebarBarType? barraB = BarraPorNombre(cfg.TipoBarraBNombre);
+        if (barraA is null || barraB is null)
         {
             res.Avisos.Add(
-                $"{contexto.Marca}: el tipo de barra de esquina «{cfg.TipoBarraEsquinasNombre}» " +
+                $"{contexto.Marca}: el tipo de barra A «{cfg.TipoBarraANombre}» o el B «{cfg.TipoBarraBNombre}» " +
                 "no existe en el documento; se omite el acero longitudinal de esta columna.");
             return;
         }
 
-        RebarBarType? barraCaraX = ResolverBarraOpcional(cfg.BarrasPorCaraX, cfg.TipoBarraCaraXNombre, barrasPorNombre, "cara X", contexto.Marca, res);
-        RebarBarType? barraCaraY = ResolverBarraOpcional(cfg.BarrasPorCaraY, cfg.TipoBarraCaraYNombre, barrasPorNombre, "cara Y", contexto.Marca, res);
+        RebarBarType? BarraPorNombre(string? nombre) =>
+            !string.IsNullOrEmpty(nombre) && barrasPorNombre.TryGetValue(nombre, out RebarBarType? b) ? b : null;
 
-        // Gancho del anclaje en la zapata (issue #37) -- no bloquea el resto
-        // de la longitudinal si falta: se avisa y esa barra sale recta ahí,
-        // igual que hoy, en vez de tirar abajo toda la columna por un gancho.
-        RebarHookType? ganchoLongitudinal = null;
-        if (contexto.IdZapata is not null)
+        // Gancho del anclaje en la zapata (issue #37) y del remate (#59), solo
+        // si hay zapata: el propio del add-in (GanchoLongitudinal), que se
+        // ajusta más abajo, cuando ya se conoce la pila. El configurado del
+        // modelo queda de respaldo.
+        RebarHookType? ganchoDelModelo = null;
+        if (contexto.IdZapata is not null && !string.IsNullOrEmpty(cfg.TipoGanchoLongitudinalNombre))
+            ganchosPorNombre.TryGetValue(cfg.TipoGanchoLongitudinalNombre, out ganchoDelModelo);
+
+        // El mismo cálculo que dibuja la pestaña «Traslapos» de la ventana:
+        // lo que se vio es lo que se genera. Sin solución, la columna no lleva
+        // longitudinal, ni grapas ni cajas (abrazarían barras que no están) --
+        // docs/planes/2026-10-17-diseno-metodologia-traslapos.md, sección 6.
+        PlanTraslapos.Resultado planTraslapos = PlanTraslapos.Calcular(
+            new PlanTraslapos.Columna(contexto.Tramos, contexto.ZInferiorLongitudinal, contexto.ZSuperior, contexto.IdZapata is not null),
+            EstandarCQ.DiametroMm(barraA), EstandarCQ.DiametroMm(barraB),
+            new PlanTraslapos.Opciones(cfg.LongitudComercialBarra, cfg.RedondeoVarillas, cfg.SolapeMayorDeLosDos));
+        if (!planTraslapos.TieneSolucion)
         {
-            if (string.IsNullOrEmpty(cfg.TipoGanchoLongitudinalNombre) ||
-                !ganchosPorNombre.TryGetValue(cfg.TipoGanchoLongitudinalNombre, out ganchoLongitudinal))
-            {
-                res.Avisos.Add(
-                    $"{contexto.Marca}: sin tipo de gancho de anclaje válido para la longitudinal; " +
-                    "el anclaje en la zapata sale recto, sin gancho.");
-            }
+            string motivos = string.Join(" ", new[] { planTraslapos.A.Motivo, planTraslapos.B.Motivo }.OfType<string>().Distinct());
+            res.Avisos.Add(
+                $"{contexto.Marca}: no se genera el acero longitudinal (ni sus grapas y cajas) porque los traslapos no tienen solución. {motivos}");
+            return;
         }
 
         double recubrimientoPies = EstandarCQ.APies(columnaPlan.Recubrimiento ?? contexto.Recubrimiento);
@@ -188,13 +210,21 @@ public static class GeneradorLongitudinal
             .DefaultIfEmpty(0)
             .Max();
 
-        double insetEsquinas = recubrimientoPies + diametroEstribo + barraEsquinas.BarNominalDiameter / 2;
+        double Inset(RebarBarType barra) => recubrimientoPies + diametroEstribo + barra.BarNominalDiameter / 2;
+
+        // Las esquinas "de referencia" (para repartir las intermedias, los
+        // límites del corrimiento y las grapas/cajas) usan la más gruesa de
+        // las dos barras: con A y B de distinto diámetro la diferencia es de
+        // unos milímetros, y así ninguna queda pisando el estribo. Cada barra
+        // se separa de su cara según SU diámetro (ver el anillo, más abajo).
+        RebarBarType barraGruesa = barraA.BarNominalDiameter >= barraB.BarNominalDiameter ? barraA : barraB;
+        double insetEsquinas = Inset(barraGruesa);
 
         int columnas = Math.Max(0, cfg.BarrasPorCaraX / 2);
         int filas = Math.Max(0, cfg.BarrasPorCaraY / 2);
 
-        double insetX = barraCaraX is not null ? recubrimientoPies + diametroEstribo + barraCaraX.BarNominalDiameter / 2 : 0;
-        double insetY = barraCaraY is not null ? recubrimientoPies + diametroEstribo + barraCaraY.BarNominalDiameter / 2 : 0;
+        double insetX = insetEsquinas;
+        double insetY = insetEsquinas;
 
         // La longitudinal es de la columna física completa (William, 9-sep):
         // recorre TODOS los tramos, aceptados o no. Lo aceptado en la UI es
@@ -265,19 +295,32 @@ public static class GeneradorLongitudinal
         {
             res.Avisos.Add(
                 $"{contexto.Marca}: la zona común a todas las columnas de la pila ({zonaComun}) es demasiado chica para el " +
-                $"recubrimiento + la barra de esquina «{barraEsquinas.Name}»; se omite el acero longitudinal de esta columna.");
+                $"recubrimiento + la barra «{barraGruesa.Name}»; se omite el acero longitudinal de esta columna.");
             return;
         }
 
-        if (barraCaraX is not null && (xMax - xMin) - 2 * insetX <= Tolerancia)
-            res.Avisos.Add(
-                $"{contexto.Marca}: la zona común de la pila ({zonaComun}) es demasiado chica para la barra de cara X " +
-                $"«{barraCaraX.Name}»; sus posiciones pueden quedar mal.");
+        // El gancho de cada barra: el propio, ajustado al cuadro para que el
+        // largo de corte en Revit sea el de la pestaña «Traslapos»; si no se
+        // pudo, el configurado del modelo (y si tampoco hay, sale recta).
+        var ganchoPorBarra = new Dictionary<ElementId, RebarHookType?>();
+        if (contexto.IdZapata is not null)
+        {
+            var puntoDeMedicion = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, pila[0].ZInf + EstandarCQ.APies(0.10));
+            foreach (RebarBarType barra in new[] { barraA, barraB }.DistinctBy(b => b.Id))
+            {
+                GanchoLongitudinal.Resultado propio = ganchoPropio.Resolver(barra, pila[0].Host, puntoDeMedicion);
+                if (propio.Aviso is not null) res.Avisos.Add($"{contexto.Marca}: {propio.Aviso}");
+                ganchoPorBarra[barra.Id] = propio.Gancho ?? ganchoDelModelo;
 
-        if (barraCaraY is not null && (yMax - yMin) - 2 * insetY <= Tolerancia)
-            res.Avisos.Add(
-                $"{contexto.Marca}: la zona común de la pila ({zonaComun}) es demasiado chica para la barra de cara Y " +
-                $"«{barraCaraY.Name}»; sus posiciones pueden quedar mal.");
+                if (propio.Gancho is null)
+                    res.Avisos.Add(ganchoDelModelo is null
+                        ? $"{contexto.Marca}: sin gancho de anclaje para «{barra.Name}»; el anclaje en la zapata y el remate salen rectos."
+                        : $"{contexto.Marca}: «{barra.Name}» usa el gancho del modelo «{ganchoDelModelo.Name}»; su largo en Revit " +
+                          "puede no coincidir con el de la pestaña «Traslapos».");
+            }
+        }
+
+        RebarHookType? GanchoDe(RebarBarType barra) => ganchoPorBarra.TryGetValue(barra.Id, out RebarHookType? g) ? g : null;
 
         var referencia = new FootprintHost(pila[0].Host, xMin, xMax, yMin, yMax);
 
@@ -292,24 +335,7 @@ public static class GeneradorLongitudinal
             $"zona común X[{GeometriaSeccion.Metros(xMin):0.###}, {GeometriaSeccion.Metros(xMax):0.###}] " +
             $"Y[{GeometriaSeccion.Metros(yMin):0.###}, {GeometriaSeccion.Metros(yMax):0.###}]; zapata: {contexto.IdZapata ?? "no"}; " +
             $"ZInferiorLongitudinal {contexto.ZInferiorLongitudinal:0.###}, ZSuperior {contexto.ZSuperior:0.###}; " +
-            $"longitud comercial {cfg.LongitudComercialBarra:0.#} m");
-
-        // El longitudinal entra a anclarse hasta 7.5cm de la cara inferior de
-        // la zapata (#26). Ya no hace falta hostear ese pedazo en la zapata:
-        // la varilla puede salirse de su host (medido el 7-oct).
-        double zInicioTotal = contexto.ZInferiorLongitudinal;
-
-        // "Niveles" para Fase 5 (#7): un candidato de traslapo por tramo
-        // LIBRE/CONTRA ZAPATA de TODA la columna (no solo los aceptados en
-        // esta corrida) -- el número de nivel (para el intercalado par/impar)
-        // es una propiedad estable de la columna real, no debería cambiar
-        // según qué tramos se tildaron hoy.
-        List<(int Ordinal, double ZInf, double ZSup)> niveles = contexto.Tramos
-            .Where(t => t.Tipo != TipoTramo.DentroDeViga)
-            .Select((t, idx) => (Ordinal: idx + 1, t.ZInferior, t.ZSuperior))
-            .ToList();
-
-        double zFinTotal = contexto.ZSuperior;
+            $"longitud comercial {cfg.LongitudComercialBarra:0.#} m, redondeo {cfg.RedondeoVarillas:0.00} m");
 
         // El grupo par/impar del traslapo intercalado sale de la posición de
         // cada barra EN EL ANILLO del perímetro (ver más abajo, "anillo"): la
@@ -351,39 +377,52 @@ public static class GeneradorLongitudinal
         //  - barras de las caras inferior/superior (varían en X): normal X;
         //  - barras de las caras izquierda/derecha (varían en Y): normal Y;
         //  - esquinas: apoyan en dos caras, así que se elige el eje cuyo lado
-        //    positivo va a lo largo de una cara y no se sale por la punta. En
-        //    la esquina superior derecha los dos lados positivos se salen:
-        //    ahí BarraContinua corre la varilla entera un diámetro para el
-        //    otro lado (ver BarraContinua.Alinear y los límites de abajo).
-        XYZ NormalDeEsquina(double y) => y < yEsqArriba - Tolerancia ? XYZ.BasisY : XYZ.BasisX;
+        //    positivo va a lo largo de una cara y no se sale por la punta: Y
+        //    en las dos de abajo, X en las dos de arriba. En la esquina
+        //    superior derecha los dos lados positivos se salen: ahí
+        //    BarraContinua corre la varilla entera un diámetro para el otro
+        //    lado (ver BarraContinua.Alinear y los límites de abajo).
+        //
+        // A y B: "uno sí, uno no" dando la vuelta, A en las posiciones pares
+        // del anillo (la esquina inferior izquierda es A). Es la misma
+        // alternancia por anillo del 11-sep; ahora además decide la barra.
+        RebarBarType BarraDe(int posicion) => posicion % 2 == 0 ? barraA : barraB;
 
-        void AgregarEsquina(double x, double y) =>
-            anillo.Add((barraEsquinas, x, y, NormalDeEsquina(y)));
+        void AgregarEsquina(bool izquierda, bool abajo)
+        {
+            RebarBarType barra = BarraDe(anillo.Count);
+            double inset = Inset(barra);
+            double x = izquierda ? referencia.XMin + inset : referencia.XMax - inset;
+            double y = abajo ? referencia.YMin + inset : referencia.YMax - inset;
+            anillo.Add((barra, x, y, abajo ? XYZ.BasisY : XYZ.BasisX));
+        }
 
         // Intermedias de las caras inferior/superior: varían en X.
-        void AgregarDeCaraX(int c, double y)
+        void AgregarDeCaraX(int c, bool abajo)
         {
-            if (barraCaraX is null) return;
+            RebarBarType barra = BarraDe(anillo.Count);
             double x = PosicionIntermedia(xEsqIzq, xEsqDer, columnas, c);
-            anillo.Add((barraCaraX, x, y, XYZ.BasisX));
+            double y = abajo ? referencia.YMin + Inset(barra) : referencia.YMax - Inset(barra);
+            anillo.Add((barra, x, y, XYZ.BasisX));
         }
 
         // Intermedias de las caras izquierda/derecha: varían en Y.
-        void AgregarDeCaraY(int f, double x)
+        void AgregarDeCaraY(int f, bool izquierda)
         {
-            if (barraCaraY is null) return;
+            RebarBarType barra = BarraDe(anillo.Count);
             double y = PosicionIntermedia(yEsqAbajo, yEsqArriba, filas, f);
-            anillo.Add((barraCaraY, x, y, XYZ.BasisY));
+            double x = izquierda ? referencia.XMin + Inset(barra) : referencia.XMax - Inset(barra);
+            anillo.Add((barra, x, y, XYZ.BasisY));
         }
 
-        AgregarEsquina(xEsqIzq, yEsqAbajo);
-        for (int c = 0; c < columnas; c++) AgregarDeCaraX(c, referencia.YMin + insetX);
-        AgregarEsquina(xEsqDer, yEsqAbajo);
-        for (int f = 0; f < filas; f++) AgregarDeCaraY(f, referencia.XMax - insetY);
-        AgregarEsquina(xEsqDer, yEsqArriba);
-        for (int c = columnas - 1; c >= 0; c--) AgregarDeCaraX(c, referencia.YMax - insetX);
-        AgregarEsquina(xEsqIzq, yEsqArriba);
-        for (int f = filas - 1; f >= 0; f--) AgregarDeCaraY(f, referencia.XMin + insetY);
+        AgregarEsquina(izquierda: true, abajo: true);
+        for (int c = 0; c < columnas; c++) AgregarDeCaraX(c, abajo: true);
+        AgregarEsquina(izquierda: false, abajo: true);
+        for (int f = 0; f < filas; f++) AgregarDeCaraY(f, izquierda: false);
+        AgregarEsquina(izquierda: false, abajo: false);
+        for (int c = columnas - 1; c >= 0; c--) AgregarDeCaraX(c, abajo: false);
+        AgregarEsquina(izquierda: true, abajo: false);
+        for (int f = filas - 1; f >= 0; f--) AgregarDeCaraY(f, izquierda: true);
 
         // En un anillo CERRADO la alternancia estricta solo existe si la
         // cantidad de posiciones es par. Con el modelo de hoy siempre lo es
@@ -394,10 +433,6 @@ public static class GeneradorLongitudinal
                 "así que dos barras vecinas van a traslapar a la misma altura -- con un número impar " +
                 "alrededor del perímetro no hay forma de alternarlas todas.");
 
-        // Las alturas de traslapo dependen solo del grupo par/impar: se
-        // calculan (y avisan) una vez por grupo, no una vez por varilla.
-        var alturasPorGrupo = new Dictionary<bool, List<double>>();
-
         // Los avisos de empalme son los mismos para todas las varillas de un
         // mismo tipo de barra: uno por columna y motivo, no uno por varilla.
         var avisosDeBarras = new HashSet<string>();
@@ -407,22 +442,16 @@ public static class GeneradorLongitudinal
         {
             (RebarBarType barraDeLaPosicion, double x, double y, XYZ normal) = anillo[i];
 
-            bool esParGrupo = i % 2 == 0;
-            if (!alturasPorGrupo.TryGetValue(esParGrupo, out List<double>? alturas))
-            {
-                alturas = PlanificarAlturas(
-                    esParGrupo, niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, contexto.Marca, res);
-                alturasPorGrupo[esParGrupo] = alturas;
-            }
+            PlanTraslapos.PlanTipo plan = i % 2 == 0 ? planTraslapos.A : planTraslapos.B;
 
-            // El tipo de empalme solo se resuelve (y, si es propio, se crea)
-            // cuando esta varilla de verdad lleva algún traslapo.
-            ElementId? tipoEmpalme = null;
-            if (alturas.Count > 0)
+            // Un tipo de empalme por largo de traslapo; solo se crean los que
+            // de verdad se usan.
+            var traslapos = new List<BarraContinua.TraslapoPedido>();
+            foreach (PlanTraslapos.Traslapo t in plan.Traslapos)
             {
-                TiposEmpalme.Resultado tipo = tiposEmpalme.Resolver(barraDeLaPosicion, cfg.TipoEmpalmeNombre);
-                tipoEmpalme = tipo.Tipo;
+                TiposEmpalme.Resultado tipo = tiposEmpalme.Resolver(barraDeLaPosicion, t.Largo);
                 if (tipo.Aviso is not null) avisosDeBarras.Add(tipo.Aviso);
+                if (tipo.Tipo is not null) traslapos.Add(new BarraContinua.TraslapoPedido(EstandarCQ.APies(t.Centro), tipo.Tipo));
             }
 
             (RebarTerminationOrientation orientacionAbajo, RebarTerminationOrientation orientacionArriba) =
@@ -435,10 +464,10 @@ public static class GeneradorLongitudinal
 
             BarraContinua.Resultado creada = BarraContinua.Crear(doc, new BarraContinua.Pedido(
                 barraDeLaPosicion, x, y, normal,
-                EstandarCQ.APies(zInicioTotal), EstandarCQ.APies(zFinTotal),
-                alturas.Select(EstandarCQ.APies).ToList(), pila,
-                ganchoLongitudinal, ganchoLongitudinal, orientacionAbajo, orientacionArriba,
-                tipoEmpalme, limites));
+                EstandarCQ.APies(contexto.ZInferiorLongitudinal), EstandarCQ.APies(contexto.ZSuperior),
+                traslapos, pila,
+                GanchoDe(barraDeLaPosicion), GanchoDe(barraDeLaPosicion), orientacionAbajo, orientacionArriba,
+                limites));
 
             piezas += creada.Piezas;
             if (creada.Aviso is not null) avisosDeBarras.Add(creada.Aviso);
@@ -486,18 +515,23 @@ public static class GeneradorLongitudinal
     {
         if (cfg.GrapasFila.Count == 0 && cfg.GrapasColumna.Count == 0 && cfg.Cajas.Count == 0) return;
 
-        barrasPorNombre.TryGetValue(cfg.TipoBarraCaraXNombre ?? "", out RebarBarType? barraCaraX);
-        barrasPorNombre.TryGetValue(cfg.TipoBarraCaraYNombre ?? "", out RebarBarType? barraCaraY);
+        barrasPorNombre.TryGetValue(cfg.TipoBarraANombre ?? "", out RebarBarType? barraA);
+
+        // Las grapas solo existen donde hay barras intermedias en esa cara;
+        // el resto del método usa estas dos como "hay intermedias" (antes eran
+        // las barras de cara X/Y, que ya no se eligen por separado).
+        RebarBarType? barraCaraX = columnas > 0 ? barraA : null;
+        RebarBarType? barraCaraY = filas > 0 ? barraA : null;
+
         // Solo de RESPALDO: grapas y cajas se hacen con la barra del ESTRIBO
-        // del tramo (ver más abajo). Esta barra longitudinal era la que se usaba
-        // hasta el 10-sep y queda para el caso de que el tramo no tenga un tipo
-        // de barra de estribo válido.
-        RebarBarType? barraMenoresRespaldo = barraCaraX ?? barraCaraY;
+        // del tramo (ver más abajo). Esta queda para el caso de que el tramo
+        // no tenga un tipo de barra de estribo válido.
+        RebarBarType? barraMenoresRespaldo = barraA;
 
         if (barraCaraX is null && cfg.GrapasColumna.Count > 0)
-            res.Avisos.Add($"{contexto.Marca}: sin tipo de barra de cara X válido, no se generan grapas de columna.");
+            res.Avisos.Add($"{contexto.Marca}: sin barras intermedias en las caras X, no se generan grapas de columna.");
         if (barraCaraY is null && cfg.GrapasFila.Count > 0)
-            res.Avisos.Add($"{contexto.Marca}: sin tipo de barra de cara Y válido, no se generan grapas de fila.");
+            res.Avisos.Add($"{contexto.Marca}: sin barras intermedias en las caras Y, no se generan grapas de fila.");
 
         int creadas = 0;
 
@@ -716,21 +750,6 @@ public static class GeneradorLongitudinal
             res.Detalles.Add($"{contexto.Marca}: {creadas} grapa(s)/caja(s) creada(s).");
     }
 
-    private static RebarBarType? ResolverBarraOpcional(
-        int cantidad, string? nombre, Dictionary<string, RebarBarType> barrasPorNombre,
-        string etiqueta, string marcaColumna, ResultadoArmado res)
-    {
-        if (cantidad <= 0) return null;
-
-        if (string.IsNullOrEmpty(nombre) || !barrasPorNombre.TryGetValue(nombre, out RebarBarType? barra))
-        {
-            res.Avisos.Add($"{marcaColumna}: el tipo de barra de {etiqueta} «{nombre}» no existe en el documento; se omiten esas barras.");
-            return null;
-        }
-
-        return barra;
-    }
-
     /// <summary>
     /// Agrupa TODOS los tramos físicos de la columna (aceptados o no) por
     /// elemento host, quedándose con el rango Z que cubren dentro de cada
@@ -763,100 +782,6 @@ public static class GeneradorLongitudinal
         porHost.Sort((a, b) => a.ZInf.CompareTo(b.ZInf));
         return porHost;
     }
-
-    /// <summary>
-    /// Las alturas (en metros) donde traslapa una varilla de un grupo par o
-    /// impar: solo donde la longitud comercial de la barra
-    /// (<paramref name="longitudComercialMetros"/>) obliga a cortar, y solo a
-    /// la mitad de un "nivel" (issue #7), alternando niveles pares/impares
-    /// según <paramref name="esParGrupo"/> para que dos barras vecinas nunca
-    /// traslapen a la misma altura.
-    ///
-    /// Ya no hay cortes obligados por límite de columna: una misma varilla
-    /// puede recorrer toda la pila (issue #41, medido contra Revit real el
-    /// 7-oct). No depende del tipo de barra ni de su posición X/Y, por eso
-    /// <see cref="GenerarColumna"/> lo calcula una vez por grupo.
-    /// </summary>
-    private static List<double> PlanificarAlturas(
-        bool esParGrupo,
-        List<(int Ordinal, double ZInf, double ZSup)> niveles,
-        double zInicioTotalMetros,
-        double zFinTotalMetros,
-        double longitudComercialMetros,
-        string marcaColumna,
-        ResultadoArmado res)
-    {
-        List<double> candidatos = niveles
-            .Where(n => (n.Ordinal % 2 == 0) == esParGrupo)
-            .Select(n => RedondearArriba10Cm((n.ZInf + n.ZSup) / 2))
-            .Where(z => z > zInicioTotalMetros + Tolerancia && z < zFinTotalMetros - Tolerancia)
-            .OrderBy(z => z)
-            .ToList();
-
-        return PlanificarSplicesReales(
-            candidatos, zInicioTotalMetros, zFinTotalMetros, longitudComercialMetros, marcaColumna, res);
-    }
-
-    /// <summary>
-    /// De los candidatos de traslapo de UN grupo (par o impar), elige el
-    /// mínimo necesario para que ningún tramo entre dos traslapos reales
-    /// consecutivos (ni el primero desde el arranque, ni el último hasta el
-    /// remate) supere <paramref name="longitudComercialMetros"/> -- avanza
-    /// siempre al candidato más lejano todavía alcanzable (voraz: minimiza
-    /// la cantidad de traslapos).
-    /// </summary>
-    private static List<double> PlanificarSplicesReales(
-        List<double> candidatosOrdenados, double zInicio, double zFin,
-        double longitudComercialMetros, string marcaColumna, ResultadoArmado res)
-    {
-        var reales = new List<double>();
-        double ultimoCorte = zInicio;
-        int i = 0;
-
-        while (i < candidatosOrdenados.Count)
-        {
-            // Lo que queda hasta el remate ya entra en una barra comercial:
-            // no hace falta ningún traslapo más. Sin este corte se traslapaba
-            // siempre al menos una vez, aunque la varilla entera cupiera en
-            // una sola barra (visto el 8-oct: 7,9 m con barra de 12 m).
-            if (zFin - ultimoCorte <= longitudComercialMetros + Tolerancia) break;
-
-            double? mejor = null;
-            while (i < candidatosOrdenados.Count && candidatosOrdenados[i] - ultimoCorte <= longitudComercialMetros)
-            {
-                mejor = candidatosOrdenados[i];
-                i++;
-            }
-
-            if (mejor is null)
-            {
-                // El próximo nivel disponible para este grupo ya se pasa de
-                // la barra comercial desde el último traslapo -- se usa
-                // igual (mejor eso que dejar un tramo sin ningún traslapo
-                // donde hacía falta), pero queda avisado.
-                res.Avisos.Add(
-                    $"{marcaColumna}: no hay un nivel disponible para el traslapo intercalado dentro de los " +
-                    $"{longitudComercialMetros:0.#} m de barra comercial (el siguiente queda a " +
-                    $"{candidatosOrdenados[i] - ultimoCorte:0.##} m); se traslapa igual ahí.");
-                mejor = candidatosOrdenados[i];
-                i++;
-            }
-
-            reales.Add(mejor.Value);
-            ultimoCorte = mejor.Value;
-        }
-
-        if (zFin - ultimoCorte > longitudComercialMetros + Tolerancia)
-            res.Avisos.Add(
-                $"{marcaColumna}: el tramo final ({zFin - ultimoCorte:0.#} m) supera la barra comercial de " +
-                $"{longitudComercialMetros:0.#} m y no queda ningún nivel disponible para traslaparlo intercalado.");
-
-        return reales;
-    }
-
-    /// <summary>El punto de traslape real se redondea hacia arriba a un múltiplo de 10 cm (issue #7).</summary>
-    private static double RedondearArriba10Cm(double metros) =>
-        Math.Ceiling(metros / 0.10 - Tolerancia) * 0.10;
 
     /// <summary>
     /// Reparte <paramref name="n"/> posiciones parejo entre los dos extremos,

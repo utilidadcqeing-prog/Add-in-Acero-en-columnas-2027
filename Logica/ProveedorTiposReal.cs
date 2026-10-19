@@ -52,16 +52,4 @@ public sealed class ProveedorTiposReal : IProveedorTipos
                 t.HookAngle * 180 / System.Math.PI))
             .OrderBy(g => g.Nombre)
             .ToList();
-
-    /// <summary>
-    /// Sin los tipos propios del add-in: cada uno lleva el solape de UNA
-    /// varilla del cuadro, y elegirlo a mano se lo aplicaría a todas.
-    /// </summary>
-    public IReadOnlyList<string> ListarEmpalmes() =>
-        RebarSpliceTypeUtils.GetAllRebarSpliceTypes(_doc)
-            .Select(id => _doc.GetElement(id)?.Name)
-            .Where(n => !string.IsNullOrEmpty(n) && !n.StartsWith(TiposEmpalme.PrefijoPropio))
-            .Select(n => n!)
-            .OrderBy(n => n)
-            .ToList();
 }

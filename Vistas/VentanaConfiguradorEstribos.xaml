@@ -129,40 +129,51 @@
                         <TextBlock x:Name="TextoAvisos" TextWrapping="Wrap" FontSize="11" Foreground="#92400E" />
                     </Border>
 
-                    <!-- Leyenda. WrapPanel y no StackPanel: en una sola fila
-                         no entran las cuatro entradas. -->
-                    <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Rectangle Width="12" Height="12" Fill="#3B82F6" Margin="0,0,4,0" />
-                        <TextBlock Text="nudo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
-                        <Rectangle Width="12" Height="12" Fill="#B45309" Margin="0,0,4,0" />
-                        <TextBlock Text="contra zapata" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
-                        <Rectangle Width="12" Height="12" Fill="#DCFCE7" Stroke="#22C55E" StrokeThickness="2" Margin="0,0,4,0" />
-                        <TextBlock Text="tramo activo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
-                        <TextBlock Text="✓" FontSize="12" FontWeight="Bold" Foreground="#16A34A" Margin="0,0,4,0" VerticalAlignment="Center" />
-                        <TextBlock Text="se genera (clic para sacarlo)" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
-                    </WrapPanel>
+                    <TabControl x:Name="PestanasElevacion" BorderThickness="0" Background="Transparent">
+                        <TabItem Header="Tramos">
+                            <DockPanel>
+                                <!-- Leyenda. WrapPanel y no StackPanel: en una sola fila
+                                     no entran las cuatro entradas. -->
+                                <WrapPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Rectangle Width="12" Height="12" Fill="#3B82F6" Margin="0,0,4,0" />
+                                    <TextBlock Text="nudo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                    <Rectangle Width="12" Height="12" Fill="#B45309" Margin="0,0,4,0" />
+                                    <TextBlock Text="contra zapata" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                    <Rectangle Width="12" Height="12" Fill="#DCFCE7" Stroke="#22C55E" StrokeThickness="2" Margin="0,0,4,0" />
+                                    <TextBlock Text="tramo activo" FontSize="10" Foreground="Gray" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="✓" FontSize="12" FontWeight="Bold" Foreground="#16A34A" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="se genera (clic para sacarlo)" FontSize="10" Foreground="Gray" VerticalAlignment="Center" />
+                                </WrapPanel>
 
-                    <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
-                         del texto: la elevación de abajo también es vertical (de piso a
-                         techo), así que "siguiente" sube (▲) y "anterior" baja (▼). -->
-                    <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" x:Name="TextoTramoActivo" Text="—" HorizontalAlignment="Left"
-                                   VerticalAlignment="Center" FontSize="11" />
-                        <StackPanel Grid.Column="1">
-                            <Button x:Name="BotonSiguiente" Content="▲" Width="26" Height="17" Padding="0"
-                                    FontSize="9" Click="BotonSiguiente_Click" />
-                            <Button x:Name="BotonAnterior" Content="▼" Width="26" Height="17" Padding="0"
-                                    FontSize="9" Margin="0,1,0,0" Click="BotonAnterior_Click" />
-                        </StackPanel>
-                    </Grid>
+                                <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
+                                     del texto: la elevación de abajo también es vertical (de piso a
+                                     techo), así que "siguiente" sube (▲) y "anterior" baja (▼). -->
+                                <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" x:Name="TextoTramoActivo" Text="—" HorizontalAlignment="Left"
+                                               VerticalAlignment="Center" FontSize="11" />
+                                    <StackPanel Grid.Column="1">
+                                        <Button x:Name="BotonSiguiente" Content="▲" Width="26" Height="17" Padding="0"
+                                                FontSize="9" Click="BotonSiguiente_Click" />
+                                        <Button x:Name="BotonAnterior" Content="▼" Width="26" Height="17" Padding="0"
+                                                FontSize="9" Margin="0,1,0,0" Click="BotonAnterior_Click" />
+                                    </StackPanel>
+                                </Grid>
 
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <Canvas x:Name="CanvasElevacion" Width="350" Height="460" Background="Transparent" />
-                    </ScrollViewer>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <Canvas x:Name="CanvasElevacion" Width="350" Height="460" Background="Transparent" />
+                                </ScrollViewer>
+                            </DockPanel>
+                        </TabItem>
+                        <!-- Tipo A y tipo B con todas sus medidas, recalculado con
+                             cada cambio del acero longitudinal (pedido de Luciano, 17-oct). -->
+                        <TabItem Header="Traslapos">
+                            <local:PanelTraslapos x:Name="PanelDeTraslapos" />
+                        </TabItem>
+                    </TabControl>
                 </DockPanel>
             </Border>
 
@@ -296,20 +307,27 @@
                         </StackPanel>
                     </Grid>
 
-                    <TextBlock Text="Tipo barra cara X:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraCaraX" Height="24" />
+                    <!-- Tipos A y B: se alternan "una sí, una no" alrededor del
+                         perímetro y traslapan en tramos distintos. Reemplazan a
+                         la elección por cara (esquinas / X / Y). -->
+                    <TextBlock Text="Tipo barra A:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraA" Height="24" />
 
-                    <TextBlock Text="Tipo barra cara Y:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraCaraY" Height="24" />
+                    <TextBlock Text="Tipo barra B:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboBarraB" Height="24" />
+                    <TextBlock Text="A y B se alternan alrededor del perímetro (una sí, una no), empezando por la esquina inferior izquierda con A."
+                               TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
 
-                    <TextBlock Text="Tipo barra esquinas:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraEsquinas" Height="24" />
-
-                    <TextBlock Text="Longitud de barra comercial (traslapos, Fase 5):" Style="{StaticResource Etiqueta}" />
+                    <TextBlock Text="Longitud de barra comercial (m):" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboLongitudBarra" Height="24" />
 
-                    <TextBlock Text="Tipo de empalme (solape de los traslapos):" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboTipoEmpalme" Height="24" />
+                    <TextBlock Text="Redondeo de varillas:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboRedondeo" Height="24" ItemStringFormat="0.00 m" />
+
+                    <TextBlock Text="Solape mínimo de los traslapos:" Style="{StaticResource Etiqueta}" />
+                    <ComboBox x:Name="ComboSolape" Height="24" />
+                    <TextBlock Text="El dibujo de A y B, con el largo de cada varilla y cada traslapo, está en la pestaña «Traslapos» de la elevación."
+                               TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,2,0,0" />
 
                     <!-- Igual que el del estribo: el anclaje en la zapata es
                          siempre el de 90° de estilo estándar. -->
