@@ -68,12 +68,14 @@ internal static class CreadorEstribos
         {
             // xVec hacia la cara izquierda (+n) e yVec hacia arriba: la normal (xVec × yVec) queda hacia +x, que es hacia
             // donde se reparten. El origen es la esquina derecha de abajo.
-            XYZ origen = CreadorBarras.Punto(u, x, der, abajo);
+            // ScaleToBox mide la caja por la cara exterior del estribo, no por su eje (medido en Revit: con la caja por el
+            // eje el estribo salía un radio por dentro de cada cara y se cruzaba con las barras de esquina).
+            XYZ origen = CreadorBarras.Punto(u, x, g.Derecha, g.Abajo);
             XYZ n = CreadorBarras.Lateral(u);
             Rebar? conForma = Rebar.CreateFromRebarShape(doc, forma, barra, host, origen, n, XYZ.BasisZ);
             if (conForma is not null)
             {
-                conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(der - izq), XYZ.BasisZ * CreadorBarras.Pies(arriba - abajo));
+                conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(g.Derecha - g.Izquierda), XYZ.BasisZ * CreadorBarras.Pies(g.Arriba - g.Abajo));
                 try
                 {
                     conForma.SetHookTypeId(0, gancho.Id);
