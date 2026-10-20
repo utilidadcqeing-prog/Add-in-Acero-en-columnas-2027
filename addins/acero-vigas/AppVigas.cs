@@ -12,10 +12,10 @@ public class AppVigas : IExternalApplication
 
         panel.AddItem(CintaCqeing.CrearBoton(
             "ComandoTablero",
-            "Tablero",
+            "Acero en vigas",
             "CQEING.Vigas.Tablero.ComandoTablero",
             "Abre el tablero de acero en vigas: pórticos, barras, traslapos, bastones, estribos y kilos.",
-            "iconoCQ"));
+            "vigas"));
 
         return Result.Succeeded;
     }

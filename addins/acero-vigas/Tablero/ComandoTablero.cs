@@ -10,7 +10,7 @@ namespace CQEING.Vigas.Tablero;
 [Transaction(TransactionMode.Manual)]
 public sealed class ComandoTablero : IExternalCommand
 {
-    private const string Titulo = "Tablero de vigas";
+    private const string Titulo = "Acero en vigas";
 
     private const string FaltaRuntime =
         "Falta Microsoft Edge WebView2 Runtime. Instálelo desde https://go.microsoft.com/fwlink/p/?LinkId=2124703 y vuelva a abrir el tablero.";
