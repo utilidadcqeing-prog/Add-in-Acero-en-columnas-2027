@@ -26,12 +26,17 @@ public sealed class ProveedorTiposReal : IProveedorTipos
     /// nombre no se puede, cada modelo los escribe distinto. Ver
     /// <see cref="TipoBarra.PorDefecto"/>.
     /// </summary>
+    /// <remarks>
+    /// Las propias del add-in ("#2 CQEING" … "#8 CQEING") van primero y por
+    /// número -- alfabético pondría la #2 al lado de la #20 de otra plantilla.
+    /// </remarks>
     public IReadOnlyList<TipoBarra> ListarBarras() =>
         new FilteredElementCollector(_doc)
             .OfClass(typeof(RebarBarType))
             .Cast<RebarBarType>()
-            .Select(t => new TipoBarra(t.Name, EstandarCQ.DiametroMm(t)))
-            .OrderBy(b => b.Nombre)
+            .Select(EstandarCQ.ComoTipoBarra)
+            .OrderBy(b => CuadroVarillas.PorNombrePropio(b.Nombre)?.Numero ?? int.MaxValue)
+            .ThenBy(b => b.Nombre)
             .ToList();
 
     /// <summary>
@@ -51,17 +56,5 @@ public sealed class ProveedorTiposReal : IProveedorTipos
                 t.Style == RebarStyle.StirrupTie ? EstiloGancho.Estribo : EstiloGancho.Estandar,
                 t.HookAngle * 180 / System.Math.PI))
             .OrderBy(g => g.Nombre)
-            .ToList();
-
-    /// <summary>
-    /// Sin los tipos propios del add-in: cada uno lleva el solape de UNA
-    /// varilla del cuadro, y elegirlo a mano se lo aplicaría a todas.
-    /// </summary>
-    public IReadOnlyList<string> ListarEmpalmes() =>
-        RebarSpliceTypeUtils.GetAllRebarSpliceTypes(_doc)
-            .Select(id => _doc.GetElement(id)?.Name)
-            .Where(n => !string.IsNullOrEmpty(n) && !n.StartsWith(TiposEmpalme.PrefijoPropio))
-            .Select(n => n!)
-            .OrderBy(n => n)
             .ToList();
 }

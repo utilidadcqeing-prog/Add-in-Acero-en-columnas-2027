@@ -1,6 +1,6 @@
 # Diagnóstico: formas y ganchos propios del add-in (#64, con los cuadros del #65)
 
-Fecha: 8-oct-2026. Estado: **comando de diagnóstico escrito y compilado; falta correrlo en Revit real.**
+Fecha: 8-oct-2026. Estado: **diagnóstico corrido en Revit 2027 (8-oct): todo lo propio funciona. Falta decidir el diámetro de doblado y escribir el diseño.**
 
 ## Contexto
 
@@ -74,12 +74,76 @@ largo de las colas de los ganchos contra el cuadro.
 Al terminar pregunta si deja las barras de prueba para mirarlas en 3D (se
 sacan con un Ctrl+Z) o deshace todo; por defecto deshace.
 
+## Resultado de la corrida (8-oct, columna de 30×30, modelo con 222 formas y 12 ganchos)
+
+Todo lo que el #64 necesita funciona con API pública:
+
+- **Gancho de cero.** `RebarHookType.Create` lo entrega con estilo `Standard`;
+  basta con asignarle `Style = StirrupTie` después. Eso era lo que faltaba el
+  10-sep. No hace falta duplicar un gancho del modelo.
+- **Extensión del gancho.** Con multiplicador 6, el gancho de 135° da
+  exactamente la E del cuadro en todas las barras (3,84 / 5,72 / 7,62 /
+  9,53 cm para #2 a #5). Con multiplicador 4, el de 180° da la E del cuadro de
+  la #6 a la #8; de la #2 a la #5 se llegó a los 6,5 cm exactos con
+  `SetAutoCalcHookLengths(false)` + `SetHookLength`. Ese ajuste es por barra
+  **y por gancho**: solo afecta a nuestro gancho, no a los demás del modelo.
+  Ojo: `GetHookLength` de Revit no es la "B" del cuadro (#3 a 135°: 8,47 cm
+  contra 11,3 cm); lo que hay que igualar es la extensión recta
+  (`GetHookExtensionLength`).
+- **Parámetros compartidos.** Se crearon cuatro nuevos desde un archivo
+  temporal (`ExternalDefinitionCreationOptions` con
+  `SpecTypeId.ReinforcementLength` +
+  `GetOrCreateElementIdForExternalDefinition`) y las formas se armaron con
+  ellos: el add-in no depende de que el modelo tenga formas.
+- **Forma de estribo de cero.** Cuatro lados en sentido antihorario, cotas
+  medidas por fuera del doblez, ganchos de 135° en las dos puntas. Funciona
+  con `CreateFromRebarShape` + `ScaleToBox`: sin diagonales, Revit no la
+  cambia por otra, y sirve igual para cajas de 15, 10 y 12×12 cm. Los ganchos
+  quedan en la esquina de arranque (abajo a la izquierda); la «T1» del modelo
+  los deja en la opuesta.
+- **Forma de grapa de cero.** Un tramo con ganchos de 180°; funciona con
+  `CreateFromCurvesAndShape` y las colas salen de 6,50 cm.
+
+Comparación con los tipos del modelo, misma barra y misma caja:
+
+| | Propios | Del modelo |
+|---|---|---|
+| Cola del gancho de 135°, #3 | 5,72 cm (= cuadro) | 10,25 cm |
+| Cola del gancho de 135°, #2 | 3,84 cm (= cuadro) | 4,50 cm |
+| Caja de 10 cm con #3 | queda dentro | el gancho se sale 1,79 cm |
+| Cola del gancho de 180°, #3 | 6,50 cm (= cuadro) | 4,76 cm |
+| Cola del gancho de 180°, #2 | 6,50 cm (= cuadro) | 3,20 cm |
+
+(La línea "se SALE" de las grapas en el texto del diagnóstico no es un
+problema real: mide el ancho del gancho contra una línea sin altura.)
+
+La comparación usa el gancho de 135° del modelo tal cual; el generador hoy lo
+achica para las cajas (`GanchoAMedidaParaMenores`), así que no reproduce
+exactamente lo que sale en producción.
+
+**Lo que los tipos propios NO arreglan: el diámetro de doblado.** Está en el
+tipo de barra del modelo y no coincide con el cuadro:
+
+| Barra | Estribo (cuadro: 4 d) | Gancho estándar (cuadro: 6 d) |
+|---|---|---|
+| #2 | 7,81 d (5 cm) | 7,81 d |
+| #3 | 4 d | 6,67 d |
+| #4, #5 | 4 d | 6 d |
+
+Con la #2, las esquinas del estribo salen con radio de 2,8 cm en vez de
+1,6 cm: en una caja de 10 cm quedan solo 3,7 cm de lado recto y se ve
+ovalada. Además, tocar un tipo de barra hace que Revit regenere toda la
+armadura del modelo que la usa (en la corrida reaparecieron avisos viejos del
+modelo al fijar los largos de gancho).
+
+No probado: un modelo con `RebarShapeDefinesHooks = True` (aquí es `False`).
+
 ## Pendiente
 
-- Correr el comando en Revit 2027 y analizar el texto.
 - Confirmar con el equipo el gancho de estribo de 135° para #6 a #8: el
   cuadro 2 solo llega a la #5. La regla de 6 d daría extensiones de 11,5 /
   13,3 / 15,2 cm; `CuadroVarillas.GanchoEstribo` conserva los largos del
   cuadro 1 (27,2 / 31,6 / 36,2 cm).
-- Decidir si el add-in toca el diámetro de doblado de las barras del modelo.
-- Con los resultados: diseño escrito del #64 y plan de implementación.
+- Decidir si el add-in corrige el diámetro de doblado de las barras del modelo
+  (#2 y #3 no coinciden con el cuadro).
+- Diseño escrito del #64 y plan de implementación.

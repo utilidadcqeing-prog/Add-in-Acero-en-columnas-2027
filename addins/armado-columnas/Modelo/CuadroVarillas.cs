@@ -41,7 +41,27 @@ public static class CuadroVarillas
         double GanchoEstribo,
         double Gancho90,
         double Gancho180,
-        double? Traslapo);
+        double? Traslapo)
+    {
+        /// <summary>
+        /// Estribo de 135° del cuadro 2 ("Dimensiones mínimas para ganchos
+        /// estándar", #65). null de la #6 a la #8: el cuadro no les da estribo.
+        /// </summary>
+        public Gancho? GanchoEstribo135 { get; init; }
+
+        /// <summary>Gancho de 90° del cuadro 2.</summary>
+        public required Gancho Gancho90Cuadro { get; init; }
+
+        /// <summary>Gancho de 180° del cuadro 2 (el de las grapas).</summary>
+        public required Gancho Gancho180Cuadro { get; init; }
+    }
+
+    /// <summary>
+    /// Un gancho del cuadro 2, en metros: la extensión recta (E) y el diámetro
+    /// mínimo de doblado (D). Se guardan los valores del cuadro y no la regla
+    /// que los genera (6 d, 4 d...): el cuadro manda (#64).
+    /// </summary>
+    public sealed record Gancho(double Extension, double DiametroDoblado);
 
     /// <summary>
     /// Dos barras del cuadro que se lleven menos que esto son la misma: los
@@ -52,13 +72,21 @@ public static class CuadroVarillas
 
     public static readonly IReadOnlyList<Varilla> Cuadro = new[]
     {
-        new Varilla(2,  6.4, 0.076, 0.112, 0.096, null),
-        new Varilla(3,  9.5, 0.113, 0.166, 0.142, 0.55),
-        new Varilla(4, 12.7, 0.151, 0.222, 0.190, 0.75),
-        new Varilla(5, 15.9, 0.189, 0.278, 0.238, 0.90),
-        new Varilla(6, 19.1, 0.272, 0.334, 0.286, 1.10),
-        new Varilla(7, 22.2, 0.316, 0.388, 0.333, 1.35),
-        new Varilla(8, 25.4, 0.362, 0.444, 0.381, 1.70),
+        // Cuadro 2 (#65), E / D en metros.
+        new Varilla(2,  6.4, 0.076, 0.112, 0.096, null)
+            { GanchoEstribo135 = new(0.038, 0.026), Gancho90Cuadro = new(0.077, 0.038), Gancho180Cuadro = new(0.065, 0.038) },
+        new Varilla(3,  9.5, 0.113, 0.166, 0.142, 0.55)
+            { GanchoEstribo135 = new(0.057, 0.038), Gancho90Cuadro = new(0.114, 0.057), Gancho180Cuadro = new(0.065, 0.057) },
+        new Varilla(4, 12.7, 0.151, 0.222, 0.190, 0.75)
+            { GanchoEstribo135 = new(0.076, 0.051), Gancho90Cuadro = new(0.152, 0.076), Gancho180Cuadro = new(0.065, 0.076) },
+        new Varilla(5, 15.9, 0.189, 0.278, 0.238, 0.90)
+            { GanchoEstribo135 = new(0.095, 0.064), Gancho90Cuadro = new(0.191, 0.095), Gancho180Cuadro = new(0.065, 0.095) },
+        new Varilla(6, 19.1, 0.272, 0.334, 0.286, 1.10)
+            { Gancho90Cuadro = new(0.229, 0.115), Gancho180Cuadro = new(0.076, 0.115) },
+        new Varilla(7, 22.2, 0.316, 0.388, 0.333, 1.35)
+            { Gancho90Cuadro = new(0.266, 0.133), Gancho180Cuadro = new(0.089, 0.133) },
+        new Varilla(8, 25.4, 0.362, 0.444, 0.381, 1.70)
+            { Gancho90Cuadro = new(0.305, 0.152), Gancho180Cuadro = new(0.102, 0.152) },
     };
 
     /// <summary>La varilla del cuadro con ese diámetro, o null si no es ninguno de los normalizados.</summary>
@@ -68,4 +96,49 @@ public static class CuadroVarillas
     /// <summary>El diámetro nominal de la varilla número N, o null si ese número no está en el cuadro.</summary>
     public static double? DiametroDe(int numero) =>
         Cuadro.FirstOrDefault(v => v.Numero == numero)?.DiametroMm;
+
+    /// <summary>
+    /// Nombre del tipo de barra propio del add-in para la varilla número N
+    /// ("#4 CQEING"). Se busca por NOMBRE y no por diámetro porque por diámetro
+    /// una barra métrica pasa por nuestra: la "16 B 400 S" de una plantilla
+    /// europea queda a 0,1 mm de la #5 (19-oct). Ver
+    /// <c>docs/planes/2026-10-19-varillas-propias-cqeing.md</c>.
+    /// </summary>
+    public static string NombrePropio(int numero) => $"#{numero} CQEING";
+
+    /// <summary>La varilla del cuadro cuyo tipo propio se llama así, o null si el nombre no es uno de los nuestros.</summary>
+    public static Varilla? PorNombrePropio(string nombre) =>
+        Cuadro.FirstOrDefault(v => NombrePropio(v.Numero) == nombre);
+
+    /// <summary>
+    /// Si una barra sirve para estribos (y para cajas y grapas, que usan la
+    /// misma barra) según el cuadro -- #64, "Filtro de la barra de estribo":
+    /// se comparan su doblado de estribo con la D del estribo de 135° y su
+    /// doblado de gancho estándar con la D del de 180° (el de las grapas).
+    /// Hasta 1 mm (el cuadro está redondeado al milímetro) es apta; hasta un
+    /// diámetro de barra, apta con aviso; más, no apta.
+    /// </summary>
+    public static (AptitudEstribo Aptitud, string? Motivo) EvaluarParaEstribo(TipoBarra barra)
+    {
+        Varilla? varilla = PorNombrePropio(barra.Nombre) ?? PorDiametro(barra.DiametroMm);
+        if (varilla is null)
+            return (AptitudEstribo.NoApta, $"«{barra.Nombre}» no está en el cuadro de la empresa.");
+        if (varilla.GanchoEstribo135 is not { } estribo)
+            return (AptitudEstribo.NoApta, $"«{barra.Nombre}»: el cuadro no da estribo de 135° para la #{varilla.Numero}.");
+
+        var diferencias = new[]
+        {
+            (Que: "doblado de estribo", Mide: barra.DobladoEstriboMm, Pide: estribo.DiametroDoblado * 1000),
+            (Que: "doblado de gancho estándar", Mide: barra.DobladoGanchoMm, Pide: varilla.Gancho180Cuadro.DiametroDoblado * 1000),
+        };
+
+        var peor = diferencias.MaxBy(d => System.Math.Abs(d.Mide - d.Pide));
+        double diferencia = System.Math.Abs(peor.Mide - peor.Pide);
+        if (diferencia <= 1) return (AptitudEstribo.Apta, null);
+
+        var es = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
+        string motivo = string.Format(es, "«{0}»: {1} de {2:0.0} cm; el cuadro pide {3:0.0} cm.",
+            barra.Nombre, peor.Que, peor.Mide / 10, peor.Pide / 10);
+        return (diferencia <= barra.DiametroMm ? AptitudEstribo.AptaConAviso : AptitudEstribo.NoApta, motivo);
+    }
 }
