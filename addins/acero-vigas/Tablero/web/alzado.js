@@ -62,7 +62,7 @@
   class Alzado extends Component {
     constructor(props) {
       super(props);
-      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', rk: '', hd: null,
+      this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', hover: '', rk: '', hd: null,
         capas: leerCapas(), capasOpen: false };
       // Esc mientras se arrastra un punto: el elemento queda como estaba
       this.esc = (e) => { if (e.key === 'Escape') this.soltarPunto(false); };
@@ -127,6 +127,10 @@
 
       const pickBar = (id) => () => { if (this.props.onPick) this.props.onPick(id); else this.setState({ selLocal: id, selLapLocal: '' }); };
       const pickLapFn = (id) => () => { if (this.props.onPickLap) this.props.onPickLap(id); else this.setState({ selLapLocal: id }); };
+      // la barra bajo el puntero se resalta antes del clic (su zona de clic es más ancha que la línea)
+      const hover = this.state.hover;
+      const entra = (id) => () => this.setState({ hover: id });
+      const sale = (id) => () => this.setState((s) => (s.hover === id ? { hover: '' } : null));
 
       // barras: la y alterna 52/58 (C) y 118/112 (F) según el índice en su capa, como la maqueta
       const enCapa = { C: 0, F: 0 };
@@ -141,7 +145,8 @@
         // el color es el de su diámetro (C#, #100); la elegida va igual, con un halo detrás. Solo al arrastrarla cambia.
         // el rótulo de DC-CAD (C#, #100) va sobre la misma barra: encima de las de arriba y debajo de las de abajo
         const yS = inv ? FH - y : y, top = isC !== inv;
-        return { id: bar.id, y, isC, pts, isSel, col: isSel && cur ? colVivo : bar.color || '#3F4A57', sw: isSel ? 3.4 : 2.4, pick: pickBar(bar.id),
+        const isHov = bar.id === hover && !isSel;
+        return { id: bar.id, y, isC, pts, isSel, isHov, col: isSel && cur ? colVivo : bar.color || '#3F4A57', sw: isSel || isHov ? 3.4 : 2.4, pick: pickBar(bar.id), entra: entra(bar.id), sale: sale(bar.id),
           lx: (X(bar.desde) + X(bar.hasta)) / 2, ly: top ? yS - 3 * k : yS + 10 * k, lt: (pulg ? bar.rotuloPulgadas : bar.rotulo) || '' };
       });
 
@@ -172,11 +177,13 @@
         // del color de su diámetro, como la corrida; se distingue por el trazo, más delgado (decisión 9)
         // su rótulo, del lado de adentro de la viga
         const yS = inv ? FH - y : y, arriba = top !== inv;
-        return { id: bs.id, y, top, pts, isSel, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : 1.7, pick: pickBar(bs.id),
+        const isHov = bs.id === hover && !isSel;
+        return { id: bs.id, y, top, pts, isSel, isHov, col: isSel && cur ? colVivo : bs.color || '#0F7B6C', sw: isSel ? 3 : isHov ? 3 : 1.7, pick: pickBar(bs.id), entra: entra(bs.id), sale: sale(bs.id),
           lx: (xa + xz) / 2, ly: arriba ? yS + 10 * k : yS - 3 * k, lt: (pulg ? bs.rotuloPulgadas : bs.rotulo) || '' };
       });
       // la selección va con un halo detrás y no con otro color: el azul ya es del #8 (#100)
       const halo = selLap ? null : (b.find((x) => x.isSel) || t.find((x) => x.isSel) || null);
+      const haloHover = b.find((x) => x.isHov) || t.find((x) => x.isHov) || null;
       const ley = (p.diametros || []).map((d) => ({ c: d.color, t: (pulg && d.nombrePulgadas) || d.nombre }));
 
       // estribos como DC-CAD (Carlos, #100): debajo de la viga, una línea por zona con una rayita en cada punta,
@@ -335,7 +342,7 @@
         // la sección de columnas va en el pedazo de columna sobre la viga: abajo chocaba con el texto de un voladizo corto
         yColSec: 30, yEje: 192 + ex,
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
-        b, l, t, st, yE, secs, colSecs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, ley,
+        b, l, t, st, yE, secs, colSecs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, haloHover, ley,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
         hdMove: (e) => {
           const h = this.state.hd;
@@ -395,7 +402,10 @@
       const v = this.valores();
       const k = v.k, NS = 'non-scaling-stroke';
       const lap = (x) => html`<rect x="${x.x}" y="${x.ry}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" vector-effect="${NS}" style="cursor: pointer" onClick=${x.pick}></rect>`;
-      const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick}></polyline>`;
+      const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick} onPointerEnter=${x.entra} onPointerLeave=${x.sale}></polyline>`;
+      // zona de clic: una línea transparente de 14 px (no crece con el zoom) bajo los traslapos y las barras. Más ancha
+      // se montaría con la de la barra vecina (la corrida y el bastón van a unos 18 px).
+      const zona = (x) => html`<polyline points="${x.pts}" fill="none" stroke="transparent" stroke-width="14" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="stroke" style="cursor: pointer" onClick=${x.pick} onPointerEnter=${x.entra} onPointerLeave=${x.sale}></polyline>`;
       // los textos llevan un borde del color del fondo para leerse sobre las líneas (#100)
       const texto = (x, y, t, col, tam, peso) => (t ? html`<text x="${x}" y="${y}" text-anchor="middle" font-size="${tam * k}" font-weight="${peso}" font-family="IBM Plex Mono, monospace" fill="${col}" stroke="#F1F3F5" stroke-width="${3.5 * k}" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${t}</text>` : null);
       const rotulo = (x) => texto(x.lx, x.ly, x.lt, x.col, 10, 500);
@@ -408,8 +418,11 @@
       ${v.cols.map((c) => html`<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" fill="#D5DAE0" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>`)}
       ${v.mediaOn ? v.luces.map((m) => html`<line x1="${m.x}" y1="22" x2="${m.x}" y2="${v.midY2}" stroke="#8A939D" stroke-width="1" stroke-dasharray="4 3" vector-effect="${NS}"></line>`) : null}
       <g transform="${v.flip}">
+        ${v.b.map(zona)}
+        ${v.t.map(zona)}
         ${v.l.filter((x) => x.isC).map(lap)}
         ${v.l.filter((x) => !x.isC).map(lap)}
+        ${v.haloHover ? html`<polyline points="${v.haloHover.pts}" fill="none" stroke="#16191D" stroke-opacity="0.12" stroke-width="9" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
         ${v.halo ? html`<polyline points="${v.halo.pts}" fill="none" stroke="#16191D" stroke-opacity="0.22" stroke-width="10" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
         ${v.b.filter((x) => x.isC).map(barra)}
         ${v.b.filter((x) => !x.isC).map(barra)}
