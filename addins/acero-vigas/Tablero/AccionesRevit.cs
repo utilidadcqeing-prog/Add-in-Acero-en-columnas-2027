@@ -55,7 +55,7 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
         }
     }
 
-    public string GetName() => "Tablero de vigas";
+    public string GetName() => "Acero en vigas";
 
     public void Dispose() => evento.Dispose();
 
@@ -101,7 +101,7 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
         List<ElementId> ids = caja is null ? vigas : vigas.Union(Apoyos(doc, caja)).ToList();
         var transparente = new OverrideGraphicSettings();
         transparente.SetSurfaceTransparency(Transparencia);
-        using (var t = new Transaction(doc, "Tablero de vigas: 3D"))
+        using (var t = new Transaction(doc, "Acero en vigas: 3D"))
         {
             t.Start();
             if (vista is null)
