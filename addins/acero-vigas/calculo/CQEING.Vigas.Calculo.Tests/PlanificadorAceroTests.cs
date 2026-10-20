@@ -101,6 +101,52 @@ public class PlanificadorAceroTests
             Assert.Equal(primera.Select(p => p.XCorte), plan.Barras.Where(p => p.Pieza == arriba[2]).Select(p => p.XCorte));
     }
 
+    /// <summary>El pórtico de la maqueta con vigas de 25 de ancho, como las VIG_25X35 del proyecto de prueba.</summary>
+    private static PorticoLeido Angosto() => Portico() with { Tramos = Portico().Tramos.Select(t => t with { Ancho = 250 }).ToList() };
+
+    [Fact]
+    public void TraslapoEnVigaAngosta_LaDelMedioNoCabeAlLadoYVaAbajo()
+    {
+        // 3 #5 en 250: al lado, la del medio quedaría a 19.8 mm libres de una corrida (Carlos: entonces va abajo).
+        PorticoCalculado c = Calcular(p: Angosto());
+        List<string> arriba = c.Vigas.Superior!.Barras.Select(b => b.Id).ToList();
+        List<BarraEnSeccion> corte = DelCorte(c, Posicion.Superior).OrderBy(b => b.X).ToList();
+        Assert.Equal(3, corte.Count);
+        const double d5 = 15.9;
+
+        List<PiezaLongitudinal> segunda = Planificar(p: Angosto()).Barras.Where(p => p.Pieza == arriba[1]).OrderBy(p => p.XCorte).ToList();
+
+        Assert.Equal((corte[0].X + d5, corte[0].Y), (segunda[0].XCorte, segunda[0].YCorte));
+        Assert.Equal((corte[1].X, corte[1].Y - d5), (segunda[1].XCorte, segunda[1].YCorte));
+        Assert.Equal((corte[2].X - d5, corte[2].Y), (segunda[2].XCorte, segunda[2].YCorte));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void TraslapoEnVigaAngosta_NingunaBarraSeMontaEnOtra(int cantidad)
+    {
+        // Con 4 #5 en 250 las dos del medio se corrían una hacia la otra y quedaban a 14 mm de centro a centro.
+        var o = OpcionesTablero.PorDefecto with { Inferior = [new GrupoBarras(cantidad, 5)] };
+        PorticoCalculado c = Calcular(o, Angosto());
+        List<string> abajo = c.Vigas.Inferior!.Barras.Select(b => b.Id).ToList();
+        Assert.True(abajo.Count >= 2, "el pórtico de la maqueta traslapa abajo");
+
+        PlanAcero plan = Planificar(o, Angosto());
+
+        // En el traslapo están las dos barras: cada pieza solo puede tocar a su pareja (la del mismo puesto del corte).
+        List<PiezaLongitudinal> primera = plan.Barras.Where(p => p.Pieza == abajo[0]).ToList();
+        List<PiezaLongitudinal> segunda = plan.Barras.Where(p => p.Pieza == abajo[1]).ToList();
+        for (int i = 0; i < segunda.Count; i++)
+        {
+            foreach (PiezaLongitudinal otra in primera.Where((_, k) => k != i).Concat(segunda.Where((_, k) => k != i)))
+            {
+                double centros = Math.Sqrt(Math.Pow(segunda[i].XCorte - otra.XCorte, 2) + Math.Pow(segunda[i].YCorte - otra.YCorte, 2));
+                Assert.True(centros >= 15.9 - 1e-6, $"{segunda[i].XCorte:F1} y {otra.XCorte:F1} quedan a {centros:F1} mm de centro a centro");
+            }
+        }
+    }
+
     [Fact]
     public void SinTraslapo_NadaSeCorre()
     {

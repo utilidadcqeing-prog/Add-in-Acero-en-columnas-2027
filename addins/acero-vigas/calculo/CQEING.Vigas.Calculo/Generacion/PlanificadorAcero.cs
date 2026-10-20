@@ -11,7 +11,8 @@ namespace CQEING.Vigas.Calculo.Generacion;
 /// Decisiones del plan docs/planes/2026-10-19-generar-acero-vigas-85.md:
 /// <list type="bullet">
 /// <item>1: cada barra calculada sale una vez por cada barra de su capa en el corte, en todas las filas;</item>
-/// <item>2: el traslapo va al lado: la segunda, cuarta… barra de cada capa se corre un diámetro hacia el centro;</item>
+/// <item>2: el traslapo va al lado: la segunda, cuarta… barra de cada capa se corre un diámetro hacia el centro, o hacia
+/// afuera o abajo si al lado no deja la distancia libre (<see cref="AlLado"/>);</item>
 /// <item>3: el host es la viga del punto medio de la parte recta, o la más cercana.</item>
 /// </list>
 /// </summary>
@@ -28,13 +29,14 @@ public static class PlanificadorAcero
         {
             CaraSeccion cara = capa.Capa == Posicion.Superior ? c.Estribos.Seccion.Superior : c.Estribos.Seccion.Inferior;
             List<BarraEnSeccion> corte = cara.Filas.SelectMany(f => f).ToList();
+            List<BarraEnSeccion> alLado = AlLado(corte, c.Seccion, r);
             List<Barra> enOrden = capa.Barras.OrderBy(b => b.Desde).ToList();
             for (int i = 0; i < enOrden.Count; i++)
             {
                 Barra b = enOrden[i];
-                bool alLado = i % 2 == 1;
-                barras.AddRange(corte.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
-                    alLado ? AlLado(s, u.Ancho, r) : s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
+                List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
+                barras.AddRange(puestos.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
+                    s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
             }
         }
 
@@ -96,11 +98,39 @@ public static class PlanificadorAcero
         return new Rama(x, arriba.Y, abajo.Y, Math.Max(r.PorDiametro[arriba.Diametro].Diametro, r.PorDiametro[abajo.Diametro].Diametro));
     }
 
-    /// <summary>Un diámetro hacia el centro del corte; la barra que está justo en el centro, hacia +X.</summary>
-    private static double AlLado(BarraEnSeccion s, double ancho, Reglas r)
+    /// <summary>
+    /// El puesto de cada barra del corte cuando es la que traslapa, en contacto con la suya (decisión 2). Prueba, en orden:
+    /// un diámetro hacia el centro (la que está justo en el centro, hacia +X), hacia afuera y abajo, es decir hacia adentro
+    /// de la viga (Carlos: "cuando la barra traslapada no cumple la distancia libre al lado, iría abajo"). Se queda con el
+    /// primero que no se sale de las esquinas, no se monta en otra barra y deja la distancia libre con las otras que
+    /// traslapan, que la acompañan en todo su largo. Si ninguno la deja (la viga es angosta), con el que más libre deja.
+    /// Se ubican de las esquinas hacia adentro, porque las de las esquinas solo tienen un lado.
+    /// </summary>
+    private static List<BarraEnSeccion> AlLado(List<BarraEnSeccion> corte, EntradaSeccion e, Reglas r)
     {
-        double d = r.PorDiametro[s.Diametro].Diametro;
-        return s.X > ancho / 2 ? s.X - d : s.X + d;
+        const double tolerancia = 1e-6;
+        double D(BarraEnSeccion b) => r.PorDiametro[b.Diametro].Diametro;
+        double Libre(BarraEnSeccion a, BarraEnSeccion b) => Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2)) - (D(a) + D(b)) / 2;
+        double izquierda = corte.Min(b => b.X), derecha = corte.Max(b => b.X);
+
+        var corridas = new BarraEnSeccion?[corte.Count];
+        foreach (int i in Enumerable.Range(0, corte.Count).OrderByDescending(i => Math.Abs(corte[i].X - e.Ancho / 2)))
+        {
+            BarraEnSeccion s = corte[i];
+            double alCentro = s.X > e.Ancho / 2 ? -D(s) : D(s), adentro = s.Y > e.Alto / 2 ? -D(s) : D(s);
+            List<BarraEnSeccion> yaCorridas = corridas.OfType<BarraEnSeccion>().ToList();
+            List<BarraEnSeccion> todas = corte.Where((_, k) => k != i).Concat(yaCorridas).ToList();
+            List<(BarraEnSeccion Puesto, double Libre, double EntreCorridas)> candidatos =
+                new[] { s with { X = s.X + alCentro }, s with { X = s.X - alCentro }, s with { Y = s.Y + adentro } }
+                    .Where(p => p.X >= izquierda - tolerancia && p.X <= derecha + tolerancia)
+                    .Select(p => (p, todas.Count == 0 ? double.MaxValue : todas.Min(o => Libre(p, o)),
+                        yaCorridas.Count == 0 ? double.MaxValue : yaCorridas.Min(o => Libre(p, o))))
+                    .ToList();
+            corridas[i] = candidatos
+                .FirstOrDefault(c => c.Libre >= -tolerancia && c.EntreCorridas >= r.DistanciaLibre - tolerancia).Puesto
+                ?? candidatos.MaxBy(c => Math.Min(c.Libre, c.EntreCorridas)).Puesto;
+        }
+        return corridas.Select(b => b!).ToList();
     }
 
     private static string Host(UbicacionPortico u, int desde, int hasta) =>
