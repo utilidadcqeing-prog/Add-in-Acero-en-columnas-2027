@@ -20,11 +20,40 @@ public sealed class ConfigLongitudinal
     /// <summary>Barras por cara paralela al eje Y global. Siempre par.</summary>
     public int BarrasPorCaraY { get; set; }
 
-    /// <summary>Las cuatro esquinas siempre llevan barra — no es opcional, por eso no hay un booleano acá.</summary>
+    /// <summary>
+    /// Barra de las cuatro esquinas. El número de barra se elige por posición
+    /// (esquinas / cara X / cara Y) y no por tipo A/B: elegirlo por A/B fue un
+    /// malentendido, corregido por Luciano el 19-oct. La alternancia A/B sigue,
+    /// pero solo decide en qué tramos traslapa cada barra, no su número --
+    /// docs/planes/2026-10-19-barras-por-cara-de-vuelta.md.
+    /// </summary>
     public string? TipoBarraEsquinasNombre { get; set; }
 
+    /// <summary>Barra de las intermedias de las caras paralelas al eje X (inferior y superior).</summary>
     public string? TipoBarraCaraXNombre { get; set; }
+
+    /// <summary>Barra de las intermedias de las caras paralelas al eje Y (izquierda y derecha).</summary>
     public string? TipoBarraCaraYNombre { get; set; }
+
+    /// <summary>
+    /// Todo largo de corte de varilla (ganchos incluidos) es múltiplo de esto,
+    /// en metros, para que en obra sea fácil de cortar. Ver
+    /// <see cref="PlanTraslapos.Redondeos"/>.
+    /// </summary>
+    public double RedondeoVarillas { get; set; } = PlanTraslapos.RedondeoPorDefecto;
+
+    /// <summary>
+    /// true: todas las barras de la columna traslapan con el mayor solape del
+    /// cuadro entre los números que se usan; false: cada una con el de su
+    /// diámetro.
+    /// </summary>
+    public bool SolapeMayorDeLosDos { get; set; }
+
+    /// <summary>OBSOLETO: solo para leer configuraciones guardadas con barras por tipo A/B (17 al 19-oct). Ver <see cref="MigrarBarrasPorCara"/>.</summary>
+    public string? TipoBarraANombre { get; set; }
+
+    /// <summary>OBSOLETO: ver <see cref="TipoBarraANombre"/>.</summary>
+    public string? TipoBarraBNombre { get; set; }
 
     /// <summary>
     /// Gancho del anclaje inferior, donde la longitudinal entra a la zapata
@@ -36,20 +65,18 @@ public sealed class ConfigLongitudinal
     public string? TipoGanchoLongitudinalNombre { get; set; }
 
     /// <summary>
-    /// Filas (posiciones Y, 0-based) con una grapa horizontal de borde a
-    /// borde -- conecta la barra intermedia de la cara izquierda con la de
-    /// la cara derecha, a esa altura, con gancho a cada punta.
+    /// Los estribos menores (grapas en C y en S, y cerrados) puestos en el
+    /// panel de estribos menores -- docs/planes/2026-10-20-diseno-estribos-menores-visual-y-64.md.
     /// </summary>
+    public List<EstriboMenor> EstribosMenores { get; set; } = new();
+
+    /// <summary>OBSOLETO: grapas por fila del panel de casillas; solo para leer configuraciones viejas. Ver <see cref="MigrarEstribosMenores"/>.</summary>
     public List<int> GrapasFila { get; set; } = new();
 
-    /// <summary>
-    /// Columnas (posiciones X, 0-based) con una grapa vertical de borde a
-    /// borde -- conecta la barra intermedia de la cara superior con la de
-    /// la cara inferior, en esa posición.
-    /// </summary>
+    /// <summary>OBSOLETO: ver <see cref="GrapasFila"/>.</summary>
     public List<int> GrapasColumna { get; set; } = new();
 
-    /// <summary>Las cajas que arma L4 cruzando filas y columnas tildadas.</summary>
+    /// <summary>OBSOLETO: ver <see cref="GrapasFila"/>.</summary>
     public List<CajaMenor> Cajas { get; set; } = new();
 
     /// <summary>
@@ -62,12 +89,108 @@ public sealed class ConfigLongitudinal
     public double LongitudComercialBarra { get; set; } = 12.0;
 
     /// <summary>
-    /// Tipo de empalme de Revit (<c>RebarSpliceType</c>, por nombre) con el que
-    /// se parten las barras longitudinales en sus traslapos -- issue #41. Vacío
-    /// = el por defecto del add-in: un tipo propio por varilla, con el solape
-    /// del cuadro de la empresa (<see cref="CuadroVarillas.Varilla.Traslapo"/>).
+    /// OBSOLETO: el tipo de empalme ya no se elige. Cada traslapo puede tener
+    /// un largo distinto y el add-in crea el tipo que corresponde
+    /// (<c>Logica/TiposEmpalme</c>). Queda solo para leer configuraciones viejas.
     /// </summary>
     public string? TipoEmpalmeNombre { get; set; }
+
+    /// <summary>
+    /// Pasa una configuración guardada con barras por tipo A/B al formato por
+    /// posición: esquinas = A, caras X e Y = B (en la esquina inferior
+    /// izquierda, que es A, arranca la alternancia). Devuelve true si cambió
+    /// algo, para avisar.
+    /// </summary>
+    public bool MigrarBarrasPorCara()
+    {
+        if (TipoBarraEsquinasNombre is not null || TipoBarraCaraXNombre is not null || TipoBarraCaraYNombre is not null) return false;
+        if (TipoBarraANombre is null && TipoBarraBNombre is null) return false;
+
+        TipoBarraEsquinasNombre = TipoBarraANombre ?? TipoBarraBNombre;
+        TipoBarraCaraXNombre = TipoBarraCaraYNombre = TipoBarraBNombre ?? TipoBarraANombre;
+        return true;
+    }
+
+    /// <summary>
+    /// Pasa las casillas del panel viejo a piezas: cada grapa a una C sin
+    /// voltear y cada caja a un cerrado con el mismo eje y rango, todas con
+    /// "Igual al estribo". Vacía las listas viejas, así una segunda llamada no
+    /// duplica nada. Devuelve true si cambió algo.
+    /// </summary>
+    public bool MigrarEstribosMenores()
+    {
+        if (GrapasFila.Count == 0 && GrapasColumna.Count == 0 && Cajas.Count == 0) return false;
+
+        EstribosMenores.AddRange(GrapasFila.Select(f => new EstriboMenor { Forma = FormaMenor.GrapaC, Eje = EjeCaja.Fila, Desde = f, Hasta = f }));
+        EstribosMenores.AddRange(GrapasColumna.Select(c => new EstriboMenor { Forma = FormaMenor.GrapaC, Eje = EjeCaja.Columna, Desde = c, Hasta = c }));
+        EstribosMenores.AddRange(Cajas.Select(c => new EstriboMenor { Forma = FormaMenor.Cerrado, Eje = c.Eje, Desde = c.Desde, Hasta = c.Hasta }));
+
+        GrapasFila.Clear();
+        GrapasColumna.Clear();
+        Cajas.Clear();
+        return true;
+    }
+
+    /// <summary>
+    /// Quita las piezas que apuntan a una fila o columna que ya no existe (se
+    /// bajó la cantidad de barras por cara después de ponerlas). Devuelve
+    /// cuántas quitó, para avisar.
+    /// </summary>
+    public int DescartarMenoresFueraDeRango()
+    {
+        int columnas = System.Math.Max(0, BarrasPorCaraX / 2);
+        int filas = System.Math.Max(0, BarrasPorCaraY / 2);
+
+        return EstribosMenores.RemoveAll(p => p.Desde < 0 || p.Hasta >= (p.Eje == EjeCaja.Fila ? filas : columnas));
+    }
+
+    /// <summary>
+    /// Las piezas que el generador tiene que crear: migradas desde las
+    /// casillas viejas y sin las que quedaron fuera de rango, en una copia
+    /// (generar no cambia la configuración guardada).
+    /// </summary>
+    public List<EstriboMenor> MenoresParaGenerar()
+    {
+        ConfigLongitudinal copia = Copiar();
+        copia.MigrarEstribosMenores();
+        copia.DescartarMenoresFueraDeRango();
+        return copia.EstribosMenores;
+    }
+
+    /// <summary>
+    /// Posición de cada barra en el anillo del perímetro, en el orden en que se
+    /// recorre: esquina inferior izquierda, cara inferior de izquierda a
+    /// derecha, esquina inferior derecha, cara derecha de abajo hacia arriba,
+    /// esquina superior derecha, cara superior de derecha a izquierda, esquina
+    /// superior izquierda y cara izquierda de arriba hacia abajo. Las pares son
+    /// tipo A y las impares tipo B (alternancia de traslapos del 11-sep). Lo
+    /// usan la ventana (qué números caen en A y cuáles en B) y el generador
+    /// (qué barra va en cada posición): el mismo orden en los dos lados.
+    /// </summary>
+    public IReadOnlyList<PosicionBarra> Anillo()
+    {
+        int columnas = System.Math.Max(0, BarrasPorCaraX / 2);
+        int filas = System.Math.Max(0, BarrasPorCaraY / 2);
+
+        var anillo = new List<PosicionBarra>();
+        for (int vuelta = 0; vuelta < 2; vuelta++)
+        {
+            anillo.Add(PosicionBarra.Esquina);
+            anillo.AddRange(Enumerable.Repeat(PosicionBarra.CaraX, columnas));
+            anillo.Add(PosicionBarra.Esquina);
+            anillo.AddRange(Enumerable.Repeat(PosicionBarra.CaraY, filas));
+        }
+
+        return anillo;
+    }
+
+    /// <summary>El nombre de la barra elegida para esa posición.</summary>
+    public string? BarraDe(PosicionBarra posicion) => posicion switch
+    {
+        PosicionBarra.Esquina => TipoBarraEsquinasNombre,
+        PosicionBarra.CaraX => TipoBarraCaraXNombre,
+        _ => TipoBarraCaraYNombre,
+    };
 
     /// <summary>
     /// Copia independiente, listas incluidas. Hace falta para las
@@ -83,11 +206,16 @@ public sealed class ConfigLongitudinal
         TipoBarraEsquinasNombre = TipoBarraEsquinasNombre,
         TipoBarraCaraXNombre = TipoBarraCaraXNombre,
         TipoBarraCaraYNombre = TipoBarraCaraYNombre,
+        TipoBarraANombre = TipoBarraANombre,
+        TipoBarraBNombre = TipoBarraBNombre,
+        RedondeoVarillas = RedondeoVarillas,
+        SolapeMayorDeLosDos = SolapeMayorDeLosDos,
         TipoGanchoLongitudinalNombre = TipoGanchoLongitudinalNombre,
         LongitudComercialBarra = LongitudComercialBarra,
         TipoEmpalmeNombre = TipoEmpalmeNombre,
         GrapasFila = new List<int>(GrapasFila),
         GrapasColumna = new List<int>(GrapasColumna),
         Cajas = Cajas.Select(c => new CajaMenor { Eje = c.Eje, Desde = c.Desde, Hasta = c.Hasta }).ToList(),
+        EstribosMenores = EstribosMenores.Select(p => p.Copiar()).ToList(),
     };
 }

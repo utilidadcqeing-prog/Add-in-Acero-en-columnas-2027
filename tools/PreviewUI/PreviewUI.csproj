@@ -61,6 +61,33 @@
       <DependentUpon>PanelPlantaColumnas.xaml</DependentUpon>
     </Compile>
 
+    <Page Include="..\..\addins\armado-columnas\Vistas\PanelTraslapos.xaml">
+      <Link>Vistas\PanelTraslapos.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\PanelTraslapos.xaml.cs">
+      <Link>Vistas\PanelTraslapos.xaml.cs</Link>
+      <DependentUpon>PanelTraslapos.xaml</DependentUpon>
+    </Compile>
+
+    <Compile Include="..\..\addins\armado-columnas\Vistas\ConvertidorBarrasPorCara.cs">
+      <Link>Vistas\ConvertidorBarrasPorCara.cs</Link>
+    </Compile>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.VistaPrevia.cs">
+      <Link>Vistas\VentanaConfiguradorEstribos.VistaPrevia.cs</Link>
+    </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\PanelVistaPrevia.xaml">
+      <Link>Vistas\PanelVistaPrevia.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\PanelVistaPrevia.xaml.cs">
+      <Link>Vistas\PanelVistaPrevia.xaml.cs</Link>
+      <DependentUpon>PanelVistaPrevia.xaml</DependentUpon>
+    </Compile>
+
     <Page Include="..\..\addins\armado-columnas\Vistas\VentanaEstribosMenores.xaml">
       <Link>Vistas\VentanaEstribosMenores.xaml</Link>
       <SubType>Designer</SubType>

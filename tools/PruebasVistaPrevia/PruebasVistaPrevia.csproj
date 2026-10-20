@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pruebas sin Revit de la vista previa y los colores por diámetro
+    (docs/planes/2026-10-20-plan-vista-previa-y-colores.md). Mismo molde que
+    tools/PruebasTraslapos: consola sin dependencias, "dotnet run" y código 1
+    si alguna falla. Los archivos se enlazan, no se copian.
+    practicacq.csproj excluye esta carpeta.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\addins\armado-columnas\Modelo\CuadroVarillas.cs" Link="Modelo\CuadroVarillas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\TipoBarra.cs" Link="Modelo\TipoBarra.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ColoresVarilla.cs" Link="Modelo\ColoresVarilla.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\TextoBarras.cs" Link="Modelo\TextoBarras.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\RepartoEstribos.cs" Link="Modelo\RepartoEstribos.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ConfigTramo.cs" Link="Modelo\ConfigTramo.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ColumnaContexto.cs" Link="Modelo\ColumnaContexto.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\EstriboMenor.cs" Link="Modelo\EstriboMenor.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PaqueteEstribos.cs" Link="Modelo\PaqueteEstribos.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\SeccionPlanta.cs" Link="Modelo\SeccionPlanta.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PosicionBarra.cs" Link="Modelo\PosicionBarra.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ConfigLongitudinal.cs" Link="Modelo\ConfigLongitudinal.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PlanTraslapos.cs" Link="Modelo\PlanTraslapos.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\NombreEmpalme.cs" Link="Modelo\NombreEmpalme.cs" />
+  </ItemGroup>
+
+</Project>

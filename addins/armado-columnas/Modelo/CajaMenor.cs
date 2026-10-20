@@ -11,6 +11,9 @@ public enum EjeCaja
 }
 
 /// <summary>
+/// OBSOLETO desde el 20-oct (ver <see cref="EstriboMenor"/>): queda para leer
+/// configuraciones guardadas con el panel de casillas.
+///
 /// Un estribo menor tipo "caja": un rectángulo nested adentro del estribo
 /// principal. Cada lado de la sección arma las suyas por separado y se
 /// superponen entre sí -- ya NO es el cruce de una fila con una columna

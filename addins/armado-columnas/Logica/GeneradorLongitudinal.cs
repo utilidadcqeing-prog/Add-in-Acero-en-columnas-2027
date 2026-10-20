@@ -22,23 +22,28 @@ using practicacq.Modelo;
 ///    una columna SÍ puede recorrer toda la pila -- medido contra Revit real
 ///    el 7-oct (docs/planes/2026-10-07-factibilidad-barra-continua-41.md); la
 ///    suposición contraria, que obligaba a cortar en cada cambio de columna,
-///    era falsa. Los traslapos solo se generan donde la longitud comercial de
-///    la barra (<see cref="ConfigLongitudinal.LongitudComercialBarra"/>, 6 o
-///    12 m) obliga a cortar, y solo a la mitad de un nivel, alternando niveles
-///    pares/impares entre las posiciones de la sección. Qué barra cae en cada
-///    grupo lo decide su lugar en el ANILLO del perímetro (ver
-///    <see cref="GenerarColumna"/>, lista <c>anillo</c>): "uno sí, uno no"
-///    dando la vuelta, de modo que dos barras VECINAS nunca traslapan a la
-///    misma altura -- regla del equipo, confirmada por Luciano el 11-sep (ver
+///    era falsa. Dónde va cada traslapo y cuánto mide cada varilla lo decide
+///    <see cref="PlanTraslapos"/>, el mismo cálculo que dibuja la ventana
+///    (docs/planes/2026-10-17-diseno-metodologia-traslapos.md): nunca en un
+///    nudo, varillas en múltiplos del redondeo sin pasarse del largo
+///    comercial, solape del cuadro como mínimo. Las posiciones se alternan
+///    "una sí, una no" en el ANILLO del perímetro (ver
+///    <see cref="ConfigLongitudinal.Anillo"/>): las pares son tipo A y las
+///    impares tipo B, y traslapan en tramos distintos -- regla del equipo,
+///    confirmada por Luciano el 11-sep (ver
 ///    docs/planes/2026-09-11-alternancia-de-traslapos-por-anillo.md). El
-///    solape y el corrimiento lateral los pone Revit según el tipo de empalme
-///    (<see cref="TiposEmpalme"/>): por defecto uno propio del add-in con el
-///    solape del cuadro de la empresa.
-///  - Las barras longitudinales llevan el gancho de
-///    <see cref="ConfigLongitudinal.TipoGanchoLongitudinalNombre"/> (90°
-///    estándar) en las DOS puntas de la columna -- abajo el anclaje en la
-///    zapata (issue #37) y arriba el remate (issue #59) -- y en ninguna junta
-///    intermedia. Los dos miran hacia el centro de la sección (issue #43).
+///    número de barra NO sale de A/B sino de la posición (esquinas / cara X /
+///    cara Y), así que cada grupo puede tener varios diámetros, cada uno con
+///    su propio plan de traslapos (Luciano, 19-oct). El
+///    solape y el corrimiento lateral los pone Revit con un tipo de empalme
+///    propio por largo (<see cref="TiposEmpalme"/>).
+///  - Si la columna arranca sobre zapata, las barras longitudinales llevan
+///    un gancho de 90° en las DOS puntas -- abajo el anclaje en la zapata
+///    (issue #37) y arriba el remate (issue #59) -- y en ninguna junta
+///    intermedia. Es el propio del add-in (<see cref="GanchoLongitudinal"/>),
+///    ajustado al largo del cuadro; el de
+///    <see cref="ConfigLongitudinal.TipoGanchoLongitudinalNombre"/> queda de
+///    respaldo. Los dos miran hacia el centro de la sección (issue #43).
 ///  - Grapas y cajas reutilizan el gancho del tramo (<see cref="ConfigTramo.TipoGanchoNombre"/>)
 ///    en el que se generan -- no hay un campo de gancho propio para
 ///    estribos menores todavía.
@@ -71,11 +76,11 @@ public static class GeneradorLongitudinal
             .OfClass(typeof(RebarHookType)).Cast<RebarHookType>()
             .GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First());
 
-        // Ver GeometriaSeccion.BuscarFormaEstribo -- misma forma que usa
-        // GeneradorArmado para los estribos principales, reutilizada acá para
-        // las "cajas" (estribos menores), que tienen exactamente el mismo
-        // problema de dobladura por ser también un lazo StirrupTie cerrado.
-        RebarShape? formaEstribo = GeometriaSeccion.BuscarFormaEstribo(doc);
+        // La misma forma que los estribos principales para los cerrados: la
+        // propia del add-in (#64) o, si no se pudo, la del modelo
+        // (GeometriaSeccion.BuscarFormaEstribo). El aviso ya lo dio GeneradorArmado.
+        var propios = new TiposPropios(doc);
+        RebarShape? formaEstribo = propios.FormaEstribo().Tipo ?? GeometriaSeccion.BuscarFormaEstribo(doc);
 
         // Mismo criterio que GeneradorArmado.Generar: una sola vez por
         // corrida, no por cada caja -- ver GeometriaSeccion.TieneLadoDiagonal.
@@ -85,6 +90,10 @@ public static class GeneradorLongitudinal
         // del add-in para no crearlos ni reconfigurarlos una vez por varilla.
         var tiposEmpalme = new TiposEmpalme(doc);
 
+        // Igual: el gancho propio de 90° se crea y se ajusta una vez por barra
+        // y por corrida, no una vez por columna.
+        var ganchoPropio = new GanchoLongitudinal(doc);
+
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
 
         // TEMPORAL -- ver BarraContinua.Traza. Queda en un archivo de texto
@@ -93,13 +102,14 @@ public static class GeneradorLongitudinal
         var traza = new System.Text.StringBuilder();
 #if DEBUG
         BarraContinua.Traza = linea => traza.AppendLine(linea);
+        ganchoPropio.Traza = linea => traza.AppendLine(linea);
 #endif
 
         foreach (ColumnaPlan columnaPlan in opciones.Plan.Columnas)
         {
             try
             {
-                GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, tiposEmpalme, cacheHost, res);
+                GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, propios, tiposEmpalme, ganchoPropio, cacheHost, res);
             }
             catch (Exception ex)
             {
@@ -127,7 +137,9 @@ public static class GeneradorLongitudinal
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
         HashSet<ElementId> formasRechazadas,
+        TiposPropios propios,
         TiposEmpalme tiposEmpalme,
+        GanchoLongitudinal ganchoPropio,
         Dictionary<ElementId, (CurveLoop, double)> cacheHost,
         ResultadoArmado res)
     {
@@ -140,31 +152,53 @@ public static class GeneradorLongitudinal
         // corrida (ver ConstruirPlanArmado).
         if (columnaPlan.Tramos.All(t => t is null)) return;
 
-        if (string.IsNullOrEmpty(cfg.TipoBarraEsquinasNombre) ||
-            !barrasPorNombre.TryGetValue(cfg.TipoBarraEsquinasNombre, out RebarBarType? barraEsquinas))
-        {
-            res.Avisos.Add(
-                $"{contexto.Marca}: el tipo de barra de esquina «{cfg.TipoBarraEsquinasNombre}» " +
-                "no existe en el documento; se omite el acero longitudinal de esta columna.");
-            return;
-        }
+        // Una configuración guardada con barras por tipo A/B (17 al 19-oct)
+        // puede llegar sin las de cara (la ventana ya la migra al cargarla;
+        // esto es por si acaso).
+        cfg.MigrarBarrasPorCara();
 
-        RebarBarType? barraCaraX = ResolverBarraOpcional(cfg.BarrasPorCaraX, cfg.TipoBarraCaraXNombre, barrasPorNombre, "cara X", contexto.Marca, res);
-        RebarBarType? barraCaraY = ResolverBarraOpcional(cfg.BarrasPorCaraY, cfg.TipoBarraCaraYNombre, barrasPorNombre, "cara Y", contexto.Marca, res);
-
-        // Gancho del anclaje en la zapata (issue #37) -- no bloquea el resto
-        // de la longitudinal si falta: se avisa y esa barra sale recta ahí,
-        // igual que hoy, en vez de tirar abajo toda la columna por un gancho.
-        RebarHookType? ganchoLongitudinal = null;
-        if (contexto.IdZapata is not null)
+        // El número de barra va por posición; A/B solo decide dónde traslapa.
+        IReadOnlyList<PosicionBarra> posiciones = cfg.Anillo();
+        var barraPorPosicion = new Dictionary<PosicionBarra, RebarBarType>();
+        foreach (PosicionBarra posicion in posiciones.Distinct())
         {
-            if (string.IsNullOrEmpty(cfg.TipoGanchoLongitudinalNombre) ||
-                !ganchosPorNombre.TryGetValue(cfg.TipoGanchoLongitudinalNombre, out ganchoLongitudinal))
+            string? nombre = cfg.BarraDe(posicion);
+            if (string.IsNullOrEmpty(nombre) || !barrasPorNombre.TryGetValue(nombre, out RebarBarType? barra))
             {
                 res.Avisos.Add(
-                    $"{contexto.Marca}: sin tipo de gancho de anclaje válido para la longitudinal; " +
-                    "el anclaje en la zapata sale recto, sin gancho.");
+                    $"{contexto.Marca}: el tipo de barra de {RotuloPosicion(posicion)} «{nombre}» no existe en el documento; " +
+                    "se omite el acero longitudinal de esta columna.");
+                return;
             }
+
+            barraPorPosicion[posicion] = barra;
+        }
+
+        List<RebarBarType> barrasUsadas = barraPorPosicion.Values.DistinctBy(b => b.Id).ToList();
+
+        // Gancho del anclaje en la zapata (issue #37) y del remate (#59), solo
+        // si hay zapata: el propio del add-in (GanchoLongitudinal), que se
+        // ajusta más abajo, cuando ya se conoce la pila. El configurado del
+        // modelo queda de respaldo.
+        RebarHookType? ganchoDelModelo = null;
+        if (contexto.IdZapata is not null && !string.IsNullOrEmpty(cfg.TipoGanchoLongitudinalNombre))
+            ganchosPorNombre.TryGetValue(cfg.TipoGanchoLongitudinalNombre, out ganchoDelModelo);
+
+        // El mismo cálculo que dibuja la pestaña «Traslapos» de la ventana:
+        // lo que se vio es lo que se genera. Sin solución, la columna no lleva
+        // longitudinal, ni grapas ni cajas (abrazarían barras que no están) --
+        // docs/planes/2026-10-17-diseno-metodologia-traslapos.md, sección 6.
+        PlanTraslapos.Resultado planTraslapos = PlanTraslapos.Calcular(
+            new PlanTraslapos.Columna(contexto.Tramos, contexto.ZInferiorLongitudinal, contexto.ZSuperior, contexto.IdZapata is not null),
+            posiciones.Where((_, i) => i % 2 == 0).Select(p => EstandarCQ.DiametroMm(barraPorPosicion[p])),
+            posiciones.Where((_, i) => i % 2 == 1).Select(p => EstandarCQ.DiametroMm(barraPorPosicion[p])),
+            new PlanTraslapos.Opciones(cfg.LongitudComercialBarra, cfg.RedondeoVarillas, cfg.SolapeMayorDeLosDos));
+        if (!planTraslapos.TieneSolucion)
+        {
+            string motivos = string.Join(" ", planTraslapos.Todos.Select(p => p.Motivo).OfType<string>().Distinct());
+            res.Avisos.Add(
+                $"{contexto.Marca}: no se genera el acero longitudinal (ni sus grapas y cajas) porque los traslapos no tienen solución. {motivos}");
+            return;
         }
 
         double recubrimientoPies = EstandarCQ.APies(columnaPlan.Recubrimiento ?? contexto.Recubrimiento);
@@ -188,13 +222,22 @@ public static class GeneradorLongitudinal
             .DefaultIfEmpty(0)
             .Max();
 
-        double insetEsquinas = recubrimientoPies + diametroEstribo + barraEsquinas.BarNominalDiameter / 2;
+        // Misma cuenta que la vista previa del panel (SeccionPlanta).
+        double Inset(RebarBarType barra) => SeccionPlanta.Inset(recubrimientoPies, diametroEstribo, barra.BarNominalDiameter);
+
+        // Las esquinas "de referencia" (para repartir las intermedias, los
+        // límites del corrimiento y las grapas/cajas) usan la más gruesa de
+        // las barras de la columna: la diferencia es de unos milímetros, y así
+        // ninguna queda pisando el estribo. Cada barra se separa de su cara
+        // según SU diámetro (ver el anillo, más abajo).
+        RebarBarType barraGruesa = barrasUsadas.MaxBy(b => b.BarNominalDiameter)!;
+        double insetEsquinas = Inset(barraGruesa);
 
         int columnas = Math.Max(0, cfg.BarrasPorCaraX / 2);
         int filas = Math.Max(0, cfg.BarrasPorCaraY / 2);
 
-        double insetX = barraCaraX is not null ? recubrimientoPies + diametroEstribo + barraCaraX.BarNominalDiameter / 2 : 0;
-        double insetY = barraCaraY is not null ? recubrimientoPies + diametroEstribo + barraCaraY.BarNominalDiameter / 2 : 0;
+        double insetX = insetEsquinas;
+        double insetY = insetEsquinas;
 
         // La longitudinal es de la columna física completa (William, 9-sep):
         // recorre TODOS los tramos, aceptados o no. Lo aceptado en la UI es
@@ -265,19 +308,32 @@ public static class GeneradorLongitudinal
         {
             res.Avisos.Add(
                 $"{contexto.Marca}: la zona común a todas las columnas de la pila ({zonaComun}) es demasiado chica para el " +
-                $"recubrimiento + la barra de esquina «{barraEsquinas.Name}»; se omite el acero longitudinal de esta columna.");
+                $"recubrimiento + la barra «{barraGruesa.Name}»; se omite el acero longitudinal de esta columna.");
             return;
         }
 
-        if (barraCaraX is not null && (xMax - xMin) - 2 * insetX <= Tolerancia)
-            res.Avisos.Add(
-                $"{contexto.Marca}: la zona común de la pila ({zonaComun}) es demasiado chica para la barra de cara X " +
-                $"«{barraCaraX.Name}»; sus posiciones pueden quedar mal.");
+        // El gancho de cada barra: el propio, ajustado al cuadro para que el
+        // largo de corte en Revit sea el de la pestaña «Traslapos»; si no se
+        // pudo, el configurado del modelo (y si tampoco hay, sale recta).
+        var ganchoPorBarra = new Dictionary<ElementId, RebarHookType?>();
+        if (contexto.IdZapata is not null)
+        {
+            var puntoDeMedicion = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, pila[0].ZInf + EstandarCQ.APies(0.10));
+            foreach (RebarBarType barra in barrasUsadas)
+            {
+                GanchoLongitudinal.Resultado propio = ganchoPropio.Resolver(barra, pila[0].Host, puntoDeMedicion);
+                if (propio.Aviso is not null) res.Avisos.Add($"{contexto.Marca}: {propio.Aviso}");
+                ganchoPorBarra[barra.Id] = propio.Gancho ?? ganchoDelModelo;
 
-        if (barraCaraY is not null && (yMax - yMin) - 2 * insetY <= Tolerancia)
-            res.Avisos.Add(
-                $"{contexto.Marca}: la zona común de la pila ({zonaComun}) es demasiado chica para la barra de cara Y " +
-                $"«{barraCaraY.Name}»; sus posiciones pueden quedar mal.");
+                if (propio.Gancho is null)
+                    res.Avisos.Add(ganchoDelModelo is null
+                        ? $"{contexto.Marca}: sin gancho de anclaje para «{barra.Name}»; el anclaje en la zapata y el remate salen rectos."
+                        : $"{contexto.Marca}: «{barra.Name}» usa el gancho del modelo «{ganchoDelModelo.Name}»; su largo en Revit " +
+                          "puede no coincidir con el de la pestaña «Traslapos».");
+            }
+        }
+
+        RebarHookType? GanchoDe(RebarBarType barra) => ganchoPorBarra.TryGetValue(barra.Id, out RebarHookType? g) ? g : null;
 
         var referencia = new FootprintHost(pila[0].Host, xMin, xMax, yMin, yMax);
 
@@ -292,24 +348,7 @@ public static class GeneradorLongitudinal
             $"zona común X[{GeometriaSeccion.Metros(xMin):0.###}, {GeometriaSeccion.Metros(xMax):0.###}] " +
             $"Y[{GeometriaSeccion.Metros(yMin):0.###}, {GeometriaSeccion.Metros(yMax):0.###}]; zapata: {contexto.IdZapata ?? "no"}; " +
             $"ZInferiorLongitudinal {contexto.ZInferiorLongitudinal:0.###}, ZSuperior {contexto.ZSuperior:0.###}; " +
-            $"longitud comercial {cfg.LongitudComercialBarra:0.#} m");
-
-        // El longitudinal entra a anclarse hasta 7.5cm de la cara inferior de
-        // la zapata (#26). Ya no hace falta hostear ese pedazo en la zapata:
-        // la varilla puede salirse de su host (medido el 7-oct).
-        double zInicioTotal = contexto.ZInferiorLongitudinal;
-
-        // "Niveles" para Fase 5 (#7): un candidato de traslapo por tramo
-        // LIBRE/CONTRA ZAPATA de TODA la columna (no solo los aceptados en
-        // esta corrida) -- el número de nivel (para el intercalado par/impar)
-        // es una propiedad estable de la columna real, no debería cambiar
-        // según qué tramos se tildaron hoy.
-        List<(int Ordinal, double ZInf, double ZSup)> niveles = contexto.Tramos
-            .Where(t => t.Tipo != TipoTramo.DentroDeViga)
-            .Select((t, idx) => (Ordinal: idx + 1, t.ZInferior, t.ZSuperior))
-            .ToList();
-
-        double zFinTotal = contexto.ZSuperior;
+            $"longitud comercial {cfg.LongitudComercialBarra:0.#} m, redondeo {cfg.RedondeoVarillas:0.00} m");
 
         // El grupo par/impar del traslapo intercalado sale de la posición de
         // cada barra EN EL ANILLO del perímetro (ver más abajo, "anillo"): la
@@ -351,39 +390,52 @@ public static class GeneradorLongitudinal
         //  - barras de las caras inferior/superior (varían en X): normal X;
         //  - barras de las caras izquierda/derecha (varían en Y): normal Y;
         //  - esquinas: apoyan en dos caras, así que se elige el eje cuyo lado
-        //    positivo va a lo largo de una cara y no se sale por la punta. En
-        //    la esquina superior derecha los dos lados positivos se salen:
-        //    ahí BarraContinua corre la varilla entera un diámetro para el
-        //    otro lado (ver BarraContinua.Alinear y los límites de abajo).
-        XYZ NormalDeEsquina(double y) => y < yEsqArriba - Tolerancia ? XYZ.BasisY : XYZ.BasisX;
+        //    positivo va a lo largo de una cara y no se sale por la punta: Y
+        //    en las dos de abajo, X en las dos de arriba. En la esquina
+        //    superior derecha los dos lados positivos se salen: ahí
+        //    BarraContinua corre la varilla entera un diámetro para el otro
+        //    lado (ver BarraContinua.Alinear y los límites de abajo).
+        //
+        // La barra de cada posición sale de cfg.Anillo(), el mismo orden en
+        // que se recorre acá: así A/B (dónde traslapa) y la cara (qué número
+        // lleva) no se pueden desincronizar.
+        RebarBarType BarraDe(int indice) => barraPorPosicion[posiciones[indice]];
 
-        void AgregarEsquina(double x, double y) =>
-            anillo.Add((barraEsquinas, x, y, NormalDeEsquina(y)));
+        void AgregarEsquina(bool izquierda, bool abajo)
+        {
+            RebarBarType barra = BarraDe(anillo.Count);
+            double inset = Inset(barra);
+            double x = izquierda ? referencia.XMin + inset : referencia.XMax - inset;
+            double y = abajo ? referencia.YMin + inset : referencia.YMax - inset;
+            anillo.Add((barra, x, y, abajo ? XYZ.BasisY : XYZ.BasisX));
+        }
 
         // Intermedias de las caras inferior/superior: varían en X.
-        void AgregarDeCaraX(int c, double y)
+        void AgregarDeCaraX(int c, bool abajo)
         {
-            if (barraCaraX is null) return;
+            RebarBarType barra = BarraDe(anillo.Count);
             double x = PosicionIntermedia(xEsqIzq, xEsqDer, columnas, c);
-            anillo.Add((barraCaraX, x, y, XYZ.BasisX));
+            double y = abajo ? referencia.YMin + Inset(barra) : referencia.YMax - Inset(barra);
+            anillo.Add((barra, x, y, XYZ.BasisX));
         }
 
         // Intermedias de las caras izquierda/derecha: varían en Y.
-        void AgregarDeCaraY(int f, double x)
+        void AgregarDeCaraY(int f, bool izquierda)
         {
-            if (barraCaraY is null) return;
+            RebarBarType barra = BarraDe(anillo.Count);
             double y = PosicionIntermedia(yEsqAbajo, yEsqArriba, filas, f);
-            anillo.Add((barraCaraY, x, y, XYZ.BasisY));
+            double x = izquierda ? referencia.XMin + Inset(barra) : referencia.XMax - Inset(barra);
+            anillo.Add((barra, x, y, XYZ.BasisY));
         }
 
-        AgregarEsquina(xEsqIzq, yEsqAbajo);
-        for (int c = 0; c < columnas; c++) AgregarDeCaraX(c, referencia.YMin + insetX);
-        AgregarEsquina(xEsqDer, yEsqAbajo);
-        for (int f = 0; f < filas; f++) AgregarDeCaraY(f, referencia.XMax - insetY);
-        AgregarEsquina(xEsqDer, yEsqArriba);
-        for (int c = columnas - 1; c >= 0; c--) AgregarDeCaraX(c, referencia.YMax - insetX);
-        AgregarEsquina(xEsqIzq, yEsqArriba);
-        for (int f = filas - 1; f >= 0; f--) AgregarDeCaraY(f, referencia.XMin + insetY);
+        AgregarEsquina(izquierda: true, abajo: true);
+        for (int c = 0; c < columnas; c++) AgregarDeCaraX(c, abajo: true);
+        AgregarEsquina(izquierda: false, abajo: true);
+        for (int f = 0; f < filas; f++) AgregarDeCaraY(f, izquierda: false);
+        AgregarEsquina(izquierda: false, abajo: false);
+        for (int c = columnas - 1; c >= 0; c--) AgregarDeCaraX(c, abajo: false);
+        AgregarEsquina(izquierda: true, abajo: false);
+        for (int f = filas - 1; f >= 0; f--) AgregarDeCaraY(f, izquierda: true);
 
         // En un anillo CERRADO la alternancia estricta solo existe si la
         // cantidad de posiciones es par. Con el modelo de hoy siempre lo es
@@ -394,10 +446,6 @@ public static class GeneradorLongitudinal
                 "así que dos barras vecinas van a traslapar a la misma altura -- con un número impar " +
                 "alrededor del perímetro no hay forma de alternarlas todas.");
 
-        // Las alturas de traslapo dependen solo del grupo par/impar: se
-        // calculan (y avisan) una vez por grupo, no una vez por varilla.
-        var alturasPorGrupo = new Dictionary<bool, List<double>>();
-
         // Los avisos de empalme son los mismos para todas las varillas de un
         // mismo tipo de barra: uno por columna y motivo, no uno por varilla.
         var avisosDeBarras = new HashSet<string>();
@@ -407,22 +455,16 @@ public static class GeneradorLongitudinal
         {
             (RebarBarType barraDeLaPosicion, double x, double y, XYZ normal) = anillo[i];
 
-            bool esParGrupo = i % 2 == 0;
-            if (!alturasPorGrupo.TryGetValue(esParGrupo, out List<double>? alturas))
-            {
-                alturas = PlanificarAlturas(
-                    esParGrupo, niveles, zInicioTotal, zFinTotal, cfg.LongitudComercialBarra, contexto.Marca, res);
-                alturasPorGrupo[esParGrupo] = alturas;
-            }
+            PlanTraslapos.PlanTipo plan = planTraslapos.De(grupoA: i % 2 == 0, EstandarCQ.DiametroMm(barraDeLaPosicion));
 
-            // El tipo de empalme solo se resuelve (y, si es propio, se crea)
-            // cuando esta varilla de verdad lleva algún traslapo.
-            ElementId? tipoEmpalme = null;
-            if (alturas.Count > 0)
+            // Un tipo de empalme por largo de traslapo; solo se crean los que
+            // de verdad se usan.
+            var traslapos = new List<BarraContinua.TraslapoPedido>();
+            foreach (PlanTraslapos.Traslapo t in plan.Traslapos)
             {
-                TiposEmpalme.Resultado tipo = tiposEmpalme.Resolver(barraDeLaPosicion, cfg.TipoEmpalmeNombre);
-                tipoEmpalme = tipo.Tipo;
+                TiposEmpalme.Resultado tipo = tiposEmpalme.Resolver(barraDeLaPosicion, t.Largo);
                 if (tipo.Aviso is not null) avisosDeBarras.Add(tipo.Aviso);
+                if (tipo.Tipo is not null) traslapos.Add(new BarraContinua.TraslapoPedido(EstandarCQ.APies(t.Centro), tipo.Tipo));
             }
 
             (RebarTerminationOrientation orientacionAbajo, RebarTerminationOrientation orientacionArriba) =
@@ -435,10 +477,10 @@ public static class GeneradorLongitudinal
 
             BarraContinua.Resultado creada = BarraContinua.Crear(doc, new BarraContinua.Pedido(
                 barraDeLaPosicion, x, y, normal,
-                EstandarCQ.APies(zInicioTotal), EstandarCQ.APies(zFinTotal),
-                alturas.Select(EstandarCQ.APies).ToList(), pila,
-                ganchoLongitudinal, ganchoLongitudinal, orientacionAbajo, orientacionArriba,
-                tipoEmpalme, limites));
+                EstandarCQ.APies(contexto.ZInferiorLongitudinal), EstandarCQ.APies(contexto.ZSuperior),
+                traslapos, pila,
+                GanchoDe(barraDeLaPosicion), GanchoDe(barraDeLaPosicion), orientacionAbajo, orientacionArriba,
+                limites));
 
             piezas += creada.Piezas;
             if (creada.Aviso is not null) avisosDeBarras.Add(creada.Aviso);
@@ -452,19 +494,24 @@ public static class GeneradorLongitudinal
                 $"{contexto.Marca}: {anillo.Count} barra(s) longitudinal(es) de punta a punta, {piezas} pieza(s) con sus traslapos.");
 
         GenerarMenores(
-            doc, columnaPlan, contexto, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, cacheHost,
-            columnas, filas, insetEsquinas, insetX, insetY, referencia, res);
+            doc, columnaPlan, contexto, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo, formasRechazadas, propios,
+            columnas, filas, insetEsquinas, insetX, insetY, recubrimientoPies, diametroEstribo,
+            barraPorPosicion.GetValueOrDefault(PosicionBarra.CaraX)?.BarNominalDiameter ?? 0,
+            barraPorPosicion.GetValueOrDefault(PosicionBarra.CaraY)?.BarNominalDiameter ?? 0,
+            referencia, res);
     }
 
     /// <summary>
-    /// Grapas y cajas en cada tramo LIBRE aceptado (no dentro de una viga), en
-    /// las mismas posiciones Z que los estribos principales de ese tramo --
-    /// issue #32: William confirmó en la reunión del 4-sep que van "en la
-    /// misma parte donde van los estribos normales", no solo en los extremos
-    /// del tramo (el supuesto anterior, atribuido a un criterio de Luciano,
-    /// quedó descartado). Las posiciones se leen de
-    /// <see cref="ResultadoArmado.PosicionesEstribosPorTramo"/>, que llena
-    /// <see cref="GeneradorArmado"/> al crear cada estribo real.
+    /// Los estribos menores (grapas en C y en S, y cerrados) de cada tramo
+    /// LIBRE aceptado (no dentro de una viga), en cada posición de estribo
+    /// principal -- issue #32: William confirmó el 4-sep que van "en la misma
+    /// parte donde van los estribos normales". Desde el 20-oct no van a la
+    /// MISMA altura sino apilados en el paquete, justo encima o justo debajo
+    /// del principal (docs/planes/2026-10-20-diseno-estribos-menores-visual-y-64.md,
+    /// sección 2): cada pieza va a la altura de su nivel en
+    /// <see cref="ResultadoArmado.PaquetePorTramo"/>, respecto de las
+    /// posiciones del principal en <see cref="ResultadoArmado.PosicionesEstribosPorTramo"/>.
+    /// Formas y ganchos propios del cuadro (#64), con los del modelo de respaldo.
     /// </summary>
     private static void GenerarMenores(
         Document doc,
@@ -475,261 +522,301 @@ public static class GeneradorLongitudinal
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
         HashSet<ElementId> formasRechazadas,
-        Dictionary<ElementId, (CurveLoop, double)> cacheHost,
+        TiposPropios propios,
         int columnas,
         int filas,
         double insetEsquinas,
         double insetX,
         double insetY,
+        double recubrimiento,
+        double diametroEstribo,
+        double diametroCaraX,
+        double diametroCaraY,
         FootprintHost referencia,
         ResultadoArmado res)
     {
-        if (cfg.GrapasFila.Count == 0 && cfg.GrapasColumna.Count == 0 && cfg.Cajas.Count == 0) return;
+        List<EstriboMenor> piezas = cfg.MenoresParaGenerar();
+        if (piezas.Count == 0) return;
 
-        barrasPorNombre.TryGetValue(cfg.TipoBarraCaraXNombre ?? "", out RebarBarType? barraCaraX);
-        barrasPorNombre.TryGetValue(cfg.TipoBarraCaraYNombre ?? "", out RebarBarType? barraCaraY);
-        // Solo de RESPALDO: grapas y cajas se hacen con la barra del ESTRIBO
-        // del tramo (ver más abajo). Esta barra longitudinal era la que se usaba
-        // hasta el 10-sep y queda para el caso de que el tramo no tenga un tipo
-        // de barra de estribo válido.
-        RebarBarType? barraMenoresRespaldo = barraCaraX ?? barraCaraY;
+        // Una pieza que no se puede crear falla igual en todos los tramos de la
+        // columna, con el mismo texto: al final se deja cada aviso una sola vez.
+        int avisosAntes = res.Avisos.Count;
 
-        if (barraCaraX is null && cfg.GrapasColumna.Count > 0)
-            res.Avisos.Add($"{contexto.Marca}: sin tipo de barra de cara X válido, no se generan grapas de columna.");
-        if (barraCaraY is null && cfg.GrapasFila.Count > 0)
-            res.Avisos.Add($"{contexto.Marca}: sin tipo de barra de cara Y válido, no se generan grapas de fila.");
+        // Los avisos que se repetirían en cada tramo (o en cada columna, para
+        // lo que es de la corrida entera) salen una sola vez.
+        var avisos = new HashSet<string>();
+        void Avisar(string aviso)
+        {
+            if (avisos.Add(aviso) && !res.Avisos.Contains(aviso)) res.Avisos.Add(aviso);
+        }
 
+        // Prioridad caja-sobre-grapa: una grapa dentro de un cerrado de su
+        // mismo eje no se genera (confirmado por Luciano; el panel la muestra
+        // en gris). El paquete ya la dejó afuera, así que acá no aparece.
+        barrasPorNombre.TryGetValue(cfg.TipoBarraEsquinasNombre ?? "", out RebarBarType? barraRespaldo);
+
+        TiposPropios.Pieza<RebarHookType> ganchoCajaPropio = propios.GanchoEstribo();
+        TiposPropios.Pieza<RebarHookType> ganchoGrapaPropio = propios.GanchoGrapa();
+        if (ganchoCajaPropio.Aviso is not null) Avisar($"Estribos menores: {ganchoCajaPropio.Aviso}; las cajas usan el gancho del tramo.");
+        if (ganchoGrapaPropio.Aviso is not null) Avisar($"Estribos menores: {ganchoGrapaPropio.Aviso}; las grapas usan un gancho del modelo.");
+
+        RebarShape? FormaGrapa(FormaMenor forma)
+        {
+            TiposPropios.Pieza<RebarShape> propia = propios.FormaGrapa(forma);
+            if (propia.Aviso is not null) Avisar($"Estribos menores: {propia.Aviso}; se usa la forma de grapa del modelo.");
+            return propia.Tipo ?? GeometriaSeccion.BuscarFormaGrapa(doc);
+        }
+
+        // Dónde queda REALMENTE el gancho de una grapa se mide una vez por
+        // barra y gancho (ver MedirCorreccionDeGrapa): no depende del tramo ni
+        // de si es C o S (diagnóstico del 20-oct: misma geometría de gancho).
+        // Qué gancho usan las grapas de cada barra y eje, y su corrección:
+        // primero dobladas como el estribo (Luciano, 20-oct); si Revit no las
+        // acepta, con el 180° del cuadro.
+        var juegos = new Dictionary<(ElementId Barra, EjeCaja Eje), (bool Estribo, RebarHookType Gancho, (double Axial, double Lateral) Correccion)>();
+        TiposPropios.Pieza<RebarHookType> ganchoGrapaEstribo = propios.GanchoGrapaEstribo();
+
+        // Una pieza que falla en un tramo falla igual en todas sus alturas: se
+        // deja de intentar en ese tramo, para no repetir el aviso por altura.
         int creadas = 0;
-
-        // Prioridad caja-sobre-gancho: si una fila/columna con grapa tildada
-        // también queda cubierta por una caja (rango fusionado), gana la
-        // caja y la grapa no se genera ahí -- confirmado por Luciano, mismo
-        // criterio que aplica VentanaEstribosMenores en la previsualización.
-        bool Tapada(EjeCaja eje, int indice) =>
-            cfg.Cajas.Any(c => c.Eje == eje && indice >= c.Desde && indice <= c.Hasta);
-
-        List<int> grapasFila = cfg.GrapasFila
-            .Where(f => f < filas && !Tapada(EjeCaja.Fila, f))
-            .ToList();
-        List<int> grapasColumna = cfg.GrapasColumna
-            .Where(c => c < columnas && !Tapada(EjeCaja.Columna, c))
-            .ToList();
 
         for (int i = 0; i < contexto.Tramos.Count && i < columnaPlan.Tramos.Count; i++)
         {
             if (columnaPlan.Tramos[i] is not ConfigTramo cfgTramo) continue;
 
             Tramo tramo = contexto.Tramos[i];
-            if (tramo.Tipo == TipoTramo.DentroDeViga) continue;
+            // Ni en los nudos ni contra la zapata (Luciano, 20-oct).
+            if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata) continue;
             if (tramo.IdElementoHost is null) continue;
             if (!long.TryParse(tramo.IdElementoHost, out long idHost) ||
                 doc.GetElement(new ElementId(idHost)) is not FamilyInstance host) continue;
 
-            // El gancho del propio tramo -- no hay un campo de gancho propio
-            // para grapas/cajas todavía (ver comentario del archivo).
-            if (string.IsNullOrEmpty(cfgTramo.TipoGanchoNombre) ||
-                !ganchosPorNombre.TryGetValue(cfgTramo.TipoGanchoNombre, out RebarHookType? gancho))
+            // Sin estribos principales registrados (GeneradorArmado omitió el
+            // tramo por algún motivo, ya avisado) no hay dónde poner los menores.
+            var clave = (tramo.IdElementoHost, tramo.Indice);
+            if (!res.PosicionesEstribosPorTramo.TryGetValue(clave, out List<double>? posicionesZ) || posicionesZ.Count == 0 ||
+                !res.PaquetePorTramo.TryGetValue(clave, out PaqueteEstribos.Paquete? paquete))
                 continue;
 
-            // Sin estribos principales registrados en este tramo (por ejemplo,
-            // GeneradorArmado lo omitió por algún motivo), no hay dónde poner
-            // los menores -- issue #32, ya no se calcula un zInf/zSup propio.
-            if (!res.PosicionesEstribosPorTramo.TryGetValue((tramo.IdElementoHost, tramo.Indice), out List<double>? posicionesZ) ||
-                posicionesZ.Count == 0)
+            // Paquetes que se pisarían (separación más chica que el alto del
+            // paquete): ese tramo va sin menores; los principales quedan.
+            List<double> ordenadas = posicionesZ.OrderBy(z => z).ToList();
+            double separacionMinima = ordenadas.Zip(ordenadas.Skip(1), (a, b) => b - a).DefaultIfEmpty(double.MaxValue).Min();
+            if (separacionMinima < EstandarCQ.APies(paquete.Alto) - Tolerancia)
+            {
+                res.Avisos.Add(
+                    $"{contexto.Marca}: tramo {tramo.Indice}: el paquete de estribos menores mide {paquete.Alto * 100:0.#} cm " +
+                    $"y la separación es de {GeometriaSeccion.Metros(separacionMinima) * 100:0.#} cm; se omiten los estribos menores de este tramo.");
                 continue;
+            }
 
-            // Grapas y cajas se ubican contra la zona común de la columna, la
-            // misma que usan las barras longitudinales que conectan -- no
-            // contra la huella de este elemento, que puede ser más ancho.
-            (double xMin, double xMax, double yMin, double yMax) =
-                (referencia.XMin, referencia.XMax, referencia.YMin, referencia.YMax);
-
-            // La geometría en planta de grapas y cajas es la MISMA en todas las
-            // alturas de estribo de este tramo, así que el gancho se resuelve
-            // una sola vez acá afuera. Antes se reintentaba (y se fallaba) una
-            // vez por altura: una sola caja imposible daba 17 avisos idénticos.
-            // Gancho propio de los menores para las CAJAS (lazo cerrado, estilo
-            // de estribo, como el principal).
-            RebarHookType ganchoMenores = GanchoAMedidaParaMenores(doc, gancho) ?? gancho;
-
-            // Grapas y cajas son armadura TRANSVERSAL: van con el tipo de barra
-            // del ESTRIBO del tramo (típicamente #3), no con el de la barra
-            // longitudinal de cara (#5, #6...), que es lo que se usaba hasta el
-            // 10-sep. Toda la geometría del gancho -- radio de doblado y
-            // extensión recta -- es proporcional al diámetro, así que una grapa
-            // hecha con la barra longitudinal salía con un gancho del doble de
-            // tamaño que la del modelo de la empresa, que es #3. Decidido con
-            // el usuario, 10-sep.
-            RebarBarType? barraEstriboTramo = null;
+            // Grapas y cajas son armadura TRANSVERSAL: por defecto van con la
+            // barra del ESTRIBO del tramo (10-sep); cada pieza puede tener la suya.
+            RebarBarType? barraEstribo = null;
             if (!string.IsNullOrEmpty(cfgTramo.TipoBarraNombre))
-                barrasPorNombre.TryGetValue(cfgTramo.TipoBarraNombre, out barraEstriboTramo);
-
-            RebarBarType? barraMenores = barraEstriboTramo ?? barraMenoresRespaldo;
-            if (barraMenores is null)
+                barrasPorNombre.TryGetValue(cfgTramo.TipoBarraNombre, out barraEstribo);
+            barraEstribo ??= barraRespaldo;
+            if (barraEstribo is null)
             {
                 res.Avisos.Add(
-                    $"{contexto.Marca}: el tramo {tramo.Indice + 1} no tiene ningún tipo de barra válido " +
-                    "para grapas ni cajas; se omiten sus estribos menores.");
+                    $"{contexto.Marca}: el tramo {tramo.Indice} no tiene ningún tipo de barra válido para estribos menores; se omiten.");
                 continue;
             }
 
-            if (barraEstriboTramo is null)
-                res.Avisos.Add(
-                    $"{contexto.Marca}: el tramo {tramo.Indice + 1} no tiene un tipo de barra de estribo válido; " +
-                    $"sus grapas y cajas se generan con «{barraMenores.Name}», la barra longitudinal de cara.");
+            // El gancho configurado en el tramo: solo de respaldo de los propios.
+            RebarHookType? ganchoTramo = null;
+            if (!string.IsNullOrEmpty(cfgTramo.TipoGanchoNombre))
+                ganchosPorNombre.TryGetValue(cfgTramo.TipoGanchoNombre, out ganchoTramo);
+            RebarHookType? ganchoCaja = ganchoCajaPropio.Tipo ?? ganchoTramo;
+            RebarHookType? ganchoGrapa = ganchoGrapaPropio.Tipo ?? GeometriaSeccion.BuscarGanchoGrapa(doc) ?? ganchoTramo;
 
-            RebarBarType? barraCaja = barraMenores;
+            // Grapas y cajas contra la zona común de la columna, la misma que
+            // usan las barras longitudinales que conectan.
+            (double xMin, double xMax, double yMin, double yMax) = (referencia.XMin, referencia.XMax, referencia.YMin, referencia.YMax);
+            double z0 = ordenadas[0];
 
-            // Las GRAPAS llevan otro gancho: 180° con estilo Standard, medido
-            // contra el modelo de referencia de la empresa. Los 180° dan la
-            // vuelta completa alrededor de la longitudinal -- por eso la agarran
-            // "por detrás", cosa que un gancho de tirante de 135° no hace.
-            // El largo del gancho NO se toca: un gancho de 180° tiene un arco de
-            // semicírculo obligatorio que, con el diámetro interior mínimo de
-            // 4db, ya mide solo él ~7,5 cm en una barra #3 -- más el tramo recto
-            // mínimo de 6,5 cm da un piso real de ~14 cm. Intentar fijarlo más
-            // corto (5,4 cm por proporción, después 6,5 cm por el mínimo
-            // normativo) hizo que Revit contestara "Can't solve Rebar Shape" en
-            // todas las grapas. El gancho de la empresa mide 12,7 cm, o sea que
-            // ya está en ese piso: no hay margen para achicarlo.
-            RebarHookType? ganchoDe180 = GeometriaSeccion.BuscarGanchoGrapa(doc);
-            RebarHookType ganchoGrapa = ganchoDe180 ?? ganchoMenores;
-            if (ganchoDe180 is null)
-                res.Avisos.Add(
-                    $"{contexto.Marca}: el documento no tiene ningún gancho de 180° con estilo Standard; " +
-                    $"las grapas salen con «{ganchoGrapa.Name}», que no abraza la barra longitudinal igual.");
-
-            RebarHookType? ganchoGrapaFila = barraCaraY is null ? null : ganchoGrapa;
-            RebarHookType? ganchoGrapaColumna = barraCaraX is null ? null : ganchoGrapa;
-
-            // Dónde queda REALMENTE el gancho: se mide una sola vez por tramo
-            // contra Revit, en vez de calcular el radio de doblado con una
-            // fórmula (ver MedirCorreccionDeGrapa). La corrección es la misma
-            // para todas las grapas del tramo: comparten barra y gancho.
-            (double Axial, double Lateral) correccion = (0, 0);
-            XYZ? pruebaDesde = null, pruebaHasta = null;
-            double zPrueba = posicionesZ[0];
-            var centroPrueba = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, zPrueba);
-
-            if (barraCaraY is not null && grapasFila.Count > 0)
+            foreach (PaqueteEstribos.NivelPieza nivel in paquete.Piezas)
             {
-                double yPrueba = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, grapasFila[0]);
-                pruebaDesde = new XYZ(xMin + insetY, yPrueba, zPrueba);
-                pruebaHasta = new XYZ(xMax - insetY, yPrueba, zPrueba);
-            }
-            else if (barraCaraX is not null && grapasColumna.Count > 0)
-            {
-                double xPrueba = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, grapasColumna[0]);
-                pruebaDesde = new XYZ(xPrueba, yMin + insetX, zPrueba);
-                pruebaHasta = new XYZ(xPrueba, yMax - insetX, zPrueba);
-            }
+                EstriboMenor pieza = nivel.Pieza;
+                RebarBarType barra = BarraDePieza(pieza, barraEstribo, barrasPorNombre, out string? avisoBarra);
+                if (avisoBarra is not null) Avisar($"{contexto.Marca}: {avisoBarra}");
 
-            if (pruebaDesde is not null && pruebaHasta is not null)
-                correccion = MedirCorreccionDeGrapa(
-                    doc, host, barraMenores, ganchoGrapa, pruebaDesde, pruebaHasta,
-                    centroPrueba, contexto.Marca, res) ?? (0, 0);
+                // La altura de la pieza respecto del eje del principal.
+                double corrimiento = EstandarCQ.APies(nivel.Desplazamiento - paquete.DesplazamientoPrincipal);
+                CuadroVarillas.Varilla? varilla = EstandarCQ.Buscar(barra);
 
-            // La caja abarca su rango sobre su propio eje y cruza de extremo a
-            // extremo en el perpendicular (a la altura de las barras de esquina).
-            var cajas = new List<(double X1, double X2, double Y1, double Y2, RebarHookType? Gancho)>();
-            if (barraCaja is not null)
-            {
-                foreach (CajaMenor caja in cfg.Cajas)
+                if (pieza.Forma == FormaMenor.Cerrado)
                 {
-                    int posiciones = caja.Eje == EjeCaja.Fila ? filas : columnas;
-                    if (caja.Hasta >= posiciones) continue;
+                    if (ganchoCaja is not null && ganchoCaja == ganchoCajaPropio.Tipo && varilla?.GanchoEstribo135 is { } e135 &&
+                        propios.AjustarExtension(barra, ganchoCaja, e135) is string avisoAjuste)
+                        Avisar($"{contexto.Marca}: {avisoAjuste}");
 
-                    double x1, x2, y1, y2;
-                    if (caja.Eje == EjeCaja.Fila)
+                    // El cerrado ABRAZA las barras por fuera (Luciano, 20-oct):
+                    // en su eje, sus lados tocan por dentro el lado de afuera de
+                    // las barras del rango, con lugar para la pieza corrida de
+                    // un traslapo; en el perpendicular va hasta donde va el
+                    // estribo principal, abrazando también las de las caras.
+                    // Son las medidas por FUERA (ScaleToBox, medido el 20-oct:
+                    // una caja pedida de 18,5 cm sale con CQ A = 0,19).
+                    double grueso = Math.Max(diametroEstribo, barraEstribo.BarNominalDiameter);
+                    double borde = recubrimiento + Math.Max(0, grueso - barra.BarNominalDiameter);
+                    (double desdeEje, double hastaEje) = pieza.Eje == EjeCaja.Fila
+                        ? EstriboMenor.LadosQueAbrazan(
+                            PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Desde),
+                            PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Hasta),
+                            diametroCaraY, barra.BarNominalDiameter)
+                        : EstriboMenor.LadosQueAbrazan(
+                            PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Desde),
+                            PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Hasta),
+                            diametroCaraX, barra.BarNominalDiameter);
+                    (double x1, double x2, double y1, double y2) = pieza.Eje == EjeCaja.Fila
+                        ? (xMin + borde, xMax - borde, Math.Max(desdeEje, yMin + borde), Math.Min(hastaEje, yMax - borde))
+                        : (Math.Max(desdeEje, xMin + borde), Math.Min(hastaEje, xMax - borde), yMin + borde, yMax - borde);
+
+                    foreach (double z in ordenadas)
                     {
-                        x1 = xMin + insetEsquinas;
-                        x2 = xMax - insetEsquinas;
-                        y1 = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, caja.Desde);
-                        y2 = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, caja.Hasta);
-                    }
-                    else
-                    {
-                        x1 = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, caja.Desde);
-                        x2 = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, caja.Hasta);
-                        y1 = yMin + insetEsquinas;
-                        y2 = yMax - insetEsquinas;
+                        int antes = creadas;
+                        CrearCaja(doc, host, barra, ganchoCaja, formaEstribo, formasRechazadas, x1, x2, y1, y2, z + corrimiento,
+                            contexto.Marca, res, ref creadas);
+                        if (creadas == antes) break;
                     }
 
-                    // El gancho de la caja cierra sobre su lado corto: ahí es
-                    // donde tiene que entrar. Se prefiere el gancho a medida y,
-                    // si ni ese entra, el más chico del modelo que sí.
-                    double corto = Math.Min(Math.Abs(x2 - x1), Math.Abs(y2 - y1));
-                    RebarHookType? ganchoDeEstaCaja = LargoDeGancho(barraCaja, ganchoMenores) <= corto
-                        ? ganchoMenores
-                        : GanchoQueEntra(doc, barraCaja, gancho, corto);
-
-                    cajas.Add((x1, x2, y1, y2, ganchoDeEstaCaja));
-                }
-            }
-
-            foreach (double z in posicionesZ)
-            {
-                var centro = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, z);
-
-                // Los extremos apuntan al EJE de la barra longitudinal que la
-                // grapa tiene que enganchar, así que usan el inset de ESA barra
-                // de cara (insetX/insetY, los mismos con los que se colocaron
-                // las longitudinales), no el de la propia grapa. La corrección
-                // medida se aplica encima, dentro de IntentarGrapa.
-                if (barraCaraY is not null && ganchoGrapaFila is not null)
-                {
-                    foreach (int fila in grapasFila)
-                    {
-                        double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, fila);
-                        CrearGrapa(doc, host, barraMenores, ganchoGrapaFila, gancho,
-                            new XYZ(xMin + insetY, y, z), new XYZ(xMax - insetY, y, z),
-                            centro, correccion, contexto.Marca, res, ref creadas);
-                    }
+                    continue;
                 }
 
-                if (barraCaraX is not null && ganchoGrapaColumna is not null)
+                // Con los ganchos, la grapa llega hasta la cara EXTERIOR del
+                // estribo (el recubrimiento) y nunca más afuera: así están las
+                // grapas del modelo de referencia que Luciano dio por buenas
+                // (20-oct, medido con el MCP de Revit). La línea va por el
+                // MEDIO de las dos posiciones que puede tener la barra que
+                // engancha: en un traslapo la pieza de arriba queda un
+                // diámetro hacia −Y (caras izquierda/derecha) o −X (caras de
+                // abajo/arriba) de la de abajo, que va en la posición teórica
+                // -- medido con el MCP el 20-oct en dos columnas --, y el
+                // gancho tiene que pasar sobre las dos.
+                // La corrección medida se aplica encima, en IntentarGrapa.
+                (XYZ desde, XYZ hasta) Extremos(double z)
                 {
-                    foreach (int columna in grapasColumna)
+                    if (pieza.Eje == EjeCaja.Fila)
                     {
-                        double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, columna);
-                        CrearGrapa(doc, host, barraMenores, ganchoGrapaColumna, gancho,
-                            new XYZ(x, yMin + insetX, z), new XYZ(x, yMax - insetX, z),
-                            centro, correccion, contexto.Marca, res, ref creadas);
+                        double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Desde) - diametroCaraY / 2;
+                        return (new XYZ(xMin + recubrimiento, y, z), new XYZ(xMax - recubrimiento, y, z));
                     }
+
+                    double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Desde) - diametroCaraX / 2;
+                    return (new XYZ(x, yMin + recubrimiento, z), new XYZ(x, yMax - recubrimiento, z));
                 }
 
-                // Si una caja falla, su geometría es idéntica en todas las
-                // alturas de este tramo, así que no tiene sentido reintentarla:
-                // se saca de la lista y el aviso sale una sola vez, no una por
-                // altura de estribo.
-                for (int ic = cajas.Count - 1; ic >= 0; ic--)
+                // Del eje de la punta del gancho al eje de la barra enganchada.
+                double diametroEnganchada = pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX;
+                double profundidadBarra = Math.Max(diametroEstribo, barraEstribo.BarNominalDiameter) +
+                    diametroEnganchada / 2 - barra.BarNominalDiameter / 2;
+
+                var centroPrueba = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, z0 + corrimiento);
+                var claveJuego = (barra.Id, pieza.Eje);
+                if (!juegos.TryGetValue(claveJuego, out var juego))
                 {
-                    (double x1, double x2, double y1, double y2, RebarHookType? ganchoCaja) = cajas[ic];
+                    (XYZ pd, XYZ ph) = Extremos(z0 + corrimiento);
+                    TiposPropios.Pieza<RebarShape> formaEstriboC = propios.FormaGrapaEstribo(FormaMenor.GrapaC);
+                    string? motivoEstribo = ganchoGrapaEstribo.Aviso ?? formaEstriboC.Aviso;
+                    bool listo = false;
+                    if (ganchoGrapaEstribo.Tipo is { } gE && formaEstriboC.Tipo is { } fE)
+                    {
+                        if (varilla is not null && propios.AjustarExtension(barra, gE, varilla.Gancho180Cuadro) is string avisoE)
+                            Avisar($"{contexto.Marca}: {avisoE}");
+                        if (MedirCorreccionDeGrapa(doc, host, barra, gE, fE, pd, ph, centroPrueba, profundidadBarra,
+                                contexto.Marca, res, out string motivoE) is { } medida)
+                        {
+                            juego = (true, gE, medida);
+                            listo = true;
+                        }
+                        else motivoEstribo = motivoE;
+                    }
+
+                    if (!listo)
+                    {
+                        Avisar($"{contexto.Marca}: las grapas dobladas como el estribo no le sirvieron a Revit ({motivoEstribo}); " +
+                               "se usan con el doblez del gancho de 180° del cuadro, que es más grande.");
+                        if (ganchoGrapa is null)
+                        {
+                            Avisar($"{contexto.Marca}: no hay ningún gancho para las grapas; no se generan.");
+                            continue;
+                        }
+
+                        if (ganchoGrapa == ganchoGrapaPropio.Tipo && varilla is not null &&
+                            propios.AjustarExtension(barra, ganchoGrapa, varilla.Gancho180Cuadro) is string avisoGrapa)
+                            Avisar($"{contexto.Marca}: {avisoGrapa}");
+
+                        (double Axial, double Lateral)? medida = MedirCorreccionDeGrapa(doc, host, barra, ganchoGrapa,
+                            FormaGrapa(FormaMenor.GrapaC), pd, ph, centroPrueba, profundidadBarra, contexto.Marca, res, out string motivoC);
+                        if (medida is null)
+                            Avisar($"{contexto.Marca}: no se pudo medir dónde queda el gancho de las grapas ({motivoC}); " +
+                                   "se generan sin corregir y el gancho puede no pasar sobre la barra longitudinal.");
+                        juego = (false, ganchoGrapa, medida ?? (0, 0));
+                    }
+
+                    juegos[claveJuego] = juego;
+                }
+
+                (double Axial, double Lateral) correccion = juego.Correccion;
+                RebarShape? formaGrapa = juego.Estribo
+                    ? propios.FormaGrapaEstribo(pieza.Forma).Tipo
+                    : FormaGrapa(pieza.Forma);
+                foreach (double z in ordenadas)
+                {
+                    (XYZ desde, XYZ hasta) = Extremos(z + corrimiento);
+                    var centro = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, z + corrimiento);
                     int antes = creadas;
-                    CrearCaja(doc, host, barraCaja!, ganchoCaja, formaEstribo, formasRechazadas, x1, x2, y1, y2, z, contexto.Marca, res, ref creadas);
-                    if (creadas == antes) cajas.RemoveAt(ic);
+                    CrearGrapa(doc, host, barra, juego.Gancho, ganchoTramo, formaGrapa, pieza.Forma, pieza.Volteado,
+                        desde, hasta, centro, correccion, contexto.Marca, res, ref creadas);
+                    if (creadas == antes) break;
                 }
             }
         }
+
+        List<string> nuevos = res.Avisos.Skip(avisosAntes).Distinct().ToList();
+        res.Avisos.RemoveRange(avisosAntes, res.Avisos.Count - avisosAntes);
+        res.Avisos.AddRange(nuevos);
 
         if (creadas > 0)
-            res.Detalles.Add($"{contexto.Marca}: {creadas} grapa(s)/caja(s) creada(s).");
+            res.Detalles.Add($"{contexto.Marca}: {creadas} estribo(s) menor(es) creado(s).");
     }
 
-    private static RebarBarType? ResolverBarraOpcional(
-        int cantidad, string? nombre, Dictionary<string, RebarBarType> barrasPorNombre,
-        string etiqueta, string marcaColumna, ResultadoArmado res)
+    /// <summary>
+    /// La barra de un estribo menor: la propia de la pieza, si existe en el
+    /// documento y es apta para estribo según el cuadro (#64); si no, la del
+    /// estribo del tramo ("Igual al estribo"), con aviso cuando la pieza pedía
+    /// otra. La usan también <see cref="GeneradorArmado"/> (para el alto del
+    /// paquete) y este generador, así los dos calculan con la misma barra.
+    /// </summary>
+    internal static RebarBarType BarraDePieza(
+        EstriboMenor pieza, RebarBarType barraEstribo, Dictionary<string, RebarBarType> barrasPorNombre, out string? aviso)
     {
-        if (cantidad <= 0) return null;
+        aviso = null;
+        if (pieza.TipoBarraNombre is not string nombre) return barraEstribo;
 
-        if (string.IsNullOrEmpty(nombre) || !barrasPorNombre.TryGetValue(nombre, out RebarBarType? barra))
+        if (!barrasPorNombre.TryGetValue(nombre, out RebarBarType? propia))
         {
-            res.Avisos.Add($"{marcaColumna}: el tipo de barra de {etiqueta} «{nombre}» no existe en el documento; se omiten esas barras.");
-            return null;
+            aviso = $"la barra «{nombre}» de un estribo menor no existe en este modelo; se usa «{barraEstribo.Name}», la del estribo.";
+            return barraEstribo;
         }
 
-        return barra;
+        (AptitudEstribo aptitud, string? motivo) = CuadroVarillas.EvaluarParaEstribo(EstandarCQ.ComoTipoBarra(propia));
+        if (aptitud == AptitudEstribo.NoApta)
+        {
+            aviso = $"la barra «{nombre}» de un estribo menor no es apta según el cuadro ({motivo}); se usa «{barraEstribo.Name}».";
+            return barraEstribo;
+        }
+
+        return propia;
     }
+
+    private static string RotuloPosicion(PosicionBarra posicion) => posicion switch
+    {
+        PosicionBarra.Esquina => "las esquinas",
+        PosicionBarra.CaraX => "la cara X",
+        _ => "la cara Y",
+    };
 
     /// <summary>
     /// Agrupa TODOS los tramos físicos de la columna (aceptados o no) por
@@ -765,106 +852,12 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Las alturas (en metros) donde traslapa una varilla de un grupo par o
-    /// impar: solo donde la longitud comercial de la barra
-    /// (<paramref name="longitudComercialMetros"/>) obliga a cortar, y solo a
-    /// la mitad de un "nivel" (issue #7), alternando niveles pares/impares
-    /// según <paramref name="esParGrupo"/> para que dos barras vecinas nunca
-    /// traslapen a la misma altura.
-    ///
-    /// Ya no hay cortes obligados por límite de columna: una misma varilla
-    /// puede recorrer toda la pila (issue #41, medido contra Revit real el
-    /// 7-oct). No depende del tipo de barra ni de su posición X/Y, por eso
-    /// <see cref="GenerarColumna"/> lo calcula una vez por grupo.
-    /// </summary>
-    private static List<double> PlanificarAlturas(
-        bool esParGrupo,
-        List<(int Ordinal, double ZInf, double ZSup)> niveles,
-        double zInicioTotalMetros,
-        double zFinTotalMetros,
-        double longitudComercialMetros,
-        string marcaColumna,
-        ResultadoArmado res)
-    {
-        List<double> candidatos = niveles
-            .Where(n => (n.Ordinal % 2 == 0) == esParGrupo)
-            .Select(n => RedondearArriba10Cm((n.ZInf + n.ZSup) / 2))
-            .Where(z => z > zInicioTotalMetros + Tolerancia && z < zFinTotalMetros - Tolerancia)
-            .OrderBy(z => z)
-            .ToList();
-
-        return PlanificarSplicesReales(
-            candidatos, zInicioTotalMetros, zFinTotalMetros, longitudComercialMetros, marcaColumna, res);
-    }
-
-    /// <summary>
-    /// De los candidatos de traslapo de UN grupo (par o impar), elige el
-    /// mínimo necesario para que ningún tramo entre dos traslapos reales
-    /// consecutivos (ni el primero desde el arranque, ni el último hasta el
-    /// remate) supere <paramref name="longitudComercialMetros"/> -- avanza
-    /// siempre al candidato más lejano todavía alcanzable (voraz: minimiza
-    /// la cantidad de traslapos).
-    /// </summary>
-    private static List<double> PlanificarSplicesReales(
-        List<double> candidatosOrdenados, double zInicio, double zFin,
-        double longitudComercialMetros, string marcaColumna, ResultadoArmado res)
-    {
-        var reales = new List<double>();
-        double ultimoCorte = zInicio;
-        int i = 0;
-
-        while (i < candidatosOrdenados.Count)
-        {
-            // Lo que queda hasta el remate ya entra en una barra comercial:
-            // no hace falta ningún traslapo más. Sin este corte se traslapaba
-            // siempre al menos una vez, aunque la varilla entera cupiera en
-            // una sola barra (visto el 8-oct: 7,9 m con barra de 12 m).
-            if (zFin - ultimoCorte <= longitudComercialMetros + Tolerancia) break;
-
-            double? mejor = null;
-            while (i < candidatosOrdenados.Count && candidatosOrdenados[i] - ultimoCorte <= longitudComercialMetros)
-            {
-                mejor = candidatosOrdenados[i];
-                i++;
-            }
-
-            if (mejor is null)
-            {
-                // El próximo nivel disponible para este grupo ya se pasa de
-                // la barra comercial desde el último traslapo -- se usa
-                // igual (mejor eso que dejar un tramo sin ningún traslapo
-                // donde hacía falta), pero queda avisado.
-                res.Avisos.Add(
-                    $"{marcaColumna}: no hay un nivel disponible para el traslapo intercalado dentro de los " +
-                    $"{longitudComercialMetros:0.#} m de barra comercial (el siguiente queda a " +
-                    $"{candidatosOrdenados[i] - ultimoCorte:0.##} m); se traslapa igual ahí.");
-                mejor = candidatosOrdenados[i];
-                i++;
-            }
-
-            reales.Add(mejor.Value);
-            ultimoCorte = mejor.Value;
-        }
-
-        if (zFin - ultimoCorte > longitudComercialMetros + Tolerancia)
-            res.Avisos.Add(
-                $"{marcaColumna}: el tramo final ({zFin - ultimoCorte:0.#} m) supera la barra comercial de " +
-                $"{longitudComercialMetros:0.#} m y no queda ningún nivel disponible para traslaparlo intercalado.");
-
-        return reales;
-    }
-
-    /// <summary>El punto de traslape real se redondea hacia arriba a un múltiplo de 10 cm (issue #7).</summary>
-    private static double RedondearArriba10Cm(double metros) =>
-        Math.Ceiling(metros / 0.10 - Tolerancia) * 0.10;
-
-    /// <summary>
     /// Reparte <paramref name="n"/> posiciones parejo entre los dos extremos,
     /// sin pisarlos -- mismo criterio que <c>VentanaEstribosMenores.X/Y</c>
     /// (fila/columna 0 es la más cercana a la esquina de índice bajo).
     /// </summary>
     private static double PosicionIntermedia(double desde, double hasta, int n, int indice) =>
-        desde + (indice + 1) * (hasta - desde) / (n + 1);
+        SeccionPlanta.PosicionIntermedia(desde, hasta, n, indice);
 
     /// <summary>
     /// Hacia dónde tiene que doblar el gancho para que mire al CENTRO de la
@@ -927,17 +920,18 @@ public static class GeneradorLongitudinal
     /// </summary>
     private static void CrearGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho, RebarHookType? ganchoRespaldo,
+        RebarShape? formaGrapa, FormaMenor forma, bool volteado,
         XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion,
         string marcaColumna, ResultadoArmado res, ref int creadas)
     {
-        if (IntentarGrapa(doc, host, barra, gancho, desde, hasta, centroSeccion, correccion, out string motivo) is not null)
+        if (IntentarGrapa(doc, host, barra, gancho, formaGrapa, forma, volteado, desde, hasta, centroSeccion, correccion, out string motivo) is not null)
         {
             creadas++;
             return;
         }
 
         if (ganchoRespaldo is not null && ganchoRespaldo.Id != gancho.Id &&
-            IntentarGrapa(doc, host, barra, ganchoRespaldo, desde, hasta, centroSeccion, correccion, out _) is not null)
+            IntentarGrapa(doc, host, barra, ganchoRespaldo, formaGrapa, forma, volteado, desde, hasta, centroSeccion, correccion, out _) is not null)
         {
             res.Avisos.Add(
                 $"{marcaColumna}: el gancho «{gancho.Name}» no le sirvió a Revit para una grapa ({motivo}); " +
@@ -950,20 +944,16 @@ public static class GeneradorLongitudinal
         try { doc.Regenerate(); } catch { /* best-effort */ }
     }
 
+    /// <param name="forma">C: los dos ganchos hacia el mismo lado; S: uno para cada lado.</param>
+    /// <param name="volteado">Invierte los dos ganchos (botón "Voltear" del panel).</param>
     private static Rebar? IntentarGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho,
+        RebarShape? formaGrapa, FormaMenor forma, bool volteado,
         XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion, out string motivo)
     {
         motivo = "";
         try
         {
-            // Los puntos que entran son los EJES de las dos barras
-            // longitudinales que la grapa engancha. La corrección medida los
-            // corre para que esos ejes queden en el MEDIO del gancho y no en la
-            // punta del tramo recto -- ver MedirCorreccionDeGrapa.
-            (desde, hasta) = AplicarCorreccion(desde, hasta, centroSeccion, correccion);
-
-            Line linea = Line.CreateBound(desde, hasta);
 
             // Los dos ganchos tienen que mirar hacia el CENTRO de la sección
             // (pedido del usuario sobre el modelo de referencia, 10-sep).
@@ -988,14 +978,36 @@ public static class GeneradorLongitudinal
             // núcleo: ese sí mira al centro (criterio del 10-sep).
             XYZ direccion = (hasta - desde).Normalize();
             XYZ haciaLaIzquierda = XYZ.BasisZ.CrossProduct(direccion);
-            bool haciaElCentro = Math.Abs(gancho.HookAngle - Math.PI) > 1e-3;
+            // Desde el 20-oct TODOS los ganchos se abren hacia el centro: la
+            // línea va sobre las barras (no un radio más adentro) y el 180°
+            // abierto hacia afuera se salía del estribo por el costado
+            // (medido con el MCP en la columna 781265). Lo de arriba sobre el
+            // 180° queda como historia.
+            const bool haciaElCentro = true;
             bool izquierdaMiraAlCentro = haciaLaIzquierda.DotProduct(centroSeccion - desde) > 0;
             RebarTerminationOrientation orientacion =
                 izquierdaMiraAlCentro == haciaElCentro
                     ? RebarTerminationOrientation.Left
                     : RebarTerminationOrientation.Right;
 
-            var curvas = new List<Curve> { linea };
+            // Esa es la C de siempre. La S y el volteo cambian la orientación de
+            // cada punta por separado: Revit la respeta tal cual y no cambia la
+            // forma (diagnóstico del 20-oct, docs/planes/2026-10-20-diagnostico-grapa-s.md).
+            RebarTerminationOrientation otra = orientacion == RebarTerminationOrientation.Left
+                ? RebarTerminationOrientation.Right
+                : RebarTerminationOrientation.Left;
+            RebarTerminationOrientation orientacionInicio = volteado ? otra : orientacion;
+            RebarTerminationOrientation orientacionFin = (forma == FormaMenor.GrapaS) != volteado ? otra : orientacion;
+
+            // Los puntos que entran son donde tiene que terminar la grapa (la
+            // cara exterior del estribo), sobre la línea de las barras. La
+            // corrección medida (con la C de siempre) deja la punta del gancho
+            // ahí y el tramo recto sobre esa línea; una punta cuyo gancho gira
+            // al revés se corre al revés.
+            (desde, hasta) = AplicarCorreccion(desde, hasta, centroSeccion, correccion,
+                orientacionInicio == orientacion ? 1 : -1, orientacionFin == orientacion ? 1 : -1);
+
+            var curvas = new List<Curve> { Line.CreateBound(desde, hasta) };
 
             // Camino preferido: la forma NATIVA de un segmento con estilo
             // Standard, igual que la grapa del modelo de referencia. Antes se
@@ -1005,14 +1017,12 @@ public static class GeneradorLongitudinal
             // deformes (también en columnas de 40x40: no era el tamaño de la
             // sección). Con CreateFromCurvesAndShape la posición la damos
             // nosotros y la geometría la resuelve la definición de la forma.
-            RebarShape? formaGrapa = GeometriaSeccion.BuscarFormaGrapa(doc);
-
             using var terminaciones = new BarTerminationsData(doc)
             {
                 HookTypeIdAtStart = gancho.Id,
                 HookTypeIdAtEnd = gancho.Id,
-                TerminationOrientationAtStart = orientacion,
-                TerminationOrientationAtEnd = orientacion,
+                TerminationOrientationAtStart = orientacionInicio,
+                TerminationOrientationAtEnd = orientacionFin,
             };
 
             Rebar? grapa = null;
@@ -1057,12 +1067,12 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Cuánto hay que correr la línea de la grapa para que la barra
-    /// longitudinal quede en el MEDIO del gancho -- el centro del semicírculo
-    /// de 180° -- y no en la punta del tramo recto, que es el punto de
-    /// TANGENCIA del doblez. Hasta el 10-sep la línea terminaba justo en el eje
-    /// de la longitudinal, así que el gancho enroscaba al costado de la barra en
-    /// vez de abrazarla (lo que el usuario dibujó como "se pasa").
+    /// Cuánto hay que correr la línea de la grapa para que la punta de cada
+    /// gancho termine en la cara exterior del estribo y el tramo recto pase
+    /// por la línea de las barras, como en el modelo de referencia que
+    /// Luciano dio por bueno (20-oct). Antes (10-sep a 20-oct) se ponía la
+    /// longitudinal en el MEDIO del gancho: con el doblez de 180° del cuadro
+    /// el gancho se salía del estribo y la S quedaba muy en diagonal.
     ///
     /// No se calcula con una fórmula: se MIDE contra Revit (regla del CLAUDE.md,
     /// y el error que se repitió nueve veces con este mismo gancho). Se crea una
@@ -1077,17 +1087,13 @@ public static class GeneradorLongitudinal
     /// orientaciones de grapa de la sección.
     /// </summary>
     private static (double Axial, double Lateral)? MedirCorreccionDeGrapa(
-        Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho,
-        XYZ desde, XYZ hasta, XYZ centroSeccion, string marcaColumna, ResultadoArmado res)
+        Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho, RebarShape? formaGrapa,
+        XYZ desde, XYZ hasta, XYZ centroSeccion, double profundidadBarra, string marcaColumna, ResultadoArmado res,
+        out string motivo)
     {
-        Rebar? prueba = IntentarGrapa(doc, host, barra, gancho, desde, hasta, centroSeccion, (0, 0), out string motivo);
-        if (prueba is null)
-        {
-            res.Avisos.Add(
-                $"{marcaColumna}: no se pudo medir dónde queda el gancho de las grapas ({motivo}); " +
-                "se generan sin corregir y el gancho puede no abrazar la barra longitudinal.");
-            return null;
-        }
+        Rebar? prueba = IntentarGrapa(doc, host, barra, gancho, formaGrapa, FormaMenor.GrapaC, volteado: false,
+            desde, hasta, centroSeccion, (0, 0), out motivo);
+        if (prueba is null) return null;
 
         try
         {
@@ -1100,31 +1106,37 @@ public static class GeneradorLongitudinal
             Arc? arco = curvas.OfType<Arc>().OrderBy(a => a.Center.DistanceTo(desde)).FirstOrDefault();
             if (arco is null)
             {
-                res.Avisos.Add(
-                    $"{marcaColumna}: la grapa de prueba salió sin ningún arco de gancho, así que no se " +
-                    "puede medir dónde queda; se generan sin corregir.");
+                motivo = "la grapa de prueba salió sin ningún arco de gancho";
                 return null;
             }
 
             XYZ direccion = (hasta - desde).Normalize();
             XYZ haciaElCentro = HaciaElCentro(desde, direccion, centroSeccion);
-            XYZ delta = desde - arco.Center;
 
-            (double axial, double lateral) = (delta.DotProduct(direccion), delta.DotProduct(haciaElCentro));
+            // Axial: cuánto se pasa la punta del gancho (lo más lejano del
+            // arco, por fuera de la barra) de "desde"; positivo = se pasa
+            // hacia afuera, y la línea se acorta eso. Lateral: el centro del
+            // gancho tiene que quedar de costado de la línea pedida (la de las
+            // barras) justo lo que hace falta para que el arco pase sobre
+            // ellas (EstriboMenor.CorrimientoSobreBarra), del lado hacia el
+            // que se abre el gancho.
+            XYZ punta = arco.Center - direccion * (arco.Radius + barra.BarNominalDiameter / 2);
+            double axial = (desde - punta).DotProduct(direccion);
+            double centroMedido = (arco.Center - desde).DotProduct(haciaElCentro);
+            double sobreBarra = EstriboMenor.CorrimientoSobreBarra(arco.Radius, profundidadBarra);
+            double lateral = Math.Sign(centroMedido) * sobreBarra - centroMedido;
 
             res.Detalles.Add(
                 $"{marcaColumna}: gancho de grapa medido en Revit -- radio {GeometriaSeccion.Metros(arco.Radius) * 100:0.0} cm; " +
                 $"la línea se corrige {GeometriaSeccion.Metros(axial) * 100:0.0} cm a lo largo y " +
-                $"{GeometriaSeccion.Metros(lateral) * 100:0.0} cm hacia el centro para que la longitudinal " +
-                "quede en el medio del gancho.");
+                $"{GeometriaSeccion.Metros(lateral) * 100:0.0} cm hacia el centro para que el gancho termine en la " +
+                "cara del estribo y pase sobre las barras.");
 
             return (axial, lateral);
         }
         catch (Exception ex)
         {
-            res.Avisos.Add(
-                $"{marcaColumna}: no se pudo leer la geometría del gancho de la grapa " +
-                $"({GeometriaSeccion.Explicar(ex)}); se generan sin corregir.");
+            motivo = $"no se pudo leer la geometría de la grapa de prueba: {GeometriaSeccion.Explicar(ex)}";
             return null;
         }
         finally
@@ -1140,23 +1152,25 @@ public static class GeneradorLongitudinal
     /// dos ganchos giran para el mismo lado (misma
     /// <see cref="RebarTerminationOrientation"/>, ver <c>IntentarGrapa</c>).
     /// </summary>
+    /// <param name="signoInicio">+1 si el gancho de esa punta gira como en la grapa medida; −1 si gira al revés (S o volteada).</param>
     private static (XYZ Desde, XYZ Hasta) AplicarCorreccion(
-        XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion)
+        XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion, int signoInicio, int signoFin)
     {
         if (Math.Abs(correccion.Axial) < Tolerancia && Math.Abs(correccion.Lateral) < Tolerancia)
             return (desde, hasta);
 
         XYZ direccion = (hasta - desde).Normalize();
         XYZ lateral = HaciaElCentro(desde, direccion, centroSeccion) * correccion.Lateral;
+        XYZ lateralInicio = lateral * signoInicio, lateralFin = lateral * signoFin;
 
         // La corrección axial acorta (o alarga) los DOS extremos. En una sección
         // muy chica podría dejar la grapa de largo cero o invertida, y ahí
         // Line.CreateBound tira excepción: se prefiere la grapa sin corregir.
         if ((hasta - desde).GetLength() - 2 * Math.Abs(correccion.Axial) <= Tolerancia)
-            return (desde + lateral, hasta + lateral);
+            return (desde + lateralInicio, hasta + lateralFin);
 
-        return (desde + direccion * correccion.Axial + lateral,
-                hasta - direccion * correccion.Axial + lateral);
+        return (desde + direccion * correccion.Axial + lateralInicio,
+                hasta - direccion * correccion.Axial + lateralFin);
     }
 
     /// <summary>
@@ -1266,7 +1280,7 @@ public static class GeneradorLongitudinal
             res.Avisos.Add(
                 $"{marcaColumna}: la {Medidas()} es demasiado angosta -- la barra no se puede doblar en un lazo " +
                 $"cerrado de ese alto (diámetro {GeometriaSeccion.Metros(barra.BarNominalDiameter) * 1000:0.#} mm). " +
-                "Esa caja no se genera: elegí casillas que no sean contiguas, o una barra más delgada. " +
+                "Esa caja no se genera: dibuja el estribo cerrado entre barras más separadas, o usa una barra más delgada. " +
                 $"(Revit: {ex.Message})");
             return null;
         }
@@ -1313,89 +1327,10 @@ public static class GeneradorLongitudinal
         return caja;
     }
 
-    /// <summary>
-    /// El gancho más chico del documento que entre en
-    /// <paramref name="espacioDisponible"/> (pies), entre los del MISMO ángulo
-    /// que <paramref name="ganchoDelTramo"/>. Los menores heredaban el gancho
-    /// del estribo principal, dimensionado para el estribo grande, y salían
-    /// desproporcionados (o directamente no entraban en una caja angosta).
-    ///
-    /// El largo sale de <c>RebarBarType.GetHookLength</c>, la API nativa para
-    /// esto -- no de un cálculo propio de la geometría del gancho.
-    ///
-    /// El filtro por ángulo es deliberado: sin él, "el más chico" podría bajar
-    /// un gancho sísmico de 135° a uno de 90°, que es un cambio estructural y
-    /// no estético. Si no hay ninguno del mismo ángulo que entre, devuelve null
-    /// y quien llama decide (hoy: crear sin gancho).
-    /// </summary>
-    private static RebarHookType? GanchoQueEntra(
-        Document doc, RebarBarType barra, RebarHookType ganchoDelTramo, double espacioDisponible)
-    {
-        double anguloDelTramo = ganchoDelTramo.HookAngle;
-
-        return new FilteredElementCollector(doc)
-            .OfClass(typeof(RebarHookType))
-            .Cast<RebarHookType>()
-            .Where(h => Math.Abs(h.HookAngle - anguloDelTramo) < 1e-6)
-            .Select(h => (Gancho: h, Largo: LargoDeGancho(barra, h)))
-            .Where(x => x.Largo is not null && x.Largo.Value <= espacioDisponible)
-            .OrderBy(x => x.Largo!.Value)
-            .Select(x => x.Gancho)
-            .FirstOrDefault();
-    }
-
-    /// <summary>
-    /// Largo del tramo recto del gancho de los menores, como multiplo del
-    /// diametro de la barra. 6 diametros es el gancho sismico estandar; los
-    /// ganchos que traen los modelos suelen estar dimensionados para el
-    /// estribo principal y en una grapa se ven enormes.
-    /// PENDIENTE de confirmar el valor con Carlos (normativa).
-    /// </summary>
-    private const double MultiplicadorGanchoMenores = 6;
-
-    private const string NombreGanchoMenores = "CQEING - gancho de menores";
-
     private static double? LargoDeGancho(RebarBarType barra, RebarHookType gancho)
     {
         try { return barra.GetHookLength(gancho.Id); }
         catch { return null; }
-    }
-
-    /// <summary>
-    /// Un tipo de gancho a medida para las CAJAS, en vez de reusar el del
-    /// estribo principal (que sale desproporcionado) o depender de que el
-    /// modelo tenga cargado uno chico.
-    ///
-    /// Se DUPLICA el gancho del tramo en vez de crear uno de cero con
-    /// <c>RebarHookType.Create</c>: un <c>RebarHookType</c> solo se puede
-    /// aplicar a barras del estilo que declara (<c>RebarHookType.Style</c>), y
-    /// uno creado de cero salía con otro estilo y Revit rechazaba la armadura
-    /// entera -- visto en Revit real, 10-sep. Duplicando, el estilo (y todo lo
-    /// demás) ya viene bien del gancho que el tramo usa hoy sin problemas.
-    ///
-    /// Se crea una sola vez por documento: después se encuentra por nombre,
-    /// validando además el estilo para no reusar uno inservible.
-    /// </summary>
-    private static RebarHookType? GanchoAMedidaParaMenores(Document doc, RebarHookType ganchoDelTramo)
-    {
-        RebarHookType? yaExiste = new FilteredElementCollector(doc)
-            .OfClass(typeof(RebarHookType))
-            .Cast<RebarHookType>()
-            .FirstOrDefault(h => h.Name == NombreGanchoMenores && h.Style == ganchoDelTramo.Style);
-
-        if (yaExiste is not null) return yaExiste;
-
-        try
-        {
-            if (ganchoDelTramo.Duplicate(NombreGanchoMenores) is not RebarHookType nuevo) return null;
-
-            nuevo.StraightLineMultiplier = MultiplicadorGanchoMenores;
-            return nuevo;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private static void Descartar(Document doc, Rebar rebar)

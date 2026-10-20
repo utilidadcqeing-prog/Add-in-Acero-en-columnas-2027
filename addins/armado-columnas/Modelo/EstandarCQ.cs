@@ -22,12 +22,28 @@ public static class EstandarCQ
     /// Busca la varilla del cuadro que corresponde a ese tipo de barra, o null si el
     /// diámetro no es ninguno de los normalizados.
     /// </summary>
+    /// <remarks>
+    /// Un tipo propio ("#4 CQEING") se resuelve por nombre; cualquier otro,
+    /// por diámetro como siempre, para no romper los modelos que siguen
+    /// usando las barras de su plantilla.
+    /// </remarks>
     public static CuadroVarillas.Varilla? Buscar(RebarBarType tipo) =>
-        CuadroVarillas.PorDiametro(DiametroMm(tipo));
+        CuadroVarillas.PorNombrePropio(tipo.Name) ?? CuadroVarillas.PorDiametro(DiametroMm(tipo));
 
     /// <summary>El diámetro nominal del tipo de barra, en milímetros.</summary>
     public static double DiametroMm(RebarBarType tipo) =>
         UnitUtils.ConvertFromInternalUnits(tipo.BarNominalDiameter, UnitTypeId.Millimeters);
+
+    /// <summary>
+    /// El tipo de barra como lo ve <c>Modelo/</c>: nombre, diámetro y los dos
+    /// doblados que pide el filtro de barra de estribo (#64). Lo usan el
+    /// proveedor de la ventana y los generadores, para evaluar igual.
+    /// </summary>
+    public static TipoBarra ComoTipoBarra(RebarBarType tipo) => new(tipo.Name, DiametroMm(tipo))
+    {
+        DobladoEstriboMm = UnitUtils.ConvertFromInternalUnits(tipo.StirrupTieBendDiameter, UnitTypeId.Millimeters),
+        DobladoGanchoMm = UnitUtils.ConvertFromInternalUnits(tipo.StandardHookBendDiameter, UnitTypeId.Millimeters),
+    };
 
     /// <summary>Los valores del cuadro vienen en metros; la API trabaja en pies.</summary>
     public static double APies(double metros) =>

@@ -26,7 +26,11 @@ using Autodesk.Revit.DB.Structure;
 ///    puede elegir es dónde queda la cadena entera (ver <see cref="Alinear"/>);
 ///  - hosteada en la columna de más abajo, Revit a veces no parte la varilla
 ///    aunque diga que puede; hay que pasarla antes a la columna del traslapo
-///    (ver <see cref="Partir"/>).
+///    (ver <see cref="Partir"/>);
+///  - (17-oct) con traslapos de largos distintos hace falta un tipo de
+///    empalme por largo y una llamada a SpliceRebar por traslapo, de abajo
+///    hacia arriba, sobre la pieza de más arriba de la llamada anterior (ver
+///    docs/planes/2026-10-17-diagnostico-traslapos-variables.md).
 ///
 /// Las longitudes van todas en pies (unidades internas de Revit).
 /// </summary>
@@ -34,12 +38,15 @@ public static class BarraContinua
 {
     public readonly record struct ColumnaDePila(FamilyInstance Host, double ZInf, double ZSup);
 
+    /// <summary>Un traslapo a aplicar: su altura central (pies) y el tipo de empalme con su largo.</summary>
+    public readonly record struct TraslapoPedido(double ZCentro, ElementId Tipo);
+
     public sealed record Pedido(
         RebarBarType Barra, double X, double Y, XYZ Normal, double ZInicio, double ZFin,
-        IReadOnlyList<double> ZTraslapos, IReadOnlyList<ColumnaDePila> Pila,
+        IReadOnlyList<TraslapoPedido> Traslapos, IReadOnlyList<ColumnaDePila> Pila,
         RebarHookType? GanchoAbajo, RebarHookType? GanchoArriba,
         RebarTerminationOrientation OrientacionAbajo, RebarTerminationOrientation OrientacionArriba,
-        ElementId? TipoEmpalme, Limites Limites);
+        Limites Limites);
 
     /// <summary>
     /// El rectángulo en planta donde puede quedar el eje de una pieza de esta
@@ -137,8 +144,8 @@ public static class BarraContinua
         Traza?.Invoke(
             $"VARILLA «{p.Barra.Name}» en ({GeometriaSeccion.Metros(p.X):0.###}, {GeometriaSeccion.Metros(p.Y):0.###}) " +
             $"normal ({p.Normal.X:0}, {p.Normal.Y:0}) Z {Z(p.ZInicio)} -> {Z(p.ZFin)}; gancho abajo: {p.GanchoAbajo?.Name ?? "no"}, " +
-            $"arriba: {p.GanchoArriba?.Name ?? "no"}; traslapos pedidos en Z: [{string.Join("; ", p.ZTraslapos.Select(Z))}]; " +
-            $"tipo de empalme: {(p.TipoEmpalme is null ? "ninguno" : doc.GetElement(p.TipoEmpalme)?.Name)}");
+            $"arriba: {p.GanchoArriba?.Name ?? "no"}; traslapos pedidos: " +
+            $"[{string.Join("; ", p.Traslapos.Select(t => $"Z={Z(t.ZCentro)} «{doc.GetElement(t.Tipo)?.Name}»"))}]");
 
         Rebar? entera;
         try
@@ -167,7 +174,7 @@ public static class BarraContinua
             VolcarRestricciones(entera);
         }
 
-        if (p.ZTraslapos.Count == 0 || p.TipoEmpalme is null)
+        if (p.Traslapos.Count == 0)
         {
             Alinear(doc, new List<Rebar> { entera }, p);
             return new Resultado(1, null);
@@ -228,7 +235,7 @@ public static class BarraContinua
             }
         }
 
-        int esperadas = p.ZTraslapos.Count - rechazados.Count + 1;
+        int esperadas = p.Traslapos.Count - rechazados.Count + 1;
         return new Resultado(piezas.Count, piezas.Count == esperadas
             ? avisoRechazados
             : $"una varilla «{p.Barra.Name}» quedó en {piezas.Count} pieza(s) y se esperaban {esperadas}: " +
@@ -292,49 +299,66 @@ public static class BarraContinua
         // datos pero no corta (aviso del Dynamo de referencia de William).
         (XYZ abajo, XYZ _) = Extremos(entera);
 
-        var opciones = new RebarSpliceOptions(doc, p.TipoEmpalme!, RebarSplicePosition.Middle);
-        var alturas = new List<double>();
-        foreach (double z in p.ZTraslapos)
+        // Cada traslapo con su propio tipo de empalme: el largo puede ser
+        // distinto en cada uno (el del cuadro es solo el mínimo).
+        var aceptados = new List<TraslapoPedido>();
+        foreach (TraslapoPedido t in p.Traslapos.OrderBy(t => t.ZCentro))
         {
+            var opciones = new RebarSpliceOptions(doc, t.Tipo, RebarSplicePosition.Middle);
             RebarSpliceError puede = RebarSpliceUtils.CanRebarBeSpliced(
-                entera, opciones, new RebarSpliceGeometry(new XYZ(abajo.X, abajo.Y, z), XYZ.BasisZ));
-            Traza?.Invoke($"  CanRebarBeSpliced en Z={Z(z)}: {puede}");
+                entera, opciones, new RebarSpliceGeometry(new XYZ(abajo.X, abajo.Y, t.ZCentro), XYZ.BasisZ));
+            Traza?.Invoke($"  CanRebarBeSpliced en Z={Z(t.ZCentro)}: {puede}");
 
             if (puede == RebarSpliceError.Success)
-                alturas.Add(z);
+                aceptados.Add(t);
             else
-                rechazados.Add($"Z={Z(z)} m ({puede})");
+                rechazados.Add($"Z={Z(t.ZCentro)} m ({puede})");
         }
 
-        if (alturas.Count == 0) return (new List<Rebar>(), entera);
+        if (aceptados.Count == 0) return (new List<Rebar>(), entera);
+        double primeraAltura = aceptados[0].ZCentro;
 
-        // Un intento de partir, con la barra donde esté en ese momento. Las
-        // piezas se leen de la cadena de empalme y no de lo que devuelve
-        // SpliceRebar: lo que cuenta es lo que quedó en el modelo.
+        // Un intento de partir, con la barra donde esté en ese momento. Una
+        // llamada a SpliceRebar por traslapo, de abajo hacia arriba, cada una
+        // sobre la pieza de más arriba que dejó la anterior -- el método medido
+        // contra Revit real en docs/planes/2026-10-17-diagnostico-traslapos-variables.md.
+        // Las piezas se leen de la cadena de empalme al final: lo que cuenta
+        // es lo que quedó en el modelo.
         List<Rebar> Intentar(string etiqueta)
         {
-            (XYZ donde, XYZ _) = Extremos(entera);
-            List<RebarSpliceGeometry> geometrias = alturas
-                .Select(z => new RebarSpliceGeometry(new XYZ(donde.X, donde.Y, z), XYZ.BasisZ))
-                .ToList();
-
-            IList<ElementId> resultantes;
-            try
+            Rebar? aPartir = entera;
+            foreach (TraslapoPedido t in aceptados)
             {
-                resultantes = RebarSpliceUtils.SpliceRebar(doc, entera.Id, opciones, geometrias);
-            }
-            catch (Exception ex)
-            {
-                Traza?.Invoke($"  [{etiqueta}] SpliceRebar tiró {ex.GetType().Name}: {ex.Message}");
-                try { doc.Regenerate(); } catch { /* best-effort */ }
-                return new List<Rebar>();
+                if (aPartir is null || !aPartir.IsValidObject) break;
+
+                (XYZ donde, XYZ _) = Extremos(aPartir);
+                var opciones = new RebarSpliceOptions(doc, t.Tipo, RebarSplicePosition.Middle);
+                IList<ElementId> resultantes;
+                try
+                {
+                    resultantes = RebarSpliceUtils.SpliceRebar(
+                        doc, aPartir.Id, opciones,
+                        new List<RebarSpliceGeometry> { new(new XYZ(donde.X, donde.Y, t.ZCentro), XYZ.BasisZ) });
+                }
+                catch (Exception ex)
+                {
+                    Traza?.Invoke($"  [{etiqueta}] SpliceRebar en Z={Z(t.ZCentro)} tiró {ex.GetType().Name}: {ex.Message}");
+                    try { doc.Regenerate(); } catch { /* best-effort */ }
+                    break;
+                }
+
+                doc.Regenerate();
+                Traza?.Invoke($"  [{etiqueta}] SpliceRebar en Z={Z(t.ZCentro)} devolvió {resultantes.Count} id(s)");
+                aPartir = resultantes
+                    .Select(id => doc.GetElement(id) as Rebar)
+                    .Where(r => r is not null)
+                    .Select(r => r!)
+                    .OrderByDescending(r => Extremos(r).Abajo.Z)
+                    .FirstOrDefault();
             }
 
-            doc.Regenerate();
-
-            Rebar? semilla = entera.IsValidObject
-                ? entera
-                : resultantes.Select(id => doc.GetElement(id) as Rebar).FirstOrDefault(r => r is not null);
+            Rebar? semilla = aPartir is not null && aPartir.IsValidObject ? aPartir
+                : entera.IsValidObject ? entera : null;
             List<Rebar> cadena = semilla is null
                 ? new List<Rebar>()
                 : RebarSpliceUtils.GetSpliceChain(semilla)
@@ -344,9 +368,7 @@ public static class BarraContinua
                     .OrderBy(r => Extremos(r).Abajo.Z)
                     .ToList();
 
-            Traza?.Invoke(
-                $"  [{etiqueta}] SpliceRebar devolvió {resultantes.Count} id(s); original " +
-                $"{(entera.IsValidObject ? "sigue" : "ya no existe")}; cadena de {cadena.Count} pieza(s)");
+            Traza?.Invoke($"  [{etiqueta}] cadena de {cadena.Count} pieza(s)");
             return cadena.Count > 1 ? cadena : new List<Rebar>();
         }
 
@@ -362,7 +384,7 @@ public static class BarraContinua
         // distancia de la cara). SetHostId queda como respaldo.
         foreach (ColumnaDePila columna in p.Pila)
         {
-            if (alturas[0] < columna.ZInf || alturas[0] > columna.ZSup) continue;
+            if (primeraAltura < columna.ZInf || primeraAltura > columna.ZSup) continue;
             if (columna.Host.Id == entera.GetHostId()) break;
 
             try

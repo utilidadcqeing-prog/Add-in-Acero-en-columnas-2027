@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pruebas del cálculo de traslapos (Modelo/PlanTraslapos.cs), sin Revit.
+    Consola sin dependencias: corre con "dotnet run" sobre tools/PruebasTraslapos
+    y sale con código 1 si alguna falla. Los archivos se enlazan, no se copian
+    (mismo criterio que tools/PreviewUI). practicacq.csproj excluye esta carpeta.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PlanTraslapos.cs" Link="Modelo\PlanTraslapos.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\CuadroVarillas.cs" Link="Modelo\CuadroVarillas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ColumnaContexto.cs" Link="Modelo\ColumnaContexto.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ConfigLongitudinal.cs" Link="Modelo\ConfigLongitudinal.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PosicionBarra.cs" Link="Modelo\PosicionBarra.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\EstriboMenor.cs" Link="Modelo\EstriboMenor.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PaqueteEstribos.cs" Link="Modelo\PaqueteEstribos.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\TipoBarra.cs" Link="Modelo\TipoBarra.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\NombreEmpalme.cs" Link="Modelo\NombreEmpalme.cs" />
+  </ItemGroup>
+
+</Project>
