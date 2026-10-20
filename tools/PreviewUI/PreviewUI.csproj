@@ -71,6 +71,23 @@
       <DependentUpon>PanelTraslapos.xaml</DependentUpon>
     </Compile>
 
+    <Compile Include="..\..\Vistas\ConvertidorBarrasPorCara.cs">
+      <Link>Vistas\ConvertidorBarrasPorCara.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Vistas\VentanaConfiguradorEstribos.VistaPrevia.cs">
+      <Link>Vistas\VentanaConfiguradorEstribos.VistaPrevia.cs</Link>
+    </Compile>
+
+    <Page Include="..\..\Vistas\PanelVistaPrevia.xaml">
+      <Link>Vistas\PanelVistaPrevia.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\Vistas\PanelVistaPrevia.xaml.cs">
+      <Link>Vistas\PanelVistaPrevia.xaml.cs</Link>
+      <DependentUpon>PanelVistaPrevia.xaml</DependentUpon>
+    </Compile>
+
     <Page Include="..\..\Vistas\VentanaEstribosMenores.xaml">
       <Link>Vistas\VentanaEstribosMenores.xaml</Link>
       <SubType>Designer</SubType>

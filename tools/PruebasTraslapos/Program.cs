@@ -297,5 +297,215 @@ Probar("varios_diametros_un_solo_tramo", () =>
     CumpleReglas(col, op, r);
 });
 
+// ------------------------------------------------ estribos menores (20-oct)
+
+static EstriboMenor Pieza(FormaMenor forma, EjeCaja eje, int desde, int hasta, string? barra = null) =>
+    new() { Forma = forma, Eje = eje, Desde = desde, Hasta = hasta, TipoBarraNombre = barra };
+
+Probar("migracion_menores", () =>
+{
+    var cfg = new ConfigLongitudinal
+    {
+        GrapasFila = new() { 0 },
+        GrapasColumna = new() { 1 },
+        Cajas = new() { new CajaMenor { Eje = EjeCaja.Fila, Desde = 0, Hasta = 1 } },
+    };
+    Cierto(cfg.MigrarEstribosMenores(), "debería migrar");
+    string piezas = string.Join(" ", cfg.EstribosMenores.Select(p => $"{p.Forma}/{p.Eje}/{p.Desde}-{p.Hasta}"));
+    Cierto(piezas == "GrapaC/Fila/0-0 GrapaC/Columna/1-1 Cerrado/Fila/0-1", $"piezas: {piezas}");
+    Cierto(cfg.EstribosMenores.All(p => !p.Volteado && p.TipoBarraNombre is null), "sin voltear e igual al estribo");
+    Cierto(cfg.GrapasFila.Count == 0 && cfg.GrapasColumna.Count == 0 && cfg.Cajas.Count == 0, "las listas viejas quedan vacías");
+    Cierto(!cfg.MigrarEstribosMenores(), "una segunda vez no hace nada");
+});
+
+Probar("menores_fuera_de_rango", () =>
+{
+    // 4 barras por cara X = 2 columnas; 2 por cara Y = 1 fila.
+    var cfg = new ConfigLongitudinal
+    {
+        BarrasPorCaraX = 4,
+        BarrasPorCaraY = 2,
+        EstribosMenores = new() { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 1, 1), Pieza(FormaMenor.Cerrado, EjeCaja.Columna, 0, 1) },
+    };
+    Cierto(cfg.DescartarMenoresFueraDeRango() == 1, "debería descartar una");
+    Cierto(cfg.EstribosMenores.Count == 1 && cfg.EstribosMenores[0].Forma == FormaMenor.Cerrado, "queda solo el cerrado");
+});
+
+Probar("copiar_menores", () =>
+{
+    var cfg = new ConfigLongitudinal { EstribosMenores = new() { Pieza(FormaMenor.GrapaS, EjeCaja.Fila, 0, 0, "#3") } };
+    ConfigLongitudinal copia = cfg.Copiar();
+    copia.EstribosMenores[0].Volteado = true;
+    copia.EstribosMenores[0].TipoBarraNombre = "#4";
+    Cierto(!cfg.EstribosMenores[0].Volteado && cfg.EstribosMenores[0].TipoBarraNombre == "#3", "la copia no toca el original");
+});
+
+// Paquete: principal #3 (9,5 mm) salvo que se diga otra cosa; todo en metros.
+const double N3 = 9.5;
+double Diam(EstriboMenor p) => p.TipoBarraNombre == "#4" ? N4 : N3;
+
+Probar("paquete_vacio", () =>
+{
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(Array.Empty<EstriboMenor>(), N3, Diam);
+    Igual(0, p.DesplazamientoPrincipal, "principal");
+    Igual(0.00475, p.Debajo, "debajo");
+    Igual(0.00475, p.Encima, "encima");
+});
+
+Probar("paquete_una_grapa", () =>
+{
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0) }, N3, Diam);
+    Igual(0.019, p.Alto, "alto");
+    Igual(0.00475, p.DesplazamientoPrincipal, "principal");
+    Igual(-0.00475, p.Piezas.Single().Desplazamiento, "grapa");
+});
+
+Probar("paquete_grapas_paralelas_comparten", () =>
+{
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(
+        new[] { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0), Pieza(FormaMenor.GrapaS, EjeCaja.Fila, 1, 1) }, N3, Diam);
+    Cierto(p.Piezas.Select(n => n.Nivel).Distinct().Count() == 1, "un solo nivel");
+    Igual(0.019, p.Alto, "alto");
+    Igual(0.00475, p.DesplazamientoPrincipal, "principal");
+});
+
+Probar("paquete_cruzadas", () =>
+{
+    EstriboMenor fila = Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0), columna = Pieza(FormaMenor.GrapaC, EjeCaja.Columna, 0, 0);
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { columna, fila }, N3, Diam);
+    Igual(-0.0095, p.Piezas.Single(n => n.Pieza == fila).Desplazamiento, "la de fila, debajo");
+    Igual(0.0095, p.Piezas.Single(n => n.Pieza == columna).Desplazamiento, "la de columna, encima");
+    Igual(0.0285, p.Alto, "alto");
+    Igual(0, p.DesplazamientoPrincipal, "principal en el centro");
+});
+
+Probar("paquete_caja_mas_cerca", () =>
+{
+    EstriboMenor caja = Pieza(FormaMenor.Cerrado, EjeCaja.Columna, 0, 1), grapa = Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0);
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { grapa, caja }, N3, Diam);
+    Cierto(p.Piezas.Single(n => n.Pieza == caja).Nivel == 1, "la caja en el nivel 1");
+    Cierto(p.Piezas.Single(n => n.Pieza == grapa).Nivel == 2, "la grapa en el nivel 2");
+    Igual(-0.0095, p.Piezas.Single(n => n.Pieza == caja).Desplazamiento, "la caja, debajo");
+});
+
+Probar("paquete_tapada", () =>
+{
+    EstriboMenor caja = Pieza(FormaMenor.Cerrado, EjeCaja.Columna, 0, 1), grapa = Pieza(FormaMenor.GrapaC, EjeCaja.Columna, 0, 0);
+    Cierto(PaqueteEstribos.EstaTapada(grapa, new[] { caja, grapa }), "la grapa queda tapada");
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { caja, grapa }, N3, Diam);
+    Cierto(p.Piezas.Count == 1 && p.Piezas[0].Pieza == caja, "solo la caja");
+});
+
+Probar("paquete_diametros_mixtos", () =>
+{
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0, "#4") }, N3, Diam);
+    Igual(0.0111, p.DesplazamientoPrincipal - p.Piezas.Single().Desplazamiento, "distancia entre ejes");
+    Igual(0.0222, p.Alto, "alto");
+});
+
+Probar("paquete_cajas_que_comparten_barra", () =>
+{
+    PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(
+        new[] { Pieza(FormaMenor.Cerrado, EjeCaja.Columna, 0, 1), Pieza(FormaMenor.Cerrado, EjeCaja.Columna, 1, 2) }, N3, Diam);
+    Cierto(p.Piezas.Select(n => n.Nivel).Distinct().Count() == 2, "dos niveles");
+});
+
+Probar("menores_para_generar", () =>
+{
+    // Copia migrada y sin piezas fuera de rango, sin tocar la configuración.
+    var cfg = new ConfigLongitudinal
+    {
+        BarrasPorCaraX = 2,
+        BarrasPorCaraY = 2,
+        GrapasFila = new() { 0, 3 },
+        EstribosMenores = new() { Pieza(FormaMenor.Cerrado, EjeCaja.Columna, 0, 0) },
+    };
+    List<EstriboMenor> piezas = cfg.MenoresParaGenerar();
+    Cierto(piezas.Count == 2, $"piezas: {piezas.Count}");
+    Cierto(cfg.GrapasFila.Count == 2 && cfg.EstribosMenores.Count == 1, "la configuración no cambia");
+});
+
+Probar("ancho_minimo_cerrado", () =>
+{
+    // Un lazo cerrado necesita, entre ejes, el diámetro de doblado más el de la
+    // barra: con una #3 CQEING (doblado 4 d = 38 mm), 47,5 mm. La caja de 3,8 cm
+    // que Revit rechazó el 20-oct queda por debajo.
+    var n3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 57 };
+    Igual(47.5, EstriboMenor.AnchoMinimoCerradoMm(n3), "#3");
+    Cierto(EstriboMenor.AnchoMinimoCerradoMm(n3) > 38, "la caja de 3,8 cm no entra");
+});
+
+Probar("cerrado_abraza_las_barras", () =>
+{
+    // Barras #4 (12,7 mm) en los ejes 100 y 200; estribo #3 (9,5 mm). En un
+    // traslapo la pieza de arriba queda 12,7 mm hacia menos: el lazo tiene que
+    // tocar por dentro el lado de afuera de las dos posiciones.
+    (double desde, double hasta) = EstriboMenor.LadosQueAbrazan(100, 200, 12.7, 9.5);
+    Igual(100 - 12.7 - 6.35 - 9.5, desde, "lado de abajo");
+    Igual(200 + 6.35 + 9.5, hasta, "lado de arriba");
+});
+
+Probar("gancho_pasa_sobre_la_barra", () =>
+{
+    // Gancho de 180° con radio de eje 33 mm; la barra longitudinal queda 11 mm
+    // por dentro de la punta del gancho. El arco pasa sobre el eje de la barra
+    // a sqrt(33² − 22²) = 24,6 mm del centro del gancho, de costado.
+    Igual(24.6, Math.Round(EstriboMenor.CorrimientoSobreBarra(33, 11), 1), "caso normal");
+    Igual(33.0, EstriboMenor.CorrimientoSobreBarra(33, 40), "barra más honda que el radio: va por el tramo recto");
+    Igual(0.0, EstriboMenor.CorrimientoSobreBarra(33, -2), "barra afuera de la punta: el centro");
+});
+
+Probar("posiciones_sin_el_ultimo_excluido", () =>
+{
+    // Un grupo con includeLastBar en false tiene la última posición, pero sin
+    // estribo: es el primero del grupo siguiente. Contarla dos veces dejaba la
+    // separación en 0 cm y se omitían los estribos menores (20-oct, tramos de
+    // tres zonas).
+    var conUltimo = PaqueteEstribos.PosicionesDelGrupo(4, 1.0, 0.5, incluirUltimo: true).ToList();
+    var sinUltimo = PaqueteEstribos.PosicionesDelGrupo(4, 1.0, 0.5, incluirUltimo: false).ToList();
+    Igual(4, conUltimo.Count, "con el último");
+    Igual(3, sinUltimo.Count, "sin el último");
+    Igual(2.0, sinUltimo[^1], "el último incluido");
+    Igual(1, PaqueteEstribos.PosicionesDelGrupo(1, 1.0, 0, incluirUltimo: false).Count(), "un solo estribo queda");
+});
+
+// ------------------------------------------- barra apta para estribo (#64)
+
+Probar("apta_cqeing_3", () =>
+{
+    var (aptitud, _) = CuadroVarillas.EvaluarParaEstribo(new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 57 });
+    Cierto(aptitud == AptitudEstribo.Apta, $"aptitud: {aptitud}");
+});
+
+Probar("apta_con_aviso_3_del_modelo", () =>
+{
+    // Medido el 8-oct: doblado estándar de 6,67 d en la #3 del modelo de prueba.
+    var (aptitud, motivo) = CuadroVarillas.EvaluarParaEstribo(new TipoBarra("#3", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 63.4 });
+    Cierto(aptitud == AptitudEstribo.AptaConAviso, $"aptitud: {aptitud}");
+    Cierto(motivo is not null && motivo.Contains("6,3") && motivo.Contains("5,7"), $"motivo: {motivo}");
+});
+
+Probar("no_apta_2_del_modelo", () =>
+{
+    var (aptitud, _) = CuadroVarillas.EvaluarParaEstribo(new TipoBarra("#2", 6.4) { DobladoEstriboMm = 50, DobladoGanchoMm = 50 });
+    Cierto(aptitud == AptitudEstribo.NoApta, $"aptitud: {aptitud}");
+});
+
+Probar("no_apta_6", () =>
+{
+    var (aptitud, motivo) = CuadroVarillas.EvaluarParaEstribo(new TipoBarra("#6", 19.1) { DobladoEstriboMm = 76.4, DobladoGanchoMm = 114.6 });
+    Cierto(aptitud == AptitudEstribo.NoApta && motivo is not null && motivo.Contains("135"), $"{aptitud}: {motivo}");
+});
+
+Probar("cuadro_2_cargado", () =>
+{
+    CuadroVarillas.Varilla n3 = CuadroVarillas.Cuadro.Single(v => v.Numero == 3);
+    Igual(0.057, n3.GanchoEstribo135!.Extension, "#3 135° E");
+    Igual(0.038, n3.GanchoEstribo135!.DiametroDoblado, "#3 135° D");
+    Igual(0.065, n3.Gancho180Cuadro.Extension, "#3 180° E");
+    Igual(0.152, CuadroVarillas.Cuadro.Single(v => v.Numero == 8).Gancho90Cuadro.DiametroDoblado, "#8 90° D");
+    Cierto(CuadroVarillas.Cuadro.Single(v => v.Numero == 6).GanchoEstribo135 is null, "#6 sin 135°");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

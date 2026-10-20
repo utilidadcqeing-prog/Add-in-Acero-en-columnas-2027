@@ -34,6 +34,17 @@ public static class EstandarCQ
     public static double DiametroMm(RebarBarType tipo) =>
         UnitUtils.ConvertFromInternalUnits(tipo.BarNominalDiameter, UnitTypeId.Millimeters);
 
+    /// <summary>
+    /// El tipo de barra como lo ve <c>Modelo/</c>: nombre, diámetro y los dos
+    /// doblados que pide el filtro de barra de estribo (#64). Lo usan el
+    /// proveedor de la ventana y los generadores, para evaluar igual.
+    /// </summary>
+    public static TipoBarra ComoTipoBarra(RebarBarType tipo) => new(tipo.Name, DiametroMm(tipo))
+    {
+        DobladoEstriboMm = UnitUtils.ConvertFromInternalUnits(tipo.StirrupTieBendDiameter, UnitTypeId.Millimeters),
+        DobladoGanchoMm = UnitUtils.ConvertFromInternalUnits(tipo.StandardHookBendDiameter, UnitTypeId.Millimeters),
+    };
+
     /// <summary>Los valores del cuadro vienen en metros; la API trabaja en pies.</summary>
     public static double APies(double metros) =>
         UnitUtils.ConvertToInternalUnits(metros, UnitTypeId.Meters);

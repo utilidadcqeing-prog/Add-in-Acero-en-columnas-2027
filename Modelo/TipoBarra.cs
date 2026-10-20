@@ -16,6 +16,12 @@ using System.Linq;
 /// </summary>
 public sealed record TipoBarra(string Nombre, double DiametroMm)
 {
+    /// <summary>Diámetro de doblado de estribo/tirante del tipo de barra, en mm (para el filtro del #64).</summary>
+    public double DobladoEstriboMm { get; init; }
+
+    /// <summary>Diámetro de doblado de gancho estándar, en mm (el de las grapas de 180°).</summary>
+    public double DobladoGanchoMm { get; init; }
+
     /// <summary>
     /// El tipo de barra que corresponde por defecto para esa varilla del cuadro
     /// de la empresa (#3 para el estribo, #4 para la longitudinal, confirmado
@@ -37,4 +43,12 @@ public sealed record TipoBarra(string Nombre, double DiametroMm)
         return barras.FirstOrDefault(b => b.Nombre == propio)
             ?? barras.FirstOrDefault(b => Math.Abs(b.DiametroMm - diametro) < CuadroVarillas.ToleranciaMm);
     }
+}
+
+/// <summary>Resultado de <see cref="CuadroVarillas.EvaluarParaEstribo"/>.</summary>
+public enum AptitudEstribo
+{
+    Apta,
+    AptaConAviso,
+    NoApta,
 }

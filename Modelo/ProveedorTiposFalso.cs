@@ -22,7 +22,14 @@ public sealed class ProveedorTiposFalso : IProveedorTipos
     /// si el default se eligiera por "el primero de la lista" saldría el #2.
     /// </summary>
     public IReadOnlyList<TipoBarra> ListarBarras() => CuadroVarillas.Cuadro
-        .Select(v => new TipoBarra($"#{v.Numero} COL", v.DiametroMm))
+        .Select(v => new TipoBarra($"#{v.Numero} COL", v.DiametroMm)
+        {
+            // Doblados como los medidos el 8-oct en el modelo de prueba: 4 d y
+            // 6 d, salvo la #2 (7,81 d), que así queda fuera de la lista de
+            // estribo y ejercita la nota del #64.
+            DobladoEstriboMm = (v.Numero == 2 ? 7.81 : 4) * v.DiametroMm,
+            DobladoGanchoMm = (v.Numero == 2 ? 7.81 : 6) * v.DiametroMm,
+        })
         .OrderBy(b => b.Nombre)
         .ToList();
 

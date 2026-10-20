@@ -35,7 +35,7 @@ public static class GeneradorArmado
     /// No es un dato que la ventana pida hoy, así que va fijo acá, igual que
     /// el cuadro de <see cref="EstandarCQ"/>.
     /// </summary>
-    private const double SeparacionExtremosMetros = 0.05;
+    private const double SeparacionExtremosMetros = RepartoEstribos.SeparacionExtremosMetros;
 
     /// <summary>
     /// TEMPORAL -- traza de diagnóstico (8-oct): deja en un archivo de texto
@@ -69,12 +69,20 @@ public static class GeneradorArmado
             .OfClass(typeof(RebarHookType)).Cast<RebarHookType>()
             .GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First());
 
-        // Ver GeometriaSeccion.BuscarFormaEstribo: si el documento tiene una
-        // forma de estribo cerrado cargada, se usa esa (evita de raíz la
-        // dobladura de ConQuiebreEnMedioDeLado); si no, cada CrearGrupo cae
-        // solo al camino de siempre (CreateFromCurves). Se resuelve una sola
-        // vez acá, no en cada llamada.
-        RebarShape? formaEstribo = GeometriaSeccion.BuscarFormaEstribo(doc);
+        // #64: forma y gancho PROPIOS del add-in, con las medidas del cuadro,
+        // en cualquier modelo. Si no se pudieron crear, la forma del modelo
+        // (GeometriaSeccion.BuscarFormaEstribo) y el gancho configurado en el
+        // tramo quedan de respaldo; y sin forma, cada CrearGrupo cae solo al
+        // camino de siempre (CreateFromCurves). Se resuelve una sola vez acá.
+        var propios = new TiposPropios(doc);
+        TiposPropios.Pieza<RebarShape> formaPropia = propios.FormaEstribo();
+        RebarShape? formaEstribo = formaPropia.Tipo ?? GeometriaSeccion.BuscarFormaEstribo(doc);
+        if (formaPropia.Aviso is not null)
+            res.Avisos.Add($"Estribos: {formaPropia.Aviso}; se usa la forma de estribo del modelo.");
+
+        TiposPropios.Pieza<RebarHookType> ganchoPropio = propios.GanchoEstribo();
+        if (ganchoPropio.Aviso is not null)
+            res.Avisos.Add($"Estribos: {ganchoPropio.Aviso}; se usa el gancho configurado en cada tramo.");
 
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
         var ganchosYaAvisados = new HashSet<(ElementId Barra, ElementId Gancho)>();
@@ -88,7 +96,8 @@ public static class GeneradorArmado
 
         foreach (ColumnaPlan columnaPlan in plan.Columnas)
         {
-            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, cacheHost, ganchosYaAvisados, formasRechazadas, res);
+            GenerarColumna(doc, columnaPlan, barrasPorNombre, ganchosPorNombre, formaEstribo, propios, ganchoPropio.Tipo,
+                cacheHost, ganchosYaAvisados, formasRechazadas, res);
         }
 
 #if DEBUG
@@ -110,6 +119,8 @@ public static class GeneradorArmado
         Dictionary<string, RebarBarType> barrasPorNombre,
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
+        TiposPropios propios,
+        RebarHookType? ganchoPropio,
         Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)> cacheHost,
         HashSet<(ElementId Barra, ElementId Gancho)> ganchosYaAvisados,
         HashSet<ElementId> formasRechazadas,
@@ -141,6 +152,10 @@ public static class GeneradorArmado
             GeometriaSeccion.ZonaComun(doc, contexto, cacheHost);
         var tramosConSeccionMayor = new List<int>();
 
+        // Los estribos menores de la columna: arman el paquete de cada
+        // posición de estribo, y el reparto tiene que dejarle lugar.
+        List<EstriboMenor> piezas = columnaPlan.Longitudinal?.MenoresParaGenerar() ?? new List<EstriboMenor>();
+
         int n = Math.Min(contexto.Tramos.Count, columnaPlan.Tramos.Count);
         for (int i = 0; i < n; i++)
         {
@@ -150,11 +165,19 @@ public static class GeneradorArmado
 
             Tramo tramo = contexto.Tramos[i];
 
+            // El tramo contra zapata no lleva estribos (Luciano, 20-oct); el
+            // acero longitudinal sí pasa por él.
+            if (tramo.Tipo == TipoTramo.ContraZapata)
+            {
+                res.Avisos.Add($"{contexto.Marca} tramo {tramo.Indice}: es el tramo contra zapata; ahí no se generan estribos.");
+                continue;
+            }
+
             try
             {
                 if (!GenerarTramo(
-                        doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo,
-                        recubrimientoPies, zonaComun, tramosConSeccionMayor, cacheHost, ganchosYaAvisados, formasRechazadas, res))
+                        doc, contexto.Marca, tramo, cfg, barrasPorNombre, ganchosPorNombre, formaEstribo, propios, ganchoPropio,
+                        piezas, recubrimientoPies, zonaComun, tramosConSeccionMayor, cacheHost, ganchosYaAvisados, formasRechazadas, res))
                 {
                     res.TramosOmitidos++;
                 }
@@ -196,6 +219,9 @@ public static class GeneradorArmado
         Dictionary<string, RebarBarType> barrasPorNombre,
         Dictionary<string, RebarHookType> ganchosPorNombre,
         RebarShape? formaEstribo,
+        TiposPropios propios,
+        RebarHookType? ganchoPropio,
+        IReadOnlyList<EstriboMenor> piezas,
         double recubrimientoPies,
         (double XMin, double XMax, double YMin, double YMax)? zonaComun,
         List<int> tramosConSeccionMayor,
@@ -238,10 +264,31 @@ public static class GeneradorArmado
             return false;
         }
 
-        if (string.IsNullOrEmpty(cfg.TipoGanchoNombre) || !ganchosPorNombre.TryGetValue(cfg.TipoGanchoNombre, out RebarHookType? gancho))
+        // #64: al generar se vuelve a evaluar la barra (el plan puede venir de
+        // una configuración guardada o de otro modelo).
+        (AptitudEstribo aptitud, string? motivoAptitud) = CuadroVarillas.EvaluarParaEstribo(EstandarCQ.ComoTipoBarra(barra));
+        if (aptitud == AptitudEstribo.NoApta)
+        {
+            res.Avisos.Add($"{etiquetaTramo}: la barra no es apta para estribo según el cuadro ({motivoAptitud}); se omite.");
+            return false;
+        }
+
+        // El gancho propio, ajustado a la extensión del cuadro para esta
+        // barra; el configurado en el tramo queda solo de respaldo.
+        RebarHookType? gancho = ganchoPropio;
+        if (gancho is not null)
+        {
+            if (EstandarCQ.Buscar(barra)?.GanchoEstribo135 is { } cuadro && propios.AjustarExtension(barra, gancho, cuadro) is string avisoAjuste)
+                res.Avisos.Add($"{etiquetaTramo}: {avisoAjuste}");
+        }
+        else if (string.IsNullOrEmpty(cfg.TipoGanchoNombre) || !ganchosPorNombre.TryGetValue(cfg.TipoGanchoNombre, out gancho))
         {
             res.Avisos.Add($"{etiquetaTramo}: el tipo de gancho «{cfg.TipoGanchoNombre}» no existe en el documento; se omite.");
             return false;
+        }
+        else
+        {
+            AvisarSiGanchoNoCumpleNorma(barra, gancho, ganchosYaAvisados, res);
         }
 
         if (RebarHostData.GetRebarHostData(host) is null)
@@ -288,15 +335,28 @@ public static class GeneradorArmado
         // claro si devuelve null) el que decida si la geometría entra o no,
         // en vez de cortar acá con una heurística sin confirmar.
 
-        AvisarSiGanchoNoCumpleNorma(barra, gancho, ganchosYaAvisados, res);
+        // Paquete de la posición de estribo: el principal en el centro y los
+        // estribos menores pegados encima y debajo (sección 2 del diseño del
+        // 20-oct). Los 5 cm de los extremos van al BORDE del paquete, y el
+        // reparto es del punto medio de un paquete al del siguiente; el eje
+        // del principal queda corrido DesplazamientoPrincipal de ese punto.
+        // Sin menores (o en un nudo, donde no van) el paquete es solo el
+        // principal y esto da lo de siempre: 5 cm más medio diámetro.
+        var claveTramo = (tramo.IdElementoHost!, tramo.Indice);
+        bool conMenores = tramo.Tipo != TipoTramo.DentroDeViga && piezas.Count > 0;
+        PaqueteEstribos.Paquete paquete = PaqueteEstribos.Calcular(
+            conMenores ? piezas : Array.Empty<EstriboMenor>(),
+            EstandarCQ.DiametroMm(barra),
+            p => EstandarCQ.DiametroMm(GeneradorLongitudinal.BarraDePieza(p, barra, barrasPorNombre, out _)));
+        if (conMenores) res.PaquetePorTramo[claveTramo] = paquete;
 
-        // Los 5 cm van al BORDE del estribo: el eje queda medio diámetro más adentro.
-        double separacionExtremos = EstandarCQ.APies(SeparacionExtremosMetros) + barra.BarNominalDiameter / 2;
         _traza?.AppendLine(
             $"{etiquetaTramo} ({tramo.Tipo}): Z {tramo.ZInferior:0.####} -> {tramo.ZSuperior:0.####} m; barra «{barra.Name}» " +
             $"Ø {GeometriaSeccion.Metros(barra.BarNominalDiameter) * 1000:0.#} mm");
-        double zInf = EstandarCQ.APies(tramo.ZInferior) + separacionExtremos;
-        double zSup = EstandarCQ.APies(tramo.ZSuperior) - separacionExtremos;
+        // Misma cuenta que la vista previa del panel (RepartoEstribos).
+        (double zInfMetros, double zSupMetros) = RepartoEstribos.Limites(tramo.ZInferior, tramo.ZSuperior, paquete);
+        double zInf = EstandarCQ.APies(zInfMetros);
+        double zSup = EstandarCQ.APies(zSupMetros);
         double altura = zSup - zInf;
 
         if (altura <= Tolerancia)
@@ -313,8 +373,6 @@ public static class GeneradorArmado
             TerminationOrientationAtStart = RebarTerminationOrientation.Left,
             TerminationOrientationAtEnd = RebarTerminationOrientation.Left
         };
-
-        var claveTramo = (tramo.IdElementoHost!, tramo.Indice);
 
         if (cfg.Modo == ModoEstribo.Uniforme)
         {
@@ -454,12 +512,22 @@ public static class GeneradorArmado
         double reparto = acceso.ArrayLength;
         double separacionReal = posiciones > 1 ? reparto / (posiciones - 1) : 0;
 
+        // La vista previa del panel cuenta los estribos sin Revit
+        // (RepartoEstribos); si Revit puso otra cantidad, la vista previa
+        // mintió y hay que corregir la cuenta. No cambia lo que se genera.
+        // Va a Avisos (no a Detalles) porque Detalles no se muestra en la ventana.
+        int previstos = RepartoEstribos.CantidadEnGrupo(longitud, espaciado, incluirUltimo);
+        if (previstos != estribo.Quantity)
+            res.Avisos.Add(
+                $"{etiquetaTramo} ({etiquetaGrupo}): la vista previa calculó {previstos} estribos y Revit puso {estribo.Quantity} " +
+                $"(posiciones {posiciones}).");
+
         res.GruposCreados++;
         res.Detalles.Add(
             $"{etiquetaTramo} ({etiquetaGrupo}): {posiciones} estribos cada " +
             $"{GeometriaSeccion.Metros(separacionReal) * 100:0.#} cm sobre {GeometriaSeccion.Metros(reparto):0.00} m.");
 
-        RegistrarPosiciones(posiciones, zInicio, separacionReal, claveTramo, res);
+        RegistrarPosiciones(posiciones, zInicio, separacionReal, incluirUltimo, claveTramo, res);
 
         if (_traza is not null)
         {
@@ -598,7 +666,7 @@ public static class GeneradorArmado
     /// medio). La cuenta a mano evita depender de eso.
     /// </summary>
     private static void RegistrarPosiciones(
-        int posiciones, double zInicio, double separacionReal,
+        int posiciones, double zInicio, double separacionReal, bool incluirUltimo,
         (string IdElementoHost, int IndiceTramo) claveTramo, ResultadoArmado res)
     {
         if (!res.PosicionesEstribosPorTramo.TryGetValue(claveTramo, out List<double>? zetas))
@@ -607,8 +675,9 @@ public static class GeneradorArmado
             res.PosicionesEstribosPorTramo[claveTramo] = zetas;
         }
 
-        for (int i = 0; i < posiciones; i++)
-            zetas.Add(zInicio + i * separacionReal);
+        // NumberOfBarPositions cuenta también la última posición aunque el
+        // grupo no tenga estribo ahí (includeLastBar: false).
+        zetas.AddRange(PaqueteEstribos.PosicionesDelGrupo(posiciones, zInicio, separacionReal, incluirUltimo));
     }
 
     /// <summary>
@@ -652,9 +721,11 @@ public static class GeneradorArmado
     }
 
     /// <summary>
-    /// Contrasta la pata del gancho contra el cuadro de la empresa, una sola
-    /// vez por combinación (barra, gancho) aunque se repita en varios tramos
-    /// o columnas -- si no, la misma advertencia sale veinte veces en un lote.
+    /// Solo cuando se cayó al gancho del modelo (el propio no se pudo crear):
+    /// contrasta su extensión recta contra la E del cuadro, una sola vez por
+    /// combinación (barra, gancho). Se compara la extensión y no el largo del
+    /// gancho porque Revit mide ese largo de otra manera (#3 a 135°: 8,47 cm
+    /// contra 11,3 cm del cuadro) -- #64.
     /// </summary>
     private static void AvisarSiGanchoNoCumpleNorma(
         RebarBarType barra, RebarHookType gancho,
@@ -671,13 +742,13 @@ public static class GeneradorArmado
             return;
         }
 
-        double real = barra.GetHookLength(gancho.Id);
-        double esperado = EstandarCQ.APies(varilla.GanchoEstribo);
+        if (varilla.GanchoEstribo135 is not { } cuadro) return;
 
-        if (Math.Abs(real - esperado) > EstandarCQ.APies(0.005))
+        double real = gancho.GetHookExtensionLength(barra);
+        if (Math.Abs(real - EstandarCQ.APies(cuadro.Extension)) > EstandarCQ.APies(0.005))
             res.Avisos.Add(
-                $"El gancho «{gancho.Name}» mide {GeometriaSeccion.Metros(real) * 100:0.#} cm con la barra {barra.Name}, " +
-                $"y el cuadro de la empresa pide {varilla.GanchoEstribo * 100:0.#} cm para la #{varilla.Numero}.");
+                $"El gancho del modelo «{gancho.Name}» deja una cola de {GeometriaSeccion.Metros(real) * 100:0.#} cm con la barra {barra.Name}, " +
+                $"y el cuadro de la empresa pide {cuadro.Extension * 100:0.#} cm para la #{varilla.Numero}.");
     }
 
 }

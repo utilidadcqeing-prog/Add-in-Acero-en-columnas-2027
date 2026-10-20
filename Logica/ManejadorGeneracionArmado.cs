@@ -1,6 +1,8 @@
 namespace practicacq.Logica;
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using practicacq.Modelo;
@@ -37,6 +39,16 @@ public class ManejadorGeneracionArmado : IExternalEventHandler
             // esto ya corrió para saber dónde poner los estribos menores.
             ResultadoArmado res = GeneradorArmado.Generar(doc, Opciones);
             GeneradorLongitudinal.Generar(doc, Opciones, res);
+
+            // Colores por diámetro en las vistas donde se ven las columnas
+            // (docs/planes/2026-10-20-colores-por-diametro.md).
+            var columnas = Opciones.Plan.Columnas
+                .SelectMany(c => c.Contexto?.Tramos ?? new List<Tramo>())
+                .Select(tr => long.TryParse(tr.IdElementoHost, out long id) ? new ElementId(id) : null)
+                .OfType<ElementId>()
+                .ToHashSet();
+            int vistas = ColoresEnVistas.Aplicar(doc, columnas, res.Avisos);
+            res.Detalles.Add($"Colores por diámetro aplicados en {vistas} vistas.");
 
             t.Commit();
             AlTerminar?.Invoke(res);

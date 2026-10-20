@@ -78,15 +78,6 @@ public class App : IExternalApplication
             "practicacq.ComandoDiagnosticoBarraContinua",
             "TEMPORAL: prueba si una sola barra puede recorrer varias columnas apiladas y llevar varios empalmes. Deja barras de prueba (Ctrl+Z las saca).",
             dllPath, folder, "iconoCQ"));
-
-        // TEMPORAL -- ver comentario de ComandoDiagnosticoFormasPropias.cs.
-        // Sacar este botón (y el comando) una vez implementado el #64.
-        panelHerramientas.AddItem(CrearBoton(
-            "ComandoDiagnosticoFormasPropias",
-            "Diagnóstico\nformas propias",
-            "practicacq.ComandoDiagnosticoFormasPropias",
-            "TEMPORAL: prueba crear formas y ganchos propios del add-in para estribos, cajas y grapas. Al terminar pregunta si deja las barras de prueba o deshace todo.",
-            dllPath, folder, "iconoCQ"));
 #endif
 
         return Result.Succeeded;

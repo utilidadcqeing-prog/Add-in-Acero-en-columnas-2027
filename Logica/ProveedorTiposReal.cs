@@ -34,7 +34,7 @@ public sealed class ProveedorTiposReal : IProveedorTipos
         new FilteredElementCollector(_doc)
             .OfClass(typeof(RebarBarType))
             .Cast<RebarBarType>()
-            .Select(t => new TipoBarra(t.Name, EstandarCQ.DiametroMm(t)))
+            .Select(EstandarCQ.ComoTipoBarra)
             .OrderBy(b => CuadroVarillas.PorNombrePropio(b.Nombre)?.Numero ?? int.MaxValue)
             .ThenBy(b => b.Nombre)
             .ToList();

@@ -65,20 +65,18 @@ public sealed class ConfigLongitudinal
     public string? TipoGanchoLongitudinalNombre { get; set; }
 
     /// <summary>
-    /// Filas (posiciones Y, 0-based) con una grapa horizontal de borde a
-    /// borde -- conecta la barra intermedia de la cara izquierda con la de
-    /// la cara derecha, a esa altura, con gancho a cada punta.
+    /// Los estribos menores (grapas en C y en S, y cerrados) puestos en el
+    /// panel de estribos menores -- docs/planes/2026-10-20-diseno-estribos-menores-visual-y-64.md.
     /// </summary>
+    public List<EstriboMenor> EstribosMenores { get; set; } = new();
+
+    /// <summary>OBSOLETO: grapas por fila del panel de casillas; solo para leer configuraciones viejas. Ver <see cref="MigrarEstribosMenores"/>.</summary>
     public List<int> GrapasFila { get; set; } = new();
 
-    /// <summary>
-    /// Columnas (posiciones X, 0-based) con una grapa vertical de borde a
-    /// borde -- conecta la barra intermedia de la cara superior con la de
-    /// la cara inferior, en esa posición.
-    /// </summary>
+    /// <summary>OBSOLETO: ver <see cref="GrapasFila"/>.</summary>
     public List<int> GrapasColumna { get; set; } = new();
 
-    /// <summary>Las cajas que arma L4 cruzando filas y columnas tildadas.</summary>
+    /// <summary>OBSOLETO: ver <see cref="GrapasFila"/>.</summary>
     public List<CajaMenor> Cajas { get; set; } = new();
 
     /// <summary>
@@ -111,6 +109,52 @@ public sealed class ConfigLongitudinal
         TipoBarraEsquinasNombre = TipoBarraANombre ?? TipoBarraBNombre;
         TipoBarraCaraXNombre = TipoBarraCaraYNombre = TipoBarraBNombre ?? TipoBarraANombre;
         return true;
+    }
+
+    /// <summary>
+    /// Pasa las casillas del panel viejo a piezas: cada grapa a una C sin
+    /// voltear y cada caja a un cerrado con el mismo eje y rango, todas con
+    /// "Igual al estribo". Vacía las listas viejas, así una segunda llamada no
+    /// duplica nada. Devuelve true si cambió algo.
+    /// </summary>
+    public bool MigrarEstribosMenores()
+    {
+        if (GrapasFila.Count == 0 && GrapasColumna.Count == 0 && Cajas.Count == 0) return false;
+
+        EstribosMenores.AddRange(GrapasFila.Select(f => new EstriboMenor { Forma = FormaMenor.GrapaC, Eje = EjeCaja.Fila, Desde = f, Hasta = f }));
+        EstribosMenores.AddRange(GrapasColumna.Select(c => new EstriboMenor { Forma = FormaMenor.GrapaC, Eje = EjeCaja.Columna, Desde = c, Hasta = c }));
+        EstribosMenores.AddRange(Cajas.Select(c => new EstriboMenor { Forma = FormaMenor.Cerrado, Eje = c.Eje, Desde = c.Desde, Hasta = c.Hasta }));
+
+        GrapasFila.Clear();
+        GrapasColumna.Clear();
+        Cajas.Clear();
+        return true;
+    }
+
+    /// <summary>
+    /// Quita las piezas que apuntan a una fila o columna que ya no existe (se
+    /// bajó la cantidad de barras por cara después de ponerlas). Devuelve
+    /// cuántas quitó, para avisar.
+    /// </summary>
+    public int DescartarMenoresFueraDeRango()
+    {
+        int columnas = System.Math.Max(0, BarrasPorCaraX / 2);
+        int filas = System.Math.Max(0, BarrasPorCaraY / 2);
+
+        return EstribosMenores.RemoveAll(p => p.Desde < 0 || p.Hasta >= (p.Eje == EjeCaja.Fila ? filas : columnas));
+    }
+
+    /// <summary>
+    /// Las piezas que el generador tiene que crear: migradas desde las
+    /// casillas viejas y sin las que quedaron fuera de rango, en una copia
+    /// (generar no cambia la configuración guardada).
+    /// </summary>
+    public List<EstriboMenor> MenoresParaGenerar()
+    {
+        ConfigLongitudinal copia = Copiar();
+        copia.MigrarEstribosMenores();
+        copia.DescartarMenoresFueraDeRango();
+        return copia.EstribosMenores;
     }
 
     /// <summary>
@@ -172,5 +216,6 @@ public sealed class ConfigLongitudinal
         GrapasFila = new List<int>(GrapasFila),
         GrapasColumna = new List<int>(GrapasColumna),
         Cajas = Cajas.Select(c => new CajaMenor { Eje = c.Eje, Desde = c.Desde, Hasta = c.Hasta }).ToList(),
+        EstribosMenores = EstribosMenores.Select(p => p.Copiar()).ToList(),
     };
 }

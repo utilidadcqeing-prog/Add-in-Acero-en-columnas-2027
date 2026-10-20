@@ -9,6 +9,12 @@
         Background="#F0F0F0">
 
     <Window.Resources>
+        <!-- "4 (2 + 2)" en las listas de cantidad de barras por cara. -->
+        <local:ConvertidorBarrasPorCara x:Key="BarrasPorCara" />
+        <DataTemplate x:Key="PlantillaBarrasPorCara">
+            <TextBlock Text="{Binding Converter={StaticResource BarrasPorCara}}" />
+        </DataTemplate>
+
         <Style TargetType="TextBlock" x:Key="Etiqueta">
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Margin" Value="0,8,0,3" />
@@ -173,6 +179,11 @@
                         <TabItem Header="Traslapos">
                             <local:PanelTraslapos x:Name="PanelDeTraslapos" />
                         </TabItem>
+                        <!-- La columna desde arriba, de frente y de costado, con los
+                             colores por diámetro (pedido de Luciano, 20-oct). -->
+                        <TabItem Header="Vista previa">
+                            <local:PanelVistaPrevia x:Name="PanelDeVistaPrevia" />
+                        </TabItem>
                     </TabControl>
                 </DockPanel>
             </Border>
@@ -244,6 +255,16 @@
 
                     <TextBlock Text="Tipo de barra:" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboTipoBarra" Height="24" />
+                    <!-- #64: solo se ofrecen las barras cuyo doblado coincide con el
+                         cuadro. Una línea de resumen, y el detalle (cuáles y por
+                         qué) plegado: en una plantilla grande son decenas de
+                         líneas que tapaban el panel (Luciano, 20-oct). -->
+                    <Expander x:Name="NotaBarrasEstribo" Margin="0,2,0,0" Visibility="Collapsed" IsExpanded="False">
+                        <Expander.Header>
+                            <TextBlock x:Name="ResumenBarrasEstribo" TextWrapping="Wrap" Foreground="#92400E" FontSize="11" />
+                        </Expander.Header>
+                        <TextBlock x:Name="DetalleBarrasEstribo" TextWrapping="Wrap" Foreground="#92400E" FontSize="11" Margin="18,2,0,0" />
+                    </Expander>
 
                     <!-- Oculto a propósito (reunión 10-sep): el gancho del
                          estribo es siempre el de 135° de estilo estribo/tirante,
@@ -299,11 +320,11 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="N. barras X:" Style="{StaticResource Etiqueta}" />
-                            <ComboBox x:Name="ComboBarrasX" Height="24" />
+                            <ComboBox x:Name="ComboBarrasX" Height="24" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="N. barras Y:" Style="{StaticResource Etiqueta}" />
-                            <ComboBox x:Name="ComboBarrasY" Height="24" />
+                            <ComboBox x:Name="ComboBarrasY" Height="24" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
                         </StackPanel>
                     </Grid>
 

@@ -51,4 +51,13 @@ public sealed class ResultadoArmado
     /// principal, no solo en los extremos del tramo.
     /// </summary>
     public Dictionary<(string IdElementoHost, int IndiceTramo), List<double>> PosicionesEstribosPorTramo { get; } = new();
+
+    /// <summary>
+    /// El paquete de estribos (principal + menores apilados) con el que
+    /// <see cref="practicacq.Logica.GeneradorArmado"/> repartió cada tramo:
+    /// <see cref="practicacq.Logica.GeneradorLongitudinal"/> pone cada estribo
+    /// menor a la altura de su nivel -- docs/planes/2026-10-20-diseno-estribos-menores-visual-y-64.md,
+    /// sección 2. Solo están los tramos libres de columnas con estribos menores.
+    /// </summary>
+    public Dictionary<(string IdElementoHost, int IndiceTramo), PaqueteEstribos.Paquete> PaquetePorTramo { get; } = new();
 }
