@@ -41,6 +41,15 @@
     queda afuera: es la del comando de muros y sÃ­ usa la API de Revit.
   -->
   <ItemGroup>
+    <Page Include="..\..\addins\armado-columnas\Vistas\Estilos.xaml">
+      <Link>Vistas\Estilos.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\Paleta.cs">
+      <Link>Vistas\Paleta.cs</Link>
+    </Compile>
+
     <Page Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.xaml">
       <Link>Vistas\VentanaConfiguradorEstribos.xaml</Link>
       <SubType>Designer</SubType>

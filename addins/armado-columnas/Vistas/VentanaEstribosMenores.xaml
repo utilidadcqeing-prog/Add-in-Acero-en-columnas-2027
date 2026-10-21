@@ -1,18 +1,23 @@
 <Window x:Class="practicacq.Vistas.VentanaEstribosMenores"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:practicacq.Vistas"
         Title="Configurador de Estribos Menores"
         Height="600" Width="860"
         MinHeight="520" MinWidth="760"
         WindowStartupLocation="CenterOwner"
-        Background="#F0F0F0"
+        Background="{x:Static local:Paleta.Fondo}"
         PreviewKeyDown="Ventana_PreviewKeyDown">
+
+    <Window.Resources>
+        <ResourceDictionary Source="Estilos.xaml" />
+    </Window.Resources>
 
     <!-- Opción A del boceto del 20-oct: paleta | sección | pieza seleccionada.
          docs/planes/2026-10-20-diseno-estribos-menores-visual-y-64.md, sección 1. -->
     <DockPanel Margin="14">
         <TextBlock DockPanel.Dock="Top" Text="Estribos menores" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4" />
-        <TextBlock x:Name="TextoEncabezado" DockPanel.Dock="Top" Foreground="Gray" FontSize="11" Margin="0,0,0,10" />
+        <TextBlock x:Name="TextoEncabezado" DockPanel.Dock="Top" Foreground="{StaticResource TextoSecundario}" FontSize="11" Margin="0,0,0,10" />
 
         <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
@@ -20,9 +25,9 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="TextoResumen" Grid.Column="0" VerticalAlignment="Center" Foreground="Gray" FontSize="11" />
+            <TextBlock x:Name="TextoResumen" Grid.Column="0" VerticalAlignment="Center" Foreground="{StaticResource TextoSecundario}" FontSize="11" />
             <Button Grid.Column="1" Content="Cancelar" Width="90" Height="30" Margin="0,0,8,0" Click="BotonCancelar_Click" />
-            <Button Grid.Column="2" Content="Aceptar" Width="90" Height="30" Background="#1E8449" Foreground="White"
+            <Button Grid.Column="2" Content="Aceptar" Width="90" Height="30" Background="{StaticResource Exito}" Foreground="White"
                     BorderThickness="0" FontWeight="Bold" Click="BotonAceptar_Click" />
         </Grid>
 
@@ -35,35 +40,35 @@
 
             <!-- Paleta: se arrastra una forma sobre una barra, o se elige y se hace clic. -->
             <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                <TextBlock Text="FORMAS" FontSize="10" Foreground="Gray" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="FORMAS" FontSize="10" Foreground="{StaticResource TextoSecundario}" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <Border x:Name="PaletaGrapaC" Tag="GrapaC" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,0,8"
-                        Background="White" Cursor="Hand" MouseLeftButtonDown="Paleta_MouseLeftButtonDown" MouseMove="Paleta_MouseMove">
+                        Background="{StaticResource Superficie}" Cursor="Hand" MouseLeftButtonDown="Paleta_MouseLeftButtonDown" MouseMove="Paleta_MouseMove">
                     <StackPanel>
                         <Canvas x:Name="IconoGrapaC" Width="90" Height="26" />
                         <TextBlock Text="Grapa en C" HorizontalAlignment="Center" FontSize="12" />
                     </StackPanel>
                 </Border>
                 <Border x:Name="PaletaGrapaS" Tag="GrapaS" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,0,8"
-                        Background="White" Cursor="Hand" MouseLeftButtonDown="Paleta_MouseLeftButtonDown" MouseMove="Paleta_MouseMove">
+                        Background="{StaticResource Superficie}" Cursor="Hand" MouseLeftButtonDown="Paleta_MouseLeftButtonDown" MouseMove="Paleta_MouseMove">
                     <StackPanel>
                         <Canvas x:Name="IconoGrapaS" Width="90" Height="26" />
                         <TextBlock Text="Grapa en S" HorizontalAlignment="Center" FontSize="12" />
                     </StackPanel>
                 </Border>
                 <Border x:Name="PaletaCerrado" Tag="Cerrado" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,0,8"
-                        Background="White" Cursor="Hand" MouseLeftButtonDown="Paleta_MouseLeftButtonDown" MouseMove="Paleta_MouseMove">
+                        Background="{StaticResource Superficie}" Cursor="Hand" MouseLeftButtonDown="Paleta_MouseLeftButtonDown" MouseMove="Paleta_MouseMove">
                     <StackPanel>
                         <Canvas x:Name="IconoCerrado" Width="90" Height="26" />
                         <TextBlock Text="Estribo cerrado" HorizontalAlignment="Center" FontSize="12" />
                     </StackPanel>
                 </Border>
-                <TextBlock x:Name="TextoAyuda" TextWrapping="Wrap" FontSize="11" Foreground="Gray" Margin="0,4,0,0" />
+                <TextBlock x:Name="TextoAyuda" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextoSecundario}" Margin="0,4,0,0" />
             </StackPanel>
 
             <!-- La sección vista desde arriba, como en el modelo (fila 1 abajo). -->
-            <Border Grid.Column="1" BorderBrush="#D0D0D0" BorderThickness="1" Background="White" Padding="8">
+            <Border Grid.Column="1" BorderBrush="{StaticResource Borde}" BorderThickness="1" Background="{StaticResource Superficie}" Padding="8">
                 <DockPanel>
-                    <TextBlock x:Name="NotaTapadas" DockPanel.Dock="Bottom" TextWrapping="Wrap" FontSize="11" Foreground="#92400E" Margin="0,6,0,0" />
+                    <TextBlock x:Name="NotaTapadas" DockPanel.Dock="Bottom" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource AvisoTexto}" Margin="0,6,0,0" />
                     <Canvas x:Name="Lienzo" Background="Transparent" AllowDrop="True" ClipToBounds="True"
                             HorizontalAlignment="Center" VerticalAlignment="Center"
                             MouseMove="Lienzo_MouseMove" MouseLeave="Lienzo_MouseLeave" MouseLeftButtonDown="Lienzo_MouseLeftButtonDown"
@@ -73,14 +78,14 @@
 
             <!-- Pieza seleccionada -->
             <StackPanel Grid.Column="2" Margin="12,0,0,0">
-                <TextBlock Text="PIEZA SELECCIONADA" FontSize="10" Foreground="Gray" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="PIEZA SELECCIONADA" FontSize="10" Foreground="{StaticResource TextoSecundario}" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <TextBlock x:Name="TextoPieza" TextWrapping="Wrap" FontSize="12" Margin="0,0,0,10" />
                 <StackPanel x:Name="PanelPieza" Visibility="Collapsed">
                     <TextBlock Text="# de varilla" FontSize="12" Margin="0,0,0,2" />
                     <ComboBox x:Name="ComboBarraPieza" Height="24" Margin="0,0,0,10" SelectionChanged="ComboBarraPieza_SelectionChanged" />
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="BotonVoltear" Content="Voltear" Width="70" Height="26" Margin="0,0,8,0" Click="BotonVoltear_Click" />
-                        <Button Content="Eliminar (Supr)" Width="110" Height="26" Foreground="#B91C1C" Click="BotonEliminar_Click" />
+                        <Button Content="Eliminar (Supr)" Width="110" Height="26" Foreground="{StaticResource Error}" Click="BotonEliminar_Click" />
                     </StackPanel>
                 </StackPanel>
             </StackPanel>

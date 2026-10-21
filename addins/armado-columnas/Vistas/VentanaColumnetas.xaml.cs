@@ -202,7 +202,7 @@ public partial class VentanaColumnetas : Window
     {
         bool activo = ChkDesfase.IsChecked == true;
         CampoDesfase.IsEnabled = activo;
-        EtiquetaDesfase.Foreground = activo ? Brushes.Black : Brushes.Gray;
+        EtiquetaDesfase.Foreground = activo ? Paleta.Texto : Paleta.TextoSecundario;
         DibujarEsquema();
     }
 
@@ -239,13 +239,13 @@ public partial class VentanaColumnetas : Window
         {
             Width = w,
             Height = h,
-            Fill = new SolidColorBrush(Color.FromRgb(0xEC, 0xEC, 0xEC)),
-            Stroke = new SolidColorBrush(Color.FromRgb(0xA0, 0xA0, 0xA0)),
+            Fill = Paleta.EsquemaMuro,
+            Stroke = Paleta.EsquemaMuroBorde,
             StrokeThickness = 1,
         }, x0, y0);
 
-        var relleno = new SolidColorBrush(Color.FromRgb(0x5B, 0x8F, 0xF9));
-        var rellenoVigueta = new SolidColorBrush(Color.FromRgb(0x2E, 0xA0, 0x6A));
+        var relleno = Paleta.EsquemaColumneta;
+        var rellenoVigueta = Paleta.EsquemaVigueta;
 
         double cantoVigueta = 0.35 * escala;
         double anchoColumneta = 0.20 * escala;

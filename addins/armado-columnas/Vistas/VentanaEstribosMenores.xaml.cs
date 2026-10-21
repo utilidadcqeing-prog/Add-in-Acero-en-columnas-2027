@@ -40,13 +40,13 @@ public partial class VentanaEstribosMenores : Window
 
     private const string IgualAlEstribo = "Igual al estribo";
 
-    private static readonly Brush ColorGrapaC = new SolidColorBrush(Color.FromRgb(0x04, 0x78, 0x57));
-    private static readonly Brush ColorGrapaS = new SolidColorBrush(Color.FromRgb(0x7C, 0x3A, 0xED));
-    private static readonly Brush ColorCerrado = new SolidColorBrush(Color.FromRgb(0x3B, 0x82, 0xF6));
-    private static readonly Brush ColorSeleccion = new SolidColorBrush(Color.FromRgb(0x1D, 0x4E, 0xD8));
-    private static readonly Brush ColorTapada = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-    private static readonly Brush ColorEstribo = new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80));
-    private static readonly Brush ColorImposible = new SolidColorBrush(Color.FromRgb(0xB9, 0x1C, 0x1C));
+    private static readonly Brush ColorGrapaC = Paleta.GrupoB;
+    private static readonly Brush ColorGrapaS = Paleta.GrapaS;
+    private static readonly Brush ColorCerrado = Paleta.Nudo;
+    private static readonly Brush ColorSeleccion = Paleta.Seleccion;
+    private static readonly Brush ColorTapada = Paleta.Contorno;
+    private static readonly Brush ColorEstribo = Paleta.Estribo;
+    private static readonly Brush ColorImposible = Paleta.Error;
 
     /// <summary>
     /// Lo que el panel necesita saber de la sección real para marcar en rojo un
@@ -211,7 +211,7 @@ public partial class VentanaEstribosMenores : Window
         Lienzo.Height = Margen * 2 + Lado;
 
         // Sección y estribo principal.
-        Agregar(new Rectangle { Width = Lado + 24, Height = Lado + 24, Fill = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6)) },
+        Agregar(new Rectangle { Width = Lado + 24, Height = Lado + 24, Fill = Paleta.Hormigon },
             Izquierda - 12, Arriba - 12);
         Agregar(new Rectangle { Width = Lado, Height = Lado, Stroke = ColorEstribo, StrokeThickness = 3 }, Izquierda, Arriba);
 
@@ -225,7 +225,7 @@ public partial class VentanaEstribosMenores : Window
 
         // Barras: esquinas e intermedias, con la que está bajo el mouse resaltada.
         foreach ((double x, double y) in new[] { (Izquierda, Arriba), (Derecha, Arriba), (Izquierda, Abajo), (Derecha, Abajo) })
-            Punto(x, y, 6, Brushes.White);
+            Punto(x, y, 6, Paleta.Superficie);
 
         (EjeCaja Eje, int Indice)? bajoMouse = _mouse is Point m && _herramienta is not null ? BarraEn(m) : null;
         for (int f = 0; f < _filas; f++)
@@ -249,7 +249,7 @@ public partial class VentanaEstribosMenores : Window
         bool primero = _primerClic is { } p && p.Equals(barra);
         if (primero || Equals(bajoMouse, barra))
             Agregar(new Ellipse { Width = 22, Height = 22, Stroke = ColorDe(_herramienta ?? FormaMenor.Cerrado), StrokeThickness = 2 }, x - 11, y - 11);
-        Punto(x, y, 5, new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)));
+        Punto(x, y, 5, Paleta.ErrorClaro);
     }
 
     private void DibujarPieza(EstriboMenor pieza, Brush color, bool seleccionada, double opacidad)
@@ -263,7 +263,7 @@ public partial class VentanaEstribosMenores : Window
             var rect = new Rectangle
             {
                 Width = r.Width, Height = r.Height, Stroke = trazo, StrokeThickness = grosor, Opacity = opacidad,
-                Fill = new SolidColorBrush(Color.FromArgb(0x22, 0x3B, 0x82, 0xF6)),
+                Fill = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorNudo, 0x22)),
             };
             Agregar(rect, r.Left, r.Top);
 
@@ -342,13 +342,13 @@ public partial class VentanaEstribosMenores : Window
     {
         if (forma == FormaMenor.Cerrado)
         {
-            var rect = new Rectangle { Width = 60, Height = 20, Stroke = Brushes.Black, StrokeThickness = 2.5 };
+            var rect = new Rectangle { Width = 60, Height = 20, Stroke = Paleta.Texto, StrokeThickness = 2.5 };
             Canvas.SetLeft(rect, 15);
             Canvas.SetTop(rect, 3);
             lienzo.Children.Add(rect);
             lienzo.Children.Add(new Polyline
             {
-                Points = new PointCollection { new(24, 14), new(15, 23) }, Stroke = Brushes.Black, StrokeThickness = 2.5,
+                Points = new PointCollection { new(24, 14), new(15, 23) }, Stroke = Paleta.Texto, StrokeThickness = 2.5,
             });
             return;
         }
@@ -357,7 +357,7 @@ public partial class VentanaEstribosMenores : Window
         lienzo.Children.Add(new Polyline
         {
             Points = new PointCollection { new(16, 21), new(10, 17), new(14, 13), new(76, 13), new(80, 13 + 4 * lado2), new(74, 13 + 8 * lado2) },
-            Stroke = Brushes.Black, StrokeThickness = 2.5,
+            Stroke = Paleta.Texto, StrokeThickness = 2.5,
         });
     }
 
@@ -370,11 +370,11 @@ public partial class VentanaEstribosMenores : Window
     }
 
     private void Punto(double cx, double cy, double r, Brush relleno) =>
-        Agregar(new Ellipse { Width = r * 2, Height = r * 2, Fill = relleno, Stroke = new SolidColorBrush(Color.FromRgb(0x37, 0x41, 0x51)), StrokeThickness = 1.2 },
+        Agregar(new Ellipse { Width = r * 2, Height = r * 2, Fill = relleno, Stroke = Paleta.ContornoOscuro, StrokeThickness = 1.2 },
             cx - r, cy - r);
 
     private void Texto(string texto, double x, double y) =>
-        Agregar(new TextBlock { Text = texto, FontSize = 10, Foreground = Brushes.Gray }, x, y);
+        Agregar(new TextBlock { Text = texto, FontSize = 10, Foreground = Paleta.TextoSecundario }, x, y);
 
     // ------------------------------------------------------- paneles laterales
 
@@ -384,8 +384,8 @@ public partial class VentanaEstribosMenores : Window
                  { (PaletaGrapaC, FormaMenor.GrapaC), (PaletaGrapaS, FormaMenor.GrapaS), (PaletaCerrado, FormaMenor.Cerrado) })
         {
             bool activa = _herramienta == forma;
-            borde.BorderBrush = activa ? ColorSeleccion : new SolidColorBrush(Color.FromRgb(0xC9, 0xCE, 0xD6));
-            borde.Background = activa ? new SolidColorBrush(Color.FromRgb(0xEF, 0xF6, 0xFF)) : Brushes.White;
+            borde.BorderBrush = activa ? ColorSeleccion : Paleta.BordeSuave;
+            borde.Background = activa ? Paleta.SeleccionFondo : Paleta.Superficie;
         }
 
         TextoAyuda.Text = _herramienta switch

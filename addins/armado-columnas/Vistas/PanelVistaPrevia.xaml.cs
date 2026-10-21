@@ -20,13 +20,13 @@ using practicacq.Modelo;
 /// </summary>
 public partial class PanelVistaPrevia : UserControl
 {
-    private static readonly Brush ColorHormigon = new SolidColorBrush(Color.FromRgb(0xF3, 0xF4, 0xF6));
-    private static readonly Brush ColorContorno = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-    private static readonly Brush ColorTexto = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
-    private static readonly Brush ColorNudo = new SolidColorBrush(Color.FromArgb(0x60, 0x3B, 0x82, 0xF6));
-    private static readonly Brush ColorZapata = new SolidColorBrush(Color.FromArgb(0x60, 0xB4, 0x53, 0x09));
-    private static readonly Brush ColorAviso = new SolidColorBrush(Color.FromRgb(0x92, 0x40, 0x0E));
-    private static readonly Brush ColorTapada = new SolidColorBrush(Color.FromRgb(0xC0, 0xC4, 0xCA));
+    private static readonly Brush ColorHormigon = Paleta.Hormigon;
+    private static readonly Brush ColorContorno = Paleta.Contorno;
+    private static readonly Brush ColorTexto = Paleta.TextoSecundario;
+    private static readonly Brush ColorNudo = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorNudo, 0x60));
+    private static readonly Brush ColorZapata = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorZapata, 0x60));
+    private static readonly Brush ColorAviso = Paleta.AvisoTexto;
+    private static readonly Brush ColorTapada = Paleta.TapadaClara;
 
     private const double AnchoLienzo = 350;
     private const double AltoPlanta = 170;
@@ -192,7 +192,7 @@ public partial class PanelVistaPrevia : UserControl
         {
             double radio = Math.Max(2.5, barra.DiametroMm / 2000 * escala);
             Point c = P(barra.X, barra.Y);
-            Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(barra.DiametroMm), Stroke = Brushes.Black, StrokeThickness = 0.5 },
+            Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(barra.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
                 c.X - radio, c.Y - radio);
         }
 

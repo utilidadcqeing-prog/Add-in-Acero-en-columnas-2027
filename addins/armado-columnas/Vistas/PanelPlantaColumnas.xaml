@@ -1,11 +1,12 @@
 <UserControl x:Class="practicacq.Vistas.PanelPlantaColumnas"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:practicacq.Vistas">
     <!-- El lienzo ya no tiene tamaño fijo: ocupa lo que le den y se redibuja
          solo al cambiar de tamaño (ver SizeChanged en el code-behind). Antes
          eran 220x460 clavados dentro de un ScrollViewer, así que agrandar la
          ventana no agrandaba la planta. -->
-    <Border Background="White" ClipToBounds="True">
+    <Border Background="{x:Static local:Paleta.Superficie}" ClipToBounds="True">
         <Canvas x:Name="Lienzo" Background="Transparent" />
     </Border>
 </UserControl>
