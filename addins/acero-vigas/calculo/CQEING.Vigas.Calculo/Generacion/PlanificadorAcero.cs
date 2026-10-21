@@ -35,8 +35,11 @@ public static class PlanificadorAcero
             {
                 Barra b = enOrden[i];
                 List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
+                // El largo de la barra del tablero lleva los ganchos del diámetro de la capa; una pieza de otro diámetro
+                // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
                 barras.AddRange(puestos.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
-                    s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
+                    s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
+                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin))));
             }
         }
 
@@ -54,10 +57,64 @@ public static class PlanificadorAcero
                 b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
         }
 
+        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r);
+        barras = anidadas.Take(barras.Count).ToList();
+        bastones = anidadas.Skip(barras.Count).ToList();
+
         List<GrupoEstribos> estribos = Estribos(c, p.Portico, o.Estribos, r, u);
         List<int> diametros = barras.Concat(bastones).Select(x => x.Diametro).Concat(estribos.Select(e => e.Diametro)).Distinct().Order().ToList();
         return new PlanAcero(idPortico, barras, bastones, sinLugar, estribos, diametros);
     }
+
+    /// <summary>
+    /// Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". Una barra que va debajo de otra
+    /// (arriba; encima, abajo) y llega a la misma punta que ese gancho lo atraviesa: termina antes, con todo su gancho por
+    /// dentro del arranque del de afuera (un radio de doblado más un diámetro), y su largo baja lo mismo. Se recorren de la
+    /// cara hacia adentro, así una tercera fila se mete dentro de la segunda ya corrida.
+    /// </summary>
+    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r)
+    {
+        const double tolerancia = 1e-6;
+        PiezaLongitudinal[] p = piezas.ToArray();
+        double D(PiezaLongitudinal x) => r.PorDiametro[x.Diametro].Diametro;
+        // De la punta de la parte recta a la cara exterior del doblez (el gancho sale hacia la punta de la viga).
+        double Vuelta(PiezaLongitudinal x, TipoGancho t) => t == TipoGancho.Sin ? 0 : DobladoDe(r.PorDiametro[x.Diametro], t) / 2 + D(x);
+
+        foreach (bool inicio in new[] { true, false })
+        {
+            int sentido = inicio ? 1 : -1; // hacia adentro de la viga desde esa punta
+            TipoGancho Gancho(PiezaLongitudinal x) => inicio ? x.GanchoInicio : x.GanchoFin;
+            int Punta(PiezaLongitudinal x) => inicio ? x.Desde : x.Hasta;
+            foreach (int[] capa in Enumerable.Range(0, p.Length).GroupBy(i => p[i].Capa).Select(g => g
+                         .OrderByDescending(i => p[i].Capa == Posicion.Superior ? p[i].YCorte : -p[i].YCorte).ToArray()))
+            {
+                for (int k = 0; k < capa.Length; k++)
+                {
+                    PiezaLongitudinal adentro = p[capa[k]];
+                    int punta = Punta(adentro);
+                    foreach (PiezaLongitudinal afuera in capa.Take(k).Select(i => p[i]))
+                    {
+                        bool debajo = Math.Abs(afuera.XCorte - adentro.XCorte) < (D(afuera) + D(adentro)) / 2 - tolerancia
+                            && Math.Abs(afuera.YCorte - adentro.YCorte) > tolerancia;
+                        double vueltaAfuera = Vuelta(afuera, Gancho(afuera));
+                        if (!debajo || vueltaAfuera == 0 || sentido * (punta - Punta(afuera)) >= vueltaAfuera + Vuelta(adentro, Gancho(adentro)))
+                            continue;
+                        int minima = Punta(afuera) + sentido * (int)Math.Ceiling(Vuelta(adentro, Gancho(adentro)) - tolerancia);
+                        if (sentido * (minima - punta) > 0)
+                            punta = minima;
+                    }
+                    int corrida = sentido * (punta - Punta(adentro));
+                    if (corrida > 0)
+                        p[capa[k]] = (inicio ? adentro with { Desde = punta } : adentro with { Hasta = punta }) with { Largo = adentro.Largo - corrida };
+                }
+            }
+        }
+        return p.ToList();
+    }
+
+    /// <summary>El diámetro de doblado del gancho del cuadro de Reglas; 6 diámetros si el cuadro no lo trae.</summary>
+    private static double DobladoDe(ReglaDiametro regla, TipoGancho t) =>
+        (t switch { TipoGancho.De180 => regla.Gancho180.D, TipoGancho.De135 => regla.Estribo135.D, _ => regla.Gancho90.D }) ?? 6 * regla.Diametro;
 
     /// <summary>
     /// Una corrida por cada zona de cada tramo y estribo (hallazgo E6: como el rótulo del tablero), con las caras del corte

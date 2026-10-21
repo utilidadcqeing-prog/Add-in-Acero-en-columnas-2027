@@ -64,17 +64,22 @@ public static class RepartidorFilas
                 : puestosLlenos;
             int?[] acomodo = Acomodar(enFila, puestos.Length);
             double bordeFila = borde;
+            bool fila1 = filas.Count == 0;
             filas.Add(acomodo
                 .Select((numero, i) => (numero, i))
                 .Where(x => x.numero is not null)
                 .Select(x =>
                 {
-                    double distancia = bordeFila + Diametro(e, x.numero!.Value) / 2;
+                    // la de esquina de la fila 1 se apoya en la curva del estribo: de lado y de alto entra lo mismo
+                    bool esquina = fila1 && puestos.Length >= 2 && (x.i == 0 || x.i == puestos.Length - 1);
+                    double enCurva = esquina ? EnLaCurva(e, x.numero!.Value) : 0;
+                    double distancia = bordeFila + enCurva + Diametro(e, x.numero!.Value) / 2;
                     double y = cara == Posicion.Inferior ? distancia : e.Alto - distancia;
-                    return new BarraEnSeccion(x.numero.Value, puestos[x.i], y);
+                    return new BarraEnSeccion(x.numero.Value, puestos[x.i] + (x.i == 0 ? enCurva : -enCurva), y);
                 })
                 .ToList());
-            borde += enFila.Max(n => Diametro(e, n)) + e.SeparacionFilas;
+            // la fila siguiente apoya en la de esquina, que bajó al apoyarse en la curva
+            borde += enFila.Max(n => Diametro(e, n)) + e.SeparacionFilas + (fila1 ? EnLaCurva(e, enFila[0]) : 0);
         }
         return new CaraSeccion(cara, caben, filas, error, maximo, alEje);
     }
@@ -172,4 +177,18 @@ public static class RepartidorFilas
         c.Error == ErrorCara.Ninguno ? c with { Error = ErrorCara.NoCabenEnElAlto } : c;
 
     internal static double Diametro(EntradaSeccion e, int numero) => e.Reglas.PorDiametro[numero].Diametro;
+
+    /// <summary>
+    /// Cuánto entra, de lado y de alto, la barra de esquina <paramref name="numero"/> para apoyarse en la curva del
+    /// estribo en vez de en una esquina recta (21-oct: en Revit la #5 se metía ~5 mm en la curva del #3). La curva tiene
+    /// por dentro el diámetro de doblado del estribo del cuadro de Reglas (4 diámetros si no lo trae); con el radio de
+    /// curva R y el de la barra r, el centro de la barra queda a R − (R − r)/√2 de cada cara en vez de a r. Si la barra es
+    /// más gruesa que la curva, no entra nada. Las del medio de la fila siguen apoyadas en la rama recta: "al eje" no cambia.
+    /// </summary>
+    internal static double EnLaCurva(EntradaSeccion e, int numero)
+    {
+        ReglaDiametro estribo = e.Reglas.PorDiametro[e.DiametroEstribo];
+        double radioCurva = (estribo.Estribo135.D ?? 4 * estribo.Diametro) / 2.0, radioBarra = Diametro(e, numero) / 2;
+        return radioCurva <= radioBarra ? 0 : (radioCurva - radioBarra) * (1 - 1 / Math.Sqrt(2));
+    }
 }

@@ -117,7 +117,8 @@ public static class UbicadorBastones
                 double y = cara == Posicion.Inferior ? distancia : e.Alto - distancia;
                 resultado.Add(new BastonEnSeccion(k + 1, new BarraEnSeccion(p.Diametro, p.X, y)));
             }
-            borde += filas[k].Max(p => Diametro(e, p.Diametro)) + e.SeparacionFilas;
+            borde += filas[k].Max(p => Diametro(e, p.Diametro)) + e.SeparacionFilas
+                + (k == 0 ? RepartidorFilas.EnLaCurva(e, filas[0].Where(p => !p.EsBaston).MinBy(p => p.X)!.Diametro) : 0);
         }
         return resultado;
     }

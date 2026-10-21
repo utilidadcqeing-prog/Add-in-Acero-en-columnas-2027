@@ -79,7 +79,7 @@ public class MotorEstribosTests
         Assert.Equal(28 * 1.5312 * 0.994, ab.Kg, 6);
         Assert.Equal(1468, Cerrado(r, "B-C").Largo, 6);
         // La sección sigue con #3: la barra de esquina queda a 40 + 9.5 + 7.95.
-        Assert.Equal(57.45, r.Seccion.Inferior.Filas[0][0].X, 6);
+        Assert.Equal(57.45 + (19 - 7.95) * (1 - 1 / Math.Sqrt(2)), r.Seccion.Inferior.Filas[0][0].X, 6);
     }
 
     [Fact]

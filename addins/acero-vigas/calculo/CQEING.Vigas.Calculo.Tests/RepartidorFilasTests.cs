@@ -6,10 +6,14 @@ namespace CQEING.Vigas.Calculo.Tests;
 /// <summary>
 /// La sección de la maqueta: 30 × 50 cm, recubrimiento libre de 4 cm, estribo #3 (9.5 mm) y barras #5 (15.9 mm).
 /// Libre para barras: 300 − 2·40 − 2·9.5 = 201 mm → caben piso((201 + 25) / (15.9 + 25)) = 5 por fila.
-/// La barra de esquina queda a 40 + 9.5 + 7.95 = 57.45 mm de cada cara.
+/// Las del medio de la fila 1 quedan a 40 + 9.5 + 7.95 = 57.45 mm de la cara (apoyadas en la rama recta del estribo);
+/// la de esquina se apoya en la curva del estribo (#3: 38 de doblado, radio 19) y entra
+/// (19 − 7.95)(1 − 1/√2) ≈ 3.236 de lado y de alto (21-oct).
 /// </summary>
 public class RepartidorFilasTests
 {
+    private static readonly double EnCurva5 = (19 - 7.95) * (1 - 1 / Math.Sqrt(2));
+
     private static EntradaSeccion Maqueta(IReadOnlyList<GrupoBarras>? inferior = null, IReadOnlyList<GrupoBarras>? superior = null) =>
         new(Ancho: 300, Alto: 500, Recubrimientos.Iguales(40), DiametroEstribo: 3,
             Superior: superior ?? [new GrupoBarras(3, 5)], Inferior: inferior ?? [new GrupoBarras(3, 5)], Reglas.Generales);
@@ -72,9 +76,26 @@ public class RepartidorFilasTests
         CaraSeccion c = Abajo(Maqueta([new GrupoBarras(5, 5)]));
 
         IReadOnlyList<BarraEnSeccion> fila = c.Filas[0];
-        Assert.Equal([57.45, 103.725, 150, 196.275, 242.55], fila.Select(b => Math.Round(b.X, 3)));
-        Assert.All(fila, b => Assert.Equal(57.45, b.Y, precision: 6));
+        Assert.Equal([60.686, 103.725, 150, 196.275, 239.314], fila.Select(b => Math.Round(b.X, 3)));
+        Assert.All(fila.Skip(1).SkipLast(1), b => Assert.Equal(57.45, b.Y, precision: 6));
+        Assert.All(new[] { fila[0], fila[^1] }, b => Assert.Equal(57.45 + EnCurva5, b.Y, precision: 6));
         Assert.All(fila.Zip(fila.Skip(1)), par => Assert.True(par.Second.X - par.First.X - 15.9 >= 25));
+    }
+
+    /// <summary>
+    /// Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". La curva del estribo (#3, radio
+    /// interior 19, centrada a 40 + 9.5 + 19 de cada cara) toca la barra de esquina sin meterse en ella: del centro de la
+    /// curva al de la barra hay 19 − 7.95. La #5 de la fila 2 que va debajo tampoco se monta en ella.
+    /// </summary>
+    [Fact]
+    public void LaEsquinaSeApoyaEnLaCurvaDelEstriboSinMeterse()
+    {
+        CaraSeccion c = Abajo(Maqueta([new GrupoBarras(7, 5)]));
+        BarraEnSeccion esquina = c.Filas[0][0], debajo = c.Filas[1][0];
+        double centroCurva = 40 + 9.5 + 19;
+
+        Assert.Equal(19 - 7.95, Math.Sqrt(Math.Pow(esquina.X - centroCurva, 2) + Math.Pow(esquina.Y - centroCurva, 2)), precision: 6);
+        Assert.True(Math.Sqrt(Math.Pow(esquina.X - debajo.X, 2) + Math.Pow(esquina.Y - debajo.Y, 2)) >= 15.9 - 1e-6);
     }
 
     [Fact]
@@ -83,7 +104,8 @@ public class RepartidorFilasTests
         CaraSeccion c = Abajo(Maqueta([new GrupoBarras(7, 5)]));
 
         Assert.Equal([57.45, 242.55], c.Filas[1].Select(b => Math.Round(b.X, 3)));
-        Assert.All(c.Filas[1], b => Assert.Equal(57.45 + 15.9, b.Y, precision: 6));
+        // apoya en la de esquina, que bajó al apoyarse en la curva
+        Assert.All(c.Filas[1], b => Assert.Equal(57.45 + EnCurva5 + 15.9, b.Y, precision: 6));
     }
 
     [Fact]
@@ -91,7 +113,7 @@ public class RepartidorFilasTests
     {
         CaraSeccion c = Abajo(Maqueta([new GrupoBarras(7, 5)]) with { SeparacionFilas = 10 });
 
-        Assert.All(c.Filas[1], b => Assert.Equal(57.45 + 15.9 + 10, b.Y, precision: 6));
+        Assert.All(c.Filas[1], b => Assert.Equal(57.45 + EnCurva5 + 15.9 + 10, b.Y, precision: 6));
     }
 
     [Fact]
@@ -99,7 +121,7 @@ public class RepartidorFilasTests
     {
         CaraSeccion arriba = RepartidorFilas.Repartir(Maqueta()).Superior;
 
-        Assert.All(arriba.Filas[0], b => Assert.Equal(500 - 57.45, b.Y, precision: 6));
+        Assert.Equal([500 - 57.45 - EnCurva5, 500 - 57.45, 500 - 57.45 - EnCurva5], arriba.Filas[0].Select(b => Math.Round(b.Y, 6)).ToArray(), (a, b) => Math.Abs(a - b) < 1e-6);
     }
 
     [Fact]
@@ -109,7 +131,8 @@ public class RepartidorFilasTests
 
         Assert.Equal(77.45, r.Inferior.RecubrimientoAlEje, precision: 6);
         Assert.Equal(57.45, r.Superior.RecubrimientoAlEje, precision: 6);
-        Assert.All(r.Inferior.Filas[0], b => Assert.Equal(77.45, b.Y, precision: 6));
+        Assert.Equal(77.45, r.Inferior.Filas[0][1].Y, precision: 6);
+        Assert.Equal(77.45 + EnCurva5, r.Inferior.Filas[0][0].Y, precision: 6);
     }
 
     [Fact]
@@ -157,8 +180,8 @@ public class RepartidorFilasTests
         CaraSeccion c = Abajo(Maqueta([new GrupoBarras(2, 5, 2), new GrupoBarras(4, 4)]));
 
         Assert.Equal([[4, 4, 4, 4], [5, 5]], c.Filas.Select(f => f.Select(b => b.Diametro).ToArray()));
-        // la esquina es del primer grupo de la fila 1: el #4
-        Assert.Equal(40 + 9.5 + 12.7 / 2, c.Filas[0][0].X, 3);
+        // la esquina es del primer grupo de la fila 1: el #4, apoyado en la curva del estribo
+        Assert.Equal(40 + 9.5 + 12.7 / 2 + (19 - 6.35) * (1 - 1 / Math.Sqrt(2)), c.Filas[0][0].X, 3);
     }
 
     [Fact]
