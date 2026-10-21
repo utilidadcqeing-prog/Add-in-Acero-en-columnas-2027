@@ -34,4 +34,11 @@ public class ColoresDiametroTests
         Assert.Equal(((byte)0xD3, (byte)0x2F, (byte)0x2F), ColoresDiametro.Rgb(5));
         Assert.Equal(((byte)0x5E, (byte)0x66, (byte)0x70), ColoresDiametro.Rgb(99));
     }
+
+    /// <summary>Casi negro y no negro puro: con el fondo oscuro, Revit pinta de blanco lo que es (0, 0, 0).</summary>
+    [Fact]
+    public void ElContornoDeTodaBarraEsCasiNegro()
+    {
+        Assert.Equal(((byte)30, (byte)30, (byte)30), ColoresDiametro.RgbContorno);
+    }
 }

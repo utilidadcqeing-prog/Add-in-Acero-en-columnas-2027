@@ -112,9 +112,10 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
                 vista.Name = Nombre3d;
             }
             // Sombreado: en alambre Revit no pinta superficies, y el acero (la vista previa y las barras con filtro de color
-            // por diámetro) se vería sin color.
-            if (vista.DisplayStyle != DisplayStyle.Shading)
-                vista.DisplayStyle = DisplayStyle.Shading;
+            // por diámetro) se vería sin color. Con aristas: cada barra generada sale con su contorno negro (FiltrosColor) y
+            // se ve dónde termina y dónde pasa por otra (Juan, 21-oct).
+            if (vista.DisplayStyle != DisplayStyle.ShadingWithEdges)
+                vista.DisplayStyle = DisplayStyle.ShadingWithEdges;
             if (vista.IsInTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate))
                 vista.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
             // La caja va antes de ocultar: lo que se oculta es lo que la vista ve, y con la caja del pórtico anterior quedaban
