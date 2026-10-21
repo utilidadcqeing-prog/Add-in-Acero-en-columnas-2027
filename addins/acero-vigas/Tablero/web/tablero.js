@@ -531,7 +531,10 @@
           : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' })),
         stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
         stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px' });
-      const sec = seccionA(Math.min(5, 270 / secc.altoCm, 340 / secc.anchoCm));
+      // La pestaña usa todo el alto del área de dibujo y el ancho que deja el texto (320 + 48 de separación + márgenes):
+      // a 5 px por cm una viga de 25 × 35 quedaba de 125 × 175 px.
+      const md = this.medidas();
+      const sec = seccionA(Math.min((md.dibujoH - 40) / secc.altoCm, (md.dibujoW - 320 - 48 - 80) / secc.anchoCm));
       const secMini = seccionA(Math.min(4, 180 / secc.altoCm, (ANCHO_CORTE - 40) / secc.anchoCm));
       const adicionales = P ? P.listaEstribos.filter((e) => e.id !== 'E') : [];
 
