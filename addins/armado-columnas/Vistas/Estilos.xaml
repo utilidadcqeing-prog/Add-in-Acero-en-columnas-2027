@@ -34,7 +34,27 @@
     <x:Static x:Key="Nudo" Member="local:Paleta.Nudo" />
     <x:Static x:Key="Zapata" Member="local:Paleta.Zapata" />
 
-    <!-- Estilos de texto y de panel -->
+    <!-- Estados de los botones (issue #117) -->
+    <x:Static x:Key="SuperficieHover" Member="local:Paleta.SuperficieHover" />
+    <x:Static x:Key="SuperficiePresionada" Member="local:Paleta.SuperficiePresionada" />
+    <x:Static x:Key="ExitoHover" Member="local:Paleta.ExitoHover" />
+    <x:Static x:Key="ExitoPresionado" Member="local:Paleta.ExitoPresionado" />
+    <x:Static x:Key="AccionFinalHover" Member="local:Paleta.AccionFinalHover" />
+    <x:Static x:Key="AccionFinalPresionada" Member="local:Paleta.AccionFinalPresionada" />
+    <x:Static x:Key="ErrorFondo" Member="local:Paleta.ErrorFondo" />
+    <x:Static x:Key="DeshabilitadoFondo" Member="local:Paleta.DeshabilitadoFondo" />
+    <x:Static x:Key="DeshabilitadoTexto" Member="local:Paleta.DeshabilitadoTexto" />
+
+    <!-- Estilos de texto y de panel (tipografía común de las tres ventanas, #119) -->
+    <Style TargetType="TextBlock" x:Key="TituloVentana">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="TextoAyuda">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource TextoSecundario}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
     <Style TargetType="TextBlock" x:Key="Etiqueta">
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Margin" Value="0,8,0,3" />
@@ -44,6 +64,115 @@
         <Setter Property="BorderBrush" Value="{StaticResource Borde}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10" />
+    </Style>
+
+    <!-- Botones (issue #117). Cuatro clases, cada una con un solo significado:
+         Principal = aceptar lo configurado (verde), AccionFinal = escribe en el
+         modelo de Revit (naranja), Secundario = todo lo demás (blanco) y
+         Peligro = borra algo (texto rojo). Todos con esquinas suaves, color al
+         pasar el mouse y al apretar, y gris cuando están deshabilitados. -->
+    <Style TargetType="Button" x:Key="BotonSecundario">
+        <Setter Property="Background" Value="{StaticResource Superficie}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Borde}" />
+        <Setter Property="Foreground" Value="Black" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" SnapsToDevicePixels="True">
+                        <ContentPresenter Margin="{TemplateBinding Padding}" RecognizesAccessKey="True"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource SuperficieHover}" />
+                <Setter Property="BorderBrush" Value="{StaticResource Contorno}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource SuperficiePresionada}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="BorderBrush" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" x:Key="BotonPrincipal" BasedOn="{StaticResource BotonSecundario}">
+        <Setter Property="Background" Value="{StaticResource Exito}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Exito}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="MinHeight" Value="32" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource ExitoHover}" />
+                <Setter Property="BorderBrush" Value="{StaticResource ExitoHover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource ExitoPresionado}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="BorderBrush" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" x:Key="BotonAccionFinal" BasedOn="{StaticResource BotonPrincipal}">
+        <Setter Property="Background" Value="{StaticResource AccionFinal}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccionFinal}" />
+        <Setter Property="Padding" Value="14,0" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource AccionFinalHover}" />
+                <Setter Property="BorderBrush" Value="{StaticResource AccionFinalHover}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{StaticResource AccionFinalPresionada}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="BorderBrush" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style TargetType="Button" x:Key="BotonPeligro" BasedOn="{StaticResource BotonSecundario}">
+        <Setter Property="Foreground" Value="{StaticResource Error}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{StaticResource ErrorFondo}" />
+                <Setter Property="BorderBrush" Value="{StaticResource Error}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="BorderBrush" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Flechas para cambiar de tramo: más grandes que antes (eran 26x17 px). -->
+    <Style TargetType="Button" x:Key="BotonFlecha" BasedOn="{StaticResource BotonSecundario}">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="11" />
     </Style>
 
 </ResourceDictionary>

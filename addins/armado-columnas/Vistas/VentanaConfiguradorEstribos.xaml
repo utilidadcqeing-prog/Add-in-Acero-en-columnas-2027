@@ -156,10 +156,10 @@
                                     <TextBlock Grid.Column="0" x:Name="TextoTramoActivo" Text="—" HorizontalAlignment="Left"
                                                VerticalAlignment="Center" FontSize="11" />
                                     <StackPanel Grid.Column="1">
-                                        <Button x:Name="BotonSiguiente" Content="▲" Width="26" Height="17" Padding="0"
-                                                FontSize="9" Click="BotonSiguiente_Click" />
-                                        <Button x:Name="BotonAnterior" Content="▼" Width="26" Height="17" Padding="0"
-                                                FontSize="9" Margin="0,1,0,0" Click="BotonAnterior_Click" />
+                                        <Button x:Name="BotonSiguiente" Content="▲" Style="{StaticResource BotonFlecha}"
+                                                ToolTip="Tramo de arriba" Click="BotonSiguiente_Click" />
+                                        <Button x:Name="BotonAnterior" Content="▼" Style="{StaticResource BotonFlecha}"
+                                                ToolTip="Tramo de abajo" Margin="0,2,0,0" Click="BotonAnterior_Click" />
                                     </StackPanel>
                                 </Grid>
 
@@ -194,11 +194,10 @@
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                     <Border Height="1" Background="{StaticResource Separador}" Margin="0,0,0,8" />
                     <Button x:Name="BotonAceptar" Content="✓  Aceptar este tramo" Height="32"
-                            Background="{StaticResource Exito}" Foreground="White" FontWeight="Bold"
-                            BorderThickness="0" Click="BotonAceptar_Click" />
-                    <Button x:Name="BotonAceptarMismoTipo" Height="26" Margin="0,4,0,0"
+                            Style="{StaticResource BotonPrincipal}" Click="BotonAceptar_Click" />
+                    <Button x:Name="BotonAceptarMismoTipo" Height="26" Style="{StaticResource BotonSecundario}" Margin="0,4,0,0"
                             Click="BotonAceptarMismoTipo_Click" Visibility="Collapsed" />
-                    <Button x:Name="BotonAceptarColumna" Height="26" Margin="0,4,0,0"
+                    <Button x:Name="BotonAceptarColumna" Height="26" Style="{StaticResource BotonSecundario}" Margin="0,4,0,0"
                             Click="BotonAceptarColumna_Click" Visibility="Collapsed" />
                 </StackPanel>
 
@@ -216,8 +215,8 @@
                         </Grid.ColumnDefinitions>
                         <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones" Height="24"
                                   SelectionChanged="ComboConfiguraciones_SelectionChanged" />
-                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" Content="Borrar"
-                                Height="24" Padding="8,0" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
+                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" Content="Borrar" Style="{StaticResource BotonPeligro}"
+                                Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
                     </Grid>
                     <Grid Margin="0,4,0,0">
                         <Grid.ColumnDefinitions>
@@ -226,8 +225,8 @@
                         </Grid.ColumnDefinitions>
                         <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" Height="24"
                                  VerticalContentAlignment="Center" />
-                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" Content="Guardar"
-                                Height="24" Padding="8,0" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
+                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" Content="Guardar" Style="{StaticResource BotonSecundario}"
+                                Height="24" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
                     </Grid>
                     <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre."
                                TextWrapping="Wrap" Foreground="{StaticResource TextoSecundario}" FontSize="10" Margin="0,3,0,0" />
@@ -352,7 +351,7 @@
                     <TextBlock x:Name="EtiquetaGanchoLongitudinal" Text="Gancho de anclaje en zapata:" Style="{StaticResource Etiqueta}" Visibility="Collapsed" />
                     <ComboBox x:Name="ComboGanchoLongitudinal" Height="24" Visibility="Collapsed" />
 
-                    <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Margin="0,12,0,0"
+                    <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" TextWrapping="Wrap" Foreground="{StaticResource TextoSecundario}" FontSize="11" Margin="0,4,0,0" />
                 </StackPanel>
@@ -378,8 +377,7 @@
             <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar TODO el armado existente en estas columnas (incluido el que no generó el addin)"
                       VerticalAlignment="Center" Margin="0,0,12,0" />
             <Button Grid.Column="2" x:Name="BotonGenerar" Content="Generar armado en Revit"
-                    Height="32" Padding="12,0" Background="{StaticResource AccionFinal}" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0" Click="BotonGenerar_Click" />
+                    Height="32" Style="{StaticResource BotonAccionFinal}" Click="BotonGenerar_Click" />
         </Grid>
     </Grid>
 </Window>
