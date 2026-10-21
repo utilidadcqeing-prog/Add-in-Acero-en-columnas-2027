@@ -5,6 +5,7 @@ namespace CQEING.Vigas.Calculo.Modelo;
 /// <param name="RecubrimientoPuntas">Distancia de la punta de las barras a la cara exterior del pórtico, en mm.</param>
 /// <param name="Cambios">Cambios manuales del usuario; se aplican sobre la solución automática.</param>
 /// <param name="Bastones">Lo que se eligió en el paso 2 del tablero; null = los valores por defecto (#89).</param>
+/// <param name="EstriboEnVoladizo">Diámetro del estribo de la punta de un voladizo, en mm (ver <see cref="Vigas.GeometriaPortico"/>).</param>
 public sealed record EntradaVigas(
     Portico Portico,
     TipoViga Tipo,
@@ -14,4 +15,5 @@ public sealed record EntradaVigas(
     Cara? CaraElegida = null,
     int RecubrimientoPuntas = 50,
     CambiosManuales? Cambios = null,
-    ArmadoBastones? Bastones = null);
+    ArmadoBastones? Bastones = null,
+    int EstriboEnVoladizo = 0);
