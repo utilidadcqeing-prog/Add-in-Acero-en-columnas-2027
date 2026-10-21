@@ -270,7 +270,10 @@ public class ArmadorVistaTests
         Assert.Equal(r.CaraUsada == Cara.Inicio ? "izq" : "der", v.CaraUsada);
     }
 
-    /// <summary>El caso de <see cref="AvisosTests"/>: D en 11.55 y la capa de abajo al final de la luz.</summary>
+    /// <summary>
+    /// El caso de <see cref="AvisosTests"/>: D en 11.55 y la capa de abajo al final de la luz. El tablero cierra la punta del
+    /// voladizo con el estribo #3 (10 mm), así que las barras terminan 10 mm antes y el traslapo queda 10 mm más largo.
+    /// </summary>
     [Fact]
     public void UnTraslapoLargoDaElAvisoConSuTexto()
     {
@@ -280,7 +283,7 @@ public class ArmadorVistaTests
         VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico));
 
         AvisoVista a = Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('I'));
-        Assert.Equal("El traslapo I3–I4 queda en 1.29, 0.39 por encima del mínimo. I4 termina en el voladizo y solo puede crecer. "
+        Assert.Equal("El traslapo I3–I4 queda en 1.30, 0.40 por encima del mínimo. I4 termina en el voladizo y solo puede crecer. "
             + "Si el traslapo va al inicio de la luz no pasa, y además se ahorran 5 kg.", a.Texto);
     }
 

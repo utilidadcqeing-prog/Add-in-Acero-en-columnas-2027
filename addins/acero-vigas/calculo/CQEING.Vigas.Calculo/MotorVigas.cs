@@ -18,7 +18,7 @@ public static class MotorVigas
         if (avisos.Count > 0)
             return new ResultadoVigas(null, null, capaDeLaCara, null, null, Cara.Inicio, Cara.Inicio, avisos, []);
 
-        var g = new GeometriaPortico(entrada.Portico, entrada.RecubrimientoPuntas);
+        var g = new GeometriaPortico(entrada.Portico, entrada.RecubrimientoPuntas, entrada.EstriboEnVoladizo);
         GeometriaPortico gCentro = GeometriaDe(entrada, capaDelCentro, g), gCara = GeometriaDe(entrada, capaDeLaCara, g);
         CapaCalculada? centro = Resolver(entrada, gCentro, capaDelCentro, Cara.Inicio, avisos);
         CapaCalculada? inicio = Resolver(entrada, gCara, capaDeLaCara, Cara.Inicio, avisos);
@@ -126,7 +126,7 @@ public static class MotorVigas
             return comun;
         double Mayor(IReadOnlyList<GrupoBarras> grupos) => e.Reglas.PorDiametro[grupos.Max(gr => gr.Diametro)].Diametro;
         int anidado = (int)Math.Round((Mayor(e.Superior) + Mayor(e.Inferior)) / 2);
-        return new GeometriaPortico(e.Portico, e.RecubrimientoPuntas + anidado);
+        return new GeometriaPortico(e.Portico, e.RecubrimientoPuntas + anidado, e.EstriboEnVoladizo);
     }
 
     private static Dictionary<string, int> Con(IReadOnlyDictionary<string, int>? actuales, string id, int valor) =>

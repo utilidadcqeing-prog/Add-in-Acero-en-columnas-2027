@@ -15,12 +15,20 @@ public sealed class GeometriaPortico
     /// <summary>El traslapo no entra al nudo: queda al menos a esta distancia de la cara del apoyo.</summary>
     public const int DistanciaACara = 50;
 
-    public GeometriaPortico(Portico portico, int recubrimientoPuntas)
+    /// <param name="recubrimientoPuntas">De la punta de las barras a la cara exterior del pórtico, en mm.</param>
+    /// <param name="estriboEnVoladizo">
+    /// Diámetro del estribo que cierra la punta de un voladizo, en mm: el último estribo queda al recubrimiento y el
+    /// gancho de las barras por dentro de él, así que en la punta de un voladizo las barras terminan ese tanto más
+    /// adentro. En el extremo sobre una columna no se suma.
+    /// </param>
+    public GeometriaPortico(Portico portico, int recubrimientoPuntas, int estriboEnVoladizo = 0)
     {
         IReadOnlyList<Apoyo> apoyos = portico.Apoyos;
         Portico = portico;
-        InicioBarras = apoyos[0].CaraIzquierda - portico.VoladizoInicio + recubrimientoPuntas;
-        FinBarras = apoyos[^1].CaraDerecha + portico.VoladizoFinal - recubrimientoPuntas;
+        InicioBarras = apoyos[0].CaraIzquierda - portico.VoladizoInicio + recubrimientoPuntas
+            + (portico.VoladizoInicio > 0 ? estriboEnVoladizo : 0);
+        FinBarras = apoyos[^1].CaraDerecha + portico.VoladizoFinal - recubrimientoPuntas
+            - (portico.VoladizoFinal > 0 ? estriboEnVoladizo : 0);
         Luces = apoyos.Zip(apoyos.Skip(1), (a, b) => new Luz($"{a.Eje}-{b.Eje}", a.CaraDerecha, b.CaraIzquierda)).ToList();
     }
 
