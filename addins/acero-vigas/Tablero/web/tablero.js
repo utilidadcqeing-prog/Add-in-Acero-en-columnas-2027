@@ -38,6 +38,8 @@
   // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
   const ANCHO_CORTE = 260;
   const CLAVES_OPCIONES = Object.keys(OPCIONES0);
+  // Sin nada elegido en el alzado: no sale el panel de barra, traslapo ni bastón, ni se pide vista previa.
+  const NADA = Object.freeze({ k: 'nada' });
 
   // Las opciones de la página con la forma de OpcionesTablero (tarea 2); null si algún campo no es número: así no se
   // manda y el último cálculo válido sigue en pantalla, como el num(x, d) de la maqueta.
@@ -161,13 +163,14 @@
       return { pageW: W + 'px', pageH: H + 'px', dibujoW: 788 + W - 1440, dibujoH: 300 + H - 900 };
     }
 
-    // Lo elegido en el alzado o la lista; sin elegir, el traslapo del aviso largo o S1.
+    // Lo elegido en el alzado o la lista; sin elegir, el traslapo del aviso largo o nada (Carlos, 21-oct, min 13:20:
+    // al abrir no debe quedar una barra elegida).
     seleccion() {
       const s = this.state, P = this.props.vista && this.props.vista.actual;
       if (s.sel) return s.sel;
       const largos = P ? P.avisos.filter((a) => a.tipo === 'TraslapoLargo') : [];
       const avisoLargo = largos.find((a) => a.cambiarCara) || largos[0] || null;
-      return avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : { k: 'bar', id: 'S1' };
+      return avisoLargo ? { k: 'lap', id: avisoLargo.elemento } : NADA;
     }
 
     // Pide a C# la vista previa de lo elegido (#84): Subir / Bajar, o el largo escrito del traslapo o del bastón. La
@@ -176,6 +179,7 @@
       const v = this.props.vista, opciones = opcionesDe(this.state);
       if (!v || !v.actual || !opciones) return;
       const sel = this.seleccion();
+      if (sel === NADA) return;
       const valor = num(this.state.draft, NaN);
       const accion = sel.k === 'lap' ? 'Traslapo' : sel.k === 'bast' ? 'Baston' : 'Barra';
       this.n = this.siguiente();
@@ -188,7 +192,7 @@
     pedirSaltos() {
       const v = this.props.vista, opciones = opcionesDe(this.state), sel = this.seleccion();
       this.saltosPedidos = {};
-      if (!v || !v.actual || !opciones || sel.k === 'lap') return;
+      if (!v || !v.actual || !opciones || sel.k === 'lap' || sel === NADA) return;
       ['Izquierda', 'Centro', 'Derecha'].forEach((punto) => {
         const n = this.siguiente();
         this.saltosPedidos[n] = punto;
@@ -589,7 +593,7 @@
         ver: s.ver, tramos: TRAMOS, rangeFrom: verT ? verT.desde : (P ? P.inicio : 0), rangeTo: verT ? verT.hasta : (P ? P.fin : 0),
         isAlzado: s.tab === 'alzado', isCorte: s.tab === 'corte', tabA: s.tab === 'alzado' ? on : off, tabC: s.tab === 'corte' ? on : off,
         side, faceQuestion: '¿Dónde traslapan las barras de ' + faceName + '?', izq: sideBtn('izq', P && P.izquierda), der: sideBtn('der', P && P.derecha),
-        barSel: kind === 'lap' ? '' : selEl.id, lapSel: kind === 'lap' ? selEl.id : '', lapsManual: lapsAll.filter((l) => l.manual).map((l) => l.id).join(','),
+        barSel: kind === 'bar' || kind === 'bast' ? selEl.id : '', lapSel: kind === 'lap' ? selEl.id : '', lapsManual: lapsAll.filter((l) => l.manual).map((l) => l.id).join(','),
         isSelBar: kind === 'bar' && !!SB, isSelLap: kind === 'lap' && !!SL, isSelBast: kind === 'bast' && !!SBa, sb, sl, st: stv, draft: s.draft,
         bastDef: s.bastDef, bastSupN: s.bastSupN, bastInfN: s.bastInfN, bastSupD: bastD(s.bastSupD, s.sup), bastInfD: bastD(s.bastInfD, s.inf),
         rulesWarn: s.rulesWarn,
@@ -659,7 +663,7 @@
         confirmGenNo: () => this.setState({ confirmGen: null }),
         // #85: el resumen de "Generar en Revit", una línea por cosa; se queda hasta cerrarlo
         resumen: s.resumen ? { titulo: s.resumen[0], lineas: s.resumen.slice(1) } : null, closeResumen: () => this.setState({ resumen: null }),
-        pickEl: (id) => selectBar(id), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
+        pickEl: (id) => (id ? selectBar(id) : this.setState({ sel: NADA })), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
         // gancho de una punta del borde (#84): "S.inicio"… en las corridas, "BS1.inicio"… en los bastones
         onHook: (clave, valor, texto) => {
           this.cambiar({ cambios: conCambio('ganchos', clave, valor) });
@@ -675,16 +679,16 @@
         setQ: (e) => this.setState({ q: e.target.value }), setVer: (e) => this.setState({ ver: e.target.value }),
         setDraft: (e) => this.setState({ draft: e.target.value }),
         showAlzado: () => this.setState({ tab: 'alzado' }), showCorte: () => this.setState({ tab: 'corte', step: 'corte', cutWin: false }),
-        useIzq: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'izq' }); },
-        useDer: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ side: 'der' }); },
+        useIzq: () => { this.setState({ sel: NADA }); this.cambiar({ side: 'izq' }); },
+        useDer: () => { this.setState({ sel: NADA }); this.cambiar({ side: 'der' }); },
         toggleList: () => this.setState({ listOpen: !s.listOpen }), toggleMore: () => this.setState({ more: !s.more }),
         toggleRecDraw: () => this.setState({ recDraw: !s.recDraw }),
         setRec: (e) => this.cambiar({ rec: e.target.value }, true), setRecUp: (e) => this.cambiar({ recUp: e.target.value }, true),
         setRecDown: (e) => this.cambiar({ recDown: e.target.value }, true), setRecSide: (e) => this.cambiar({ recSide: e.target.value }, true),
         sepPegada: () => this.cambiar({ sepMode: 'pegada' }), sepSeparada: () => this.cambiar({ sepMode: 'separada' }),
         setSepCm: (e) => this.cambiar({ sepCm: e.target.value }, true), setMaxCapas: (e) => this.cambiar({ maxCapas: e.target.value }, true),
-        setAerea: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ tipo: 'Aérea' }); },
-        setCim: () => { this.setState({ sel: { k: 'bar', id: 'S1' } }); this.cambiar({ tipo: 'Cimentación' }); },
+        setAerea: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Aérea' }); },
+        setCim: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Cimentación' }); },
         setBastSupN: (e) => this.cambiar({ bastSupN: e.target.value }, true), setBastInfN: (e) => this.cambiar({ bastInfN: e.target.value }, true),
         setBastSupD: (e) => this.cambiar({ bastSupD: e.target.value }), setBastInfD: (e) => this.cambiar({ bastInfD: e.target.value }),
         setBastDef: (e) => this.cambiar({ bastDef: e.target.value }, true), hookNo: () => this.cambiar({ bastHook: false }), hookYes: () => this.cambiar({ bastHook: true }),
