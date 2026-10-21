@@ -128,10 +128,11 @@ internal static class CreadorEstribos
         double radio = LectorModelo.Mm(barra.StandardHookBendDiameter) / 2 + d / 2;
         double xRama = rama.X + LadoDeLaRama(u, rama) * radio;
         double x = g.Corrida.Primero;
-        // Revit toma la punta de la línea como la cara exterior del doblez (medido con las barras corridas): para que el
-        // doblez quede centrado en la barra, la línea pasa un radio más medio diámetro de su centro (sexta prueba: el
-        // gancho daba la vuelta 30 mm por encima de la barra).
-        double alDoblez = radio + d / 2;
+        // Revit toma la punta de la línea como la cara exterior del doblez (medido con las barras corridas; sexta prueba: el
+        // gancho daba la vuelta 30 mm por encima de la barra). El doblez abraza la barra, su cara interior la toca: la cara
+        // exterior queda un diámetro de estribo más allá de la cara de la barra. Centrado en la barra (radio + d/2) se
+        // salía 2 cm del cerrado y lo cruzaba (medido el 21-oct en la viga 388501).
+        double alDoblez = rama.Diametro / 2 + d;
         Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, xRama, rama.YAbajo - alDoblez), CreadorBarras.Punto(u, x, xRama, rama.YArriba + alDoblez));
         RebarHookType? gancho = tipos.GanchoGrapa(g.Gancho, g.Diametro);
         using var terminaciones = new BarTerminationsData(doc);

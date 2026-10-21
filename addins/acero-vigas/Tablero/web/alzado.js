@@ -376,8 +376,19 @@
           this.setState({ cutDrag: false });
           this.props.onCut(cutAt(e), true);
         },
+        // Carlos (21-oct, min 13:20): un clic en el fondo, sin arrastrar, suelta lo elegido para ver todo sin nada
+        // elegido. Lo que se puede elegir o arrastrar lleva data-clic; los botones van fuera del svg.
+        clicFondo: (e) => {
+          if (e.button !== 0) return;
+          const d = this.clicDesde;
+          if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 3) return;
+          if (!e.target.closest('svg') || e.target.closest('[data-clic]')) return;
+          if (this.props.onPick) this.props.onPick('');
+          else this.setState({ selLocal: '', selLapLocal: '' });
+        },
         down: (e) => {
           if (e.button !== 0 && e.button !== 1) return;
+          this.clicDesde = { x: e.clientX, y: e.clientY };
           if (e.button === 1) e.preventDefault();
           const { k } = scaleOf(e.currentTarget);
           this.setState({ drag: { x: e.clientX, y: e.clientY, tx: v.tx, ty: v.ty, z: v.z, k } });
@@ -401,16 +412,16 @@
     render() {
       const v = this.valores();
       const k = v.k, NS = 'non-scaling-stroke';
-      const lap = (x) => html`<rect x="${x.x}" y="${x.ry}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" vector-effect="${NS}" style="cursor: pointer" onClick=${x.pick}></rect>`;
-      const barra = (x) => html`<polyline points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick} onPointerEnter=${x.entra} onPointerLeave=${x.sale}></polyline>`;
+      const lap = (x) => html`<rect data-clic x="${x.x}" y="${x.ry}" width="${x.w}" height="18" fill="${x.c}" fill-opacity="${x.o}" stroke="${x.c}" stroke-width="${x.sw}" vector-effect="${NS}" style="cursor: pointer" onClick=${x.pick}></rect>`;
+      const barra = (x) => html`<polyline data-clic points="${x.pts}" fill="none" stroke="${x.col}" stroke-width="${x.sw}" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" style="cursor: pointer" onClick=${x.pick} onPointerEnter=${x.entra} onPointerLeave=${x.sale}></polyline>`;
       // zona de clic: una línea transparente de 14 px (no crece con el zoom) bajo los traslapos y las barras. Más ancha
       // se montaría con la de la barra vecina (la corrida y el bastón van a unos 18 px).
-      const zona = (x) => html`<polyline points="${x.pts}" fill="none" stroke="transparent" stroke-width="14" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="stroke" style="cursor: pointer" onClick=${x.pick} onPointerEnter=${x.entra} onPointerLeave=${x.sale}></polyline>`;
+      const zona = (x) => html`<polyline data-clic points="${x.pts}" fill="none" stroke="transparent" stroke-width="14" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="stroke" style="cursor: pointer" onClick=${x.pick} onPointerEnter=${x.entra} onPointerLeave=${x.sale}></polyline>`;
       // los textos llevan un borde del color del fondo para leerse sobre las líneas (#100)
       const texto = (x, y, t, col, tam, peso) => (t ? html`<text x="${x}" y="${y}" text-anchor="middle" font-size="${tam * k}" font-weight="${peso}" font-family="IBM Plex Mono, monospace" fill="${col}" stroke="#F1F3F5" stroke-width="${3.5 * k}" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${t}</text>` : null);
       const rotulo = (x) => texto(x.lx, x.ly, x.lt, x.col, 10, 500);
       return html`
-<div style="position: relative; width: ${v.wpx}; height: ${v.hpx}; overflow: hidden; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #16191D; cursor: ${v.cursor}; user-select: none; touch-action: none" onPointerDown=${v.down} onPointerMove=${v.move} onPointerUp=${v.up} onPointerLeave=${v.up} onWheel=${v.wheel} onDblClick=${v.fitView}>
+<div style="position: relative; width: ${v.wpx}; height: ${v.hpx}; overflow: hidden; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #16191D; cursor: ${v.cursor}; user-select: none; touch-action: none" onPointerDown=${v.down} onPointerMove=${v.move} onPointerUp=${v.up} onPointerLeave=${v.up} onClick=${v.clicFondo} onWheel=${v.wheel} onDblClick=${v.fitView}>
   <svg width="${v.w}" height="${v.h}" style="display: block" role="img" aria-label="Alzado del pórtico con barras, traslapos, bastones y estribos">
     <g transform="${v.view}">
       <rect x="${v.beamX}" y="40" width="${v.beamW}" height="${v.beamH}" fill="#F1F3F5" stroke="#9AA3AD" stroke-width="1" vector-effect="${NS}"></rect>
@@ -434,7 +445,7 @@
         ${v.puntos3 ? html`
         <g>
           ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="${5 * k}" fill="${o.fill}" stroke="${o.stroke}" stroke-width="1.6" vector-effect="${NS}" pointer-events="none"></circle>`)}
-          ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="${11 * k}" fill="transparent" aria-label=${o.tip} style="cursor: ${o.cur}" onPointerDown=${o.down} onPointerMove=${v.hdMove} onPointerUp=${v.hdUp} onPointerCancel=${v.hdCancel}><title>${o.tip}</title></circle>`)}
+          ${v.puntos3.pts.map((o) => html`<circle cx="${o.x}" cy="${v.puntos3.y}" r="${11 * k}" fill="transparent" data-clic aria-label=${o.tip} style="cursor: ${o.cur}" onPointerDown=${o.down} onPointerMove=${v.hdMove} onPointerUp=${v.hdUp} onPointerCancel=${v.hdCancel}><title>${o.tip}</title></circle>`)}
         </g>` : null}
       </g>
       <g visibility="${v.stVis}">
@@ -457,7 +468,7 @@
       <path d="${v.cut.arrow(18)}" stroke="${v.cut.c}" stroke-width="1.6" vector-effect="${NS}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
       <path d="${v.cut.arrow(v.cutY2)}" stroke="${v.cut.c}" stroke-width="1.6" vector-effect="${NS}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
       <text x="${v.cut.x}" y="${18 - 6 * k}" text-anchor="middle" font-size="${10 * k}" font-weight="600" font-family="IBM Plex Mono, monospace" fill="${v.cut.c}" pointer-events="none">1-1</text>
-      <rect x="${v.cut.x - 7 * k}" y="2" width="${14 * k}" height="${v.cutH}" fill="transparent" style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>` : null}
+      <rect x="${v.cut.x - 7 * k}" y="2" width="${14 * k}" height="${v.cutH}" fill="transparent" data-clic style="cursor: ew-resize" aria-label="Línea del corte 1-1: arrástrala para moverla" onPointerDown=${v.cutDown} onPointerMove=${v.cutMove} onPointerUp=${v.cutUp} onPointerCancel=${v.cutUp}></rect>` : null}
       ${v.luces.map((m) => html`<text x="${m.x}" y="${v.yLuz}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#5E6670">${m.lt}</text>`)}
       ${v.vol.map((o) => html`<text x="${o.lx}" y="${v.yLuz}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#5E6670">${o.lt}</text>`)}
       ${v.ejes.map((e) => html`<circle cx="${e.x}" cy="${v.yEje}" r="${8 * k}" fill="#FFFFFF" stroke="#9AA3AD" vector-effect="${NS}"></circle><text x="${e.x}" y="${v.yEje + 3.5 * k}" text-anchor="middle" font-size="${9 * k}" font-family="IBM Plex Mono, monospace" fill="#3F4A57">${e.eje}</text>`)}

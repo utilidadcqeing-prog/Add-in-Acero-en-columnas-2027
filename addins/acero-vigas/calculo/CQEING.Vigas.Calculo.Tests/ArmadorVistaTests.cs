@@ -227,11 +227,10 @@ public class ArmadorVistaTests
     {
         VistaPortico v = Armar();
 
-        Assert.Equal(11, v.Zonas.Count);
+        Assert.Equal(10, v.Zonas.Count);
         Assert.Equal((0.25, 0.95, true), (Math.Round(v.Zonas[0].Desde, 2), Math.Round(v.Zonas[0].Hasta, 2), v.Zonas[0].Junta));
         Assert.Equal((0.95, 3.45, false), (Math.Round(v.Zonas[1].Desde, 2), Math.Round(v.Zonas[1].Hasta, 2), v.Zonas[1].Junta));
-        Assert.Equal((12.55, 13.25, true), (Math.Round(v.Zonas[^2].Desde, 2), Math.Round(v.Zonas[^2].Hasta, 2), v.Zonas[^2].Junta));
-        Assert.Equal((13.25, 13.95, false), (Math.Round(v.Zonas[^1].Desde, 2), Math.Round(v.Zonas[^1].Hasta, 2), v.Zonas[^1].Junta));
+        Assert.Equal((12.55, 13.95, true), (Math.Round(v.Zonas[^1].Desde, 2), Math.Round(v.Zonas[^1].Hasta, 2), v.Zonas[^1].Junta));
     }
 
     [Fact]
@@ -308,7 +307,7 @@ public class ArmadorVistaTests
 
         FilaEstribos e = Assert.Single(Armar().ListaEstribos);
 
-        Assert.Equal(("E", "Estribo cerrado", 91, "#3"), (e.Id, e.Tipo, e.Cantidad, e.Diametro));
+        Assert.Equal(("E", "Estribo cerrado", 94, "#3"), (e.Id, e.Tipo, e.Cantidad, e.Diametro));
         Assert.Equal(1.468, e.Largo, 6);
         Assert.Equal("zonas 0.80 cada 0.10 · centro cada 0.20", e.Detalle);
         Assert.Equal(r.Kg, e.Kg, 6);
@@ -322,7 +321,7 @@ public class ArmadorVistaTests
         VistaPortico v = Armar();
 
         Assert.Equal(rv.Kg + v.ListaEstribos.Sum(e => e.Kg), v.Kg, 6);
-        Assert.Equal((91, true), (v.Estribos, v.SePuedeGenerar));
+        Assert.Equal((94, true), (v.Estribos, v.SePuedeGenerar));
         Assert.Equal(rv.Traslapos.Count(), v.ZonasTraslapo.Count);
     }
 

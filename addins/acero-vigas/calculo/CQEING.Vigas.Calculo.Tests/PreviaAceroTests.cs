@@ -77,16 +77,20 @@ public class PreviaAceroTests
     [Fact]
     public void ElAbiertoVaAlLadoDeSusBarrasYLasAbraza()
     {
-        // barras en X 200 (a la derecha del centro): la rama va a su izquierda, a un radio (20 + 5) de su eje
+        // barras de 16 en X 200 (a la derecha del centro): la rama va a su izquierda, a un radio (20 + 5) de su eje. El
+        // doblez abraza la barra (su cara interior la toca), no se centra en ella: con el doblez de 40 centrado, el gancho
+        // quedaba 12 mm por fuera de la barra y en Revit cruzaba el cerrado (21-oct). El centro del doblez de arriba va en
+        // 440 + 8 − 20 = 428 y el de abajo en 60 − 8 + 20 = 72.
         var g = new GrupoEstribos("E1", "1-2", TipoEstribo.Abierto, 3, GanchoEstribo.De135, 200, 200, 40, 460, new Corrida(500, 1, 0), "101",
             new Rama(200, 440, 60, 16));
 
         List<(double Xc, double Yc)> lazo = Assert.Single(Trazos(estribos: [g])).Puntos.Select(Corte).ToList();
 
-        Assert.Contains(lazo, p => Math.Abs(p.Xc - 175) < 1e-6 && Math.Abs(p.Yc - 440) < 1e-6);
-        Assert.Contains(lazo, p => Math.Abs(p.Xc - 175) < 1e-6 && Math.Abs(p.Yc - 60) < 1e-6);
-        Assert.Contains(lazo, p => Math.Abs(p.Xc - 200) < 1e-6 && Math.Abs(p.Yc - 465) < 1e-6);
-        Assert.Contains(lazo, p => Math.Abs(p.Xc - 200) < 1e-6 && Math.Abs(p.Yc - 35) < 1e-6);
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 175) < 1e-6 && Math.Abs(p.Yc - 428) < 1e-6);
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 175) < 1e-6 && Math.Abs(p.Yc - 72) < 1e-6);
+        // por fuera, el doblez queda a un diámetro de estribo de la barra: 448 + 10 y 52 − 10
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 200) < 1e-6 && Math.Abs(p.Yc - 453) < 1e-6);
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 200) < 1e-6 && Math.Abs(p.Yc - 47) < 1e-6);
         // las colas salen del lado de las barras, como las deja Revit (séptima prueba)
         Assert.True(lazo[0].Xc > 200 && lazo[^1].Xc > 200);
     }
