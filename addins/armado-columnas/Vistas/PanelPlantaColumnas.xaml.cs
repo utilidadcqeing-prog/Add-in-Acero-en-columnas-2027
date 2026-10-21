@@ -226,8 +226,8 @@ public partial class PanelPlantaColumnas : UserControl
             var texto = new TextBlock
             {
                 Text = c.MarcaUbicacion,
-                FontSize = 9,
-                Foreground = Paleta.TextoSecundario,
+                FontSize = 10,
+                Foreground = Paleta.ContornoOscuro,
                 IsHitTestVisible = false,
             };
             texto.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -330,7 +330,7 @@ public partial class PanelPlantaColumnas : UserControl
             Height = tam,
             Fill = elegida ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
             Stroke = activa ? ColorBordeActiva : (elegida ? ColorBordeMarcada : ColorBordeColumna),
-            StrokeThickness = activa || elegida ? 2 : 1,
+            StrokeThickness = activa ? 3 : (elegida ? 2 : 1),
             Cursor = Cursors.Hand,
             ToolTip = c.MarcaUbicacion.Length > 0 ? $"{c.Marca}  ·  {c.MarcaUbicacion}" : c.Marca,
             // Los clics los resuelve el lienzo contra _marcadores: si cada

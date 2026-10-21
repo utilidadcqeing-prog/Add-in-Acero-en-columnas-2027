@@ -32,6 +32,13 @@ Los de cada sub-issue; se evalúan en «Estado».
 9. **Columnetas sigue el mismo significado** (2026-10-21, a aprobar por Luciano): «Generar Columnetas y Viguetas» escribe en el modelo, así que pasa de verde a naranja (`BotonAccionFinal`), igual que «Generar armado en Revit». «Seleccionar Muros» pasa de azul a `BotonSecundario`: el azul queda solo para selección dentro de los dibujos.
 10. **Tipografía común** (2026-10-21): estilos `TituloVentana` (14, seminegrita) y `TextoAyuda` (11, gris, con ajuste de línea). En Estribos menores, los encabezados «FORMAS» y «PIEZA SELECCIONADA» pasan a «Formas» y «Pieza seleccionada» con el estilo `Etiqueta` de la ventana principal. Columnetas deja su propio estilo `Etiqueta` y usa el común.
 11. **Una sola rama y un solo PR en borrador** (2026-10-21, pedido de Luciano; reemplaza la 1 y la 6): desde ahora todo se trabaja en la rama `mejora-visual` y va en un único PR en borrador (draft) contra `main`, que se marca listo cuando se termine. Los PR #127 y #128 ya estaban unidos a `main` (cierran #115, #116, #117 y #119). El #146 (#118) se unió a la rama `mejora-visual-botones` y no a `main`, así que su commit se pasó a `mejora-visual` y entra a `main` con el PR único.
+12. **Pulido visual extra** (2026-10-21, propuesto por el equipo y aceptado por el usuario; a aprobar por Luciano en el PR #148): estilos sin `x:Key` en `Estilos.xaml`, así se aplican solos a las tres ventanas.
+    - Paneles como tarjetas: esquinas de 6 px y margen interior de 10 a 12 px; separación entre paneles y margen de la ventana de 10 a 12 px.
+    - Pestañas planas con una línea azul debajo de la activa (antes, las grises de Windows).
+    - Listas desplegables y campos de texto con esquinas de 4 px, 26 px de alto, borde gris al pasar el mouse y azul al usarlos. Se quitaron las alturas fijas (22/24 px) de cada lista y campo para que mande el estilo.
+    - Barra de desplazamiento delgada (10 px) y redondeada.
+    - Planta: la columna activa con borde de 3 px (antes 2) y las marcas de ubicación de 9 a 10 px, más oscuras.
+    - Sin sombra en los paneles: un `DropShadowEffect` sobre un panel con texto lo vuelve borroso en WPF.
 
 ## Plan paso a paso
 
@@ -110,3 +117,9 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` sin errores.
 - [ ] Probado en Revit 2027.
 - [x] PR #128 unido a `main` el 2026-10-21 (cierra #117 y #119). El #146 quedó en la rama `mejora-visual-botones`: el #118 entra con el PR único de `mejora-visual`.
+
+## Evidencia y estado (pulido, 2026-10-21)
+
+- Ventana principal: `imagenes/2026-10-21-ventana-principal-pulida.png` (antes: `imagenes/2026-10-21-ventana-principal-orden.png`). Estribos menores: `imagenes/2026-10-21-estribos-menores-pulida.png`.
+- [x] Compila (Revit 2027) sin advertencias; visor sin errores; lista desplegable abierta y probada en el visor.
+- [ ] Probado en Revit 2027 (incluida la ventana Columnetas, que no se ve en el visor).

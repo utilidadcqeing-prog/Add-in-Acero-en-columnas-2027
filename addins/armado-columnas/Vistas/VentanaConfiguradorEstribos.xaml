@@ -53,7 +53,7 @@
         </ResourceDictionary>
     </Window.Resources>
 
-    <Grid Margin="10">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -81,9 +81,9 @@
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="280" />
-                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="380" />
-                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -217,7 +217,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones" Height="24"
+                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones"
                                   SelectionChanged="ComboConfiguraciones_SelectionChanged" />
                         <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" Content="Borrar" Style="{StaticResource BotonPeligro}"
                                 Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
@@ -227,7 +227,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" Height="24"
+                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion"
                                  VerticalContentAlignment="Center" />
                         <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" Content="Guardar" Style="{StaticResource BotonSecundario}"
                                 Height="24" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
@@ -253,7 +253,7 @@
                                Style="{StaticResource TextoAyuda}" />
 
                     <TextBlock Text="Tipo de barra:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboTipoBarra" Height="24" />
+                    <ComboBox x:Name="ComboTipoBarra" />
                     <!-- #64: solo se ofrecen las barras cuyo doblado coincide con el
                          cuadro. Una línea de resumen, y el detalle (cuáles y por
                          qué) plegado: en una plantilla grande son decenas de
@@ -271,24 +271,24 @@
                          se queda en el árbol, con su valor puesto, porque es de
                          donde lo lee LeerConfigDelPanel. -->
                     <TextBlock x:Name="EtiquetaTipoGancho" Text="Tipo de gancho:" Style="{StaticResource Etiqueta}" Visibility="Collapsed" />
-                    <ComboBox x:Name="ComboTipoGancho" Height="24" Visibility="Collapsed" />
+                    <ComboBox x:Name="ComboTipoGancho" Visibility="Collapsed" />
 
                     <!-- Modo Uniforme -->
                     <StackPanel x:Name="PanelUniforme">
                         <TextBlock Text="Espaciado (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoEspaciadoUniforme" Height="22" Text="0.20" />
+                        <TextBox x:Name="CampoEspaciadoUniforme" Text="0.20" />
                     </StackPanel>
 
                     <!-- Modo Confinado -->
                     <StackPanel x:Name="PanelConfinado" Visibility="Collapsed">
                         <TextBlock Text="Longitud de confinamiento L1 (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoL1" Height="22" Text="0.50" />
+                        <TextBox x:Name="CampoL1" Text="0.50" />
 
                         <TextBlock Text="Espaciado confinado (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoEspaciadoConfinado" Height="22" Text="0.07" />
+                        <TextBox x:Name="CampoEspaciadoConfinado" Text="0.07" />
 
                         <TextBlock Text="Espaciado no confinado (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoEspaciadoNoConfinado" Height="22" Text="0.14" />
+                        <TextBox x:Name="CampoEspaciadoNoConfinado" Text="0.14" />
                         <TextBlock Text="Sugerido al doble del confinado. Si lo editas a mano, deja de recalcularse hasta que cambies de tramo."
                                    Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
                     </StackPanel>
@@ -304,7 +304,7 @@
                     <Border Style="{StaticResource EncabezadoSeccion}">
                         <TextBlock Text="Recubrimiento (toda la columna)" Style="{StaticResource TituloSeccion}" />
                     </Border>
-                    <ComboBox x:Name="ComboRecubrimiento" Height="24" SelectionChanged="ComboRecubrimiento_SelectionChanged" />
+                    <ComboBox x:Name="ComboRecubrimiento" SelectionChanged="ComboRecubrimiento_SelectionChanged" />
                     <TextBlock Text="Se usa solo para dibujar el acero; no cambia el recubrimiento de las columnas en Revit."
                                Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
 
@@ -323,11 +323,11 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="N. barras X:" Style="{StaticResource Etiqueta}" />
-                            <ComboBox x:Name="ComboBarrasX" Height="24" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
+                            <ComboBox x:Name="ComboBarrasX" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="N. barras Y:" Style="{StaticResource Etiqueta}" />
-                            <ComboBox x:Name="ComboBarrasY" Height="24" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
+                            <ComboBox x:Name="ComboBarrasY" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
                         </StackPanel>
                     </Grid>
 
@@ -335,31 +335,31 @@
                          A/B de los traslapos sigue, pero no decide el número
                          (Luciano, 19-oct). -->
                     <TextBlock Text="Tipo barra cara X:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraCaraX" Height="24" />
+                    <ComboBox x:Name="ComboBarraCaraX" />
 
                     <TextBlock Text="Tipo barra cara Y:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraCaraY" Height="24" />
+                    <ComboBox x:Name="ComboBarraCaraY" />
 
                     <TextBlock Text="Tipo barra esquinas:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraEsquinas" Height="24" />
+                    <ComboBox x:Name="ComboBarraEsquinas" />
                     <TextBlock Text="Los traslapos se alternan alrededor del perímetro (una barra sí, una no): A y B traslapan en tramos distintos."
                                Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
 
                     <TextBlock Text="Longitud de barra comercial (m):" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboLongitudBarra" Height="24" />
+                    <ComboBox x:Name="ComboLongitudBarra" />
 
                     <TextBlock Text="Redondeo de varillas:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboRedondeo" Height="24" ItemStringFormat="0.00 m" />
+                    <ComboBox x:Name="ComboRedondeo" ItemStringFormat="0.00 m" />
 
                     <TextBlock Text="Solape mínimo de los traslapos:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboSolape" Height="24" />
+                    <ComboBox x:Name="ComboSolape" />
                     <TextBlock Text="El dibujo de A y B por número de barra, con el largo de cada varilla y cada traslapo, está en la pestaña «Traslapos» de la elevación."
                                Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
 
                     <!-- Igual que el del estribo: el anclaje en la zapata es
                          siempre el de 90° de estilo estándar. -->
                     <TextBlock x:Name="EtiquetaGanchoLongitudinal" Text="Gancho de anclaje en zapata:" Style="{StaticResource Etiqueta}" Visibility="Collapsed" />
-                    <ComboBox x:Name="ComboGanchoLongitudinal" Height="24" Visibility="Collapsed" />
+                    <ComboBox x:Name="ComboGanchoLongitudinal" Visibility="Collapsed" />
 
                     <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
