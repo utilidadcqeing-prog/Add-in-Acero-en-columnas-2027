@@ -31,4 +31,11 @@ public static class ColoresDiametro
         int n = Convert.ToInt32(De(diametro)[1..], 16);
         return ((byte)(n >> 16), (byte)(n >> 8), (byte)n);
     }
+
+    /// <summary>
+    /// El contorno de toda barra en Revit (la vista previa 3D y el acero generado): casi negro, el mismo para todos los
+    /// diámetros (Juan, 21-oct). Marca dónde empieza y termina cada barra y dónde una pasa por otra. No es negro puro: con el
+    /// fondo oscuro, Revit pinta de blanco las líneas negras (21-oct, las aristas del acero generado salían blancas).
+    /// </summary>
+    public static (byte R, byte G, byte B) RgbContorno { get; } = (30, 30, 30);
 }
