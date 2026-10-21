@@ -13,10 +13,6 @@
         <ResourceDictionary.MergedDictionaries>
             <ResourceDictionary Source="Estilos.xaml" />
         </ResourceDictionary.MergedDictionaries>
-        <Style TargetType="TextBlock" x:Key="Etiqueta">
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,10,0,4" />
-        </Style>
         <Style TargetType="CheckBox">
             <Setter Property="Margin" Value="0,3,0,3" />
         </Style>
@@ -37,16 +33,14 @@
                     x:Name="BotonSeleccionar"
                     Content="Seleccionar Muros"
                     Height="30"
-                    Background="{StaticResource Primario}" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0"
+                    Style="{StaticResource BotonSecundario}"
                     Click="BotonSeleccionar_Click" />
 
             <Button DockPanel.Dock="Bottom"
                     x:Name="BotonGenerar"
                     Content="Generar Columnetas y Viguetas"
                     Height="34" Margin="0,12,0,0"
-                    Background="{StaticResource Exito}" Foreground="White"
-                    FontWeight="Bold" BorderThickness="0"
+                    Style="{StaticResource BotonAccionFinal}"
                     Click="BotonGenerar_Click" />
 
             <StackPanel>
@@ -117,9 +111,7 @@
         </DockPanel>
 
         <!-- Panel de esquema -->
-        <Border Grid.Column="2"
-                BorderBrush="{StaticResource Borde}" BorderThickness="1"
-                Background="{StaticResource Superficie}">
+        <Border Grid.Column="2" Style="{StaticResource Panel}" Padding="0">
             <Grid>
                 <Canvas x:Name="Esquema" ClipToBounds="True"
                         SizeChanged="Esquema_SizeChanged" />

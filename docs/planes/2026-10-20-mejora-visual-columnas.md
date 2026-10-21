@@ -28,6 +28,9 @@ Los de cada sub-issue; se evalúan en «Estado».
 5. **Hallazgo de la prueba** (2026-10-20): un atributo del elemento raíz `<Window Background="{StaticResource ...}">` no puede usar los recursos de su propio `Window.Resources` (se lee antes). En el elemento raíz se usa `{x:Static local:Paleta.Fondo}`.
 6. **#115 y #116 en un solo PR** (2026-10-20): `PanelTraslapos.xaml.cs` lleva cambios de las dos (el `#N` y la paleta), así que separarlas en dos PR dejaría uno sin compilar. Van en un PR con dos commits y `Closes #115` y `Closes #116`.
 7. **Prueba en Revit** (2026-10-20): la ventana abrió en Revit 2027 con la paleta (los estilos cargan bien dentro de Revit). La columna de prueba no tenía vigas ("sin solución"), así que falta verificar el `#N` con color y el armado en una columna con nudos.
+8. **Cuatro clases de botón** (2026-10-21): `BotonPrincipal` (verde, aceptar lo configurado), `BotonAccionFinal` (naranja, escribe en el modelo de Revit), `BotonSecundario` (blanco con borde, todo lo demás) y `BotonPeligro` (texto rojo, borra algo). Más `BotonFlecha` para ▲▼. Todos con esquinas de 4 px, color al pasar el mouse y al apretar, y gris cuando están deshabilitados.
+9. **Columnetas sigue el mismo significado** (2026-10-21, a aprobar por Luciano): «Generar Columnetas y Viguetas» escribe en el modelo, así que pasa de verde a naranja (`BotonAccionFinal`), igual que «Generar armado en Revit». «Seleccionar Muros» pasa de azul a `BotonSecundario`: el azul queda solo para selección dentro de los dibujos.
+10. **Tipografía común** (2026-10-21): estilos `TituloVentana` (14, seminegrita) y `TextoAyuda` (11, gris, con ajuste de línea). En Estribos menores, los encabezados «FORMAS» y «PIEZA SELECCIONADA» pasan a «Formas» y «Pieza seleccionada» con el estilo `Etiqueta` de la ventana principal. Columnetas deja su propio estilo `Etiqueta` y usa el común.
 
 ## Plan paso a paso
 
@@ -36,9 +39,14 @@ Los de cada sub-issue; se evalúan en «Estado».
 1. **#115 Traslapos: `#N` con su color junto al largo** — archivo: `Vistas/PanelTraslapos.xaml.cs` (`DibujarTipo`). El largo sigue con el color del grupo (A azul, B verde); el `#N` va con el color de `ColoresVarilla.ColorDe(tipo.DiametroMm)`. Se ensancha `Separacion` para que los textos no se pisen. Prueba: build + visor `tools/PreviewUI` + columna de varios pisos en Revit.
 2. **#116 Paleta y estilos comunes** — archivos: nuevo `Vistas/Estilos.xaml`, y reemplazo de colores sueltos en las ventanas y paneles. Prueba: build + visor + `grep` de colores sueltos.
 
-### Días 2 a 4
+### Día 2 (rama `mejora-visual-botones`, sale de `main` con el PR #127 ya unido)
 
-Ver la issue madre: #117 + #119 (día 2), #118 (día 3), #120 + prueba final + este documento (día 4), #121 opcional (día 5).
+3. **#117 Estilos de botón** — archivos: `Vistas/Paleta.cs` (colores de hover, apretado y deshabilitado), `Vistas/Estilos.xaml` (los cinco estilos), `Vistas/VentanaConfiguradorEstribos.xaml` (los 9 botones; flechas de 26x17 a 34x24 px con tooltip «Tramo de arriba» / «Tramo de abajo»). Prueba: build + visor + muestrario de estilos.
+4. **#119 Ventanas secundarias** — archivos: `Vistas/VentanaEstribosMenores.xaml` y `Vistas/VentanaColumnetas.xaml` (botones, `Panel`, `Etiqueta`, `TituloVentana`, `TextoAyuda`). Prueba: build + render de Estribos menores; Columnetas se revisa en Revit.
+
+### Días 3 y 4
+
+Ver la issue madre: #118 (día 3), #120 + prueba final (día 4), #121 opcional (día 5).
 
 ## Cómo probarlo
 
@@ -63,3 +71,17 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - [x] Visor `PreviewUI` y las ventanas Traslapos y Estribos menores renderizadas sin errores.
 - [ ] Probado en Revit real 2027 (lo hace el usuario con la guía): la ventana abre, Traslapos muestra `#N` con color y «Generar armado» produce lo mismo que antes.
 - [ ] Columnetas y Viguetas no se ve en el visor (usa la API de Revit): se revisa en Revit.
+- [x] PR #127 unido el 2026-10-21 (cierra #115 y #116).
+
+## Evidencia (día 2)
+
+- Muestrario de los estilos de botón (normal, mouse encima, deshabilitado) y de las flechas: `imagenes/2026-10-21-estilos-de-boton.png`.
+- Ventana principal en el visor con los botones nuevos: `imagenes/2026-10-21-ventana-principal-botones.png` (antes: `imagenes/2026-10-20-ventana-traslapos-previewui.png`).
+- Estribos menores con botones y tipografía comunes: `imagenes/2026-10-21-estribos-menores-botones.png`.
+
+## Estado (día 2)
+
+- [x] #117: los 15 botones de las tres ventanas usan uno de los estilos (revisado botón por botón); el deshabilitado se ve gris en los cinco estilos (muestrario).
+- [x] #119: Estribos menores y Columnetas usan los mismos colores, botones y tipografía que la principal.
+- [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` y render de Estribos menores sin errores.
+- [ ] Probado en Revit 2027: botones, flechas con tooltip, y la ventana Columnetas y Viguetas.
