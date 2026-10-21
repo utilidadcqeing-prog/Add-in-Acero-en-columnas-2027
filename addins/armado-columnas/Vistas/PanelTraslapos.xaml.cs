@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using practicacq.Modelo;
@@ -23,19 +24,19 @@ using practicacq.Modelo;
 /// </summary>
 public partial class PanelTraslapos : UserControl
 {
-    private static readonly Brush ColorA = new SolidColorBrush(Color.FromRgb(0x1D, 0x4E, 0xD8));
-    private static readonly Brush ColorB = new SolidColorBrush(Color.FromRgb(0x04, 0x78, 0x57));
-    private static readonly Brush ColorNudo = new SolidColorBrush(Color.FromArgb(0x60, 0x3B, 0x82, 0xF6));
-    private static readonly Brush ColorZapata = new SolidColorBrush(Color.FromArgb(0x60, 0xB4, 0x53, 0x09));
-    private static readonly Brush ColorContorno = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-    private static readonly Brush ColorTexto = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
-    private static readonly Brush ColorError = new SolidColorBrush(Color.FromRgb(0xB9, 0x1C, 0x1C));
+    private static readonly Brush ColorA = Paleta.GrupoA;
+    private static readonly Brush ColorB = Paleta.GrupoB;
+    private static readonly Brush ColorNudo = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorNudo, 0x60));
+    private static readonly Brush ColorZapata = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorZapata, 0x60));
+    private static readonly Brush ColorContorno = Paleta.Contorno;
+    private static readonly Brush ColorTexto = Paleta.TextoSecundario;
+    private static readonly Brush ColorError = Paleta.Error;
 
     private const double MargenSuperior = 36;
     private const double MargenInferior = 20;
     /// <summary>Dónde va el primer plan, y cuánto se corre cada uno de los siguientes.</summary>
     private const double XPrimero = 125;
-    private const double Separacion = 130;
+    private const double Separacion = 150;
 
     public PanelTraslapos() => InitializeComponent();
 
@@ -102,7 +103,7 @@ public partial class PanelTraslapos : UserControl
             PlanTraslapos.Pieza pieza = tipo.Piezas[i];
             double xi = x + (i % 2 == 0 ? -3 : 3);
             Linea(xi, Y(pieza.ZDesde), xi, Y(pieza.ZHasta), color, 3);
-            Texto($"{pieza.LargoCorte:0.00} m", x + 9, (Y(pieza.ZDesde) + Y(pieza.ZHasta)) / 2 - 8, color);
+            TextoVarilla($"{pieza.LargoCorte:0.00} m", tipo.DiametroMm, x + 9, (Y(pieza.ZDesde) + Y(pieza.ZHasta)) / 2 - 8, color);
         }
 
         foreach (PlanTraslapos.Traslapo t in tipo.Traslapos)
@@ -131,6 +132,29 @@ public partial class PanelTraslapos : UserControl
             Text = texto, Foreground = color, FontSize = chico ? 9 : 10,
             FontWeight = negrita ? FontWeights.SemiBold : FontWeights.Normal,
         };
+        Canvas.SetLeft(t, x);
+        Canvas.SetTop(t, y);
+        Lienzo.Children.Add(t);
+    }
+
+    /// <summary>
+    /// El largo de corte con el color del grupo (A o B) y, al lado, el número de
+    /// varilla con su color de la tabla de la empresa (<see cref="ColoresVarilla"/>),
+    /// el mismo que usan la vista previa y los filtros de Revit. Un diámetro que no
+    /// está en la tabla sale como "Ø16" en gris.
+    /// </summary>
+    private void TextoVarilla(string largo, double diametroMm, double x, double y, Brush colorGrupo)
+    {
+        ColoresVarilla.ColorRgb c = ColoresVarilla.ColorDe(diametroMm);
+        string etiqueta = ColoresVarilla.NumeroDe(diametroMm) is int numero ? $"#{numero}" : $"Ø{diametroMm:0}";
+
+        var t = new TextBlock { FontSize = 10, Foreground = colorGrupo };
+        t.Inlines.Add(new Run(largo));
+        t.Inlines.Add(new Run($"  {etiqueta}")
+        {
+            Foreground = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)),
+            FontWeight = FontWeights.Bold,
+        });
         Canvas.SetLeft(t, x);
         Canvas.SetTop(t, y);
         Lienzo.Children.Add(t);
