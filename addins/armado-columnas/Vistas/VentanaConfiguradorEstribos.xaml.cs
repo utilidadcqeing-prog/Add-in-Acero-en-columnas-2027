@@ -1654,9 +1654,9 @@ public partial class VentanaConfiguradorEstribos : Window
         {
             Width = anchoColumna,
             Height = Math.Max(1, Y(_columnaActiva.ZInferior) - Y(_columnaActiva.ZSuperior)),
-            Stroke = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF)),
+            Stroke = Paleta.Contorno,
             StrokeThickness = 1.5,
-            Fill = Brushes.White,
+            Fill = Paleta.Superficie,
         };
         Canvas.SetLeft(contorno, xColumna);
         Canvas.SetTop(contorno, Y(_columnaActiva.ZSuperior));
@@ -1673,7 +1673,7 @@ public partial class VentanaConfiguradorEstribos : Window
                 Y1 = y,
                 X2 = xLeaderFin,
                 Y2 = y,
-                Stroke = Brushes.LightGray,
+                Stroke = Paleta.Borde,
                 StrokeThickness = 1,
                 StrokeDashArray = new DoubleCollection { 1, 2 },
                 IsHitTestVisible = false,
@@ -1684,7 +1684,7 @@ public partial class VentanaConfiguradorEstribos : Window
             {
                 Text = $"N{(nivel.Cota >= 0 ? "+" : "")}{nivel.Cota:0.00}  {nivel.Nombre}",
                 FontSize = 10,
-                Foreground = Brushes.DimGray,
+                Foreground = Paleta.TextoSecundario,
                 TextAlignment = TextAlignment.Right,
                 Width = anchoEtiqueta,
                 IsHitTestVisible = false,
@@ -1706,8 +1706,8 @@ public partial class VentanaConfiguradorEstribos : Window
             if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
             {
                 Color color = tramo.Tipo == TipoTramo.DentroDeViga
-                    ? Color.FromRgb(0x3B, 0x82, 0xF6)
-                    : Color.FromRgb(0xB4, 0x53, 0x09);
+                    ? Paleta.ColorNudo
+                    : Paleta.ColorZapata;
 
                 var banda = new Rectangle
                 {
@@ -1732,7 +1732,7 @@ public partial class VentanaConfiguradorEstribos : Window
                 {
                     Width = anchoColumna,
                     Height = alto,
-                    Fill = new SolidColorBrush(Color.FromArgb(30, 0x16, 0xA3, 0x4A)),
+                    Fill = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorExito, 30)),
                     IsHitTestVisible = false,
                 };
                 Canvas.SetLeft(tinte, xColumna);
@@ -1745,7 +1745,7 @@ public partial class VentanaConfiguradorEstribos : Window
                     Text = "✓",
                     FontSize = 13,
                     FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A)),
+                    Foreground = Paleta.Exito,
                     Cursor = System.Windows.Input.Cursors.Hand,
                     ToolTip = "Este tramo se genera. Clic para sacarlo.",
                     Background = Brushes.Transparent,
@@ -1762,8 +1762,8 @@ public partial class VentanaConfiguradorEstribos : Window
                 {
                     Width = anchoColumna + 6,
                     Height = alto,
-                    Fill = new SolidColorBrush(Color.FromArgb(60, 0x22, 0xC5, 0x5E)),
-                    Stroke = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
+                    Fill = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorExitoClaro, 60)),
+                    Stroke = Paleta.ExitoClaro,
                     StrokeThickness = 2,
                     IsHitTestVisible = false,
                 };

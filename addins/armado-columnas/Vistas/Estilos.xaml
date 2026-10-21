@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:practicacq.Vistas">
+
+    <!-- Paleta y estilos comunes de las ventanas del add-in (issue #116).
+         Los colores viven en Paleta.cs (el código que dibuja en canvas usa la
+         misma); acá solo se exponen a los XAML. Los colores de varilla por
+         diámetro NO van acá: son la tabla de la empresa (Modelo/ColoresVarilla.cs). -->
+
+    <!-- Superficies y bordes -->
+    <x:Static x:Key="Fondo" Member="local:Paleta.Fondo" />
+    <x:Static x:Key="Superficie" Member="local:Paleta.Superficie" />
+    <x:Static x:Key="Borde" Member="local:Paleta.Borde" />
+    <x:Static x:Key="Separador" Member="local:Paleta.Separador" />
+    <x:Static x:Key="Contorno" Member="local:Paleta.Contorno" />
+
+    <!-- Texto -->
+    <x:Static x:Key="TextoSecundario" Member="local:Paleta.TextoSecundario" />
+    <x:Static x:Key="TextoApagado" Member="local:Paleta.TextoApagado" />
+
+    <!-- Significados: azul = selección, verde = aceptado, amarillo = aviso, rojo = error -->
+    <x:Static x:Key="Primario" Member="local:Paleta.Primario" />
+    <x:Static x:Key="Exito" Member="local:Paleta.Exito" />
+    <x:Static x:Key="ExitoClaro" Member="local:Paleta.ExitoClaro" />
+    <x:Static x:Key="ExitoFondo" Member="local:Paleta.ExitoFondo" />
+    <x:Static x:Key="ExitoTexto" Member="local:Paleta.ExitoTexto" />
+    <x:Static x:Key="AvisoFondo" Member="local:Paleta.AvisoFondo" />
+    <x:Static x:Key="AvisoBorde" Member="local:Paleta.AvisoBorde" />
+    <x:Static x:Key="AvisoTexto" Member="local:Paleta.AvisoTexto" />
+    <x:Static x:Key="Error" Member="local:Paleta.Error" />
+    <x:Static x:Key="AccionFinal" Member="local:Paleta.AccionFinal" />
+
+    <!-- Lo que se dibuja de la columna -->
+    <x:Static x:Key="Nudo" Member="local:Paleta.Nudo" />
+    <x:Static x:Key="Zapata" Member="local:Paleta.Zapata" />
+
+    <!-- Estilos de texto y de panel -->
+    <Style TargetType="TextBlock" x:Key="Etiqueta">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Margin" Value="0,8,0,3" />
+    </Style>
+    <Style TargetType="Border" x:Key="Panel">
+        <Setter Property="Background" Value="{StaticResource Superficie}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Borde}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10" />
+    </Style>
+
+</ResourceDictionary>

@@ -60,27 +60,27 @@ public partial class PanelPlantaColumnas : UserControl
     /// </summary>
     public event Action<IReadOnlyList<string>, bool>? ColumnasEnRectangulo;
 
-    private static readonly Brush ColorColumna = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-    private static readonly Brush ColorBordeColumna = new SolidColorBrush(Color.FromRgb(0x4B, 0x55, 0x63));
-    private static readonly Brush ColorColumnaActiva = new SolidColorBrush(Color.FromArgb(120, 0x22, 0xC5, 0x5E));
-    private static readonly Brush ColorBordeActiva = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
+    private static readonly Brush ColorColumna = Paleta.Contorno;
+    private static readonly Brush ColorBordeColumna = Paleta.ContornoFuerte;
+    private static readonly Brush ColorColumnaActiva = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorExitoClaro, 120));
+    private static readonly Brush ColorBordeActiva = Paleta.ExitoClaro;
 
     // Azul de "columna elegida": a las elegidas les cae lo que se acepte en el
     // panel del tramo (issue #56). Independiente de si además está activa
     // (verde) o de si ya tiene tramos aceptados (✓).
-    private static readonly Brush ColorColumnaMarcada = new SolidColorBrush(Color.FromArgb(140, 0x0B, 0x63, 0xCE));
-    private static readonly Brush ColorBordeMarcada = new SolidColorBrush(Color.FromRgb(0x0B, 0x63, 0xCE));
+    private static readonly Brush ColorColumnaMarcada = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorPrimario, 140));
+    private static readonly Brush ColorBordeMarcada = Paleta.Primario;
 
-    private static readonly Brush ColorRejilla = new SolidColorBrush(Color.FromRgb(0xB0, 0xB0, 0xB0));
+    private static readonly Brush ColorRejilla = Paleta.Contorno;
 
     /// <summary>Mismo verde que el chulito de la elevación (VentanaConfiguradorEstribos).</summary>
-    private static readonly Brush ColorChulito = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A));
+    private static readonly Brush ColorChulito = Paleta.Exito;
 
     // Rectángulo de arrastre: azul para "ventana" (izq -> der, solo lo que
     // entra entero) y verde para "cruce" (der -> izq, todo lo que toca),
     // mismos colores que usa Revit.
-    private static readonly Brush ColorVentana = new SolidColorBrush(Color.FromRgb(0x0B, 0x63, 0xCE));
-    private static readonly Brush ColorCruce = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
+    private static readonly Brush ColorVentana = Paleta.Primario;
+    private static readonly Brush ColorCruce = Paleta.ExitoClaro;
 
     /// <summary>Un clic que se movió menos que esto sigue siendo un clic, no un arrastre.</summary>
     private const double MinimoArrastre = 4;
@@ -227,7 +227,7 @@ public partial class PanelPlantaColumnas : UserControl
             {
                 Text = c.MarcaUbicacion,
                 FontSize = 9,
-                Foreground = Brushes.DimGray,
+                Foreground = Paleta.TextoSecundario,
                 IsHitTestVisible = false,
             };
             texto.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -260,7 +260,7 @@ public partial class PanelPlantaColumnas : UserControl
             Text = "N ↑",
             FontWeight = FontWeights.Bold,
             FontSize = 11,
-            Foreground = Brushes.Gray,
+            Foreground = Paleta.TextoSecundario,
             IsHitTestVisible = false,
         };
         Canvas.SetLeft(texto, 4);
@@ -291,9 +291,9 @@ public partial class PanelPlantaColumnas : UserControl
         {
             Width = radioBurbuja * 2,
             Height = radioBurbuja * 2,
-            Stroke = Brushes.DimGray,
+            Stroke = Paleta.TextoSecundario,
             StrokeThickness = 1,
-            Fill = Brushes.White,
+            Fill = Paleta.Superficie,
             IsHitTestVisible = false,
         };
         Canvas.SetLeft(circulo, bx - radioBurbuja);
@@ -391,8 +391,7 @@ public partial class PanelPlantaColumnas : UserControl
 
         // Ventana (izq -> der): línea llena. Cruce (der -> izq): punteada.
         _rectanguloArrastre.Stroke = haciaLaDerecha ? ColorVentana : ColorCruce;
-        _rectanguloArrastre.Fill = new SolidColorBrush(Color.FromArgb(
-            30, haciaLaDerecha ? (byte)0x0B : (byte)0x22, haciaLaDerecha ? (byte)0x63 : (byte)0xC5, haciaLaDerecha ? (byte)0xCE : (byte)0x5E));
+        _rectanguloArrastre.Fill = new SolidColorBrush(Paleta.ConAlfa(haciaLaDerecha ? Paleta.ColorPrimario : Paleta.ColorExitoClaro, 30));
         _rectanguloArrastre.StrokeDashArray = haciaLaDerecha ? null : new DoubleCollection { 4, 3 };
 
         Rect caja = new(_inicioArrastre, actual);
