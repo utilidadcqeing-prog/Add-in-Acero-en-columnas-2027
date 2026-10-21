@@ -31,6 +31,7 @@ Los de cada sub-issue; se evalúan en «Estado».
 8. **Cuatro clases de botón** (2026-10-21): `BotonPrincipal` (verde, aceptar lo configurado), `BotonAccionFinal` (naranja, escribe en el modelo de Revit), `BotonSecundario` (blanco con borde, todo lo demás) y `BotonPeligro` (texto rojo, borra algo). Más `BotonFlecha` para ▲▼. Todos con esquinas de 4 px, color al pasar el mouse y al apretar, y gris cuando están deshabilitados.
 9. **Columnetas sigue el mismo significado** (2026-10-21, a aprobar por Luciano): «Generar Columnetas y Viguetas» escribe en el modelo, así que pasa de verde a naranja (`BotonAccionFinal`), igual que «Generar armado en Revit». «Seleccionar Muros» pasa de azul a `BotonSecundario`: el azul queda solo para selección dentro de los dibujos.
 10. **Tipografía común** (2026-10-21): estilos `TituloVentana` (14, seminegrita) y `TextoAyuda` (11, gris, con ajuste de línea). En Estribos menores, los encabezados «FORMAS» y «PIEZA SELECCIONADA» pasan a «Formas» y «Pieza seleccionada» con el estilo `Etiqueta` de la ventana principal. Columnetas deja su propio estilo `Etiqueta` y usa el común.
+11. **Una sola rama y un solo PR en borrador** (2026-10-21, pedido de Luciano; reemplaza la 1 y la 6): desde ahora todo se trabaja en la rama `mejora-visual` y va en un único PR en borrador (draft) contra `main`, que se marca listo cuando se termine. Los PR #127 y #128 ya estaban unidos a `main` (cierran #115, #116, #117 y #119). El #146 (#118) se unió a la rama `mejora-visual-botones` y no a `main`, así que su commit se pasó a `mejora-visual` y entra a `main` con el PR único.
 
 ## Plan paso a paso
 
@@ -55,7 +56,7 @@ Los de cada sub-issue; se evalúan en «Estado».
    - Textos de título que cambian: «Configuración guardada:» → «Configuración guardada», «Configuración del tramo activo» → «Tramo activo», «Recubrimiento (toda la columna):» → sin los dos puntos.
    Prueba: build + visor (captura antes/después) + Revit.
 
-### Día 4
+### Día 4 (rama `mejora-visual`, PR único en borrador)
 
 Ver la issue madre: #120 + prueba final (día 4), #121 opcional (día 5).
 
@@ -108,3 +109,4 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - [x] No se movió ni se quitó ningún control: el diff solo cambia estilos, los cuatro textos de título y el `Border` alrededor de la casilla (mismo `x:Name`, misma columna del pie).
 - [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` sin errores.
 - [ ] Probado en Revit 2027.
+- [x] PR #128 unido a `main` el 2026-10-21 (cierra #117 y #119). El #146 quedó en la rama `mejora-visual-botones`: el #118 entra con el PR único de `mejora-visual`.
