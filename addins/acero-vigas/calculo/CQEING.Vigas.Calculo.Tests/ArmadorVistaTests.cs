@@ -239,10 +239,11 @@ public class ArmadorVistaTests
         VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(5, 5)] });
 
         List<BarraSeccion> arriba = v.Seccion.Barras.Where(b => b.Arriba && !b.Baston).ToList();
-        Assert.Equal([5.745, 10.3725, 15, 19.6275, 24.255], arriba.Select(b => Math.Round(b.X, 4)));
+        // las de esquina se apoyan en la curva del estribo y entran 0.3236 cm (21-oct)
+        Assert.Equal([6.0686, 10.3725, 15, 19.6275, 23.9314], arriba.Select(b => Math.Round(b.X, 4)));
         Assert.Equal(["a1", "a2", "a3", "a4", "a5"], arriba.Select(b => b.Id));
         Assert.Equal([true, false, false, false, true], arriba.Select(b => b.Esquina));
-        Assert.Equal(("arriba 1", 5.745, 1.59), (arriba[0].Nombre, Math.Round(arriba[0].Y, 4), arriba[0].D));
+        Assert.Equal(("arriba 1", 6.0686, 1.59), (arriba[0].Nombre, Math.Round(arriba[0].Y, 4), arriba[0].D));
         Assert.Equal((30, 50), (v.Seccion.AnchoCm, v.Seccion.AltoCm));
         Assert.Equal(new FiguraSeccion("E", "Cerrado", 4, 26, 4, 46), v.Seccion.Figuras[0]);
     }
