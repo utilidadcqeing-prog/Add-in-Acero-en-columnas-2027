@@ -81,6 +81,38 @@ public class PlanificadorAceroTests
         Assert.All(plan.Barras, p => Assert.Equal(c.Vigas.Barras.Single(b => b.Id == p.Pieza) is var b ? (b.Desde, b.Largo) : default, (p.Desde, p.Largo)));
     }
 
+    /// <summary>
+    /// Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". Medido en Revit: con la fila 2
+    /// debajo de las esquinas, las dos filas llegaban a la misma punta y el gancho de la fila 1 bajaba atravesando la barra
+    /// de la fila 2. Ahora la de la fila 2 termina antes, con todo su gancho por dentro del arranque del de la fila 1: un
+    /// radio de doblado más un diámetro (#3: 57 / 2 + 9.5 = 38 mm) en cada punta con gancho. Su largo baja lo mismo.
+    /// </summary>
+    [Fact]
+    public void FilaDos_SuGanchoVaPorDentroDelDeLaFilaUno()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 3, Fila: 2)] };
+        PorticoCalculado c = Calcular(o);
+        List<PiezaLongitudinal> arriba = Planificar(o).Barras.Where(p => p.Capa == Posicion.Superior).ToList();
+        const int anidado = 38;
+
+        int anidadas = 0;
+        foreach (Barra b in c.Vigas.Superior!.Barras)
+        {
+            List<PiezaLongitudinal> fila1 = arriba.Where(p => p.Pieza == b.Id && p.Diametro == 5).ToList();
+            Assert.All(fila1, p => Assert.Equal((b.Desde, b.Hasta, b.Largo), (p.Desde, p.Hasta, p.Largo)));
+            foreach (PiezaLongitudinal p in arriba.Where(p => p.Pieza == b.Id && p.Diametro == 3))
+            {
+                // Solo la que queda debajo de una #5 (se tocan en X) se anida; si el traslapo al lado las separa, sus
+                // ganchos van en planos distintos y no se cruzan.
+                bool debajo = fila1.Any(f => Math.Abs(f.XCorte - p.XCorte) < (15.9 + 9.5) / 2);
+                int alInicio = debajo && b.TipoInicio != TipoGancho.Sin ? anidado : 0, alFin = debajo && b.TipoFin != TipoGancho.Sin ? anidado : 0;
+                Assert.Equal((b.Desde + alInicio, b.Hasta - alFin, b.Largo - alInicio - alFin), (p.Desde, p.Hasta, p.Largo));
+                anidadas += alInicio + alFin > 0 ? 1 : 0;
+            }
+        }
+        Assert.True(anidadas >= 2, "las dos #3 de debajo de las esquinas en la punta con gancho");
+    }
+
     [Fact]
     public void TraslapoAlLado_LaSegundaBarraSeCorreUnDiametroHaciaElCentro()
     {
