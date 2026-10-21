@@ -23,7 +23,8 @@ public sealed record DobladoBarra(double Diametro, double Gancho, double Estribo
 /// doblado del tipo más medio diámetro y la cola de <see cref="GanchoPropio.Extension"/>;</item>
 /// <item>el cerrado tiene los dos ganchos en la esquina de arriba a la izquierda, dando la vuelta a la barra de esquina, y
 /// las colas entran al núcleo (hallazgo E2);</item>
-/// <item>el abierto es una rama al lado de sus barras con un gancho centrado en cada una (hallazgo E13b).</item>
+/// <item>el abierto es una rama al lado de sus barras con un gancho que abraza cada una (hallazgo E13b; desde el 21-oct
+/// el doblez toca la barra en vez de centrarse en ella).</item>
 /// </list>
 /// Es un dibujo: no reproduce el milímetro que Revit corre la barra en la esquina de los ganchos.
 /// </summary>
@@ -116,8 +117,8 @@ public static class PreviaAcero
     }
 
     /// <summary>
-    /// La rama al lado de sus dos barras, del lado del centro de la viga, con un gancho alrededor de cada barra (centrado en
-    /// ella) y la cola hacia el núcleo. Null si el plan no trae sus barras.
+    /// La rama al lado de sus dos barras, del lado del centro de la viga, con un gancho que abraza cada barra (la toca por
+    /// fuera) y la cola hacia el núcleo. Null si el plan no trae sus barras.
     /// </summary>
     private static List<(double X, double Y)>? Abierto(GrupoEstribos g, UbicacionPortico u, DobladoBarra d, int grados, double cola)
     {
@@ -126,17 +127,21 @@ public static class PreviaAcero
         double r = d.Gancho / 2 + d.Diametro / 2;
         double hacia = rama.X <= u.Ancho / 2 ? 1 : -1; // de la barra hacia el centro: ahí va la rama
         double xRama = rama.X + hacia * r;
-        // Ángulos medidos desde la rama: 180° (o 0°) es el punto de la rama a la altura de la barra.
+        // El doblez abraza la barra: su cara interior toca la barra por encima (abajo, por debajo), así que su centro va
+        // medio doblado menos medio diámetro de barra hacia adentro (centrado en la barra, el gancho cruzaba el cerrado).
+        double alCentro = d.Gancho / 2 - rama.Diametro / 2;
+        double yArriba = rama.YArriba - alCentro, yAbajo = rama.YAbajo + alCentro;
+        // Ángulos medidos desde la rama: 180° (o 0°) es el punto de la rama a la altura del centro del doblez.
         double desde = hacia > 0 ? 0 : 180;
         double giro = hacia > 0 ? 1 : -1; // arriba gira pasando por encima de la barra, hacia el lado de la barra
-        List<(double X, double Y)> abajo = Arco((rama.X, rama.YAbajo), r, desde - giro * grados, desde);
-        List<(double X, double Y)> arriba = Arco((rama.X, rama.YArriba), r, desde, desde + giro * grados);
+        List<(double X, double Y)> abajo = Arco((rama.X, yAbajo), r, desde - giro * grados, desde);
+        List<(double X, double Y)> arriba = Arco((rama.X, yArriba), r, desde, desde + giro * grados);
         var lazo = new List<(double X, double Y)>
         {
             Mas(abajo[0], Tangente(desde - giro * grados), -giro * cola),
         };
         lazo.AddRange(abajo);
-        lazo.Add((xRama, rama.YArriba));
+        lazo.Add((xRama, yArriba));
         lazo.AddRange(arriba.Skip(1));
         lazo.Add(Mas(arriba[^1], Tangente(desde + giro * grados), giro * cola));
         return lazo;

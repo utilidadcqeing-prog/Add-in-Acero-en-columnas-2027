@@ -77,6 +77,10 @@ public static class PlanificadorAcero
                 ? CorridasEstribos.PorZonas(e.Posiciones, DistribuidorEstribos.Zonas(tramo, config, r.PorDiametro[config.Diametro].Diametro))
                 : CorridasEstribos.Partir(e.Posiciones);
             Rama? rama = e.Tipo == TipoEstribo.Abierto ? RamaDe(re.Seccion, caras.Izquierda, r) : null;
+            // Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". En el plano del cerrado, los
+            // ganchos del adicional lo cruzan: el adicional n va pegado al lado, n diámetros de estribo más allá.
+            double desfase = e.Id == MotorEstribos.IdCerrado ? 0 : int.Parse(e.Id[MotorEstribos.IdCerrado.Length..]) * r.PorDiametro[e.Diametro].Diametro;
+            corridas = corridas.Select(c => c with { Primero = c.Primero + desfase }).ToList();
             grupos.AddRange(corridas.Select(c => new GrupoEstribos(e.Id, e.Tramo, e.Tipo, e.Diametro, e.Gancho,
                 caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba, c,
                 MarcoPortico.VigaEn(u, c.Primero + (c.Cantidad - 1) * c.Separacion / 2) ?? throw new InvalidOperationException("El pórtico no tiene vigas."),

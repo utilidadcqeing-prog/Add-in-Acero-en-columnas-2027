@@ -254,6 +254,24 @@ public class PlanificadorAceroTests
         Assert.All(Planificar(o).Estribos.Where(g => g.Pieza == "E"), g => Assert.Null(g.Rama));
     }
 
+    /// <summary>
+    /// Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". El adicional va pegado al lado
+    /// del cerrado, un diámetro de estribo más allá, y no en su mismo plano (ahí sus ganchos cruzaban el cerrado).
+    /// </summary>
+    [Fact]
+    public void Estribos_ElAdicionalVaPegadoAlCerradoYNoEnSuPlano()
+    {
+        var adicional = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)]);
+        var o = OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(Adicionales: [adicional]) };
+        PlanAcero plan = Planificar(o);
+        double d = Reglas.Generales.PorDiametro[3].Diametro;
+
+        IEnumerable<Corrida> cerrado = plan.Estribos.Where(g => g.Pieza == "E").Select(g => g.Corrida);
+        IEnumerable<Corrida> abierto = plan.Estribos.Where(g => g.Pieza == "E1").Select(g => g.Corrida);
+
+        Assert.Equal(cerrado.Select(c => c with { Primero = c.Primero + d }), abierto);
+    }
+
     [Fact]
     public void NoSePlanifica_SiNoSePuedeGenerarOSinUbicacion()
     {
