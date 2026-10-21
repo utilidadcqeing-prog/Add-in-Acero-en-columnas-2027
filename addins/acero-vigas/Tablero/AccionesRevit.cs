@@ -117,14 +117,17 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
                 vista.DisplayStyle = DisplayStyle.Shading;
             if (vista.IsInTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate))
                 vista.DisableTemporaryViewMode(TemporaryViewMode.TemporaryHideIsolate);
-            Aislar(doc, vista, ids);
-            foreach (ElementId id in ids)
-                vista.SetElementOverrides(id, transparente);
+            // La caja va antes de ocultar: lo que se oculta es lo que la vista ve, y con la caja del pórtico anterior quedaban
+            // sin ocultar las vigas, el acero, el nivel y el DWG que solo caen en la caja nueva (Juan, 21-oct).
             if (caja is not null)
             {
                 vista.SetSectionBox(caja);
                 vista.IsSectionBoxActive = true;
+                doc.Regenerate();
             }
+            Aislar(doc, vista, ids);
+            foreach (ElementId id in ids)
+                vista.SetElementOverrides(id, transparente);
             t.Commit();
         }
         uidoc.ActiveView = vista;
@@ -142,7 +145,10 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
         List<ElementId> ocultos = new FilteredElementCollector(doc).WhereElementIsNotElementType()
             .Where(e => e.IsHidden(vista)).Select(e => e.Id).ToList();
         if (ocultos.Count > 0)
+        {
             vista.UnhideElements(ocultos);
+            doc.Regenerate(); // si no, el colector de la vista todavía no los ve y quedan sin ocultar
+        }
         var quedan = ids.ToHashSet();
         List<ElementId> sobran = new FilteredElementCollector(doc, vista.Id).WhereElementIsNotElementType()
             .Where(e => !quedan.Contains(e.Id) && e.CanBeHidden(vista)).Select(e => e.Id).ToList();
