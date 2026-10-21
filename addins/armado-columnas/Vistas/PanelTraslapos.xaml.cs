@@ -91,7 +91,7 @@ public partial class PanelTraslapos : UserControl
 
     private void DibujarTipo(PlanTraslapos.PlanTipo tipo, string titulo, double x, Brush color, Func<double, double> Y)
     {
-        Texto(titulo, x - 45, 4, tipo.TieneSolucion ? color : ColorError, negrita: true);
+        TextoTitulo(titulo, tipo.DiametroMm, x - 45, 4, tipo.TieneSolucion ? color : ColorError);
         if (!tipo.TieneSolucion)
         {
             Texto("sin solución", x - 30, 20, ColorError);
@@ -155,6 +155,29 @@ public partial class PanelTraslapos : UserControl
             Foreground = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)),
             FontWeight = FontWeights.Bold,
         });
+        Canvas.SetLeft(t, x);
+        Canvas.SetTop(t, y);
+        Lienzo.Children.Add(t);
+    }
+
+    /// <summary>
+    /// "Tipo A · #5": el grupo con su color (A o B) y el "#5" con el de la tabla de
+    /// la empresa, igual que el número junto al largo de cada varilla. Sin
+    /// solución, todo va en el color de error.
+    /// </summary>
+    private void TextoTitulo(string titulo, double diametroMm, double x, double y, Brush colorGrupo)
+    {
+        var t = new TextBlock { FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = colorGrupo };
+        int numero = titulo.IndexOf('#');
+        if (numero < 0 || ReferenceEquals(colorGrupo, ColorError))
+            t.Inlines.Add(new Run(titulo));
+        else
+        {
+            ColoresVarilla.ColorRgb c = ColoresVarilla.ColorDe(diametroMm);
+            t.Inlines.Add(new Run(titulo[..numero]));
+            t.Inlines.Add(new Run(titulo[numero..]) { Foreground = new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B)) });
+        }
+
         Canvas.SetLeft(t, x);
         Canvas.SetTop(t, y);
         Lienzo.Children.Add(t);
