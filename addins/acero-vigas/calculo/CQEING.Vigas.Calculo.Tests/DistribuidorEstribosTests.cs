@@ -65,29 +65,27 @@ public class DistribuidorEstribosTests
     }
 
     /// <summary>
-    /// Carlos (min 1:21:21): las zonas de confinamiento "son las que están pegadas a las columnas". El voladizo tiene
-    /// columna de un solo lado: zona junto a ella y el resto con la separación del centro, hasta 5 cm de la punta.
+    /// Carlos (21-oct, min 15:14): "en voladizo no existe el confinamiento y el no confinamiento… siempre va a existir
+    /// el confinamiento". Todo el voladizo va con la separación de la zona, de la columna a 5 cm de la punta.
     /// </summary>
     [Fact]
-    public void ElVoladizoLlevaZonaJuntoALaColumnaYElRestoComoCentro()
+    public void ElVoladizoVaTodoConLaSeparacionDeLaZona()
     {
         IReadOnlyList<double> p = Posiciones("Voladizo D");
 
-        Assert.Equal(12, p.Count);
-        VanCada(p.Take(8).ToList(), 12554.75, 13254.75, 100);
-        VanCada(p.Skip(7).ToList(), 13254.75, 13945.25, 690.5 / 4);
+        Assert.Equal(15, p.Count);
+        VanCada(p, 12554.75, 13945.25, 1390.5 / 14);
     }
 
     [Fact]
-    public void UnVoladizoAlInicio_LlevaLaZonaJuntoALaColumnaDeLaDerecha()
+    public void UnVoladizoAlInicio_TambienVaTodoConLaSeparacionDeLaZona()
     {
         Portico portico = Datos.PorticoMaqueta() with { VoladizoInicio = 1500 };
 
         IReadOnlyList<double> p = Posiciones("Voladizo A", p: portico);
 
-        Assert.Equal(12, p.Count);
-        VanCada(p.Take(5).ToList(), -1645.25, -954.75, 690.5 / 4);
-        VanCada(p.Skip(4).ToList(), -954.75, -254.75, 100);
+        Assert.Equal(15, p.Count);
+        VanCada(p, -1645.25, -254.75, 1390.5 / 14);
     }
 
     /// <summary>Como la luz corta (min 1:22:43): si no alcanza para la zona, todo el voladizo va como zona.</summary>
@@ -188,9 +186,9 @@ public class DistribuidorEstribosTests
     }
 
     [Fact]
-    public void ElVoladizoTieneZonaSoloJuntoASuColumna()
+    public void ElVoladizoEsUnaSolaZona()
     {
-        Assert.Equal([new ZonaTramo(12554.75, 13254.75, true), new ZonaTramo(13254.75, 13945.25, false)], Zonas("Voladizo D"));
+        Assert.Equal([new ZonaTramo(12554.75, 13945.25, true)], Zonas("Voladizo D"));
     }
 
     [Fact]

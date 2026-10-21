@@ -10,7 +10,7 @@ namespace CQEING.Vigas.Calculo.Estribos;
 /// <item>el primero va a 5 cm de la cara del apoyo, medidos hasta la cara del estribo;</item>
 /// <item>una zona junto a cada columna a la separación exacta y el resto repartido a la misma distancia, sin pasar de
 /// la separación del centro. Las zonas "son las que están pegadas a las columnas" (Carlos, min 1:21:21): la luz lleva
-/// dos y el voladizo una, junto a su columna;</item>
+/// dos; el voladizo va todo como zona (Carlos, 21-oct, min 15:14);</item>
 /// <item>si el tramo no alcanza para sus zonas (la luz corta, min 1:22:43), todo va como zona.</item>
 /// </list>
 /// </summary>
@@ -96,32 +96,23 @@ internal static class DistribuidorEstribos
             double centro = (t.CaraIzquierda + t.CaraDerecha) / 2;
             return [new Segmento(centro, centro, c.SeparacionZona, true, false)];
         }
-        // La zona va junto a cada columna: en la luz, a los dos lados; en el voladizo, solo del lado de su apoyo.
-        bool zonaIzquierda = t.Tipo != TipoTramo.VoladizoInicial, zonaDerecha = t.Tipo != TipoTramo.VoladizoFinal;
-        int zonas = (zonaIzquierda ? 1 : 0) + (zonaDerecha ? 1 : 0);
         var todoComoZona = new Segmento(desde, hasta, c.SeparacionZona, true, false);
-        if (t.CaraDerecha - t.CaraIzquierda < zonas * c.LargoZona)
+        // En voladizo "no existe el confinamiento y el no confinamiento… siempre va a existir el confinamiento"
+        // (Carlos, 21-oct, min 15:14).
+        if (t.Tipo != TipoTramo.Luz || t.CaraDerecha - t.CaraIzquierda < 2 * c.LargoZona)
             return [todoComoZona];
 
         int enZona = c.LargoZona < alPrimero ? 0 : (int)Math.Floor((c.LargoZona - alPrimero) / c.SeparacionZona + Tolerancia) + 1;
         if (enZona == 0)
             return [new Segmento(desde, hasta, c.SeparacionCentro, false, false)];
 
-        int izquierda = zonaIzquierda ? enZona : 1, derecha = zonaDerecha ? enZona : 1;
-        double finZonaIzquierda = desde + (izquierda - 1) * c.SeparacionZona;
-        double finZonaDerecha = hasta - (derecha - 1) * c.SeparacionZona;
-        // Si la zona llega hasta el último estribo (un voladizo apenas del largo de la zona), todo va como zona.
-        if (finZonaDerecha - finZonaIzquierda < -Tolerancia)
-            return [todoComoZona];
-
-        var segmentos = new List<Segmento>();
-        if (zonaIzquierda)
-            segmentos.Add(new Segmento(desde, finZonaIzquierda, c.SeparacionZona, true, true));
+        double finZonaIzquierda = desde + (enZona - 1) * c.SeparacionZona;
+        double finZonaDerecha = hasta - (enZona - 1) * c.SeparacionZona;
         // El centro reparte entre el último de cada zona; si las dos zonas se tocan, no hay centro.
+        var segmentos = new List<Segmento> { new(desde, finZonaIzquierda, c.SeparacionZona, true, true) };
         if (finZonaDerecha - finZonaIzquierda > Tolerancia)
             segmentos.Add(new Segmento(finZonaIzquierda, finZonaDerecha, c.SeparacionCentro, false, false));
-        if (zonaDerecha)
-            segmentos.Add(new Segmento(finZonaDerecha, hasta, c.SeparacionZona, true, true, DesdeLaDerecha: true));
+        segmentos.Add(new Segmento(finZonaDerecha, hasta, c.SeparacionZona, true, true, DesdeLaDerecha: true));
         return segmentos;
     }
 
