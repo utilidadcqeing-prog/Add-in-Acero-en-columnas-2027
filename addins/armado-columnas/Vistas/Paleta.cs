@@ -79,6 +79,17 @@ public static class Paleta
     public static Color ColorEsquemaColumneta { get; } = Rgb(0x5B8FF9);
     public static Color ColorEsquemaVigueta { get; } = Rgb(0x2EA06A);
 
+    // ---- Estados de los botones (issue #117): pasar el mouse, apretar, deshabilitado ----
+    public static Color ColorSuperficieHover { get; } = Rgb(0xF3F4F6);
+    public static Color ColorSuperficiePresionada { get; } = Rgb(0xE5E7EB);
+    public static Color ColorExitoHover { get; } = Rgb(0x15803D);
+    public static Color ColorExitoPresionado { get; } = Rgb(0x166534);
+    public static Color ColorAccionFinalHover { get; } = Rgb(0x92400E);
+    public static Color ColorAccionFinalPresionada { get; } = Rgb(0x78350F);
+    public static Color ColorErrorFondo { get; } = Rgb(0xFEF2F2);
+    public static Color ColorDeshabilitadoFondo { get; } = Rgb(0xE5E7EB);
+    public static Color ColorDeshabilitadoTexto { get; } = Rgb(0x9CA3AF);
+
     // ---- Los mismos colores como pincel ----
     public static SolidColorBrush Fondo { get; } = Pincel(ColorFondo);
     public static SolidColorBrush Superficie { get; } = Pincel(ColorSuperficie);
@@ -117,5 +128,13 @@ public static class Paleta
     public static SolidColorBrush EsquemaMuroBorde { get; } = Pincel(ColorEsquemaMuroBorde);
     public static SolidColorBrush EsquemaColumneta { get; } = Pincel(ColorEsquemaColumneta);
     public static SolidColorBrush EsquemaVigueta { get; } = Pincel(ColorEsquemaVigueta);
-
+    public static SolidColorBrush SuperficieHover { get; } = Pincel(ColorSuperficieHover);
+    public static SolidColorBrush SuperficiePresionada { get; } = Pincel(ColorSuperficiePresionada);
+    public static SolidColorBrush ExitoHover { get; } = Pincel(ColorExitoHover);
+    public static SolidColorBrush ExitoPresionado { get; } = Pincel(ColorExitoPresionado);
+    public static SolidColorBrush AccionFinalHover { get; } = Pincel(ColorAccionFinalHover);
+    public static SolidColorBrush AccionFinalPresionada { get; } = Pincel(ColorAccionFinalPresionada);
+    public static SolidColorBrush ErrorFondo { get; } = Pincel(ColorErrorFondo);
+    public static SolidColorBrush DeshabilitadoFondo { get; } = Pincel(ColorDeshabilitadoFondo);
+    public static SolidColorBrush DeshabilitadoTexto { get; } = Pincel(ColorDeshabilitadoTexto);
 }
