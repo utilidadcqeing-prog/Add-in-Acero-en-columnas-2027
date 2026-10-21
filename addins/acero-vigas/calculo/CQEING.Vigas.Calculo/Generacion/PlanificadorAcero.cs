@@ -35,8 +35,11 @@ public static class PlanificadorAcero
             {
                 Barra b = enOrden[i];
                 List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
+                // El largo de la barra del tablero lleva los ganchos del diámetro de la capa; una pieza de otro diámetro
+                // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
                 barras.AddRange(puestos.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
-                    s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
+                    s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
+                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin))));
             }
         }
 

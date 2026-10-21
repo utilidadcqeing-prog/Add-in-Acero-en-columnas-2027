@@ -106,11 +106,30 @@ public class PlanificadorAceroTests
                 // ganchos van en planos distintos y no se cruzan.
                 bool debajo = fila1.Any(f => Math.Abs(f.XCorte - p.XCorte) < (15.9 + 9.5) / 2);
                 int alInicio = debajo && b.TipoInicio != TipoGancho.Sin ? anidado : 0, alFin = debajo && b.TipoFin != TipoGancho.Sin ? anidado : 0;
-                Assert.Equal((b.Desde + alInicio, b.Hasta - alFin, b.Largo - alInicio - alFin), (p.Desde, p.Hasta, p.Largo));
+                ReglaDiametro r3 = Reglas.Generales.PorDiametro[3];
+                int largo = b.Hasta - alFin - (b.Desde + alInicio) + Reglas.LargoGancho(r3, b.TipoInicio) + Reglas.LargoGancho(r3, b.TipoFin);
+                Assert.Equal((b.Desde + alInicio, b.Hasta - alFin, largo), (p.Desde, p.Hasta, p.Largo));
                 anidadas += alInicio + alFin > 0 ? 1 : 0;
             }
         }
         Assert.True(anidadas >= 2, "las dos #3 de debajo de las esquinas en la punta con gancho");
+    }
+
+    /// <summary>
+    /// Con dos diámetros en la capa, cada pieza lleva el largo con los ganchos de su diámetro: con el de la barra del
+    /// tablero (#5), las #4 de la fila 2 salían "0.06 m más cortas en Revit" (21-oct).
+    /// </summary>
+    [Fact]
+    public void DosDiametros_CadaPiezaConElLargoDeSusGanchos()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };
+        ReglaDiametro r4 = Reglas.Generales.PorDiametro[4];
+
+        List<PiezaLongitudinal> de4 = Planificar(o).Barras.Where(p => p.Capa == Posicion.Superior && p.Diametro == 4).ToList();
+
+        Assert.NotEmpty(de4);
+        Assert.Contains(de4, p => p.GanchoInicio != TipoGancho.Sin || p.GanchoFin != TipoGancho.Sin);
+        Assert.All(de4, p => Assert.Equal(p.Hasta - p.Desde + Reglas.LargoGancho(r4, p.GanchoInicio) + Reglas.LargoGancho(r4, p.GanchoFin), p.Largo));
     }
 
     [Fact]
