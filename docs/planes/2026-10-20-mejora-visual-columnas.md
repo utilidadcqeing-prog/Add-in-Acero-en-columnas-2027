@@ -44,9 +44,20 @@ Los de cada sub-issue; se evalúan en «Estado».
 3. **#117 Estilos de botón** — archivos: `Vistas/Paleta.cs` (colores de hover, apretado y deshabilitado), `Vistas/Estilos.xaml` (los cinco estilos), `Vistas/VentanaConfiguradorEstribos.xaml` (los 9 botones; flechas de 26x17 a 34x24 px con tooltip «Tramo de arriba» / «Tramo de abajo»). Prueba: build + visor + muestrario de estilos.
 4. **#119 Ventanas secundarias** — archivos: `Vistas/VentanaEstribosMenores.xaml` y `Vistas/VentanaColumnetas.xaml` (botones, `Panel`, `Etiqueta`, `TituloVentana`, `TextoAyuda`). Prueba: build + render de Estribos menores; Columnetas se revisa en Revit.
 
-### Días 3 y 4
+### Día 3 (rama `mejora-visual-orden`, sale de `mejora-visual-botones` porque toca la misma ventana; PR contra esa rama)
 
-Ver la issue madre: #118 (día 3), #120 + prueba final (día 4), #121 opcional (día 5).
+5. **#118 Orden y jerarquía de la ventana principal** — archivos: `Vistas/Estilos.xaml` (estilos nuevos) y `Vistas/VentanaConfiguradorEstribos.xaml`. Sin mover ni quitar ningún control: solo estilos y títulos.
+   - Títulos de sección con una barrita azul a la izquierda (`EncabezadoSeccion` + `TituloSeccion`) en los tres paneles y en los cuatro grupos del panel derecho: configuración guardada / tramo activo / recubrimiento / acero longitudinal.
+   - Separadores entre grupos con el mismo espacio (`SeparadorSeccion`).
+   - Leyenda de la elevación de 10 a 11 px y cuadritos de 12 a 14 px (`TextoLeyenda`).
+   - Un estilo único para avisos (`CajaAviso` + `TextoAviso`), validación (`TextoError`) y ayudas (`TextoAyuda`).
+   - «Borrar TODO el armado existente…» dentro de una caja roja suave (`CajaPeligro` + `CasillaPeligro`); al marcarla, el texto pasa a negrita.
+   - Textos de título que cambian: «Configuración guardada:» → «Configuración guardada», «Configuración del tramo activo» → «Tramo activo», «Recubrimiento (toda la columna):» → sin los dos puntos.
+   Prueba: build + visor (captura antes/después) + Revit.
+
+### Día 4
+
+Ver la issue madre: #120 + prueba final (día 4), #121 opcional (día 5).
 
 ## Cómo probarlo
 
@@ -85,3 +96,15 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - [x] #119: Estribos menores y Columnetas usan los mismos colores, botones y tipografía que la principal.
 - [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` y render de Estribos menores sin errores.
 - [ ] Probado en Revit 2027: botones, flechas con tooltip, y la ventana Columnetas y Viguetas.
+
+## Evidencia (día 3)
+
+- Ventana principal con títulos de sección, avisos y la casilla de borrar destacada: `imagenes/2026-10-21-ventana-principal-orden.png` (antes: `imagenes/2026-10-21-ventana-principal-botones.png`).
+- La casilla «Borrar TODO…» marcada (negrita roja): `imagenes/2026-10-21-borrar-todo-marcada.png`.
+
+## Estado (día 3)
+
+- [x] #118: los tres paneles y los cuatro grupos del panel derecho tienen título de sección; separadores con el mismo espacio; leyenda de 11 px; avisos, validación y ayudas con un estilo cada uno; «Borrar TODO…» destacada.
+- [x] No se movió ni se quitó ningún control: el diff solo cambia estilos, los cuatro textos de título y el `Border` alrededor de la casilla (mismo `x:Name`, misma columna del pie).
+- [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` sin errores.
+- [ ] Probado en Revit 2027.
