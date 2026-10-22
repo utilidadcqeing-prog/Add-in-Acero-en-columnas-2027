@@ -53,8 +53,9 @@ public static class GeneradorArmado
         var res = new ResultadoArmado();
         PlanArmado plan = opciones.Plan;
 
-        if (opciones.BorrarAnteriores)
-            res.Eliminados = BorrarAnteriores(doc, plan);
+        // #145: regenerar reemplaza, no apila. Va antes de crear nada, y en la
+        // misma transacción: si la generación falla, el acero anterior vuelve.
+        res.Eliminados = BorrarAnteriores(doc, plan, opciones.BorrarArmadoAjeno);
 
 #if DEBUG
         // Solo en Debug: el paquete publicado (Release) no deja registros.
@@ -729,36 +730,53 @@ public static class GeneradorArmado
     }
 
     /// <summary>
-    /// Quita TODO el acero de refuerzo (<see cref="Rebar"/>) ya hosteado en
-    /// los elementos que el plan de hoy va a tocar -- sin importar si lo
-    /// generó este add-in o si lo modeló alguien a mano (pedido explícito
-    /// del usuario, 9-sep: antes solo se borraba lo marcado por el add-in
-    /// vía <see cref="MarcaEstribos"/>; con la casilla tildada ahora se borra
-    /// cualquier armado existente en esas columnas, para no dejar una barra
-    /// vieja convivendo con la nueva). Solo alcanza a los host que aparecen
-    /// como <see cref="Tramo.IdElementoHost"/> en el plan -- no toca columnas
-    /// fuera de esta corrida. Ver el checkbox en la ventana
-    /// ("Borrar TODO el armado existente en estas columnas") -- es una
-    /// operación destructiva a propósito, el usuario la tilda explícitamente
-    /// cada vez que la quiere.
+    /// #145: antes de generar, quita el acero que este add-in generó en una
+    /// corrida anterior (el que lleva <see cref="MarcaEstribos"/>), para que
+    /// regenerar reemplace en vez de apilar un juego sobre otro. Solo en las
+    /// columnas de esta corrida (las que tienen algún tramo con ✓):
+    /// <list type="bullet">
+    /// <item>las longitudinales, en toda la columna: se vuelven a armar de
+    /// punta a punta aunque se marque un solo tramo;</item>
+    /// <item>los estribos, cajas y grapas, solo en los tramos con ✓: los de
+    /// los tramos sin ✓ no se regeneran, así que se conservan (Luciano,
+    /// 22-oct).</item>
+    /// </list>
+    /// Con <paramref name="tambienAjeno"/> (la casilla "Borrar TODO el armado
+    /// existente…", pedido del 9-sep) se borra además el acero que no generó
+    /// el add-in, en toda la columna. Se conserva aunque #61 pedía sacarla:
+    /// Luciano, 22-oct.
     /// </summary>
-    private static int BorrarAnteriores(Document doc, PlanArmado plan)
+    private static int BorrarAnteriores(Document doc, PlanArmado plan, bool tambienAjeno)
     {
-        var idsHost = plan.Columnas
-            .SelectMany(c => c.Contexto?.Tramos ?? new List<Tramo>())
-            .Select(t => t.IdElementoHost)
-            .Where(id => id is not null)
-            .Select(id => long.TryParse(id, out long v) ? new ElementId(v) : null)
-            .Where(id => id is not null)
-            .Select(id => id!)
-            .ToHashSet();
+        var hostsColumna = new HashSet<ElementId>();
+        var hostsMarcados = new HashSet<ElementId>();
+        foreach (ColumnaPlan columna in plan.Columnas)
+        {
+            if (columna.Contexto is null || columna.Tramos.All(t => t is null)) continue;
+            for (int i = 0; i < columna.Contexto.Tramos.Count; i++)
+            {
+                if (!long.TryParse(columna.Contexto.Tramos[i].IdElementoHost, out long v)) continue;
+                var host = new ElementId(v);
+                hostsColumna.Add(host);
+                if (i < columna.Tramos.Count && columna.Tramos[i] is not null) hostsMarcados.Add(host);
+            }
+        }
 
-        if (idsHost.Count == 0) return 0;
+        if (hostsColumna.Count == 0) return 0;
+
+        HashSet<ElementId> propios = new FilteredElementCollector(doc)
+            .OfClass(typeof(Rebar))
+            .WherePasses(MarcaEstribos.Filtro())
+            .ToElementIds()
+            .ToHashSet();
 
         List<ElementId> viejos = new FilteredElementCollector(doc)
             .OfClass(typeof(Rebar))
             .Cast<Rebar>()
-            .Where(r => idsHost.Contains(r.GetHostId()))
+            .Where(r => hostsColumna.Contains(r.GetHostId()))
+            .Where(r => propios.Contains(r.Id)
+                ? !EsTransversal(r) || hostsMarcados.Contains(r.GetHostId())
+                : tambienAjeno)
             .Select(r => r.Id)
             .ToList();
 
@@ -767,6 +785,16 @@ public static class GeneradorArmado
 
         return viejos.Count;
     }
+
+    /// <summary>
+    /// Estribo, caja o grapa: su plano es horizontal (normal vertical), porque
+    /// se crean con normal Z o con BasisX/BasisY. Las longitudinales se crean
+    /// con una normal horizontal (<see cref="BarraContinua"/>). Una barra que
+    /// no es de forma (a mano, libre) cuenta como longitudinal: se borra en
+    /// toda la columna.
+    /// </summary>
+    private static bool EsTransversal(Rebar r) =>
+        r.IsRebarShapeDriven() && Math.Abs(r.GetShapeDrivenAccessor().Normal.Z) > 0.9;
 
     /// <summary>
     /// Solo cuando se cayó al gancho del modelo (el propio no se pudo crear):

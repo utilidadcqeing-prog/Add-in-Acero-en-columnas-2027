@@ -31,7 +31,7 @@ public class ManejadorGeneracionArmado : IExternalEventHandler
             using var t = new Transaction(doc, "Generar armado de columnas");
             t.Start();
 
-            // Estribos primero: es quien corre BorrarAnteriores (issue #2),
+            // Estribos primero: es quien borra el acero anterior (#145),
             // así que cualquier longitudinal/menor de una corrida vieja
             // (misma marca, mismo esquema) ya queda limpio antes de que J4
             // cree lo nuevo. También es quien llena

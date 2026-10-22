@@ -1922,7 +1922,7 @@ public partial class VentanaConfiguradorEstribos : Window
         var opciones = new OpcionesArmado
         {
             Plan = plan,
-            BorrarAnteriores = CheckBorrarAnteriores.IsChecked == true,
+            BorrarArmadoAjeno = CheckBorrarAjeno.IsChecked == true,
         };
 
         TextoEstado.Text = "Generando armado en Revit…";
@@ -1950,7 +1950,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstado.Text =
             $"Generado: {resultado.GruposCreados} estribo(s) creado(s)" +
-            (resultado.Eliminados > 0 ? $", {resultado.Eliminados} anterior(es) borrado(s)" : "") +
+            (resultado.Eliminados > 0 ? $", {resultado.Eliminados} elemento(s) de acero anterior(es) reemplazado(s)" : "") +
             (resultado.TramosOmitidos > 0 ? $", {resultado.TramosOmitidos} tramo(s) omitido(s)" : "") +
             ".";
 

@@ -378,7 +378,10 @@
                 <TextBlock x:Name="TextoResumenGeneracion" Foreground="{StaticResource ExitoTexto}" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock x:Name="TextoEstado" Foreground="{StaticResource TextoSecundario}" TextWrapping="Wrap" />
             </StackPanel>
-            <CheckBox Grid.Column="1" x:Name="CheckBorrarAnteriores" Content="Borrar TODO el armado existente en estas columnas (incluido el que no generó el addin)"
+            <!-- #145: lo que generó el add-in antes se reemplaza siempre; la casilla
+                 es solo para el acero ajeno (se conserva aunque #61 pedía sacarla). -->
+            <CheckBox Grid.Column="1" x:Name="CheckBorrarAjeno" Content="Borrar también el armado que no generó el add-in en estas columnas"
+                      ToolTip="El acero que generó el add-in en estas columnas se reemplaza siempre al generar. Esto borra además el modelado a mano o con otro add-in, en toda la columna."
                       VerticalAlignment="Center" Margin="0,0,12,0" />
             <Button Grid.Column="2" x:Name="BotonGenerar" Content="Generar armado en Revit"
                     Height="32" Style="{StaticResource BotonAccionFinal}" Click="BotonGenerar_Click" />

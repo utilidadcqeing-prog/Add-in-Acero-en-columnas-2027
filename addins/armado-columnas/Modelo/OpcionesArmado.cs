@@ -6,7 +6,7 @@ using System.Collections.Generic;
 /// Lo que L2 arma para pedirle a J3 que genere el armado real en Revit: el
 /// PlanArmado tal como quedó configurado en la ventana (mismo objeto que
 /// arma <c>BotonExportar_Click</c>, ver <c>ConstruirPlanArmado</c>) más si
-/// hay que borrar antes lo que este add-in ya había generado en esas
+/// hay que borrar también el acero que no generó este add-in en esas
 /// columnas.
 ///
 /// Vive en Modelo/ y no tiene una sola línea de Autodesk.Revit: la ventana
@@ -18,17 +18,18 @@ public sealed class OpcionesArmado
     public PlanArmado Plan { get; set; } = new();
 
     /// <summary>
-    /// Issue #2: por defecto NO se borra nada -- los estribos nuevos conviven
-    /// con lo que ya había, decisión del equipo del 2-sep. Tildar esto borra,
-    /// antes de generar, los estribos que este mismo add-in había creado
-    /// antes en los elementos de estas columnas (no toca lo modelado a mano).
+    /// El acero que generó este add-in en una corrida anterior se reemplaza
+    /// siempre (#145; hasta el 22-oct, por el #2, se apilaba). Esto agrega
+    /// borrar también el que NO generó el add-in (el modelado a mano, o el de
+    /// otro add-in) en esas columnas: la casilla "Borrar TODO el armado
+    /// existente…", destildada por defecto.
     /// </summary>
-    public bool BorrarAnteriores { get; set; }
+    public bool BorrarArmadoAjeno { get; set; }
 }
 
 public sealed class ResultadoArmado
 {
-    /// <summary>Estribos (de una tanda anterior de este add-in) borrados antes de generar. 0 si BorrarAnteriores estaba destildado.</summary>
+    /// <summary>Elementos de acero borrados antes de generar: los de una corrida anterior del add-in y, con <see cref="OpcionesArmado.BorrarArmadoAjeno"/>, también los ajenos.</summary>
     public int Eliminados { get; set; }
 
     /// <summary>Rebar creados -- cada grupo (el uniforme, o cada una de las tres zonas de un confinado) cuenta aparte.</summary>
