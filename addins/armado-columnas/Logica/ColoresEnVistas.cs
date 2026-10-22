@@ -82,7 +82,7 @@ public static class ColoresEnVistas
                     OverrideGraphicSettings ogs = destino.IsFilterApplied(filtro.Id)
                         ? destino.GetFilterOverrides(filtro.Id)
                         : new OverrideGraphicSettings();
-                    destino.SetFilterOverrides(filtro.Id, ConColor(ogs, color, solido));
+                    destino.SetFilterOverrides(filtro.Id, ConColor(ogs, color, solido, destino.ViewType));
                 }
                 pintadas++;
             }
@@ -152,7 +152,7 @@ public static class ColoresEnVistas
                 foreach ((ElementId id, ColoresVarilla.ColorRgb color) in empresa)
                 {
                     if (!vista.IsFilterApplied(id)) continue;
-                    vista.SetFilterOverrides(id, ConColor(vista.GetFilterOverrides(id), color, solido));
+                    vista.SetFilterOverrides(id, ConColor(vista.GetFilterOverrides(id), color, solido, vista.ViewType));
                 }
             }
             catch (Exception ex)
@@ -176,13 +176,26 @@ public static class ColoresEnVistas
         return libre ? null : plantilla;
     }
 
-    /// <summary>Solo cambia los colores (líneas y relleno sólido); lo demás queda como estaba.</summary>
-    private static OverrideGraphicSettings ConColor(OverrideGraphicSettings actual, ColoresVarilla.ColorRgb rgb, ElementId solido)
+    /// <summary>
+    /// Solo cambia los colores (líneas y relleno sólido); lo demás queda como estaba.
+    ///
+    /// #144: en 3D las líneas van casi negras. Con las líneas del mismo color
+    /// que el relleno, en "colores coherentes" (sin sombras) dos barras pegadas
+    /// se veían como una sola mancha; con el borde oscuro se ve dónde termina
+    /// cada una (Carlos, 22-oct). (30, 30, 30) y no negro puro, igual que
+    /// vigas (<c>ColoresDiametro.RgbContorno</c>): con el fondo oscuro, Revit
+    /// pinta de blanco las líneas negras. En plantas, cortes y alzados siguen del color del
+    /// diámetro: ahí la barra puede dibujarse solo con líneas, y en negro se
+    /// perdería el color.
+    /// </summary>
+    private static OverrideGraphicSettings ConColor(
+        OverrideGraphicSettings actual, ColoresVarilla.ColorRgb rgb, ElementId solido, ViewType tipoVista)
     {
         var color = new Color(rgb.R, rgb.G, rgb.B);
+        Color lineas = tipoVista == ViewType.ThreeD ? new Color(30, 30, 30) : color;
         var ogs = new OverrideGraphicSettings(actual)
-            .SetProjectionLineColor(color)
-            .SetCutLineColor(color);
+            .SetProjectionLineColor(lineas)
+            .SetCutLineColor(lineas);
         if (solido != ElementId.InvalidElementId)
             ogs.SetSurfaceForegroundPatternId(solido).SetSurfaceForegroundPatternColor(color)
                .SetCutForegroundPatternId(solido).SetCutForegroundPatternColor(color);
