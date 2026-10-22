@@ -339,5 +339,48 @@ Probar("lindero_gancho_que_no_llega", () =>
 Probar("lindero_punta_justo_sobre_la_linea_cuenta", () =>
     Cierto(Lindero.Cruza(lote, 7.0, 0.0, 1, 0, 0.15), "la punta toca X = 7,15"));
 
+// ---- #131: choques entre piezas de la sección
+
+string Barra(int i) => $"la barra {i}";
+
+Probar("choques_separacion_minima", () =>
+{
+    Igual(40, ChoquesSeccion.SeparacionMinimaMm(15.9, 15.9), "dos #5: manda 4 cm");
+    Igual(40, ChoquesSeccion.SeparacionMinimaMm(25.4, 19.1), "1,5 × 25,4 = 38,1 < 40");
+    Igual(48.45, ChoquesSeccion.SeparacionMinimaMm(32.3, 12.7), "1,5 × la más gruesa");
+});
+
+Probar("choques_barras_juntas", () =>
+{
+    var juntas = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 0), new(0.15, 0.10, 15.9, 1) };
+    IReadOnlyList<ChoquesSeccion.Choque> choques = ChoquesSeccion.BarrasJuntas(juntas, Barra);
+    Cierto(choques.Count == 1, $"{choques.Count} choques");
+    Cierto(choques[0].Motivo.Contains("3,4 cm") && choques[0].Motivo.Contains("4,0 cm"), choques[0].Motivo);
+    Cierto(choques[0].Marcas.Count == 2, "marca las dos barras");
+
+    var separadas = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 0), new(0.16, 0.10, 15.9, 1) };
+    Cierto(ChoquesSeccion.BarrasJuntas(separadas, Barra).Count == 0, "a 6 cm entre ejes no chocan");
+});
+
+Probar("choques_misma_varilla_no_cuenta", () =>
+{
+    var traslapo = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 3), new(0.1159, 0.10, 15.9, 3) };
+    Cierto(ChoquesSeccion.BarrasJuntas(traslapo, Barra).Count == 0, "las dos piezas de un traslapo van pegadas");
+});
+
+Probar("choques_alturas_que_no_se_cruzan", () =>
+{
+    var piezas = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 0, 0, 1), new(0.12, 0.10, 15.9, 1, 2, 3) };
+    Cierto(ChoquesSeccion.BarrasJuntas(piezas, Barra).Count == 0, "a distinta altura no chocan");
+});
+
+Probar("choques_nombre_barra", () =>
+{
+    var cfg = new ConfigLongitudinal { BarrasPorCaraX = 2, BarrasPorCaraY = 0 };
+    IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras = SeccionPlanta.Calcular(0.40, 0.40, 0.04, 9.5, cfg, _ => 15.9);
+    Cierto(ChoquesSeccion.NombreBarra(barras, 0) == "la esquina inferior izquierda", ChoquesSeccion.NombreBarra(barras, 0));
+    Cierto(ChoquesSeccion.NombreBarra(barras, 1) == "la barra 1 de la cara inferior", ChoquesSeccion.NombreBarra(barras, 1));
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;
