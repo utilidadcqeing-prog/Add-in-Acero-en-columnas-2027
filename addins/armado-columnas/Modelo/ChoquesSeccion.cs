@@ -25,7 +25,20 @@ public static class ChoquesSeccion
 
     /// <param name="Motivo">Qué pieza choca con cuál, para leer.</param>
     /// <param name="Marcas">Círculos a rodear en rojo en el dibujo (centro y radio).</param>
-    public sealed record Choque(string Motivo, IReadOnlyList<(double X, double Y, double Radio)> Marcas);
+    /// <param name="Clave">Qué piezas chocan, sin las medidas: el mismo par en dos tramos es el mismo choque (<see cref="DeLaColumna"/>).</param>
+    public sealed record Choque(string Motivo, IReadOnlyList<(double X, double Y, double Radio)> Marcas, string Clave = "");
+
+    /// <summary>
+    /// Los choques de todos los tramos de una columna, uno por <see cref="Choque.Clave"/>:
+    /// las longitudinales son las mismas en toda la columna, y un tramo sin
+    /// estribo las ubica unos milímetros distinto (revisión final del #131).
+    /// Manda el primero: pasar antes el tramo de referencia.
+    /// </summary>
+    public static IReadOnlyList<Choque> DeLaColumna(IEnumerable<Resultado> tramosEnOrden)
+    {
+        var vistas = new HashSet<string>();
+        return tramosEnOrden.SelectMany(r => r.Todos).Where(c => vistas.Add(c.Clave)).ToList();
+    }
 
     /// <summary>
     /// Distancia libre mínima (borde a borde) entre dos longitudinales: la de
@@ -57,7 +70,8 @@ public static class ChoquesSeccion
                 choques.Add(new Choque(
                     string.Format(Es, "{0} y {1} quedan a {2:0.0} cm libres; se piden {3:0.0} cm.",
                         Mayuscula(nombreVarilla(a.Varilla)), nombreVarilla(b.Varilla), Math.Max(0, libreMm) / 10, minimoMm / 10),
-                    new[] { Marca(a), Marca(b) }));
+                    new[] { Marca(a), Marca(b) },
+                    $"juntas:{Math.Min(a.Varilla, b.Varilla)}-{Math.Max(a.Varilla, b.Varilla)}"));
             }
 
         return choques;
@@ -68,7 +82,8 @@ public static class ChoquesSeccion
     /// <param name="HayTraslapo">Si alguna varilla lleva un traslapo con pieza corrida.</param>
     /// <param name="PiezasTraslapo">Las piezas de las varillas con traslapo, para dibujar esa zona.</param>
     public sealed record Resultado(
-        IReadOnlyList<Choque> Normal, IReadOnlyList<Choque> Traslapo, bool HayTraslapo, IReadOnlyList<PiezaRedonda> PiezasTraslapo)
+        IReadOnlyList<Choque> Normal, IReadOnlyList<Choque> Traslapo, bool HayTraslapo, IReadOnlyList<PiezaRedonda> PiezasTraslapo,
+        int VarillasSinRevisarEnTraslapo = 0)
     {
         public static Resultado Vacio { get; } =
             new(Array.Empty<Choque>(), Array.Empty<Choque>(), false, Array.Empty<PiezaRedonda>());
@@ -152,7 +167,7 @@ public static class ChoquesSeccion
 
             if (p.Forma == FormaMenor.Cerrado &&
                 CerradoImposible(p, barraPieza, abrazadas.Select(Pieza), donde) is string imposible)
-                normal.Add(new Choque(imposible, abrazadas.Select(i => Marca(redondas[i])).ToList()));
+                normal.Add(new Choque(imposible, abrazadas.Select(i => Marca(redondas[i])).ToList(), $"cerrado:{donde}"));
 
             IReadOnlyList<(double X, double Y)> eje = PlantaArmado.Menor(
                 p, k => { (int a, int b) = IndicesDe(p.Eje, k); return (Pieza(a), Pieza(b)); },
@@ -173,11 +188,15 @@ public static class ChoquesSeccion
         if (!plan.TieneSolucion) return new Resultado(normal, Array.Empty<Choque>(), false, Array.Empty<PiezaRedonda>());
 
         var pedidos = new List<AcomodoTraslapos.PedidoSeccion>();
+        int sinRevisar = 0;
         for (int i = 0; i < barras.Count; i++)
         {
             SeccionPlanta.BarraEnPlanta b = barras[i];
             PlanTraslapos.PlanTipo tipo = plan.De(grupoA: i % 2 == 0, b.DiametroMm);
             bool unTraslapo = tipo.Traslapos.Count == 1 && tipo.Piezas.Count == 2;
+            // Con más de un traslapo la varilla va como siempre (el acomodo
+            // solo está medido con uno) y su zona no se revisa: se dice.
+            if (tipo.Traslapos.Count > 1) sinRevisar++;
 
             // Las mismas normales que el anillo del generador.
             (double X, double Y) normalBarra = b.Posicion switch
@@ -226,7 +245,7 @@ public static class ChoquesSeccion
         var yaAvisados = normal.Select(c => c.Motivo).ToHashSet();
         var traslapo = BarrasJuntas(enTraslapo, Nombre)
             .Where(c => !yaAvisados.Contains(c.Motivo))
-            .Select(c => c with { Motivo = "En la zona de traslapo: " + Minuscula(c.Motivo) })
+            .Select(c => c with { Motivo = "En la zona de traslapo: " + Minuscula(c.Motivo), Clave = "traslapo:" + c.Clave })
             .ToList();
 
         // Las dos piezas del traslapo de una barra que abraza una grapa: si no
@@ -241,10 +260,10 @@ public static class ChoquesSeccion
                 traslapo.Add(new Choque(
                     $"En la zona de traslapo: las dos piezas de {Nombre(i)} no entran juntas en el doblez de {nombrePieza}; " +
                     "abraza una y choca con la otra.",
-                    dos.Select(q => (q.X, q.Y, q.Radio)).ToList()));
+                    dos.Select(q => (q.X, q.Y, q.Radio)).ToList(), $"doblez:{i}:{nombrePieza}"));
             }
 
-        return new Resultado(normal, traslapo, corridas.Count > 0, corridas);
+        return new Resultado(normal, traslapo, corridas.Count > 0, corridas, sinRevisar);
     }
 
     /// <summary>
@@ -316,7 +335,7 @@ public static class ChoquesSeccion
             return new Choque(
                 string.Format(Es, "{0} pasa encima de {1}, que no abraza (se meten {2:0.0} cm).",
                     Mayuscula(nombrePieza), nombreVarilla(barra.Varilla), metidaMm / 10),
-                new[] { Marca(barra) });
+                new[] { Marca(barra) }, $"encima:{nombrePieza}:{barra.Varilla}");
         }
 
         return null;

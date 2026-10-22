@@ -480,5 +480,27 @@ Probar("choques_tramo_contra_zapata", () =>
         "contra zapata: no evalúa menores");
 });
 
+Probar("choques_un_aviso_por_par_en_la_columna", () =>
+{
+    // El tramo de la zapata no lleva estribo y corre las esquinas distinto: el
+    // mismo par sale con otra distancia. En la columna se avisa una vez.
+    ConfigLongitudinal l = LongDePrueba("#6", 3, comercial: 6);
+    ChoquesSeccion.Resultado libre = ChoquesDe(ColumnaDePrueba(0.40, 9), l);
+    ChoquesSeccion.Resultado zapata = ChoquesDe(ColumnaDePrueba(0.40, 9, TipoTramo.ContraZapata), l);
+    IReadOnlyList<ChoquesSeccion.Choque> juntos = ChoquesSeccion.DeLaColumna(new[] { libre, zapata });
+    Cierto(juntos.Count == juntos.Select(c => c.Clave).Distinct().Count(), "un aviso por clave");
+    Cierto(juntos.Count == libre.Todos.Select(c => c.Clave).Union(zapata.Todos.Select(c => c.Clave)).Count(),
+        $"{juntos.Count} avisos");
+    Cierto(juntos.Take(libre.Todos.Count()).SequenceEqual(libre.Todos), "manda el primer tramo");
+});
+
+Probar("choques_varios_traslapos_se_avisan", () =>
+{
+    // 15 m con barras de 6 m: cada varilla lleva más de un traslapo y esa zona
+    // no se revisa; tiene que decirse.
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 15), LongDePrueba("#6", 3, comercial: 6));
+    Cierto(r.VarillasSinRevisarEnTraslapo > 0, $"{r.VarillasSinRevisarEnTraslapo} varillas sin revisar");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;
