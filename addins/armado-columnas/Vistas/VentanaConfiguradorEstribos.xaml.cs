@@ -1188,33 +1188,21 @@ public partial class VentanaConfiguradorEstribos : Window
 
     /// <summary>
     /// Lo que el panel de estribos menores necesita para marcar en rojo un
-    /// estribo cerrado que no se puede doblar: la distancia real entre barras
-    /// intermedias vecinas, con la misma cuenta que el generador (las
-    /// intermedias se reparten entre las esquinas, corridas el recubrimiento,
-    /// el estribo y media barra longitudinal -- SeccionPlanta). null si todavía
-    /// falta elegir alguna barra.
+    /// estribo cerrado que no se puede doblar: el diámetro y el doblado de cada
+    /// barra. Las medidas del cerrado salen de la sección real del panel
+    /// (#132). null si todavía falta elegir alguna barra.
     /// </summary>
-    private VentanaEstribosMenores.MedidasSeccion? MedidasParaEstribosMenores(string idColumna, int barrasX, int barrasY)
+    private VentanaEstribosMenores.MedidasSeccion? MedidasParaEstribosMenores()
     {
         if (_columnaActiva is null) return null;
 
         TipoBarra? Barra(string? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre);
         string? estribo = ComboTipoBarra.SelectedItem as string;
-        double? dEstribo = Barra(estribo)?.DiametroMm;
-        double?[] longitudinales = { Barra(ComboBarraEsquinas.SelectedItem as string)?.DiametroMm,
-                                     Barra(ComboBarraCaraX.SelectedItem as string)?.DiametroMm,
-                                     Barra(ComboBarraCaraY.SelectedItem as string)?.DiametroMm };
-        if (dEstribo is null || longitudinales.Any(d => d is null)) return null;
+        string?[] nombres = { estribo, ComboBarraEsquinas.SelectedItem as string,
+                              ComboBarraCaraX.SelectedItem as string, ComboBarraCaraY.SelectedItem as string };
+        if (nombres.Any(n => Barra(n) is null)) return null;
 
-        double recubrimiento = _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : _columnaActiva.Recubrimiento;
-        double inset = SeccionPlanta.Inset(recubrimiento, dEstribo.Value / 1000, longitudinales.Max()!.Value / 1000);
-        double Paso(double lado, int intermedias) => (lado - 2 * inset) / (intermedias + 1);
-
-        return new VentanaEstribosMenores.MedidasSeccion(
-            Paso(_columnaActiva.BaseX, Math.Max(1, barrasX / 2)),
-            Paso(_columnaActiva.BaseY, Math.Max(1, barrasY / 2)),
-            Barra,
-            estribo);
+        return new VentanaEstribosMenores.MedidasSeccion(Barra, estribo);
     }
 
     /// <summary>
@@ -1417,7 +1405,7 @@ public partial class VentanaConfiguradorEstribos : Window
             actual?.EstribosMenores ?? new List<EstriboMenor>(),
             BarrasAptasParaEstribo(),
             SeccionParaEstribosMenores(idColumna, _columnaActiva),
-            MedidasParaEstribosMenores(idColumna, barrasX, barrasY))
+            MedidasParaEstribosMenores())
         { Owner = this };
 
         if (dialogo.ShowDialog() != true) return;

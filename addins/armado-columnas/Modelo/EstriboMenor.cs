@@ -43,11 +43,13 @@ public sealed class EstriboMenor
     public string? TipoBarraNombre { get; set; }
 
     /// <summary>
-    /// El ancho mínimo, entre ejes de las dos barras que abraza, de un estribo
-    /// cerrado hecho con esa barra: en el lado corto entran dos dobleces de
-    /// 90°, y cada uno ocupa medio diámetro de doblado más medio diámetro de
-    /// barra. Más angosto, Revit no lo puede doblar (20-oct: una caja de 3,8 cm
-    /// con #3 salió con "An internal error has occurred").
+    /// El ancho mínimo de un estribo cerrado hecho con esa barra, medido entre
+    /// los ejes de SU barra (no de las que abraza: el cerrado va por fuera de
+    /// ellas, #132): en el lado corto entran dos dobleces de 90°, y cada uno
+    /// ocupa medio diámetro de doblado más medio diámetro de barra. Más
+    /// angosto, Revit no lo puede doblar (10-sep: una caja de 3,7 cm por fuera
+    /// con #3 no se pudo ajustar; 20-oct: una de 3,8 cm salió con "An internal
+    /// error has occurred").
     /// </summary>
     public static double AnchoMinimoCerradoMm(TipoBarra barra) => barra.DobladoEstriboMm + barra.DiametroMm;
 

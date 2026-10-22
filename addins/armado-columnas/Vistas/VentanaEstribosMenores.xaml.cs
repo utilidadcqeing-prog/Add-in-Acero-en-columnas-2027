@@ -54,12 +54,12 @@ public partial class VentanaEstribosMenores : Window
 
     /// <summary>
     /// Lo que el panel necesita saber de la sección real para marcar en rojo un
-    /// estribo cerrado que no se puede doblar (Luciano, 20-oct): la distancia,
-    /// en metros, entre dos barras intermedias vecinas de cada eje, y cómo
-    /// encontrar el diámetro y el doblado de una barra por su nombre.
+    /// estribo cerrado que no se puede doblar (Luciano, 20-oct): cómo encontrar
+    /// el diámetro y el doblado de una barra por su nombre. Las medidas del
+    /// cerrado salen del mismo dibujo (<see cref="Imposible"/>).
     /// </summary>
     /// <param name="BarraEstribo">La barra de "Igual al estribo": la del tramo activo.</param>
-    public sealed record MedidasSeccion(double PasoColumnas, double PasoFilas, Func<string?, TipoBarra?> Barra, string? BarraEstribo);
+    public sealed record MedidasSeccion(Func<string?, TipoBarra?> Barra, string? BarraEstribo);
 
     /// <summary>
     /// La sección real, para dibujarla a escala y con sus medidas (#133, #134):
@@ -408,23 +408,31 @@ public partial class VentanaEstribosMenores : Window
         : ColorDe(pieza.Forma);
 
     /// <summary>
-    /// Por qué un estribo cerrado no se puede doblar con su barra -- más
-    /// angosto que <see cref="EstriboMenor.AnchoMinimoCerradoMm"/> --, o null
-    /// si se puede (o si no se conocen las medidas de la sección).
+    /// Por qué un estribo cerrado no se puede doblar con su barra -- su lado
+    /// corto, entre los ejes de su propia barra, más angosto que
+    /// <see cref="EstriboMenor.AnchoMinimoCerradoMm"/> --, o null si se puede
+    /// (o si no se conocen las barras). Con la misma caja que se dibuja y que
+    /// crea el generador, por fuera de las barras que abraza: antes se medía
+    /// entre los centros de esas barras y marcaba imposibles cerrados que sí
+    /// entran (#132: 4,2 cm en una 25×30, cuando el cerrado real mide más).
     /// </summary>
     private string? Imposible(EstriboMenor pieza)
     {
         if (pieza.Forma != FormaMenor.Cerrado || _medidas is null) return null;
         if (_medidas.Barra(pieza.TipoBarraNombre ?? _medidas.BarraEstribo) is not { } barra) return null;
 
-        double paso = pieza.Eje == EjeCaja.Fila ? _medidas.PasoFilas : _medidas.PasoColumnas;
-        double anchoMm = (pieza.Hasta - pieza.Desde) * paso * 1000;
+        double diametro = barra.DiametroMm / 1000;
+        IEnumerable<GanchoGrapa.Pieza> abrazadas = Enumerable.Range(pieza.Desde, pieza.Hasta - pieza.Desde + 1)
+            .SelectMany(k => { (GanchoGrapa.Pieza a, GanchoGrapa.Pieza b) = BarrasDe(pieza.Eje, k); return new[] { a, b }; });
+        (double x1, double x2, double y1, double y2) = EstriboMenor.CajaQueAbraza(
+            abrazadas, diametro, PlantaArmado.Doblez(barra, barra.DiametroMm) / 2);
+        double anchoMm = (Math.Min(x2 - x1, y2 - y1) - diametro) * 1000;
         double minimoMm = EstriboMenor.AnchoMinimoCerradoMm(barra);
         if (anchoMm >= minimoMm) return null;
 
         var es = System.Globalization.CultureInfo.GetCultureInfo("es-CO");
         return string.Format(es,
-            "El estribo cerrado de las {0} mide {1:0.0} cm entre ejes, y con «{2}» necesita al menos {3:0.0} cm para doblarse: " +
+            "El estribo cerrado de las {0} mide {1:0.0} cm de ancho (entre los ejes de su barra), y con «{2}» necesita al menos {3:0.0} cm para doblarse: " +
             "dibújalo entre barras más separadas o usa una barra más delgada.",
             Donde(pieza), anchoMm / 10, barra.Nombre, minimoMm / 10);
     }

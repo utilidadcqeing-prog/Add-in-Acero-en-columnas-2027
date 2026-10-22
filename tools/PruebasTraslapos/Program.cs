@@ -441,6 +441,29 @@ Probar("ancho_minimo_cerrado", () =>
     Cierto(EstriboMenor.AnchoMinimoCerradoMm(n3) > 38, "la caja de 3,8 cm no entra");
 });
 
+Probar("cerrado_entre_filas_vecinas_se_puede_doblar", () =>
+{
+    // #132 (25×30, reunión del 21-oct): un cerrado #3 entre dos filas vecinas
+    // a 42 mm entre centros de las #6 salía marcado como imposible (42 < 47,5).
+    // Pero el cerrado va por fuera de las barras: su lado corto, entre los ejes
+    // de su barra, mide 42 + 19,05 + 9,5 + lo que se abre en las esquinas.
+    var piezas = new[]
+    {
+        new GanchoGrapa.Pieza(60, 100, 9.525, 0), new GanchoGrapa.Pieza(190, 100, 9.525, 0),
+        new GanchoGrapa.Pieza(60, 142, 9.525, 0), new GanchoGrapa.Pieza(190, 142, 9.525, 0),
+    };
+    (double x1, double x2, double y1, double y2) = EstriboMenor.CajaQueAbraza(piezas, 9.5, radioDoblezInterior: 19);
+    double ancho = Math.Min(x2 - x1, y2 - y1) - 9.5;
+    double abre = (19 - 9.525) * (1 - 1 / Math.Sqrt(2));
+    Igual(Math.Round(42 + 19.05 + 9.5 + 2 * abre, 6), Math.Round(ancho, 6), "lado corto entre ejes del cerrado");
+    var n3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 57 };
+    Cierto(ancho >= EstriboMenor.AnchoMinimoCerradoMm(n3), $"entra: {ancho:0.0} mm");
+
+    // De una sola fila (las dos barras de la misma fila) sí es imposible.
+    (x1, x2, y1, y2) = EstriboMenor.CajaQueAbraza(piezas.Take(2), 9.5, radioDoblezInterior: 19);
+    Cierto(Math.Min(x2 - x1, y2 - y1) - 9.5 < EstriboMenor.AnchoMinimoCerradoMm(n3), "una sola fila no entra");
+});
+
 Probar("cerrado_abraza_las_barras", () =>
 {
     // Columna 387983 (21-oct): cerrado #3 de las filas 0 a 2 de la cara Y, con
