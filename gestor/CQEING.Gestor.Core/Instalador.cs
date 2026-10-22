@@ -154,7 +154,7 @@ public sealed class Instalador(HttpClient http, RutasGestor rutas, TimeSpan? tie
         return doc;
     }
 
-    private static bool TieneAddinValido(string carpeta)
+    internal static bool TieneAddinValido(string carpeta)
     {
         try
         {
@@ -182,7 +182,7 @@ public sealed class Instalador(HttpClient http, RutasGestor rutas, TimeSpan? tie
         BorrarSinFallar(aBorrar);
     }
 
-    private static void ActivarAddin(string carpetaVersion, string destino)
+    internal static void ActivarAddin(string carpetaVersion, string destino)
     {
         XDocument doc = LeerAddinDelPaquete(carpetaVersion);
         foreach (XElement assembly in doc.Descendants("Assembly"))
@@ -230,21 +230,28 @@ public sealed class Instalador(HttpClient http, RutasGestor rutas, TimeSpan? tie
             .Select(x => x.Carpeta);
 
         foreach (string carpeta in sobrantes)
-        {
-            string aBorrar = $"{carpeta}.borrar-{Guid.NewGuid():N}";
-            try
-            {
-                Directory.Move(carpeta, aBorrar);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                continue; // en uso: se reintenta en la próxima instalación
-            }
-            BorrarSinFallar(aBorrar);
-        }
+            RetirarSinFallar(carpeta);
 
         foreach (string resto in Directory.GetDirectories(raiz, "*.borrar-*"))
             BorrarSinFallar(resto);
+    }
+
+    /// <summary>
+    /// Borra una carpeta de versión que ya no se usa. Antes la renombra: si Revit tiene una DLL abierta, Windows no
+    /// deja renombrarla y la carpeta queda entera para la próxima vez, en vez de quedar a medio borrar.
+    /// </summary>
+    internal static void RetirarSinFallar(string carpeta)
+    {
+        string aBorrar = $"{carpeta}.borrar-{Guid.NewGuid():N}";
+        try
+        {
+            Directory.Move(carpeta, aBorrar);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return; // en uso: se reintenta la próxima vez
+        }
+        BorrarSinFallar(aBorrar);
     }
 
     /// <summary>Restos de una descarga que se cortó por un cierre brusco (sin tiempo de limpiar).</summary>
