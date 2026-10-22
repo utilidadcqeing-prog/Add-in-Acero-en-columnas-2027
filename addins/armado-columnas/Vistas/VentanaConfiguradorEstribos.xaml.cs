@@ -1453,7 +1453,8 @@ public partial class VentanaConfiguradorEstribos : Window
             actual?.EstribosMenores ?? new List<EstriboMenor>(),
             BarrasAptasParaEstribo(),
             SeccionParaEstribosMenores(idColumna, _columnaActiva),
-            MedidasParaEstribosMenores())
+            MedidasParaEstribosMenores(),
+            ChoquesParaEstribosMenores())
         { Owner = this };
 
         if (dialogo.ShowDialog() != true) return;

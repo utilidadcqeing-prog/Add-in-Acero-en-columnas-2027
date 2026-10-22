@@ -106,11 +106,23 @@ public partial class VentanaEstribosMenores : Window
     /// <summary>Lo que queda configurado si el usuario acepta (DialogResult == true).</summary>
     public List<EstriboMenor> Piezas { get; private set; } = new();
 
+    /// <summary>
+    /// Los choques de la sección con estas piezas (#131): la misma cuenta que
+    /// la vista previa (<see cref="ChoquesSeccion.DeTramo"/>), con las piezas
+    /// que se están editando. null = no se conocen las barras; no se marca nada.
+    /// </summary>
+    private readonly Func<IReadOnlyList<EstriboMenor>, ChoquesSeccion.Resultado>? _choquesDe;
+
+    /// <summary>Los últimos choques calculados, para las notas.</summary>
+    private ChoquesSeccion.Resultado _choques = ChoquesSeccion.Resultado.Vacio;
+
     public VentanaEstribosMenores(
         int barrasPorCaraX, int barrasPorCaraY, IEnumerable<EstriboMenor> piezas, IReadOnlyList<string> barrasAptas,
-        SeccionReal seccion, MedidasSeccion? medidas = null)
+        SeccionReal seccion, MedidasSeccion? medidas = null,
+        Func<IReadOnlyList<EstriboMenor>, ChoquesSeccion.Resultado>? choquesDe = null)
     {
         InitializeComponent();
+        _choquesDe = choquesDe;
         _medidas = medidas;
         _seccion = seccion;
         _escala = EscalaDibujo.Ajustar(seccion.LadoX, seccion.LadoY, CajaDibujo, CajaDibujo);
@@ -330,6 +342,18 @@ public partial class VentanaEstribosMenores : Window
             foreach (double y in new[] { Arriba, Abajo })
                 PuntoIntermedio(X(c), y, Radio(_seccion.DiametroCaraXMm), (EjeCaja.Columna, c), bajoMouse);
 
+        // Los choques (#131): en la zona de traslapo, además las piezas corridas.
+        _choques = _choquesDe?.Invoke(_piezas) ?? ChoquesSeccion.Resultado.Vacio;
+        OpcionZonaTraslapo.IsEnabled = _choques.HayTraslapo;
+        if (!_choques.HayTraslapo && OpcionZonaTraslapo.IsChecked == true) OpcionSeccionNormal.IsChecked = true;
+        bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
+        if (verTraslapo)
+            foreach (ChoquesSeccion.PiezaRedonda pieza in _choques.PiezasTraslapo)
+                Punto(PX(pieza.X), PY(pieza.Y), Radio(pieza.DiametroMm), Paleta.Superficie);
+        foreach (ChoquesSeccion.Choque choque in verTraslapo ? _choques.Traslapo : _choques.Normal)
+            foreach ((double X, double Y, double Radio) marca in choque.Marcas)
+                Lienzo.Children.Add(DibujoArmado.MarcaChoque(AP(marca.X, marca.Y), Math.Max(1.5, marca.Radio * _escala), choque.Motivo));
+
         // Rótulos de fila y columna, desde 1, por fuera de la sección.
         for (int f = 0; f < _filas; f++) Texto($"F{f + 1}", PX(0) - 30, Y(f) - 8);
         for (int c = 0; c < _columnas; c++) Texto($"C{c + 1}", X(c) - 8, PY(0) + 3);
@@ -511,12 +535,22 @@ public partial class VentanaEstribosMenores : Window
         }
     }
 
+    private void OpcionSeccion_Checked(object sender, RoutedEventArgs e)
+    {
+        // El XAML marca "Sección normal" mientras se construye la ventana, antes de tener sección.
+        if (IsLoaded) Dibujar();
+    }
+
     private void ActualizarNotas()
     {
+        // Los choques del modo elegido (#131); el cerrado imposible ya viene de Imposible.
+        IEnumerable<ChoquesSeccion.Choque> choques = OpcionZonaTraslapo.IsChecked == true ? _choques.Traslapo : _choques.Normal;
+        List<string> imposibles = _piezas.Select(Imposible).OfType<string>().ToList();
         NotaTapadas.Text = string.Join("\n", _piezas
             .Where(p => PaqueteEstribos.EstaTapada(p, _piezas))
             .Select(p => $"La {Nombre(p.Forma).ToLowerInvariant()} de la {Donde(p)} queda dentro de un estribo cerrado y no se va a generar.")
-            .Concat(_piezas.Select(Imposible).OfType<string>()));
+            .Concat(imposibles)
+            .Concat(choques.Where(c => !imposibles.Contains(c.Motivo)).Select(c => "⚠ " + c.Motivo)));
 
         int grapas = _piezas.Count(p => p.Forma != FormaMenor.Cerrado && !PaqueteEstribos.EstaTapada(p, _piezas));
         int cerrados = _piezas.Count(p => p.Forma == FormaMenor.Cerrado);

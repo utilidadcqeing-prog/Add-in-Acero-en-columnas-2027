@@ -68,6 +68,13 @@
             <!-- La sección vista desde arriba, como en el modelo (fila 1 abajo). -->
             <Border Grid.Column="1" Style="{StaticResource Panel}" Padding="8">
                 <DockPanel>
+                    <!-- #131: choques en la sección normal o en la zona de traslapo. -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <RadioButton x:Name="OpcionSeccionNormal" Content="Sección normal" GroupName="SeccionChoques" IsChecked="True"
+                                     Margin="0,0,16,0" Checked="OpcionSeccion_Checked" />
+                        <RadioButton x:Name="OpcionZonaTraslapo" Content="Zona de traslapo" GroupName="SeccionChoques"
+                                     Checked="OpcionSeccion_Checked" />
+                    </StackPanel>
                     <TextBlock x:Name="NotaTapadas" DockPanel.Dock="Bottom" Style="{StaticResource TextoAyuda}" Foreground="{StaticResource AvisoTexto}" Margin="0,6,0,0" />
                     <Canvas x:Name="Lienzo" Background="Transparent" AllowDrop="True" ClipToBounds="True"
                             HorizontalAlignment="Center" VerticalAlignment="Center"
