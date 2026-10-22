@@ -7,12 +7,10 @@
   const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
   const DIAM = { 3: 0.95, 4: 1.27, 5: 1.59, 6: 1.91, 7: 2.22, 8: 2.54 };
   const RULES0 = [
-    { d: '#3', t: '0.55', g: '0.166', e: '0.113', k: '0.560' }, { d: '#4', t: '0.75', g: '0.222', e: '0.151', k: '0.994' },
-    { d: '#5', t: '0.90', g: '0.278', e: '0.189', k: '1.552' }, { d: '#6', t: '1.10', g: '0.334', e: '0.272', k: '2.235' },
-    { d: '#7', t: '1.35', g: '0.388', e: '0.316', k: '3.042' }, { d: '#8', t: '1.70', g: '0.444', e: '0.362', k: '3.973' },
+    { d: '#3', t: '0.55', g: '0.166', g180: '0.142', e: '0.113', k: '0.560' }, { d: '#4', t: '0.75', g: '0.222', g180: '0.190', e: '0.151', k: '0.994' },
+    { d: '#5', t: '0.90', g: '0.278', g180: '0.238', e: '0.189', k: '1.552' }, { d: '#6', t: '1.10', g: '0.334', g180: '0.286', e: '0.272', k: '2.235' },
+    { d: '#7', t: '1.35', g: '0.388', g180: '0.333', e: '0.316', k: '3.042' }, { d: '#8', t: '1.70', g: '0.444', g180: '0.381', e: '0.362', k: '3.973' },
   ];
-  // gancho de 180° por diámetro, en m (se guarda en las reglas, pero la pantalla de Reglas no lo muestra)
-  const G180 = { 3: 0.142, 4: 0.190, 5: 0.238, 6: 0.286, 7: 0.333, 8: 0.381 };
   // un color por diámetro, como ColoresDiametro en C# (#100)
   const COLOR = { 3: '#B8860B', 4: '#E8710A', 5: '#D32F2F', 6: '#C2185B', 7: '#7B1FA2', 8: '#1565C0', 9: '#00838F', 10: '#2E7D32', 11: '#6D4C41' };
   const colorDe = (d) => COLOR[d] || '#5E6670';
@@ -172,7 +170,7 @@
           // múltiplo y el sobrante va a la otra punta (como CalculadorBastones en C#)
           const punta = (clave, borde) => (!borde ? 'Sin' : gch[clave] || (ob.conGancho ? 'De90' : 'Sin'));
           const ti = punta(b.id + '.inicio', cutA), tf = punta(b.id + '.fin', cutZ);
-          const largoGancho = (tipo) => (tipo === 'De90' ? num(regla(st.diametro).g, 0) : tipo === 'De135' ? num(regla(st.diametro).e, 0) : tipo === 'De180' ? G180[st.diametro] || 0 : 0);
+          const largoGancho = (tipo) => (tipo === 'De90' ? num(regla(st.diametro).g, 0) : tipo === 'De135' ? num(regla(st.diametro).e, 0) : tipo === 'De180' ? num(regla(st.diametro).g180, 0) : 0);
           const gA = largoGancho(ti), gZ = largoGancho(tf);
           let len = z - a + gA + gZ;
           const elegido = (cutA && gch[b.id + '.inicio'] && gch[b.id + '.inicio'] !== 'Sin') || (cutZ && gch[b.id + '.fin'] && gch[b.id + '.fin'] !== 'Sin');
@@ -264,7 +262,7 @@
       };
       const nMain = G.luces.reduce((s, l) => s + nEst(l), 0);
       const re = regla(o.estribos.diametro);
-      const hookE = num(o.estribos.gancho === 'De135' ? re.e : re.g, 0);
+      const hookE = o.estribos.gancho === 'De180' ? num(re.g180, 0) : num(o.estribos.gancho === 'De135' ? re.e : re.g, 0);
       const hE = (50 - recUp - recDown - dE) / 100;
       const lenMain = 2 * ((30 - 2 * recSide - dE) / 100 + hE) + 2 * hookE;
       const kgE = nMain * lenMain * num(re.k, 0);

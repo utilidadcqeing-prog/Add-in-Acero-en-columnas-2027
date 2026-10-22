@@ -1,4 +1,5 @@
 using CQEING.Vigas.Calculo.Generacion;
+using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Vigas.Calculo.Tests;
 
@@ -21,6 +22,19 @@ public class GanchoPropioTests
     public void NuncaMenosDeUnDiametro()
     {
         Assert.Equal(16, GanchoPropio.Extension(10, 16, 64, 180));
+    }
+
+    [Fact]
+    public void DelEstribo_DaElAnguloYLaColaDelCuadro()
+    {
+        IReadOnlyDictionary<int, ReglaDiametro> r = Reglas.Generales.PorDiametro;
+
+        Assert.Equal((135, 57), GanchoPropio.DeEstribo(GanchoEstribo.De135, r[3]));
+        Assert.Equal((180, 65), GanchoPropio.DeEstribo(GanchoEstribo.De180, r[3]));
+        Assert.Equal((180, 76), GanchoPropio.DeEstribo(GanchoEstribo.De180, r[6]));
+        // sin E en el cuadro: quien lo usa pone 6 diámetros
+        Assert.Equal((90, (int?)null), GanchoPropio.DeEstribo(GanchoEstribo.De90, r[3]));
+        Assert.Equal((135, (int?)null), GanchoPropio.DeEstribo(GanchoEstribo.De135, r[6]));
     }
 
     [Fact]

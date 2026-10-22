@@ -42,6 +42,10 @@ internal static class GeneradorAcero
         foreach (PorticoAGenerar p in porticos)
         {
             MarcaAcero.BorrarAnteriores(doc, p.Id, p.Vigas);
+            // Con qué se generó, en cada viga y en esta misma transacción: un deshacer quita las dos cosas.
+            foreach (string id in p.Vigas)
+                if (long.TryParse(id, out long n) && doc.GetElement(new ElementId(n)) is { } viga)
+                    ConfiguracionPortico.Guardar(viga, p.Configuracion);
             foreach ((PiezaLongitudinal pieza, bool esBaston) in p.Plan.Barras.Select(b => (b, false)).Concat(p.Plan.Bastones.Select(b => (b, true))))
             {
                 if (Crear(doc, p, pieza, tipos) is { } barra)

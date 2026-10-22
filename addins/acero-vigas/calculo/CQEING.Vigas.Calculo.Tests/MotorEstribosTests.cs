@@ -46,6 +46,27 @@ public class MotorEstribosTests
     }
 
     [Fact]
+    public void ConGanchoDe180_UsaElGancho180DeLasReglas()
+    {
+        ResultadoEstribos r = Calcular(General with { Gancho = GanchoEstribo.De180 });
+
+        Assert.Equal(1242 + 2 * 142, Cerrado(r, "A-B").Largo, 6);
+        Assert.Equal(GanchoEstribo.De180, Cerrado(r, "A-B").Gancho);
+    }
+
+    [Fact]
+    public void ElAbiertoLlevaLaFormaElegidaYElCerradoVaEnC()
+    {
+        var enS = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 3), new PuntoBarra(Posicion.Inferior, 1, 3)],
+            FormaGrapa.S);
+
+        ResultadoEstribos r = Calcular(General with { Adicionales = [enS] });
+
+        Assert.All(r.Estribos.Where(e => e.Id == "E1"), e => Assert.Equal(FormaGrapa.S, e.Forma));
+        Assert.All(r.Estribos.Where(e => e.Id == "E"), e => Assert.Equal(FormaGrapa.C, e.Forma));
+    }
+
+    [Fact]
     public void LosKilosSonCantidadPorLargoPorPeso()
     {
         ResultadoEstribos r = Calcular();

@@ -29,8 +29,20 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
     /// </summary>
     private const double SeparacionContorno = 1.06;
 
+    /// <summary>
+    /// El radio del marcador de un choque, en mm (decisión 5 del plan de choques de 22-oct): bastante más grande que las
+    /// barras, para que se vea fácil entre ellas (Juan, 22-oct).
+    /// </summary>
+    private const double RadioMarcador = 50;
+
     private static readonly ColorWithTransparency ColorContorno =
         new(ColoresDiametro.RgbContorno.R, ColoresDiametro.RgbContorno.G, ColoresDiametro.RgbContorno.B, 0);
+
+    /// <summary>
+    /// Cian fluorescente (<c>#00E5FF</c>): ningún diámetro usa un color parecido (los de <see cref="ColoresDiametro"/> y los
+    /// nuevos de columnas), así el marcador no se confunde con una barra (Juan, 22-oct).
+    /// </summary>
+    private static readonly ColorWithTransparency ColorChoque = new(0x00, 0xE5, 0xFF, 0);
 
     private static readonly Guid Id = new("6E2B7B9E-3C1F-4D7A-9A53-8F1C0B4E2D71");
     private static PreviaAcero3D? servidor;
@@ -46,7 +58,8 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
 
     /// <summary>
     /// Dibuja el pórtico en la vista <paramref name="nombreVista"/> de <paramref name="doc"/>, o quita lo dibujado si
-    /// <paramref name="p"/> es null.
+    /// <paramref name="p"/> es null. Cada punto donde las barras se meten una en la otra lleva un marcador rojo: los
+    /// mismos choques que marca el alzado del tablero, sobre los mismos trazos.
     /// </summary>
     public static void Mostrar(Document doc, string nombreVista, PorticoAGenerar? p, Reglas reglas)
     {
@@ -58,7 +71,7 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         }
         IReadOnlyList<Trazo> trazos = PreviaAcero.Trazos(p.Plan, p.Ubicacion, reglas, Doblados(doc, p.Plan.Diametros, reglas));
         s.documento = doc;
-        s.mallas = trazos.Select(Tubo).ToList();
+        s.mallas = trazos.Select(Tubo).Concat(DetectorChoques.Detectar(trazos).Select(c => Marcador(c.Punto))).ToList();
         s.caja = Caja(trazos);
         // se arman en el próximo dibujo, en el hilo de dibujo
         s.bloques = null;
@@ -90,8 +103,11 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         return servidor;
     }
 
-    /// <summary>El diámetro y los doblados de cada tipo de barra del modelo (los mismos que usa "Generar").</summary>
-    private static Dictionary<int, DobladoBarra> Doblados(Document doc, IEnumerable<int> diametros, Reglas reglas)
+    /// <summary>
+    /// El diámetro y los doblados de cada tipo de barra del modelo (los mismos que usa "Generar"). También los usa el
+    /// tablero para los choques, para marcar lo mismo que se dibuja aquí.
+    /// </summary>
+    internal static Dictionary<int, DobladoBarra> Doblados(Document doc, IEnumerable<int> diametros, Reglas reglas)
     {
         TiposAcero tipos = TiposAcero.Leer(doc, reglas);
         var doblados = new Dictionary<int, DobladoBarra>();
@@ -109,7 +125,7 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         List<Punto3> puntos = trazos.SelectMany(t => t.Puntos).ToList();
         if (puntos.Count == 0)
             return null;
-        double margen = trazos.Max(t => t.Diametro);
+        double margen = Math.Max(trazos.Max(t => t.Diametro), RadioMarcador);
         return new Outline(
             Pies(new Punto3(puntos.Min(p => p.X) - margen, puntos.Min(p => p.Y) - margen, puntos.Min(p => p.Z) - margen)),
             Pies(new Punto3(puntos.Max(p => p.X) + margen, puntos.Max(p => p.Y) + margen, puntos.Max(p => p.Z) + margen)));
@@ -167,6 +183,32 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         foreach ((XYZ centro, XYZ u, XYZ v) in new[] { primera, ultima }.OfType<(XYZ, XYZ, XYZ)>())
             for (int k = 0; k < Lados; k++)
                 contorno.AddRange([centro + Radial(u, v, k) * radioContorno, centro + Radial(u, v, k + 1) * radioContorno]);
+        return new Malla(vertices, triangulos, contorno);
+    }
+
+    /// <summary>
+    /// El marcador de un choque: un octaedro cian de <see cref="RadioMarcador"/> con su contorno, cada cara con su normal
+    /// para que se lean las aristas. Cada cara va en los dos sentidos, así se ve sin importar cuál descarte Revit.
+    /// </summary>
+    private static Malla Marcador(Punto3 punto)
+    {
+        XYZ centro = Pies(punto);
+        double r = CreadorBarras.Pies(RadioMarcador);
+        var vertices = new List<Vertice>();
+        var triangulos = new List<(int, int, int)>();
+        var contorno = new List<XYZ>();
+        foreach (int sx in new[] { -1, 1 })
+            foreach (int sy in new[] { -1, 1 })
+                foreach (int sz in new[] { -1, 1 })
+                {
+                    XYZ a = centro + XYZ.BasisX * (sx * r), b = centro + XYZ.BasisY * (sy * r), c = centro + XYZ.BasisZ * (sz * r);
+                    XYZ normal = new XYZ(sx, sy, sz).Normalize();
+                    int i = vertices.Count;
+                    vertices.AddRange([new Vertice(a, normal, ColorChoque), new Vertice(b, normal, ColorChoque), new Vertice(c, normal, ColorChoque)]);
+                    triangulos.Add((i, i + 1, i + 2));
+                    triangulos.Add((i, i + 2, i + 1));
+                    contorno.AddRange([a, b, b, c, c, a]);
+                }
         return new Malla(vertices, triangulos, contorno);
     }
 

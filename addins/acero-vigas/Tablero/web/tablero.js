@@ -35,6 +35,17 @@
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
     cambios: { barras: {}, traslapos: {}, movidos: {}, ganchos: {} }, bastPuntas: {},
   };
+  // El estado de la página con que se generó el pórtico (VistaPortico.Estado, guardado en sus vigas): solo las claves de
+  // OPCIONES0. null si no hay o no se entiende.
+  const estadoGuardado = (actual) => {
+    if (!actual || !actual.estado) return null;
+    try {
+      const e = JSON.parse(actual.estado);
+      return Object.keys(e).filter((k) => k in OPCIONES0).reduce((o, k) => ({ ...o, [k]: e[k] }), {});
+    } catch (err) {
+      return null;
+    }
+  };
   // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
   const ANCHO_CORTE = 260;
   const CLAVES_OPCIONES = Object.keys(OPCIONES0);
@@ -48,9 +59,10 @@
     const opcional = (x) => (String(x).trim() === '' ? null : n(x));
     // la fila a mano de cada tipo (#84): '' = Auto
     const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
-    const estribos = (e) => ({ diametro: diametro(e.estD), gancho: e.estG === '135°' ? 'De135' : 'De90',
+    const estribos = (e) => ({ diametro: diametro(e.estD), gancho: ({ '135°': 'De135', '180°': 'De180' })[e.estG] || 'De90',
       largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)),
-      adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
+      adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, forma: a.forma || 'C',
+        barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
     try {
       const largos = {};
@@ -89,12 +101,26 @@
       + ', dentro del voladizo ' + eje + '. El add-in nunca lo pone ahí: solo queda si lo confirmas.';
   };
 
+  // "Hay 7 choques entre barras en Pórtico 1 (y 3 en Pórtico 2)." con los nombres de la lista.
+  const textoChoquesGen = (porticos, lista) => {
+    const nombre = (id) => (lista.find((p) => p.id === id) || { nombre: id }).nombre;
+    const cuantos = (n) => n + (n === 1 ? ' choque' : ' choques');
+    const [primero, ...resto] = porticos;
+    return 'Hay ' + cuantos(primero.cantidad) + ' entre barras en ' + nombre(primero.id)
+      + (resto.length ? ' (y ' + resto.map((p) => p.cantidad + ' en ' + nombre(p.id)).join(', ') + ')' : '')
+      + '. Puedes revisarlos antes o generar de todos modos.';
+  };
+
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #8A939D; border-radius: 4px"></div>
+      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid #8A939D; border-radius: ${sec.stRadio}"></div>
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
+      ${sec.trazos.length ? html`
+        <svg aria-hidden="true" width=${sec.wpx} height=${sec.hpx} style="position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none">
+          ${sec.trazos.map((t) => html`<polyline points=${t.pts} fill="none" stroke="#0F7B6C" stroke-width=${t.w} stroke-linejoin="round" stroke-linecap="butt" />`)}
+        </svg>` : null}
       ${sec.proy.map((d) => html`
         <div role="img" aria-label=${d.label} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; border: 1.5px dashed #5E6670; border-radius: 50%; box-sizing: border-box"></div>`)}
       ${sec.dots.map((d) => html`
@@ -141,7 +167,7 @@
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
         cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
-        vw: window.innerWidth, vh: window.innerHeight },
+        vw: window.innerWidth, vh: window.innerHeight, choqueAbierto: -1, arreglos: null, deshacer: null },
       OPCIONES0, props.inicial || {});
       this.opcionesPorPortico = {};
       this.alCambiarTamano = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
@@ -149,6 +175,21 @@
 
     componentDidMount() {
       window.addEventListener('resize', this.alCambiarTamano);
+    }
+
+    // Lo que el usuario eligió para el pórtico abierto (las claves de OPCIONES0).
+    estadoDeLaPagina() {
+      return CLAVES_OPCIONES.reduce((o, k) => ({ ...o, [k]: this.state[k] }), {});
+    }
+
+    // El estado de la página de cada pórtico que se genera, como texto, para guardarlo en sus vigas: el abierto, como
+    // está ahora; los demás, el que quedó en memoria (los que nunca se abrieron no mandan nada y C# usa el guardado).
+    estadosParaGenerar(ids) {
+      const actual = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
+      return ids.reduce((o, id) => {
+        const e = id === actual ? this.estadoDeLaPagina() : this.opcionesPorPortico[id];
+        return e ? { ...o, [id]: JSON.stringify(e) } : o;
+      }, {});
     }
 
     componentWillUnmount() {
@@ -230,6 +271,56 @@
       this.cambiar({ cambios: { ...s.cambios, movidos, ganchos }, bastPuntas: puntas, confirmVol: null });
     }
 
+    // "Generar en Revit" (#85). Sin forzar, si algún pórtico tiene choques C# no genera y contesta "choques" (decisión 8
+    // del plan de choques); "Generar de todos modos" vuelve a mandar los mismos con forzar.
+    generar(ids, forzar) {
+      this.idsGenerar = ids;
+      this.props.enviar({ tipo: 'generar', ids, estados: this.estadosParaGenerar(ids), forzar });
+    }
+
+    choquesAlGenerar(porticos) {
+      if (porticos && porticos.length && this.idsGenerar) this.setState({ choquesGen: { porticos, ids: this.idsGenerar } });
+    }
+
+    // Los arreglos de un choque (plan docs/planes/2026-10-22-choques-entre-barras-vigas.md, decisión 7): C# los prueba
+    // antes de ofrecerlos. Se piden al abrir el punto, con las opciones de ahora; los que traen otro número son viejos.
+    abrirChoque(i) {
+      const v = this.props.vista, opciones = opcionesDe(this.state);
+      if (!v || !v.actual || !opciones) return;
+      this.nArreglos = this.siguiente();
+      this.setState({ choqueAbierto: i, arreglos: null });
+      this.props.enviar({ tipo: 'arreglos', id: v.actual.id, opciones, n: this.nArreglos, choque: i });
+    }
+
+    arreglosRecibidos(a) {
+      if (a && a.n === this.nArreglos && a.choque === this.state.choqueAbierto) this.setState({ arreglos: a.arreglos });
+    }
+
+    // Aplica el arreglo como lo probó C# (ArreglosChoque.Aplicar) y guarda la página como estaba, para "Deshacer".
+    aplicarArreglo(arreglo) {
+      const s = this.state, c = arreglo.cambio, antes = this.estadoDeLaPagina();
+      if (c.tipo === 'salto') {
+        this.aplicarSalto({ cambios: c.saltos });
+      } else {
+        const clave = c.donde === 'estMarc' && s.estMarc ? 'estMarc' : 'est', e = s[clave], adicionales = e.adicionales || [];
+        const nuevo = c.tipo === 'gancho' ? { ...e, estG: c.valor }
+          : c.tipo === 'forma' ? { ...e, adicionales: adicionales.map((a, j) => (j === c.indice ? { ...a, forma: c.valor } : a)) }
+          : { ...e, adicionales: adicionales.filter((a, j) => j !== c.indice) };
+        this.cambiar({ [clave]: nuevo });
+      }
+      this.setState({ choqueAbierto: -1, arreglos: null, deshacer: { antes, texto: arreglo.texto } });
+      clearTimeout(this._deshacer);
+      this._deshacer = setTimeout(() => this.setState({ deshacer: null }), 10000);
+    }
+
+    deshacerArreglo() {
+      const d = this.state.deshacer;
+      if (!d) return;
+      clearTimeout(this._deshacer);
+      this.setState({ deshacer: null });
+      this.cambiar(d.antes);
+    }
+
     say(t) {
       this.setState({ toast: t });
       clearTimeout(this._t);
@@ -261,11 +352,12 @@
       }
       const antes = prev.vista && prev.vista.actual ? prev.vista.actual.id : null;
       const ahora = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
-      // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas.
+      // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas. Sin
+      // ninguna en memoria, las que se guardaron en sus vigas al generarlo (plan de 22-oct, recordar el pórtico).
       if (antes !== ahora) {
-        const guardadas = ahora ? this.opcionesPorPortico[ahora] : null;
+        const guardadas = ahora ? this.opcionesPorPortico[ahora] || estadoGuardado(this.props.vista.actual) : null;
         if (antes) {
-          this.opcionesPorPortico[antes] = CLAVES_OPCIONES.reduce((o, k) => ({ ...o, [k]: this.state[k] }), {});
+          this.opcionesPorPortico[antes] = this.estadoDeLaPagina();
           this.setState({ ...OPCIONES0, ...guardadas });
         } else if (guardadas) {
           this.setState(guardadas);
@@ -274,6 +366,8 @@
         const tarjeta = ahora && document.querySelector('[data-portico="' + CSS.escape(ahora) + '"]');
         if (tarjeta) tarjeta.scrollIntoView({ block: 'nearest' });
       }
+      // Con otra vista los choques pueden ser otros: el globo abierto se cierra.
+      if (prev.vista !== this.props.vista && s.choqueAbierto >= 0) this.setState({ choqueAbierto: -1, arreglos: null });
       // Al soltar la línea 1-1, se sigue viendo donde quedó hasta que llega el cálculo de C#.
       if (prev.vista !== this.props.vista && !this.arrastrandoCorte && this.state.cutLive != null) this.setState({ cutLive: null });
       if (this.state.guardando && prev.vista !== this.props.vista) {
@@ -300,7 +394,7 @@
     guardarReglas(reglas, salir) {
       this.salirDeReglas = !!salir;
       this.setState({ guardando: true });
-      this.props.enviar({ tipo: 'guardarReglas', reglas: { porDiametro: reglas.rules.map((r) => ({ d: r.d, t: r.t, g: r.g, e: r.e, k: r.k })),
+      this.props.enviar({ tipo: 'guardarReglas', reglas: { porDiametro: reglas.rules.map((r) => ({ d: r.d, t: r.t, g: r.g, g180: r.g180, e: r.e, k: r.k })),
         multiplo: reglas.mult, distanciaLibreCm: reglas.gap, varilla12: reglas.bar12, problema: null } });
     }
 
@@ -515,6 +609,8 @@
         }
         this.setState({ pick: { ...pk, barras: pk.barras.concat(p) } });
       };
+      // El grueso de un estribo en px: su diámetro a escala, nunca menos de 1 px para que se vea en el corte chico.
+      const grueso = (f, K) => Math.max(1, f && f.diametroCm ? f.diametroCm * K : 2);
       const seccionA = (K) => ({
         wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
         dots: secBars.map((b) => {
@@ -526,11 +622,19 @@
         }),
         // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
         proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
-        adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
+        // los adicionales con su trazo de C# (PreviaAcero.EnElCorte): los ganchos según el ángulo y la forma C/S, como
+        // salen en Revit (Juan, 22-oct). Sin trazo (no debería pasar), la figura simple de antes.
+        // El grueso es el diámetro de la barra a escala (Juan, 22-oct), por el eje del trazo.
+        trazos: secc.figuras.filter((f) => f.id !== 'E' && f.puntos).map((f) => ({
+          pts: f.puntos.map((p) => p[0] * K + ',' + p[1] * K).join(' '), w: grueso(f, K) })),
+        adds: secc.figuras.filter((f) => f.id !== 'E' && !f.puntos).map((f) => (f.tipo === 'Cerrado'
           ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
           : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' })),
         stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
-        stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px' });
+        stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px',
+        // El cerrado de las esquinas, con el grueso de su barra hacia adentro desde las caras exteriores y la esquina
+        // redondeada por fuera como el doblado de estribo (4 d de diámetro interior: radio exterior 3 d).
+        stW: grueso(cerrado, K) + 'px', stRadio: (cerrado && cerrado.diametroCm ? 3 * cerrado.diametroCm * K : 4) + 'px' });
       // La pestaña usa todo el alto del área de dibujo y el ancho que deja el texto (320 + 48 de separación + márgenes):
       // a 5 px por cm una viga de 25 × 35 quedaba de 125 × 175 px.
       const md = this.medidas();
@@ -611,6 +715,11 @@
             const a = P ? P.avisos.find((x) => x.elemento === id && DESCARTA.includes(x.tipo)) : null;
             return a ? 'No se agrega: ' + a.texto : '';
           })(),
+          // la grapa en C o en S (Juan, 22-oct): solo el abierto
+          isAbierto: ea.tipo === 'Abierto',
+          formas: ['C', 'S'].map((f) => ({ f, pressed: (ea.forma || 'C') === f ? 'true' : 'false', label: 'Adicional ' + (i + 1) + ' en ' + f,
+            style: (ea.forma || 'C') === f ? on : off,
+            pick: () => ponerAdicionales(misAdicionales.map((x, j) => (j === i ? { ...x, forma: f } : x))) })),
           removeLabel: 'Quitar adicional ' + (i + 1), remove: () => ponerAdicionales(misAdicionales.filter((_, j) => j !== i)) })),
         isPicking: !!pk, noPick: !pk, pickNotDone: !pk || nArriba !== limite || nAbajo !== limite,
         pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
@@ -650,7 +759,8 @@
         lockBtn: lockedNow ? 'Desbloquear' : 'Guardar y bloquear', lockPath: lockedNow ? 'M4.5 6V4.2a2.5 2.5 0 015 0V6' : 'M4.5 6V4.2a2.5 2.5 0 014.6-1.3',
         rules: rulesData.map((r, i) => {
           const set = (key) => (e) => this.setState({ rules: rulesData.map((x, j) => (j === i ? { ...x, [key]: e.target.value } : x)) });
-          return { d: r.d, t: r.t, g: r.g, e: r.e, k: r.k, labT: 'Traslapo ' + r.d, labG: 'Gancho 90° ' + r.d, labE: 'Gancho de estribo 135° ' + r.d, labK: 'Peso por metro ' + r.d, setT: set('t'), setG: set('g'), setE: set('e'), setK: set('k') };
+          return { d: r.d, t: r.t, g: r.g, g180: r.g180, e: r.e, k: r.k, labT: 'Traslapo ' + r.d, labG: 'Gancho 90° ' + r.d, labG180: 'Gancho 180° ' + r.d,
+            labE: 'Gancho de estribo 135° ' + r.d, labK: 'Peso por metro ' + r.d, setT: set('t'), setG: set('g'), setG180: set('g180'), setE: set('e'), setK: set('k') };
         }),
         liveDot: vista.enVivo ? '#1E7A46' : '#9AA3AD', liveText: vista.enVivo ? 'En vivo con Revit' : 'Sin enlace con Revit',
         // #85, decisión 4: con la lista filtrada por "Seleccionar en Revit" se generan todos los de la lista (la sesión salta
@@ -658,12 +768,25 @@
         genOff: elegidos ? enLista.length === 0 : !P || !P.sePuedeGenerar,
         genBg: (elegidos ? enLista.length > 0 : P && P.sePuedeGenerar) ? '#1F5FAF' : '#9AA3AD',
         disponibles: vista.diametrosDisponibles || null, hasToast: !!s.toast, toast: s.toast,
+        // choques: el globo del punto abierto, sus arreglos y "Aplicado · Deshacer"
+        choqueAbierto: s.choqueAbierto, arreglos: s.arreglos, onChoque: (i) => this.abrirChoque(i), onArreglo: (a) => this.aplicarArreglo(a),
+        onCerrarChoque: () => this.setState({ choqueAbierto: -1, arreglos: null }),
+        deshacer: s.deshacer ? s.deshacer.texto : '', deshacerArreglo: () => this.deshacerArreglo(),
         hasConfirmGen: !!s.confirmGen,
         confirmGenText: s.confirmGen ? 'Se generará el acero de ' + (s.confirmGen.length === 1
           ? (PORS.find((p) => p.id === s.confirmGen[0]) || { nombre: s.confirmGen[0] }).nombre
           : s.confirmGen.length + ' pórticos') + '. Lo que el add-in generó antes en ' + (s.confirmGen.length === 1 ? 'él' : 'ellos') + ' se reemplaza.' : '',
-        confirmGenYes: () => { enviar({ tipo: 'generar', ids: s.confirmGen }); this.setState({ confirmGen: null }); },
+        confirmGenYes: () => { this.generar(s.confirmGen, false); this.setState({ confirmGen: null }); },
         confirmGenNo: () => this.setState({ confirmGen: null }),
+        // los choques al generar (decisión 8 del plan de choques): no bloquea, pregunta
+        hasChoquesGen: !!s.choquesGen,
+        choquesGenText: s.choquesGen ? textoChoquesGen(s.choquesGen.porticos, PORS) : '',
+        choquesGenRevisar: () => {
+          const primero = s.choquesGen.porticos[0].id;
+          this.setState({ choquesGen: null, tab: 'alzado' });
+          if (!P || P.id !== primero) enviar({ tipo: 'elegirPortico', id: primero });
+        },
+        choquesGenForzar: () => { this.generar(s.choquesGen.ids, true); this.setState({ choquesGen: null }); },
         // #85: el resumen de "Generar en Revit", una línea por cosa; se queda hasta cerrarlo
         resumen: s.resumen ? { titulo: s.resumen[0], lineas: s.resumen.slice(1) } : null, closeResumen: () => this.setState({ resumen: null }),
         pickEl: (id) => (id ? selectBar(id) : this.setState({ sel: NADA })), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
@@ -816,7 +939,7 @@
 
         ${v.isAlzado ? html`
           <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
-            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} />
+            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} choqueAbierto=${v.choqueAbierto} arreglos=${v.arreglos} onChoque=${v.onChoque} onArreglo=${v.onArreglo} onCerrarChoque=${v.onCerrarChoque} />
             ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
           </div>` : null}
         ${v.isCorte ? html`
@@ -1135,7 +1258,7 @@
                 ${opcionesDiametro(v.disponibles, 3, 4, v.estD, true)}
               </select>
               <select aria-label="Gancho del estribo" value=${v.estG} onChange=${v.setEstG} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
-                <option value="135°">135°</option><option value="90°">90°</option>
+                <option value="135°">135°</option><option value="90°">90°</option><option value="180°">180°</option>
               </select>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px">
@@ -1168,6 +1291,11 @@
                     <span style="color: #5E6670">${ea.desc}</span>
                     ${ea.motivo ? html`<span role="status" style="color: #B42318">${ea.motivo}</span>` : null}
                   </div>
+                  ${ea.isAbierto ? html`
+                    <div role="group" aria-label="Forma de la grapa" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                      ${ea.formas.map((fo) => html`
+                        <button type="button" aria-label=${fo.label} aria-pressed=${fo.pressed} onClick=${fo.pick} style="height: 26px; width: 28px; padding: 0; border: 0; font: inherit; font-weight: 600; cursor: pointer; ${fo.style}">${fo.f}</button>`)}
+                    </div>` : null}
                   <button type="button" aria-label=${ea.removeLabel} onClick=${ea.remove} style="height: 28px; padding: 0 8px; border: 0; background: transparent; font: inherit; color: #B42318; cursor: pointer">Quitar</button>
                 </div>`)}
               ${v.noPick ? html`
@@ -1254,18 +1382,19 @@
             </div>
             <span style="font-size: 12px; color: #5E6670; margin-top: -8px">Si un tramo no se puede resolver con 6 m, se usa una de 12 m.</span>
             <div style="display: flex; flex-direction: column; gap: 6px">
-              <div style="display: grid; grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
-                <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Estribo 135°</span><span>kg/m</span>
+              <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
+                <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Gancho 180°</span><span>Estribo 135°</span><span>kg/m</span>
               </div>
               ${v.rules.map((ru) => html`
-                <div style="display: grid; grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 5px; align-items: center">
+                <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; align-items: center">
                   <span style="color: #3F4A57">${ru.d}</span>
                   <input type="text" aria-label=${ru.labT} value=${ru.t} onInput=${ru.setT} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labG} value=${ru.g} onInput=${ru.setG} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
+                  <input type="text" aria-label=${ru.labG180} value=${ru.g180} onInput=${ru.setG180} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labE} value=${ru.e} onInput=${ru.setE} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labK} value=${ru.k} onInput=${ru.setK} disabled=${v.locked} style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 6px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                 </div>`)}
-              <span style="font-size: 12px; color: #5E6670; line-height: 1.45">Valores en metros, de los cuadros de ganchos y traslapos. El traslapo depende solo del diámetro. Las barras terminan con gancho de 90°; el estribo de 135° sale del cuadro de dimensiones mínimas.</span>
+              <span style="font-size: 12px; color: #5E6670; line-height: 1.45">Valores en metros, de los cuadros de ganchos y traslapos. El traslapo depende solo del diámetro. Las barras terminan con gancho de 90°; el estribo de 135° sale del cuadro de dimensiones mínimas y el de 180°, de la columna Gancho 180°.</span>
             </div>
           </div>` : null}
       </div>
@@ -1301,8 +1430,26 @@
         </div>
       </div>
     </div>` : null}
+  ${v.hasChoquesGen ? html`
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(22, 25, 29, 0.32)">
+      <div role="alertdialog" aria-labelledby="chq-t" aria-describedby="chq-d" style="width: 440px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 12px 32px rgba(22, 25, 29, 0.22)">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span id="chq-t" style="font-weight: 600; font-size: 15px">Hay barras que se tocan</span>
+          <span id="chq-d" style="font-size: 12px; color: #5E6670; line-height: 1.5">${v.choquesGenText}</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" onClick=${v.choquesGenRevisar} style="height: 32px; padding: 0 14px; border: 1px solid #1F5FAF; border-radius: 6px; background: #1F5FAF; font: inherit; font-weight: 600; color: #FFFFFF; cursor: pointer">Revisar</button>
+          <button type="button" onClick=${v.choquesGenForzar} style="height: 32px; padding: 0 14px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">Generar de todos modos</button>
+        </div>
+      </div>
+    </div>` : null}
   ${v.hasToast ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">${v.toast}</div>` : null}
+  ${v.deshacer ? html`
+    <div role="status" style="position: absolute; left: 50%; bottom: ${v.hasToast ? 64 : 20}px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">
+      <span>Aplicado: ${v.deshacer}</span>
+      <button type="button" onClick=${v.deshacerArreglo} style="height: 28px; padding: 0 12px; border: 1px solid #5E6670; border-radius: 6px; background: transparent; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">Deshacer</button>
+    </div>` : null}
   ${v.resumen ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); max-height: 45%; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.25)">
       <div style="display: flex; align-items: flex-start; gap: 12px">
@@ -1327,6 +1474,8 @@
       if (m.tipo === 'vista') this.setState({ vista: m.vista });
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
       else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
+      else if (m.tipo === 'arreglos' && this.tablero) this.tablero.arreglosRecibidos(m.arreglos);
+      else if (m.tipo === 'choques' && this.tablero) this.tablero.choquesAlGenerar(m.porticos);
       // #85: el resumen de la generación; la primera línea es el título y las demás, una por falla o diferencia.
       else if (m.tipo === 'generado' && this.tablero) this.tablero.setState({ resumen: m.texto.split('\n') });
     }

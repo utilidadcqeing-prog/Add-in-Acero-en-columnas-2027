@@ -87,8 +87,15 @@ public sealed record BarraSeccion(string Id, string Nombre, bool Arriba, int Fil
 /// <summary>Un diámetro que hay en el pórtico, para la leyenda: <c>"#5"</c> (o <c>"⅝\""</c>) y su color.</summary>
 public sealed record DiametroVista(string Nombre, string Color, string NombrePulgadas = "");
 
-/// <summary>Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba.</summary>
-public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo);
+/// <summary>
+/// Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba. <paramref name="Forma"/> es
+/// <c>"C"</c> o <c>"S"</c> (solo cuenta en el abierto). <paramref name="Puntos"/> es el trazo de un adicional por su
+/// eje, con sus ganchos según el ángulo y la forma, en cm ([x, y] con la y desde arriba); null en el cerrado de las
+/// esquinas, que la página dibuja como un rectángulo. <paramref name="DiametroCm"/> es el de su barra, para dibujar el
+/// grueso a escala (Juan, 22-oct).
+/// </summary>
+public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo, string Forma = "C",
+    IReadOnlyList<double[]>? Puntos = null, double DiametroCm = 0);
 
 public sealed record SeccionVista(double AnchoCm, double AltoCm, IReadOnlyList<BarraSeccion> Barras, IReadOnlyList<FiguraSeccion> Figuras);
 
@@ -100,6 +107,14 @@ public sealed record FilaEstribos(string Id, string Tipo, int Cantidad, string D
 /// <paramref name="CambiarCara"/>: pasar a la otra cara evita el traslapo largo (la tarjeta muestra "Cambiar").
 /// </summary>
 public sealed record AvisoVista(string Tipo, string Elemento, string Texto, bool CambiarCara = false);
+
+/// <summary>
+/// Un punto donde dos barras se meten una en la otra (plan docs/planes/2026-10-22-choques-entre-barras-vigas.md), para
+/// pintarlo en el alzado: <paramref name="X"/> en m desde el eje A, sobre la barra o el bastón <paramref name="Elemento"/>
+/// (su id del alzado, el que se elige al hacer clic). <paramref name="Texto"/> dice qué toca a qué y cuánto se mete;
+/// <paramref name="Pista"/>, qué se puede hacer; <paramref name="Veces"/>, cuántos estribos de la corrida chocan igual.
+/// </summary>
+public sealed record ChoqueVista(double X, string Elemento, string Texto, string Pista, int Veces, double SeMeteMm);
 
 /// <summary>Un tramo del pórtico, en m.</summary>
 public sealed record Rango(double Desde, double Hasta);
@@ -121,6 +136,10 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// <paramref name="PosicionesEstribos"/> es el centro de cada estribo cerrado, en m, para dibujarlos en el alzado donde van.
 /// <paramref name="Diametros"/> son los de las barras y bastones del pórtico, del más grueso al más delgado (la leyenda).
 /// <paramref name="Secciones"/>: la de cada tramo, para escribirla arriba de él.
+/// <paramref name="Estado"/>: el estado de la página con que se generó el pórtico (guardado en sus vigas o mandado al
+/// generar en esta sesión); la página lo usa si no tiene uno propio en memoria. Null si no hay.
+/// <paramref name="Choques"/>: los puntos donde las barras se tocan, de izquierda a derecha; null si no se revisaron
+/// (sin ubicación en el modelo o sin plan).
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -148,7 +167,9 @@ public sealed record VistaPortico(
     CorteVista? Corte = null,
     IReadOnlyList<double>? PosicionesEstribos = null,
     IReadOnlyList<DiametroVista>? Diametros = null,
-    IReadOnlyList<SeccionEnAlzado>? Secciones = null);
+    IReadOnlyList<SeccionEnAlzado>? Secciones = null,
+    string? Estado = null,
+    IReadOnlyList<ChoqueVista>? Choques = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).
@@ -156,8 +177,11 @@ public sealed record VistaPortico(
 /// </summary>
 public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string Multiplo, string DistanciaLibreCm, bool Varilla12, string? Problema);
 
-/// <summary>Una fila de la tabla de reglas: traslapo, gancho de 90°, estribo de 135° y peso por metro.</summary>
-public sealed record ReglaVista(string D, string T, string G, string E, string K);
+/// <summary>
+/// Una fila de la tabla de reglas: traslapo, gancho de 90°, gancho de 180° (<paramref name="G180"/>, el de los estribos
+/// de 180°: tarea 6 del plan de 22-oct), estribo de 135° y peso por metro.
+/// </summary>
+public sealed record ReglaVista(string D, string T, string G, string G180, string E, string K);
 
 // La edición (#84): la página pide ver un cambio antes de aplicarlo y C# contesta con lo que pasaría.
 

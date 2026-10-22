@@ -95,6 +95,86 @@ public class PreviaAceroTests
         Assert.True(lazo[0].Xc > 200 && lazo[^1].Xc > 200);
     }
 
+    private static double Largo((double Xc, double Yc) a, (double Xc, double Yc) b) => Math.Sqrt(Math.Pow(a.Xc - b.Xc, 2) + Math.Pow(a.Yc - b.Yc, 2));
+
+    [Fact]
+    public void ElCerradoDe180DaLaVueltaALaEsquinaConLaColaDelCuadro()
+    {
+        // radio 25 en la esquina (70, 430): el primer gancho sale de abajo de la esquina con la cola hacia la derecha y el
+        // segundo pasa por encima y baja. Cola: E del gancho de 180° del #3 (65).
+        var g = new GrupoEstribos("E", "1-2", TipoEstribo.Cerrado, 3, GanchoEstribo.De180, 40, 260, 40, 460, new Corrida(500, 1, 0), "101");
+
+        List<(double Xc, double Yc)> lazo = Assert.Single(Trazos(estribos: [g])).Puntos.Select(Corte).ToList();
+
+        Assert.Equal(65, Largo(lazo[0], lazo[1]), 6);
+        Assert.Equal(65, Largo(lazo[^2], lazo[^1]), 6);
+        Assert.Equal((135, 405), (Math.Round(lazo[0].Xc, 6), Math.Round(lazo[0].Yc, 6)));
+        Assert.Equal((95, 365), (Math.Round(lazo[^1].Xc, 6), Math.Round(lazo[^1].Yc, 6)));
+    }
+
+    [Fact]
+    public void ElAbiertoDe180TieneLasColasParalelasALaRama()
+    {
+        // como en el de 135°: la rama en X 175 y los dobleces centrados en 428 y 72; con 180° cada cola vuelve en X 225
+        var g = new GrupoEstribos("E1", "1-2", TipoEstribo.Abierto, 3, GanchoEstribo.De180, 200, 200, 40, 460, new Corrida(500, 1, 0), "101",
+            new Rama(200, 440, 60, 16));
+
+        List<(double Xc, double Yc)> lazo = Assert.Single(Trazos(estribos: [g])).Puntos.Select(Corte).ToList();
+
+        Assert.Equal((225, 72 + 65), (Math.Round(lazo[0].Xc, 6), Math.Round(lazo[0].Yc, 6)));
+        Assert.Equal((225, 428 - 65), (Math.Round(lazo[^1].Xc, 6), Math.Round(lazo[^1].Yc, 6)));
+    }
+
+    [Fact]
+    public void ElAbiertoEnSAbrazaCadaBarraDesdeUnLadoDistinto()
+    {
+        // Hallazgo H6: arriba la rama pasa a la izquierda de la barra (X 175), como en C; abajo, a la derecha (X 225). El
+        // gancho de arriba termina a la derecha de su barra y el de abajo, a la izquierda.
+        var g = new GrupoEstribos("E1", "1-2", TipoEstribo.Abierto, 3, GanchoEstribo.De135, 200, 200, 40, 460, new Corrida(500, 1, 0), "101",
+            new Rama(200, 440, 60, 16), FormaGrapa.S);
+
+        List<(double Xc, double Yc)> lazo = Assert.Single(Trazos(estribos: [g])).Puntos.Select(Corte).ToList();
+
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 175) < 1e-6 && Math.Abs(p.Yc - 428) < 1e-6);
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 225) < 1e-6 && Math.Abs(p.Yc - 72) < 1e-6);
+        // los dos dobleces siguen abrazando su barra por fuera
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 200) < 1e-6 && Math.Abs(p.Yc - 453) < 1e-6);
+        Assert.Contains(lazo, p => Math.Abs(p.Xc - 200) < 1e-6 && Math.Abs(p.Yc - 47) < 1e-6);
+        Assert.True(lazo[0].Xc < 200, $"cola de abajo en {lazo[0]}");
+        Assert.True(lazo[^1].Xc > 200, $"cola de arriba en {lazo[^1]}");
+    }
+
+    [Fact]
+    public void ElAbiertoSeDoblaComoEstriboNoComoGancho()
+    {
+        // H8 del plan de 22-oct: la grapa es refuerzo transversal y Revit la crea con estilo de estribo, así que toma el
+        // doblado de estribo (40) y no el de gancho (60). Radio 40 / 2 + 5 = 25: la rama va en 175, no en 165.
+        var g = new GrupoEstribos("E1", "1-2", TipoEstribo.Abierto, 3, GanchoEstribo.De180, 200, 200, 40, 460, new Corrida(500, 1, 0), "101",
+            new Rama(200, 440, 60, 16));
+        var doblados = new Dictionary<int, DobladoBarra> { [3] = new(10, 60, 40) };
+
+        Trazo t = Assert.Single(PreviaAcero.Trazos(new PlanAcero("P", [], [], [], [g], []), U, Reglas.Generales, doblados));
+
+        Assert.Contains(t.Puntos.Select(Corte), p => Math.Abs(p.Xc - 175) < 1e-6 && Math.Abs(p.Yc - 428) < 1e-6);
+    }
+
+    [Fact]
+    public void CadaTrazoDiceDeQuePiezaEs()
+    {
+        // para los choques (plan de 22-oct): qué toca a qué, y los estribos de una corrida con su tramo
+        var baston = Barra() with { Pieza = "BS1" };
+        var cerrado = new GrupoEstribos("E", "1-2", TipoEstribo.Cerrado, 3, GanchoEstribo.De135, 40, 260, 40, 460, new Corrida(500, 2, 100), "101");
+        var abierto = new GrupoEstribos("E1", "2-3", TipoEstribo.Abierto, 3, GanchoEstribo.De135, 200, 200, 40, 460, new Corrida(500, 1, 0), "101",
+            new Rama(200, 440, 60, 16));
+
+        IReadOnlyList<Trazo> t = PreviaAcero.Trazos(new PlanAcero("P", [Barra()], [baston], [], [cerrado, abierto], []), U, Reglas.Generales, Doblados);
+
+        Assert.Equal(
+            [("S1", TipoTrazo.Barra, null), ("BS1", TipoTrazo.Baston, null), ("E", TipoTrazo.Estribo, "1-2"),
+                ("E", TipoTrazo.Estribo, "1-2"), ("E1", TipoTrazo.Grapa, "2-3")],
+            t.Select(x => (x.Pieza, x.Tipo, x.Tramo)));
+    }
+
     [Fact]
     public void SinDobladosDelModeloUsaElDiametroDeLasReglas()
     {

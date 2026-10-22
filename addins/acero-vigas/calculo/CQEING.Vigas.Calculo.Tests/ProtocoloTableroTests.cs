@@ -135,6 +135,39 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LeeElPedidoDeArreglosDeUnChoque()
+    {
+        string json = $$"""{"tipo":"arreglos","id":"P1","n":4,"choque":2,"opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";
+
+        var m = Assert.IsType<PedirArreglos>(ProtocoloTablero.Leer(json));
+
+        Assert.Equal(("P1", 4, 2), (m.Id, m.N, m.Choque));
+    }
+
+    [Fact]
+    public void GenerarLeeForzar()
+    {
+        Assert.Equal(new Generar(["P1"]).Forzar, Assert.IsType<Generar>(ProtocoloTablero.Leer("""{"tipo":"generar","ids":["P1"]}""")).Forzar);
+        Assert.True(Assert.IsType<Generar>(ProtocoloTablero.Leer("""{"tipo":"generar","ids":["P1"],"forzar":true}""")).Forzar);
+    }
+
+    [Fact]
+    public void EscribeLosChoquesAlGenerar()
+    {
+        string json = ProtocoloTablero.Choques([new PorticoConChoques("Pórtico 1", 7)]);
+
+        Assert.Equal("""{"tipo":"choques","porticos":[{"id":"Pórtico 1","cantidad":7}]}""", json);
+    }
+
+    [Fact]
+    public void ArreglosSinChoqueEsDesconocido()
+    {
+        string json = $$"""{"tipo":"arreglos","id":"P1","n":4,"opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";
+
+        Assert.Equal(new Desconocido("arreglos"), ProtocoloTablero.Leer(json));
+    }
+
+    [Fact]
     public void PrevisualizarSinPedidoEsDesconocido()
     {
         string json = $$"""{"tipo":"previsualizar","id":"P1","opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";
@@ -174,6 +207,23 @@ public class ProtocoloTableroTests
         EstriboAdicional a = Assert.Single(c.Opciones.Estribos.Adicionales!);
         Assert.Equal(TipoEstribo.Abierto, a.Tipo);
         Assert.Equal([new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)], a.Barras);
+        Assert.Equal(FormaGrapa.C, a.Forma);
+    }
+
+    [Fact]
+    public void CalcularTraeElGancho180YLaGrapaEnS()
+    {
+        const string json = """
+            {"tipo":"calcular","id":"Pórtico 1","opciones":{"superior":[{"cantidad":3,"diametro":5}],"inferior":[{"cantidad":3,"diametro":5}],
+             "recubrimientoCm":4,"maximoFilas":3,
+             "estribos":{"diametro":3,"gancho":"De180","largoZona":800,"separacionZona":100,"separacionCentro":200,
+               "adicionales":[{"tipo":"Abierto","forma":"S","barras":[{"cara":"Superior","fila":1,"numero":2},{"cara":"Inferior","fila":1,"numero":2}]}]}}}
+            """;
+
+        Calcular c = Assert.IsType<Calcular>(ProtocoloTablero.Leer(json));
+
+        Assert.Equal(GanchoEstribo.De180, c.Opciones.Estribos.Gancho);
+        Assert.Equal(FormaGrapa.S, Assert.Single(c.Opciones.Estribos.Adicionales!).Forma);
     }
 
     [Fact]
@@ -182,6 +232,15 @@ public class ProtocoloTableroTests
         MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1","Pórtico 2"]}""");
 
         Assert.Equal(["Pórtico 1", "Pórtico 2"], Assert.IsType<Generar>(m).Ids);
+        Assert.Null(((Generar)m).Estados);
+    }
+
+    [Fact]
+    public void GenerarTraeElEstadoDeLaPaginaDeCadaPortico()
+    {
+        MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1"],"estados":{"Pórtico 1":"{\"rec\":\"5\"}"}}""");
+
+        Assert.Equal("""{"rec":"5"}""", Assert.IsType<Generar>(m).Estados!["Pórtico 1"]);
         Assert.IsType<Desconocido>(ProtocoloTablero.Leer("""{"tipo":"generar"}"""));
     }
 
