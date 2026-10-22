@@ -75,11 +75,18 @@
                         <RadioButton x:Name="OpcionZonaTraslapo" Content="Zona de traslapo" GroupName="SeccionChoques"
                                      Checked="OpcionSeccion_Checked" />
                     </StackPanel>
-                    <TextBlock x:Name="NotaTapadas" DockPanel.Dock="Bottom" Style="{StaticResource TextoAyuda}" Foreground="{StaticResource AvisoTexto}" Margin="0,6,0,0" />
-                    <Canvas x:Name="Lienzo" Background="Transparent" AllowDrop="True" ClipToBounds="True"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                            MouseMove="Lienzo_MouseMove" MouseLeave="Lienzo_MouseLeave" MouseLeftButtonDown="Lienzo_MouseLeftButtonDown"
-                            DragOver="Lienzo_DragOver" DragLeave="Lienzo_DragLeave" Drop="Lienzo_Drop" />
+                    <!-- Alto máximo con su propio scroll: si hay muchas notas, no le quitan lugar a la sección. -->
+                    <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="72" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">
+                        <TextBlock x:Name="NotaTapadas" Style="{StaticResource TextoAyuda}" Foreground="{StaticResource AvisoTexto}" TextWrapping="Wrap" />
+                    </ScrollViewer>
+                    <!-- Se achica solo si no entra (nunca agranda): así no tapa el
+                         selector ni las notas. Los clics se miden sobre el Lienzo. -->
+                    <Viewbox StretchDirection="DownOnly" Stretch="Uniform">
+                        <Canvas x:Name="Lienzo" Background="Transparent" AllowDrop="True" ClipToBounds="True"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                MouseMove="Lienzo_MouseMove" MouseLeave="Lienzo_MouseLeave" MouseLeftButtonDown="Lienzo_MouseLeftButtonDown"
+                                DragOver="Lienzo_DragOver" DragLeave="Lienzo_DragLeave" Drop="Lienzo_Drop" />
+                    </Viewbox>
                 </DockPanel>
             </Border>
 

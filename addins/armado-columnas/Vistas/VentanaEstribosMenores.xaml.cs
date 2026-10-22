@@ -544,16 +544,24 @@ public partial class VentanaEstribosMenores : Window
     private void ActualizarNotas()
     {
         // Los choques del modo elegido (#131); el cerrado imposible ya viene de Imposible.
-        IEnumerable<ChoquesSeccion.Choque> choques = OpcionZonaTraslapo.IsChecked == true ? _choques.Traslapo : _choques.Normal;
+        // Los choques van en una línea: el motivo de cada uno se lee al pasar
+        // el mouse por su marca roja (una nota por choque tapaba la sección).
+        bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
         List<string> imposibles = _piezas.Select(Imposible).OfType<string>().ToList();
+        int choques = (verTraslapo ? _choques.Traslapo : _choques.Normal).Count(c => !imposibles.Contains(c.Motivo));
+        var resumenChoques = new List<string>();
+        if (choques > 0)
+            resumenChoques.Add(
+                $"⚠ {choques} choque(s) en la {(verTraslapo ? "zona de traslapo" : "sección normal")} (se puede generar igual): " +
+                "pasa el mouse por las marcas rojas para ver el motivo.");
+        if (_choques.VarillasSinRevisarEnTraslapo > 0)
+            resumenChoques.Add(ChoquesSeccion.NotaSinRevisar(_choques.VarillasSinRevisarEnTraslapo));
+
         NotaTapadas.Text = string.Join("\n", _piezas
             .Where(p => PaqueteEstribos.EstaTapada(p, _piezas))
             .Select(p => $"La {Nombre(p.Forma).ToLowerInvariant()} de la {Donde(p)} queda dentro de un estribo cerrado y no se va a generar.")
             .Concat(imposibles)
-            .Concat(choques.Where(c => !imposibles.Contains(c.Motivo)).Select(c => "⚠ " + c.Motivo))
-            .Concat(_choques.VarillasSinRevisarEnTraslapo > 0
-                ? new[] { ChoquesSeccion.NotaSinRevisar(_choques.VarillasSinRevisarEnTraslapo) }
-                : Array.Empty<string>()));
+            .Concat(resumenChoques));
 
         int grapas = _piezas.Count(p => p.Forma != FormaMenor.Cerrado && !PaqueteEstribos.EstaTapada(p, _piezas));
         int cerrados = _piezas.Count(p => p.Forma == FormaMenor.Cerrado);
