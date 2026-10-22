@@ -82,6 +82,6 @@ public partial class VentanaConfiguradorEstribos
 
         PanelDeVistaPrevia.Mostrar(
             _columnaActiva, _columnaActiva.Tramos[_tramoActivoIndice], cfgTramo, LeerLongitudinalConEstribosMenores(),
-            recubrimiento, Diametro, estriboMasGrueso);
+            recubrimiento, nombre => _barras.FirstOrDefault(b => b.Nombre == nombre), estriboMasGrueso);
     }
 }

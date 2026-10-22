@@ -51,18 +51,20 @@ public partial class PanelVistaPrevia : UserControl
     }
 
     /// <param name="cfgLong">Con los estribos menores de la columna ya cargados.</param>
-    /// <param name="diametroDeBarraMm">Diámetro de un tipo de barra por su nombre, o null si no existe.</param>
+    /// <param name="barraDe">Un tipo de barra por su nombre (diámetro y doblado), o null si no existe.</param>
     /// <param name="diametroEstriboPlantaMm">
     /// El estribo más grueso de la columna: el generador corre las longitudinales
     /// con ese (<c>GeneradorLongitudinal</c>, "diametroEstribo").
     /// </param>
     public void Mostrar(
         ColumnaContexto columna, Tramo tramo, ConfigTramo cfgTramo, ConfigLongitudinal cfgLong,
-        double recubrimiento, Func<string?, double?> diametroDeBarraMm, double diametroEstriboPlantaMm)
+        double recubrimiento, Func<string?, TipoBarra?> barraDe, double diametroEstriboPlantaMm)
     {
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
+
+        double? diametroDeBarraMm(string? nombre) => string.IsNullOrEmpty(nombre) ? null : barraDe(nombre)?.DiametroMm;
 
         double? dEsquina = diametroDeBarraMm(cfgLong.BarraDe(PosicionBarra.Esquina));
         double? dCaraX = diametroDeBarraMm(cfgLong.BarraDe(PosicionBarra.CaraX));
@@ -80,15 +82,18 @@ public partial class PanelVistaPrevia : UserControl
             _ => dCaraY.Value,
         };
 
-        double ladoX = columna.BaseX, ladoY = columna.BaseY;
-        IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras =
-            SeccionPlanta.Calcular(ladoX, ladoY, recubrimiento, diametroEstriboPlantaMm, cfgLong, DiametroDe);
-
         // El estribo principal del tramo activo y su paquete con los menores
         // (en los nudos no van menores, como en GeneradorArmado). El tramo
         // contra zapata no lleva estribos (Luciano, 20-oct): no se dibujan.
         bool sinEstribos = tramo.Tipo == TipoTramo.ContraZapata;
         double? dEstribo = sinEstribos ? null : diametroDeBarraMm(cfgTramo.TipoBarraNombre);
+
+        // Las esquinas, metidas en la curva del estribo como las deja el
+        // generador (sin estribo, donde da la cuenta).
+        double ladoX = columna.BaseX, ladoY = columna.BaseY;
+        double doblezEstribo = dEstribo is double dd ? PlantaArmado.Doblez(barraDe(cfgTramo.TipoBarraNombre), dd) : 0;
+        IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras = SeccionPlanta.Calcular(
+            ladoX, ladoY, recubrimiento, diametroEstriboPlantaMm, cfgLong, DiametroDe, doblezEstribo * 1000);
         List<EstriboMenor> piezas = tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata
             ? new List<EstriboMenor>()
             : cfgLong.MenoresParaGenerar();
@@ -109,7 +114,11 @@ public partial class PanelVistaPrevia : UserControl
         double XColumna(int c) => SeccionPlanta.PosicionIntermedia(insetEsq, ladoX - insetEsq, columnas, c);
         double YFila(int f) => SeccionPlanta.PosicionIntermedia(insetEsq, ladoY - insetEsq, filas, f);
 
-        DibujarPlanta(ladoX, ladoY, recubrimiento, dEstribo, barras, piezas, DiametroPieza, XColumna, YFila, columnas, filas);
+        double DoblezPieza(EstriboMenor p) =>
+            PlantaArmado.Doblez(barraDe(p.TipoBarraNombre) ?? barraDe(cfgTramo.TipoBarraNombre), DiametroPieza(p));
+
+        DibujarPlanta(ladoX, ladoY, recubrimiento, dEstribo, doblezEstribo, barras, piezas, DiametroPieza, DoblezPieza,
+            XColumna, YFila, columnas, filas);
 
         // Frente: se mira la cara de abajo (paralela a X); costado: la de la izquierda (paralela a Y).
         List<BarraVista> frente = barras
@@ -148,9 +157,9 @@ public partial class PanelVistaPrevia : UserControl
     // ------------------------------------------------------------- planta
 
     private void DibujarPlanta(
-        double ladoX, double ladoY, double recubrimiento, double? dEstribo,
+        double ladoX, double ladoY, double recubrimiento, double? dEstribo, double doblezEstribo,
         IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza,
-        Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas)
+        Func<EstriboMenor, double> doblezPieza, Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas)
     {
         Texto("Desde arriba", 16, 0, 11, FontWeights.SemiBold);
 
@@ -161,45 +170,44 @@ public partial class PanelVistaPrevia : UserControl
 
         Agregar(new Rectangle { Width = ancho, Height = alto, Fill = ColorHormigon, Stroke = ColorContorno }, ox, oy);
 
+        // Estribo principal como lo deja Revit: cara exterior al recubrimiento,
+        // esquinas curvas y los ganchos de 135° abajo a la izquierda.
         if (dEstribo is double de)
+            Lienzo.Children.Add(DibujoArmado.Trazo(
+                PlantaArmado.EstriboCerrado(recubrimiento, ladoX - recubrimiento, recubrimiento, ladoY - recubrimiento,
+                    de / 1000, doblezEstribo, PlantaArmado.Cola135(de)),
+                P, Pincel(de), Math.Max(1.2, de / 1000 * escala)));
+
+        // Estribos menores, abrazando las barras que enganchan (PlantaArmado.Menor).
+        List<SeccionPlanta.BarraEnPlanta> deCaraY = barras.Where(b => b.Posicion == PosicionBarra.CaraY).ToList();
+        List<SeccionPlanta.BarraEnPlanta> deCaraX = barras.Where(b => b.Posicion == PosicionBarra.CaraX).ToList();
+        (GanchoGrapa.Pieza, GanchoGrapa.Pieza) BarrasDe(EjeCaja eje, int k)
         {
-            double r = recubrimiento + de / 2000;
-            Point a = P(r, ladoY - r), b = P(ladoX - r, r);
-            Agregar(new Rectangle
+            if (eje == EjeCaja.Fila)
             {
-                Width = b.X - a.X, Height = b.Y - a.Y, RadiusX = 4, RadiusY = 4,
-                Stroke = Pincel(de), StrokeThickness = Math.Max(1.5, de / 1000 * escala),
-            }, a.X, a.Y);
+                double r = deCaraY[0].DiametroMm / 2000;
+                return (new(deCaraY.Min(b => b.X), yFila(k), r, 0), new(deCaraY.Max(b => b.X), yFila(k), r, 0));
+            }
+            double rx = deCaraX[0].DiametroMm / 2000;
+            return (new(xColumna(k), deCaraX.Min(b => b.Y), rx, 0), new(xColumna(k), deCaraX.Max(b => b.Y), rx, 0));
         }
 
-        // Estribos menores: entre las barras de los dos extremos de la sección.
-        double xIzq = barras.Min(b => b.X), xDer = barras.Max(b => b.X);
-        double yAba = barras.Min(b => b.Y), yArr = barras.Max(b => b.Y);
-        foreach (EstriboMenor p in piezas)
+        // Los cerrados abajo de todo, para que no tapen a las grapas.
+        foreach (EstriboMenor p in piezas.OrderBy(p => p.Forma == FormaMenor.Cerrado ? 0 : 1))
         {
-            if (p.Eje == EjeCaja.Fila ? p.Hasta >= filas : p.Hasta >= columnas) continue;
+            if (p.Eje == EjeCaja.Fila ? p.Hasta >= filas || deCaraY.Count == 0 : p.Hasta >= columnas || deCaraX.Count == 0) continue;
             bool tapada = PaqueteEstribos.EstaTapada(p, piezas);
             Brush color = tapada ? ColorTapada : Pincel(diametroPieza(p));
             double grosor = Math.Max(1.2, diametroPieza(p) / 1000 * escala);
-
-            if (p.Forma == FormaMenor.Cerrado)
-            {
-                Point a = p.Eje == EjeCaja.Fila ? P(xIzq, yFila(p.Hasta)) : P(xColumna(p.Desde), yArr);
-                Point b = p.Eje == EjeCaja.Fila ? P(xDer, yFila(p.Desde)) : P(xColumna(p.Hasta), yAba);
-                Agregar(new Rectangle { Width = Math.Max(1, b.X - a.X), Height = Math.Max(1, b.Y - a.Y), Stroke = color, StrokeThickness = grosor }, a.X, a.Y);
-            }
-            else
-            {
-                (Point a, Point b) = p.Eje == EjeCaja.Fila
-                    ? (P(xIzq, yFila(p.Desde)), P(xDer, yFila(p.Desde)))
-                    : (P(xColumna(p.Desde), yAba), P(xColumna(p.Desde), yArr));
-                Linea(a, b, color, grosor, tapada);
-            }
+            Lienzo.Children.Add(DibujoArmado.Trazo(
+                PlantaArmado.Menor(p, k => BarrasDe(p.Eje, k), (ladoX / 2, ladoY / 2), diametroPieza(p), doblezPieza(p)),
+                P, color, grosor, tapada ? 0.6 : 1));
         }
 
         foreach (SeccionPlanta.BarraEnPlanta barra in barras)
         {
-            double radio = Math.Max(2.5, barra.DiametroMm / 2000 * escala);
+            // Su diámetro a escala; el mínimo es solo para que no desaparezca.
+            double radio = Math.Max(1, barra.DiametroMm / 2000 * escala);
             Point c = P(barra.X, barra.Y);
             Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(barra.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
                 c.X - radio, c.Y - radio);

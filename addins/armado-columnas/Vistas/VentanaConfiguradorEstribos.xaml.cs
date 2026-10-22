@@ -1235,7 +1235,8 @@ public partial class VentanaConfiguradorEstribos : Window
             columna.BaseX, columna.BaseY,
             _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : columna.Recubrimiento,
             esquina ?? reservaLongitudinalMm, caraX ?? reservaLongitudinalMm, caraY ?? reservaLongitudinalMm, estribo ?? reservaEstriboMm,
-            DiametrosDeReserva: esquina is null || caraX is null || caraY is null || estribo is null);
+            DiametrosDeReserva: esquina is null || caraX is null || caraY is null || estribo is null,
+            DobladoEstriboMm: _barras.FirstOrDefault(b => b.Nombre == ComboTipoBarra.SelectedItem as string)?.DobladoEstriboMm ?? 0);
     }
 
     /// <summary>Las barras que se ofrecen para los estribos menores: las mismas aptas que para el estribo (#64).</summary>

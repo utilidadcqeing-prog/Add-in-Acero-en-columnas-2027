@@ -65,12 +65,13 @@ public partial class VentanaEstribosMenores : Window
     /// La sección real, para dibujarla a escala y con sus medidas (#133, #134):
     /// lados y recubrimiento en metros, diámetros en mm. Con
     /// <paramref name="DiametrosDeReserva"/> todavía falta elegir alguna barra y
-    /// se dibuja con diámetros aproximados.
+    /// se dibuja con diámetros aproximados. <paramref name="DobladoEstriboMm"/>:
+    /// diámetro de doblado del estribo principal (0 = 4 diámetros).
     /// </summary>
     public sealed record SeccionReal(
         double LadoX, double LadoY, double Recubrimiento,
         double DiametroEsquinaMm, double DiametroCaraXMm, double DiametroCaraYMm, double DiametroEstriboMm,
-        bool DiametrosDeReserva);
+        bool DiametrosDeReserva, double DobladoEstriboMm = 0);
 
     private readonly MedidasSeccion? _medidas;
     private readonly SeccionReal _seccion;
@@ -80,6 +81,12 @@ public partial class VentanaEstribosMenores : Window
 
     /// <summary>Del borde de la sección al eje de cada barra (m), como <see cref="SeccionPlanta"/>.</summary>
     private readonly double _insetEsquina, _insetCaraX, _insetCaraY, _insetReferencia;
+
+    /// <summary>Diámetro de doblado del estribo principal, en metros.</summary>
+    private readonly double _doblezEstribo;
+
+    /// <summary>Las cuatro esquinas (m), metidas en la curva del estribo como en el generador.</summary>
+    private readonly IReadOnlyList<(double X, double Y)> _esquinas;
 
     private readonly int _filas;
     private readonly int _columnas;
@@ -116,6 +123,17 @@ public partial class VentanaEstribosMenores : Window
         // Las intermedias se reparten entre las esquinas corridas con la barra
         // más gruesa, igual que en SeccionPlanta.Calcular.
         _insetReferencia = Math.Max(_insetEsquina, Math.Max(_insetCaraX, _insetCaraY));
+
+        _doblezEstribo = (seccion.DobladoEstriboMm > 0 ? seccion.DobladoEstriboMm : 4 * seccion.DiametroEstriboMm) / 1000;
+        var dobleces = SeccionPlanta.DoblecesEstribo(
+            seccion.LadoX, seccion.LadoY, seccion.Recubrimiento, seccion.DiametroEstriboMm / 1000, _doblezEstribo).ToList();
+        _esquinas = new[]
+            {
+                (_insetEsquina, _insetEsquina), (seccion.LadoX - _insetEsquina, _insetEsquina),
+                (seccion.LadoX - _insetEsquina, seccion.LadoY - _insetEsquina), (_insetEsquina, seccion.LadoY - _insetEsquina),
+            }
+            .Select(p => SeccionPlanta.EnElDoblez(dobleces, p.Item1, p.Item2, seccion.DiametroEsquinaMm / 2000, SeccionPlanta.AlcanceDoblez))
+            .ToList();
 
         _columnas = Math.Max(1, barrasPorCaraX / 2);
         _filas = Math.Max(1, barrasPorCaraY / 2);
@@ -170,8 +188,8 @@ public partial class VentanaEstribosMenores : Window
     private double X(int columna) =>
         PX(SeccionPlanta.PosicionIntermedia(_insetReferencia, _seccion.LadoX - _insetReferencia, _columnas, columna));
 
-    /// <summary>Radio en píxeles de una barra, con un mínimo para que se pueda ver y elegir.</summary>
-    private double Radio(double diametroMm) => Math.Max(4, diametroMm / 2000 * _escala);
+    /// <summary>Radio en píxeles de una barra, a escala (el mínimo es solo para que no desaparezca; se elige con <see cref="RadioCaptura"/>).</summary>
+    private double Radio(double diametroMm) => Math.Max(1.5, diametroMm / 2000 * _escala);
 
     /// <summary>
     /// La barra intermedia bajo el punto, si hay una: las de las caras izquierda
@@ -224,33 +242,55 @@ public partial class VentanaEstribosMenores : Window
         };
     }
 
-    /// <summary>La pieza puesta bajo el punto: primero las grapas (son más finas), después el cerrado más chico.</summary>
+    /// <summary>
+    /// La pieza puesta bajo el punto, con la forma con la que se DIBUJA (la de
+    /// Revit, <see cref="TrazoDe"/>): primero la que tiene la barra bajo el
+    /// puntero -- con unos píxeles de margen; si hay varias, la que se ve encima
+    /// y después la más cercana --,
+    /// y si no, el cerrado más chico que lo encierra. Antes se buscaba con la
+    /// forma esquemática vieja y había que hacer clic donde estaba la línea.
+    /// </summary>
     private EstriboMenor? PiezaEn(Point p)
     {
-        const double tolerancia = 6;
+        const double margen = 5;
 
-        EstriboMenor? grapa = _piezas
-            .Where(o => o.Forma != FormaMenor.Cerrado)
-            .FirstOrDefault(o => o.Eje == EjeCaja.Fila
-                ? Math.Abs(p.Y - Y(o.Desde)) <= tolerancia && p.X >= Izquierda - tolerancia && p.X <= Derecha + tolerancia
-                : Math.Abs(p.X - X(o.Desde)) <= tolerancia && p.Y >= Arriba - tolerancia && p.Y <= Abajo + tolerancia);
-        if (grapa is not null) return grapa;
+        var trazos = _piezas.Select(o => (Pieza: o, Trazo: TrazoDe(o))).ToList();
 
-        return _piezas
-            .Where(o => o.Forma == FormaMenor.Cerrado)
-            .Where(o =>
-            {
-                Rect r = RectanguloDe(o);
-                return p.X >= r.Left - tolerancia && p.X <= r.Right + tolerancia && p.Y >= r.Top - tolerancia && p.Y <= r.Bottom + tolerancia;
-            })
-            .OrderBy(o => RectanguloDe(o).Width * RectanguloDe(o).Height)
+        (EstriboMenor Pieza, double Distancia)? masCerca = trazos
+            .Select(t => (t.Pieza, Distancia: DistanciaAlTrazo(p, t.Trazo.Puntos) - t.Trazo.Grosor / 2))
+            .Where(t => t.Distancia <= margen)
+            // Donde se cruzan, gana la que se ve encima: las grapas se dibujan sobre los cerrados.
+            .OrderBy(t => t.Pieza.Forma == FormaMenor.Cerrado ? 1 : 0)
+            .ThenBy(t => t.Distancia)
+            .Cast<(EstriboMenor, double)?>()
+            .FirstOrDefault();
+        if (masCerca is { } cerca) return cerca.Pieza;
+
+        return trazos
+            .Where(t => t.Pieza.Forma == FormaMenor.Cerrado)
+            .Select(t => (t.Pieza, Caja: Caja(t.Trazo.Puntos)))
+            .Where(t => t.Caja.Contains(p))
+            .OrderBy(t => t.Caja.Width * t.Caja.Height)
+            .Select(t => t.Pieza)
             .FirstOrDefault();
     }
 
-    /// <summary>El cerrado abarca su rango en su eje y cruza de extremo a extremo en el otro (como <see cref="CajaMenor"/>).</summary>
-    private Rect RectanguloDe(EstriboMenor caja) => caja.Eje == EjeCaja.Fila
-        ? new Rect(new Point(Izquierda + 6, Y(caja.Desde) + 6), new Point(Derecha - 6, Y(caja.Hasta) - 6))
-        : new Rect(new Point(X(caja.Desde) - 6, Arriba + 6), new Point(X(caja.Hasta) + 6, Abajo - 6));
+    /// <summary>Distancia en píxeles del punto al eje dibujado (una polilínea).</summary>
+    private static double DistanciaAlTrazo(Point p, IReadOnlyList<Point> puntos)
+    {
+        double mejor = double.MaxValue;
+        for (int i = 0; i + 1 < puntos.Count; i++)
+        {
+            Vector ab = puntos[i + 1] - puntos[i], ap = p - puntos[i];
+            double t = ab.LengthSquared <= 1e-12 ? 0 : Math.Clamp((ap.X * ab.X + ap.Y * ab.Y) / ab.LengthSquared, 0, 1);
+            mejor = Math.Min(mejor, (p - (puntos[i] + t * ab)).Length);
+        }
+        return mejor;
+    }
+
+    private static Rect Caja(IReadOnlyList<Point> puntos) => puntos.Count == 0
+        ? Rect.Empty
+        : new Rect(new Point(puntos.Min(q => q.X), puntos.Min(q => q.Y)), new Point(puntos.Max(q => q.X), puntos.Max(q => q.Y)));
 
     // ------------------------------------------------------------------- dibujo
 
@@ -261,15 +301,14 @@ public partial class VentanaEstribosMenores : Window
         Lienzo.Width = MargenIzquierdo + ancho + MargenDerecho;
         Lienzo.Height = MargenArriba + alto + MargenAbajo;
 
-        // Sección (el hormigón, a escala) y estribo principal, por su eje.
+        // Sección (el hormigón, a escala) y estribo principal como lo deja
+        // Revit: cara exterior al recubrimiento, esquinas curvas y los ganchos
+        // de 135° abajo a la izquierda (PlantaArmado).
         Agregar(new Rectangle { Width = ancho, Height = alto, Fill = Paleta.Hormigon, Stroke = Paleta.Contorno }, PX(0), PY(_seccion.LadoY));
-        double ejeEstribo = _seccion.Recubrimiento + _seccion.DiametroEstriboMm / 2000;
-        Agregar(new Rectangle
-        {
-            Width = Math.Max(1, (_seccion.LadoX - 2 * ejeEstribo) * _escala),
-            Height = Math.Max(1, (_seccion.LadoY - 2 * ejeEstribo) * _escala),
-            Stroke = ColorEstribo, StrokeThickness = Math.Max(1.5, _seccion.DiametroEstriboMm / 1000 * _escala),
-        }, PX(ejeEstribo), PY(_seccion.LadoY - ejeEstribo));
+        double rec = _seccion.Recubrimiento, dE = _seccion.DiametroEstriboMm;
+        Lienzo.Children.Add(DibujoArmado.Trazo(
+            PlantaArmado.EstriboCerrado(rec, _seccion.LadoX - rec, rec, _seccion.LadoY - rec, dE / 1000, _doblezEstribo, PlantaArmado.Cola135(dE)),
+            AP, ColorEstribo, Math.Max(1.5, dE / 1000 * _escala)));
 
         // Los cerrados abajo de todo, para que no tapen a las grapas.
         foreach (EstriboMenor pieza in _piezas.OrderBy(p => p.Forma == FormaMenor.Cerrado ? 0 : 1))
@@ -280,10 +319,8 @@ public partial class VentanaEstribosMenores : Window
             DibujarPieza(propuesta, ColorDePieza(propuesta), seleccionada: false, opacidad: 0.45);
 
         // Barras: esquinas e intermedias, con la que está bajo el mouse resaltada.
-        double izqEsq = PX(_insetEsquina), derEsq = PX(_seccion.LadoX - _insetEsquina);
-        double arrEsq = PY(_seccion.LadoY - _insetEsquina), abaEsq = PY(_insetEsquina);
-        foreach ((double x, double y) in new[] { (izqEsq, arrEsq), (derEsq, arrEsq), (izqEsq, abaEsq), (derEsq, abaEsq) })
-            Punto(x, y, Radio(_seccion.DiametroEsquinaMm), Paleta.Superficie);
+        foreach ((double x, double y) in _esquinas)
+            Punto(PX(x), PY(y), Radio(_seccion.DiametroEsquinaMm), Paleta.Superficie);
 
         (EjeCaja Eje, int Indice)? bajoMouse = _mouse is Point m && _herramienta is not null ? BarraEn(m) : null;
         for (int f = 0; f < _filas; f++)
@@ -315,57 +352,55 @@ public partial class VentanaEstribosMenores : Window
         Punto(x, y, radio, Paleta.ErrorClaro);
     }
 
+    /// <summary>
+    /// La pieza como la va a crear el generador (<see cref="PlantaArmado.Menor"/>):
+    /// abrazando sus barras, con sus ganchos y el grosor de su barra a escala.
+    /// La seleccionada lleva un halo alrededor.
+    /// </summary>
     private void DibujarPieza(EstriboMenor pieza, Brush color, bool seleccionada, double opacidad)
     {
-        Brush trazo = seleccionada ? ColorSeleccion : color;
-        double grosor = seleccionada ? 4 : 3;
+        (IReadOnlyList<(double X, double Y)> eje, double grosor) = EjeDe(pieza);
 
-        if (pieza.Forma == FormaMenor.Cerrado)
+        if (seleccionada) Lienzo.Children.Add(DibujoArmado.Trazo(eje, AP, ColorSeleccion, grosor + 6, 0.35 * opacidad));
+        Lienzo.Children.Add(DibujoArmado.Trazo(eje, AP, seleccionada ? ColorSeleccion : color, grosor, opacidad));
+    }
+
+    /// <summary>El eje de la pieza en metros (<see cref="PlantaArmado.Menor"/>) y el grosor con que se dibuja, en píxeles.</summary>
+    private (IReadOnlyList<(double X, double Y)> Eje, double Grosor) EjeDe(EstriboMenor pieza)
+    {
+        TipoBarra? barra = _medidas?.Barra(pieza.TipoBarraNombre ?? _medidas.BarraEstribo);
+        double diametroMm = barra?.DiametroMm ?? _seccion.DiametroEstriboMm;
+        double doblez = barra is not null ? PlantaArmado.Doblez(barra, diametroMm) : _doblezEstribo;
+
+        IReadOnlyList<(double X, double Y)> eje = PlantaArmado.Menor(
+            pieza, k => BarrasDe(pieza.Eje, k), (_seccion.LadoX / 2, _seccion.LadoY / 2), diametroMm, doblez);
+        return (eje, Math.Max(2, diametroMm / 1000 * _escala));
+    }
+
+    /// <summary>Lo mismo que se dibuja, en píxeles del lienzo: para saber qué pieza está bajo el puntero.</summary>
+    private (IReadOnlyList<Point> Puntos, double Grosor) TrazoDe(EstriboMenor pieza)
+    {
+        (IReadOnlyList<(double X, double Y)> eje, double grosor) = EjeDe(pieza);
+        return (eje.Select(q => AP(q.X, q.Y)).ToList(), grosor);
+    }
+
+    /// <summary>Las dos barras (m) que engancha una pieza en la fila o columna <paramref name="k"/>: la de la izquierda (o abajo) y la de enfrente.</summary>
+    private (GanchoGrapa.Pieza Inicio, GanchoGrapa.Pieza Fin) BarrasDe(EjeCaja eje, int k)
+    {
+        if (eje == EjeCaja.Fila)
         {
-            Rect r = RectanguloDe(pieza);
-            var rect = new Rectangle
-            {
-                Width = r.Width, Height = r.Height, Stroke = trazo, StrokeThickness = grosor, Opacity = opacidad,
-                Fill = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorNudo, 0x22)),
-            };
-            Agregar(rect, r.Left, r.Top);
-
-            // El gancho de cierre, en la esquina de arranque (abajo a la izquierda).
-            Lienzo.Children.Add(new Polyline
-            {
-                Points = new PointCollection { new(r.Left + 12, r.Bottom - 12), new(r.Left, r.Bottom) },
-                Stroke = trazo, StrokeThickness = grosor, Opacity = opacidad,
-            });
-            if (seleccionada) Asas(r.TopLeft, r.BottomRight);
-            return;
+            double y = SeccionPlanta.PosicionIntermedia(_insetReferencia, _seccion.LadoY - _insetReferencia, _filas, k);
+            double r = _seccion.DiametroCaraYMm / 2000;
+            return (new(_insetCaraY, y, r, 0), new(_seccion.LadoX - _insetCaraY, y, r, 0));
         }
 
-        // C: los dos ganchos hacia el mismo lado; S: uno hacia cada lado.
-        // "Voltear" invierte los dos.
-        int lado1 = pieza.Volteado ? -1 : 1;
-        int lado2 = pieza.Forma == FormaMenor.GrapaS ? -lado1 : lado1;
-
-        PointCollection puntos = pieza.Eje == EjeCaja.Fila
-            ? new PointCollection
-            {
-                new(Izquierda + 3, Y(pieza.Desde) + 10 * lado1), new(Izquierda - 5, Y(pieza.Desde) + 5 * lado1), new(Izquierda, Y(pieza.Desde)),
-                new(Derecha, Y(pieza.Desde)), new(Derecha + 5, Y(pieza.Desde) + 5 * lado2), new(Derecha - 3, Y(pieza.Desde) + 10 * lado2),
-            }
-            : new PointCollection
-            {
-                new(X(pieza.Desde) + 10 * lado1, Abajo - 3), new(X(pieza.Desde) + 5 * lado1, Abajo + 5), new(X(pieza.Desde), Abajo),
-                new(X(pieza.Desde), Arriba), new(X(pieza.Desde) + 5 * lado2, Arriba - 5), new(X(pieza.Desde) + 10 * lado2, Arriba + 3),
-            };
-
-        Lienzo.Children.Add(new Polyline { Points = puntos, Stroke = trazo, StrokeThickness = grosor, Opacity = opacidad });
-        if (seleccionada) Asas(puntos[2], puntos[3]);
+        double x = SeccionPlanta.PosicionIntermedia(_insetReferencia, _seccion.LadoX - _insetReferencia, _columnas, k);
+        double rx = _seccion.DiametroCaraXMm / 2000;
+        return (new(x, _insetCaraX, rx, 0), new(x, _seccion.LadoY - _insetCaraX, rx, 0));
     }
 
-    private void Asas(Point a, Point b)
-    {
-        foreach (Point p in new[] { a, b })
-            Agregar(new Rectangle { Width = 9, Height = 9, Fill = ColorSeleccion }, p.X - 4.5, p.Y - 4.5);
-    }
+    /// <summary>De metros en planta a píxeles del lienzo.</summary>
+    private Point AP(double x, double y) => new(PX(x), PY(y));
 
     private Brush ColorDePieza(EstriboMenor pieza) =>
         PaqueteEstribos.EstaTapada(pieza, _piezas) ? ColorTapada

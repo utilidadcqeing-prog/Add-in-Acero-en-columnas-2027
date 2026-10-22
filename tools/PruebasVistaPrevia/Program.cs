@@ -232,5 +232,71 @@ Probar("texto_cotas", () =>
     Cierto(EscalaDibujo.M(3) == "3,00 m", EscalaDibujo.M(3));
 });
 
+// ---- La sección como queda en Revit (2026-10-21-seccion-como-en-revit.md).
+// Columna 387983: 25×30, recubrimiento 4 cm, estribo #3 (doblez 38 mm),
+// esquinas #8, cara X #7, cara Y #6.
+
+void Cerca(double esperado, double real, double tolerancia, string que)
+{
+    if (Math.Abs(esperado - real) > tolerancia) throw new Exception($"{que}: esperado {esperado}, real {real}");
+}
+
+Probar("esquina_dentro_del_doblez_del_estribo", () =>
+{
+    var cfg = new ConfigLongitudinal { BarrasPorCaraX = 4, BarrasPorCaraY = 4 };
+    double D(PosicionBarra p) => p switch { PosicionBarra.Esquina => 25.4, PosicionBarra.CaraX => 22.2, _ => 19.1 };
+    IReadOnlyList<SeccionPlanta.BarraEnPlanta> b = SeccionPlanta.Calcular(0.25, 0.30, 0.04, 9.5, cfg, D, doblezEstriboMm: 38);
+    // Centro del doblez a 4 + 0,95 + 1,9 = 6,85 cm de cada cara; la #8 (r 12,7) toca
+    // la cara interior (r 19): a 6,3 mm del centro, sobre la diagonal.
+    double esperado = 0.0685 - (0.019 - 0.0127) * Math.Sqrt(2) / 2;
+    Igual(esperado, b[0].X, "esquina X");
+    Igual(esperado, b[0].Y, "esquina Y");
+    // Las de las caras quedan pegadas al estribo: 4 + 0,95 + 0,955 = 5,905 cm
+    // (medido antes del arreglo: 6,38 = esto + los 4,75 mm de más del estribo).
+    Igual(0.04 + 0.0095 + 0.00955, b.Where(x => x.Posicion == PosicionBarra.CaraY).Min(x => x.X), "cara Y pegada al estribo");
+});
+
+Probar("estribo_principal_esquinas_y_ganchos", () =>
+{
+    // Cara exterior al recubrimiento: de 4 a 21 cm en X y de 4 a 26 en Y.
+    IReadOnlyList<(double X, double Y)> e = PlantaArmado.EstriboCerrado(0.04, 0.21, 0.04, 0.26, 0.0095, 0.038, PlantaArmado.Cola135(9.5));
+    Cerca(0.04475, e.Min(p => p.X), 1e-9, "eje del lado izquierdo a 4 cm + medio diámetro");
+    Cerca(0.26 - 0.00475, e.Max(p => p.Y), 1e-9, "eje del lado de arriba");
+    // Los dos ganchos en la esquina de abajo a la izquierda; las colas, a un
+    // radio al eje (19 + 4,75 = 23,75 mm) de cada lado de la diagonal (medido: ~23,7).
+    double cx = 0.04475 + 0.02375, cy = cx;
+    double ADiagonal((double X, double Y) p) => ((p.X - cx) - (p.Y - cy)) / Math.Sqrt(2);
+    Cerca(0.02375, Math.Abs(ADiagonal(e[0])), 1e-9, "cola del arranque");
+    Cerca(0.02375, Math.Abs(ADiagonal(e[^1])), 1e-9, "cola del cierre");
+    Cierto(ADiagonal(e[0]) * ADiagonal(e[^1]) < 0, "una cola a cada lado de la diagonal");
+    // Las colas miden la E del cuadro (5,7 cm con #3) y entran hacia el centro.
+    Cierto(e[0].X > cx && e[0].Y > cy && e[^1].X > cx && e[^1].Y > cy, "las colas van hacia adentro");
+});
+
+Probar("grapa_abraza_la_barra", () =>
+{
+    // Grapa en C #3 en la fila 0 (y = 12 cm), entre las #6 de las caras Y.
+    double xi = 0.04 + 0.0095 + 0.00955, xd = 0.25 - xi, y = 0.12;
+    (double X, double Y) ci = PlantaArmado.CentroDelGancho(xi, y, 0.00955, 0.038, (1, 0));
+    (double X, double Y) cf = PlantaArmado.CentroDelGancho(xd, y, 0.00955, 0.038, (-1, 0));
+    // La barra toca la cara interior del doblez en la punta: centro corrido 19 − 9,55 mm hacia adentro.
+    Cerca(xi + 0.00945, ci.X, 1e-9, "centro del gancho del inicio");
+    Cerca(y, ci.Y, 1e-9, "a la altura de la barra");
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(ci, cf, 1, 1, 0.0095, 0.038, PlantaArmado.Cola180(9.5));
+    // Abre hacia +Y (el centro de la sección): el tramo recto queda un radio al eje por debajo.
+    Cerca(y - 0.02375, g.Min(p => p.Y), 1e-9, "tramo recto");
+    // Por fuera, el doblez llega a centro − radio al eje − medio diámetro.
+    Cerca(ci.X - 0.02375, g.Min(p => p.X), 1e-9, "punta del gancho");
+    // Colas de 6,5 cm (cuadro, #3), hacia adentro, del lado que abre.
+    Cerca(ci.X + 0.065, g[0].X, 1e-9, "cola del inicio");
+    Cerca(y + 0.02375, g[0].Y, 1e-9, "cola del lado de arriba");
+});
+
+Probar("grapa_en_s_abre_un_gancho_para_cada_lado", () =>
+{
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa((0.07, 0.12), (0.18, 0.12), 1, -1, 0.0095, 0.038, 0.065);
+    Cierto(g[0].Y > 0.12 && g[^1].Y < 0.12, "la cola del inicio arriba y la del fin abajo");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

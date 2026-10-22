@@ -52,6 +52,9 @@
     <Compile Include="..\..\addins\armado-columnas\Vistas\Cotas.cs">
       <Link>Vistas\Cotas.cs</Link>
     </Compile>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\DibujoArmado.cs">
+      <Link>Vistas\DibujoArmado.cs</Link>
+    </Compile>
 
     <Page Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.xaml">
       <Link>Vistas\VentanaConfiguradorEstribos.xaml</Link>

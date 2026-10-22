@@ -768,30 +768,12 @@ public static class GeneradorLongitudinal
         IReadOnlyList<(double X, double Y, double RadioInterior)> Dobleces);
 
     /// <summary>
-    /// Dónde va una barra de esquina de radio <paramref name="radio"/> pedida en
-    /// (<paramref name="x"/>, <paramref name="y"/>) para quedar dentro del
-    /// doblez más cercano del estribo, tocándolo por dentro: sobre la línea
-    /// del centro del doblez a la barra, a (radio interior − radio) del centro.
-    /// Si no hay un doblez a menos de 4 cm, o la barra no entra en él (radio
-    /// interior menor que el de la barra: ahí la tocan los dos lados rectos),
-    /// queda donde se pidió.
+    /// <see cref="SeccionPlanta.EnElDoblez"/> con los dobleces medidos y un
+    /// alcance de 4 cm (en pies). La misma cuenta dibuja la vista previa.
     /// </summary>
     private static (double X, double Y) EnElDoblez(
-        IReadOnlyList<(double X, double Y, double RadioInterior)> dobleces, double x, double y, double radio)
-    {
-        double alcance = UnitUtils.ConvertToInternalUnits(0.04, UnitTypeId.Meters);
-        (double X, double Y, double RadioInterior)? cercano = null;
-        double mejor = alcance;
-        foreach (var d in dobleces)
-        {
-            double distancia = Math.Sqrt((d.X - x) * (d.X - x) + (d.Y - y) * (d.Y - y));
-            if (distancia < mejor) (cercano, mejor) = (d, distancia);
-        }
-
-        if (cercano is not { } c || c.RadioInterior <= radio || mejor < 1e-9) return (x, y);
-        double t = (c.RadioInterior - radio) / mejor;
-        return (c.X + (x - c.X) * t, c.Y + (y - c.Y) * t);
-    }
+        IReadOnlyList<(double X, double Y, double RadioInterior)> dobleces, double x, double y, double radio) =>
+        SeccionPlanta.EnElDoblez(dobleces, x, y, radio, UnitUtils.ConvertToInternalUnits(0.04, UnitTypeId.Meters));
 
     /// <summary>Una varilla longitudinal ya creada: su radio y dónde quedó cada pieza (pies).</summary>
     private sealed record BarraReal(double Radio, IReadOnlyList<BarraContinua.PiezaReal> Piezas);

@@ -587,6 +587,35 @@ public static class GeneradorArmado
     /// cae al camino de <c>CreateFromCurves</c> de siempre, no vale la pena
     /// tirar la columna abajo por esto cuando ya existe un camino que funciona.
     /// </summary>
+    /// <summary>~0,03 mm: por debajo, el eje ya está donde se pidió.</summary>
+    private const double ToleranciaEjePies = 1e-4;
+
+    /// <summary>
+    /// Dónde quedó cada lado del eje del estribo en planta: la X de los dos
+    /// lados verticales y la Y de los dos horizontales, leídos sin ganchos ni
+    /// radios. No sirve la caja que encierra esas curvas: en la esquina de los
+    /// ganchos Revit alarga los dos tramos que llegan ahí (~7 mm con #3,
+    /// medido el 21-oct en la columna 387983) y la caja salía más grande que
+    /// el estribo. null si no se pudo leer.
+    /// </summary>
+    private static (double X1, double X2, double Y1, double Y2)? LadosDelEje(Rebar estribo)
+    {
+        try
+        {
+            List<Line> rectas = estribo
+                .GetCenterlineCurves(false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, 0)
+                .OfType<Line>().ToList();
+            List<double> xs = rectas.Where(l => Math.Abs(l.Direction.X) < 1e-6).Select(l => l.GetEndPoint(0).X).ToList();
+            List<double> ys = rectas.Where(l => Math.Abs(l.Direction.Y) < 1e-6).Select(l => l.GetEndPoint(0).Y).ToList();
+            if (xs.Count < 2 || ys.Count < 2) return null;
+            return (xs.Min(), xs.Max(), ys.Min(), ys.Max());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static Rebar? CrearDesdeForma(
         Document doc, FamilyInstance host, IList<Curve> curvasTrasladadas,
         RebarBarType barra, RebarShape forma, HashSet<ElementId> formasRechazadas,
@@ -610,6 +639,25 @@ public static class GeneradorArmado
             if (estribo is null) return null;
 
             estribo.GetShapeDrivenAccessor().ScaleToBox(origen, vectorX, vectorY);
+
+            // La caja que se pide es el EJE de la barra, pero la forma propia
+            // "CQ Estribo" se acota por FUERA del doblez: la caja terminaba
+            // siendo la cara exterior y el estribo quedaba medio diámetro más
+            // adentro que el recubrimiento (4,48 cm en vez de 4 con #3; medido
+            // el 21-oct, docs/planes/2026-10-21-seccion-como-en-revit.md). Se
+            // mide dónde quedó cada lado y se vuelve a escalar con la caja
+            // corregida lado por lado, hasta que coincida (así sirve igual para
+            // una forma del modelo acotada por el eje).
+            (double X1, double X2, double Y1, double Y2) caja = (xMin, xMax, yMin, yMax);
+            for (int intento = 0; intento < 3 && LadosDelEje(estribo) is { } lados; intento++)
+            {
+                double dx1 = xMin - lados.X1, dx2 = xMax - lados.X2, dy1 = yMin - lados.Y1, dy2 = yMax - lados.Y2;
+                if (new[] { dx1, dx2, dy1, dy2 }.All(d => Math.Abs(d) <= ToleranciaEjePies)) break;
+
+                caja = (caja.X1 + dx1, caja.X2 + dx2, caja.Y1 + dy1, caja.Y2 + dy2);
+                estribo.GetShapeDrivenAccessor().ScaleToBox(
+                    new XYZ(caja.X1, caja.Y1, z), new XYZ(caja.X2 - caja.X1, 0, 0), new XYZ(0, caja.Y2 - caja.Y1, 0));
+            }
 
             ElementId idGancho = terminaciones.HookTypeIdAtStart;
             if (idGancho != ElementId.InvalidElementId)
