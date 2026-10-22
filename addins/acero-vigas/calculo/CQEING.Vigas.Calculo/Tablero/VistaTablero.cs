@@ -91,10 +91,11 @@ public sealed record DiametroVista(string Nombre, string Color, string NombrePul
 /// Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba. <paramref name="Forma"/> es
 /// <c>"C"</c> o <c>"S"</c> (solo cuenta en el abierto). <paramref name="Puntos"/> es el trazo de un adicional por su
 /// eje, con sus ganchos según el ángulo y la forma, en cm ([x, y] con la y desde arriba); null en el cerrado de las
-/// esquinas, que la página dibuja como un rectángulo.
+/// esquinas, que la página dibuja como un rectángulo. <paramref name="DiametroCm"/> es el de su barra, para dibujar el
+/// grueso a escala (Juan, 22-oct).
 /// </summary>
 public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo, string Forma = "C",
-    IReadOnlyList<double[]>? Puntos = null);
+    IReadOnlyList<double[]>? Puntos = null, double DiametroCm = 0);
 
 public sealed record SeccionVista(double AnchoCm, double AltoCm, IReadOnlyList<BarraSeccion> Barras, IReadOnlyList<FiguraSeccion> Figuras);
 
