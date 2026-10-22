@@ -29,4 +29,29 @@ internal static class DibujoArmado
             Opacity = opacidad,
             IsHitTestVisible = false,
         };
+
+    /// <summary>
+    /// Un choque (#131): la pieza rodeada en rojo, con el motivo al pasar el
+    /// mouse. A diferencia del resto del dibujo, esta marca SÍ captura el
+    /// mouse (para el ToolTip); el relleno transparente es lo que la hace
+    /// sensible en todo el círculo y no solo en el borde.
+    /// </summary>
+    /// <param name="radioPx">El radio de la pieza en píxeles; la marca va 3 px por fuera.</param>
+    public static Ellipse MarcaChoque(Point centro, double radioPx, string motivo)
+    {
+        double r = radioPx + 3;
+        var marca = new Ellipse
+        {
+            Width = 2 * r,
+            Height = 2 * r,
+            Stroke = Paleta.Error,
+            StrokeThickness = 1.8,
+            StrokeDashArray = new DoubleCollection { 2, 1.5 },
+            Fill = Brushes.Transparent,
+            ToolTip = motivo,
+        };
+        System.Windows.Controls.Canvas.SetLeft(marca, centro.X - r);
+        System.Windows.Controls.Canvas.SetTop(marca, centro.Y - r);
+        return marca;
+    }
 }

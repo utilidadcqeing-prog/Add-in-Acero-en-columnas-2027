@@ -41,9 +41,21 @@ public partial class PanelVistaPrevia : UserControl
 
     public PanelVistaPrevia() => InitializeComponent();
 
+    /// <summary>Vuelve a dibujar lo último que se mostró (al cambiar "Sección normal / Zona de traslapo").</summary>
+    private Action? _redibujar;
+
+    /// <summary>Mientras Mostrar acomoda el selector: sus cambios no tienen que volver a dibujar.</summary>
+    private bool _ajustandoSelector;
+
+    private void OpcionSeccion_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!_ajustandoSelector) _redibujar?.Invoke();
+    }
+
     /// <summary>Sin dibujo: solo un texto (por ejemplo, "Elige una columna").</summary>
     public void MostrarMensaje(string mensaje)
     {
+        _redibujar = null;
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
@@ -60,6 +72,7 @@ public partial class PanelVistaPrevia : UserControl
         ColumnaContexto columna, Tramo tramo, ConfigTramo cfgTramo, ConfigLongitudinal cfgLong,
         double recubrimiento, Func<string?, TipoBarra?> barraDe, double diametroEstriboPlantaMm)
     {
+        _redibujar = () => Mostrar(columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm);
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
@@ -117,8 +130,19 @@ public partial class PanelVistaPrevia : UserControl
         double DoblezPieza(EstriboMenor p) =>
             PlantaArmado.Doblez(barraDe(p.TipoBarraNombre) ?? barraDe(cfgTramo.TipoBarraNombre), DiametroPieza(p));
 
+        // Los choques (#131), de la sección normal o de la zona de traslapo
+        // según el selector; sin traslapo, el selector queda en "normal".
+        ChoquesSeccion.Resultado choques = ChoquesSeccion.DeTramo(
+            columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm);
+        _ajustandoSelector = true;
+        OpcionZonaTraslapo.IsEnabled = choques.HayTraslapo;
+        if (!choques.HayTraslapo) OpcionSeccionNormal.IsChecked = true;
+        _ajustandoSelector = false;
+        bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
+        IReadOnlyList<ChoquesSeccion.Choque> aMarcar = verTraslapo ? choques.Traslapo : choques.Normal;
+
         DibujarPlanta(ladoX, ladoY, recubrimiento, dEstribo, doblezEstribo, barras, piezas, DiametroPieza, DoblezPieza,
-            XColumna, YFila, columnas, filas);
+            XColumna, YFila, columnas, filas, aMarcar, verTraslapo ? choques.PiezasTraslapo : null);
 
         // Frente: se mira la cara de abajo (paralela a X); costado: la de la izquierda (paralela a Y).
         List<BarraVista> frente = barras
@@ -152,6 +176,13 @@ public partial class PanelVistaPrevia : UserControl
             .Concat(dEstribo is double de ? new[] { de } : Array.Empty<double>())
             .Concat(piezas.Select(DiametroPieza)));
         LlenarResumen(cfgLong, barras, dEstribo, reparto, piezas, DiametroPieza, sinEstribos);
+
+        int cuantos = choques.Normal.Count + choques.Traslapo.Count;
+        if (cuantos > 0)
+            AgregarNota(
+                $"⚠ {cuantos} choque(s) (se puede generar igual): {choques.Normal.Count} en la sección normal, " +
+                $"{choques.Traslapo.Count} en la zona de traslapo. Pasa el mouse por las marcas rojas para ver el motivo.",
+                Paleta.Error, negrita: true);
     }
 
     // ------------------------------------------------------------- planta
@@ -159,7 +190,8 @@ public partial class PanelVistaPrevia : UserControl
     private void DibujarPlanta(
         double ladoX, double ladoY, double recubrimiento, double? dEstribo, double doblezEstribo,
         IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza,
-        Func<EstriboMenor, double> doblezPieza, Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas)
+        Func<EstriboMenor, double> doblezPieza, Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas,
+        IReadOnlyList<ChoquesSeccion.Choque> choques, IReadOnlyList<ChoquesSeccion.PiezaRedonda>? piezasTraslapo)
     {
         Texto("Desde arriba", 16, 0, 11, FontWeights.SemiBold);
 
@@ -212,6 +244,22 @@ public partial class PanelVistaPrevia : UserControl
             Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(barra.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
                 c.X - radio, c.Y - radio);
         }
+
+        // Zona de traslapo: las piezas de las varillas que traslapan, con la
+        // corrida al lado de la pedida (la pedida coincide con la barra).
+        if (piezasTraslapo is not null)
+            foreach (ChoquesSeccion.PiezaRedonda pieza in piezasTraslapo)
+            {
+                double radio = Math.Max(1, pieza.DiametroMm / 2000 * escala);
+                Point c = P(pieza.X, pieza.Y);
+                Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(pieza.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
+                    c.X - radio, c.Y - radio);
+            }
+
+        // Los choques, encima de todo para que se lean al pasar el mouse.
+        foreach (ChoquesSeccion.Choque choque in choques)
+            foreach ((double X, double Y, double Radio) marca in choque.Marcas)
+                Lienzo.Children.Add(DibujoArmado.MarcaChoque(P(marca.X, marca.Y), Math.Max(1, marca.Radio * escala), choque.Motivo));
 
         // Cuántas intermedias lleva cada cara.
         string cx = (columnas).ToString(), cy = (filas).ToString();
