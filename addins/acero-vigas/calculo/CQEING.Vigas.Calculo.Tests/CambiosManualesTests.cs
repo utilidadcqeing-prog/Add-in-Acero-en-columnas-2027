@@ -206,6 +206,17 @@ public class CambiosManualesTests
     }
 
     [Fact]
+    public void SubirUnaBarraConSuTraslapoCorrido_QuitaElCorridoYLaBarraSube()
+    {
+        // S1–S2 corrido un módulo deja S1 en 3.50; Subir la pide en 4.00. El corrido es una posición fija: si se
+        // quedara, devolvería S1 a 3.50 y "Subir" no haría nada (Juan, 22-oct: "algunas barras sí cambian, otras no").
+        Previsualizacion p = MotorVigas.PrevisualizarBarra(Maqueta(Movido("S1–S2", 1672 + 500)), "S1", 4000);
+
+        Assert.True(p.SePuede);
+        Assert.Equal((4000, true), (p.Resultado!.Superior!.Barras[0].Largo, p.Resultado.Superior.Barras[0].Manual));
+    }
+
+    [Fact]
     public void UnMovidoDeUnIdQueYaNoExisteAvisaYSigue()
     {
         ResultadoVigas r = MotorVigas.Calcular(Maqueta(new CambiosManuales(Movidos: new Dictionary<string, TraslapoMovido>

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Interop;
 using CQEING.Vigas.Calculo.Tablero;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 
 namespace CQEING.Vigas.Tablero;
 
@@ -18,21 +19,44 @@ internal sealed partial class VentanaTablero : Window
 
     private bool cerrada;
 
+    /// <summary>
+    /// Abre a 1440 × 900, el tamaño de la maqueta; al cargar se recorta al área de trabajo (decisión 6 del plan).
+    /// Se crea en código y no en el XAML: en Revit 2027 el lector de XAML no resuelve el WebView2 que trae Revit y la
+    /// ventana no abre ("Set connectionId threw an exception"). Desde el código se resuelve igual que
+    /// <see cref="CoreWebView2Environment"/> en <see cref="ComandoTablero"/>.
+    /// </summary>
+    private readonly WebView2 navegador = new()
+    {
+        Width = 1440,
+        Height = 900,
+        DefaultBackgroundColor = System.Drawing.Color.FromArgb(0xEE, 0xF0, 0xF2),
+    };
+
     public VentanaTablero(IntPtr duenio)
     {
         InitializeComponent();
+        Content = navegador;
         new WindowInteropHelper(this).Owner = duenio;
         Loaded += async (_, _) =>
         {
             AjustarAlArea();
-            await IniciarAsync();
+            try
+            {
+                await IniciarAsync();
+            }
+            catch (Exception e)
+            {
+                // Sin esto la excepción se pierde y la ventana queda en blanco.
+                MessageBox.Show(this, $"No se pudo abrir el tablero.\n\n{e}", Title, MessageBoxButton.OK, MessageBoxImage.Error);
+                Close();
+            }
         };
         // La página mide 1440 × 900 como la maqueta: si no entra, se achica entera y nada se corta (decisión 6).
-        Navegador.SizeChanged += (_, _) => Navegador.ZoomFactor = CalculadoraZoom.Factor(Navegador.ActualWidth, Navegador.ActualHeight);
+        navegador.SizeChanged += (_, _) => navegador.ZoomFactor = CalculadoraZoom.Factor(navegador.ActualWidth, navegador.ActualHeight);
         Closed += (_, _) =>
         {
             cerrada = true;
-            Navegador.Dispose();
+            navegador.Dispose();
         };
     }
 
@@ -78,7 +102,7 @@ internal sealed partial class VentanaTablero : Window
     public void Enviar(string json)
     {
         if (!cerrada)
-            Navegador.CoreWebView2?.PostWebMessageAsJson(json);
+            navegador.CoreWebView2?.PostWebMessageAsJson(json);
     }
 
     /// <summary>
@@ -89,8 +113,8 @@ internal sealed partial class VentanaTablero : Window
     {
         Caja c = CalculadoraZoom.Encajar(new Caja(Left, Top, ActualWidth, ActualHeight), AreaDeTrabajo());
         SizeToContent = SizeToContent.Manual;
-        Navegador.Width = double.NaN;
-        Navegador.Height = double.NaN;
+        navegador.Width = double.NaN;
+        navegador.Height = double.NaN;
         (Left, Top, Width, Height) = (c.X, c.Y, c.Ancho, c.Alto);
     }
 
@@ -139,8 +163,8 @@ internal sealed partial class VentanaTablero : Window
     private async Task IniciarAsync()
     {
         CoreWebView2Environment entorno = await CoreWebView2Environment.CreateAsync(null, CarpetaDatos);
-        await Navegador.EnsureCoreWebView2Async(entorno);
-        CoreWebView2 core = Navegador.CoreWebView2;
+        await navegador.EnsureCoreWebView2Async(entorno);
+        CoreWebView2 core = navegador.CoreWebView2;
         core.SetVirtualHostNameToFolderMapping(Host, CarpetaWeb, CoreWebView2HostResourceAccessKind.Deny);
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = false;

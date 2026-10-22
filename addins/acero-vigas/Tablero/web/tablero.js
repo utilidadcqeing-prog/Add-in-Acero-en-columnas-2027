@@ -512,6 +512,13 @@
         if (valor == null) delete c[clave][id]; else c[clave][id] = valor;
         return c;
       };
+      // El largo de la barra puesto a mano (o Automático) quita el corrido de sus traslapos: el corrido es una posición fija
+      // y la devolvería a otro largo. C# previsualiza igual (MotorVigas.SinCorridosDe).
+      const barraSinCorridos = (id, valor) => {
+        const c = conCambio('barras', id, valor), movidos = { ...c.movidos };
+        lapsAll.filter((l) => l.barraIzquierda === id || l.barraDerecha === id).forEach((l) => delete movidos[l.id]);
+        return { ...c, movidos };
+      };
 
       let sb = { id: '', where: '', qty: '', len: '', tag: '', tagCol: '#1E7A46', downVal: '', upVal: '', downOff: true, downWhy: '', downCol: '#9AA3AD',
         upOff: true, upWhy: '', upCol: '#9AA3AD', notManual: true, resetCol: '#9AA3AD', note: '', down: () => {}, up: () => {}, reset: () => {} };
@@ -520,7 +527,7 @@
         const subir = opcion('subir'), bajar = opcion('bajar');
         const aplicar = (o) => () => {
           if (!o || !o.sePuede) return;
-          this.cambiar({ cambios: conCambio('barras', SB.id, mm(o.valor)) });
+          this.cambiar({ cambios: barraSinCorridos(SB.id, mm(o.valor)) });
           this.say(o.texto);
         };
         sb = {
@@ -533,7 +540,7 @@
           note: (SB.llegaAlVoladizo ? 'Esta barra entra al voladizo de corrido: en el voladizo nunca se traslapa. ' : '')
             + (bajar ? (bajar.sePuede ? 'Bajar: ' : '') + bajar.texto + ' ' : '') + (subir ? 'Subir: ' + subir.texto : ''),
           down: aplicar(bajar), up: aplicar(subir),
-          reset: () => this.cambiar({ cambios: conCambio('barras', SB.id, null) }),
+          reset: () => this.cambiar({ cambios: barraSinCorridos(SB.id, null) }),
         };
       }
 

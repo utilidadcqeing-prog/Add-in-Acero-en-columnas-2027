@@ -36,7 +36,17 @@ public sealed class ComandoTablero : IExternalCommand
         }
 
         UIApplication uiapp = commandData.Application;
-        var ventana = new VentanaTablero(uiapp.MainWindowHandle);
+        VentanaTablero ventana;
+        try
+        {
+            ventana = new VentanaTablero(uiapp.MainWindowHandle);
+        }
+        catch (Exception e)
+        {
+            // Revit muestra solo el mensaje de afuera ("Set connectionId threw an exception"); la causa va adentro.
+            message = e.ToString();
+            return Result.Failed;
+        }
         // El puente se crea aquí, con la API válida: su ExternalEvent no se puede crear desde la ventana.
         _ = new PuenteTablero(ventana, uiapp);
         ventana.Closed += (_, _) => abierta = null;
