@@ -153,6 +153,29 @@ digan **qué pieza choca con cuál** (criterio del issue). Ejemplos:
   revisan; el dibujo muestra el primero, y el motivo dice a qué altura).
 - La tolerancia numérica para "tocarse".
 
+## Resultado (22-oct)
+
+Implementado según `2026-10-22-avisos-de-choque-131-plan.md` (Tasks 1-7),
+revisión final independiente (sin críticos; los 2 importantes y los 9
+menores corregidos) y probado en Revit con Luciano:
+
+- Vista previa: marcas rojas, selector y resumen, bien.
+- "Editar estribos menores": la lista de choques empujaba la sección y la
+  tapaba. Corregido: una línea de resumen (el motivo se lee en la marca),
+  notas con alto máximo y la sección se achica si no entra.
+- Generar: el mensaje "Hay choques en N columna(s)" sale bien, con "Volver a
+  revisar" y "Generar igual".
+- **El generador no cambió** (el acomodo de traslapos pasó a
+  `AcomodoTraslapos.PlanearSeccion`): se regeneró la columna 782105 ("1-6",
+  #4, 3 intermedias por cara X y 2 por cara Y, estribo #3) y sus 28 piezas
+  longitudinales quedaron idénticas a la generación anterior (cajas
+  envolventes iguales en X, Y y Z). Los ganchos siguen dentro del lote
+  (punta más afuera en X = 7,100 e Y = -0,100; línea en 7,15 y -0,15).
+
+Pendiente: que Carlos confirme la regla de 1,5 diámetros / 4 cm, sobre todo
+en la zona de traslapo (con #6 casi todas las piezas corridas quedan a 3-3,4
+cm de la vecina).
+
 ## Cómo se verifica
 
 - Pruebas sin Revit de `ChoquesSeccion` con casos medidos: barras juntas,
