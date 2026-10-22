@@ -122,6 +122,16 @@
       <Link>Vistas\VentanaCuadroVarillas.xaml.cs</Link>
       <DependentUpon>VentanaCuadroVarillas.xaml</DependentUpon>
     </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\VentanaChoques.xaml">
+      <Link>Vistas\VentanaChoques.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaChoques.xaml.cs">
+      <Link>Vistas\VentanaChoques.xaml.cs</Link>
+      <DependentUpon>VentanaChoques.xaml</DependentUpon>
+    </Compile>
   </ItemGroup>
 
 </Project>

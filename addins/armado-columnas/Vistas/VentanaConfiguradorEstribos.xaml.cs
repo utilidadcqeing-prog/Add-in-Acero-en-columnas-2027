@@ -1920,6 +1920,14 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
+        // #131: si algo choca, se avisa y se deja seguir.
+        IReadOnlyList<(string Columna, string Motivo)> choques = ChoquesDelPlan(plan);
+        if (choques.Count > 0 && new VentanaChoques(choques) { Owner = this }.ShowDialog() != true)
+        {
+            TextoEstado.Text = "Generación cancelada: revisa los choques marcados en rojo.";
+            return;
+        }
+
         var opciones = new OpcionesArmado
         {
             Plan = plan,
@@ -1930,6 +1938,39 @@ public partial class VentanaConfiguradorEstribos : Window
         BotonGenerar.IsEnabled = false;
 
         GenerarSolicitado?.Invoke(opciones);
+    }
+
+    /// <summary>
+    /// Los choques de todas las columnas que se van a generar (#131): de cada
+    /// tramo aceptado, la sección normal y la zona de traslapo
+    /// (<see cref="ChoquesSeccion.DeTramo"/>), sin repetir motivos dentro de
+    /// una columna. Mismas entradas que la vista previa, con lo guardado de
+    /// cada columna aunque no se haya abierto.
+    /// </summary>
+    private IReadOnlyList<(string Columna, string Motivo)> ChoquesDelPlan(PlanArmado plan)
+    {
+        var choques = new List<(string Columna, string Motivo)>();
+        foreach (ColumnaPlan columna in plan.Columnas)
+        {
+            if (columna.Contexto is not ColumnaContexto contexto || columna.Longitudinal is not ConfigLongitudinal longitudinal) continue;
+
+            double recubrimiento = columna.Recubrimiento ?? contexto.Recubrimiento;
+            double estriboMasGrueso = columna.Tramos
+                .Select(t => BarraPorNombre(t?.TipoBarraNombre)?.DiametroMm ?? 0)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            var motivos = new HashSet<string>();
+            for (int i = 0; i < columna.Tramos.Count && i < contexto.Tramos.Count; i++)
+            {
+                if (columna.Tramos[i] is not ConfigTramo cfgTramo) continue;
+                foreach (ChoquesSeccion.Choque choque in ChoquesSeccion.DeTramo(
+                             contexto, contexto.Tramos[i], cfgTramo, longitudinal, recubrimiento, BarraPorNombre, estriboMasGrueso).Todos)
+                    if (motivos.Add(choque.Motivo)) choques.Add((contexto.Marca, choque.Motivo));
+            }
+        }
+
+        return choques;
     }
 
     /// <summary>
