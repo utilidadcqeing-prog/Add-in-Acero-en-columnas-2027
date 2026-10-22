@@ -63,9 +63,18 @@ Los de cada sub-issue; se evalúan en «Estado».
    - Textos de título que cambian: «Configuración guardada:» → «Configuración guardada», «Configuración del tramo activo» → «Tramo activo», «Recubrimiento (toda la columna):» → sin los dos puntos.
    Prueba: build + visor (captura antes/después) + Revit.
 
-### Día 4 (rama `mejora-visual`, PR único en borrador)
+### Día 4 (rama `mejora-visual`, PR único en borrador; 2026-10-22)
 
-Ver la issue madre: #120 + prueba final (día 4), #121 opcional (día 5).
+0. **Traer `main`** (Luciano cambió los colores por diámetro a la paleta Estándar de Google Sheets, #143, y sumó las ventanas de choques #131 y cuadro de varillas #142): merge de `origin/main` en `mejora-visual`. Conflictos en `PanelPlantaColumnas.xaml.cs` (se queda el código de `main` con el borde de 3 px de la activa) y `VentanaConfiguradorEstribos.xaml` (se quedan «Barra de estribos:», el botón «Ver cuadro de varillas…» y la casilla nueva `CheckBorrarAjeno` de #145, dentro de la caja roja de #118). Las ventanas nuevas de Luciano ya usan `Estilos.xaml`.
+6. **#120 Revisión de flujos (sin cambiar resultados)** — archivos: `Vistas/VentanaConfiguradorEstribos.xaml(.cs)`, `Vistas/VentanaEstribosMenores.xaml`.
+   - Instrucción de arriba en tres pasos numerados.
+   - Tooltips en todos los controles de configuración (qué es y en qué unidad).
+   - **Enter = «Aceptar este tramo»** (`IsDefault`); en el campo del nombre de configuración, Enter = Guardar.
+   - Estribos menores: Enter = Aceptar, Esc = Cancelar.
+   - Ayudas más cortas (tres textos).
+   - El resumen de abajo dice **qué** tramos se van a generar por columna (por ejemplo «C-12: 1, 2, 3 · C-13: 1»), y el botón Generar repite la lista en su tooltip.
+   - Propuesta que no se hace (cambia el comportamiento): mover el foco solo al primer campo al elegir columna, porque roba el foco de la planta mientras se eligen varias con Ctrl.
+7. **#121 Íconos del ribbon** — archivos: `Resources/icono16|32.png` (redibujados nítidos, sin reescalar), `Resources/iconoColumnetas16|32.png` (nuevo: muro con columnetas y vigueta, para que «Columnetas y Viguetas» deje de usar el genérico) y `App.cs`. `iconoCQ` queda para los botones de diagnóstico (solo en Debug).
 
 ## Cómo probarlo
 
@@ -123,3 +132,13 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - Ventana principal: `imagenes/2026-10-21-ventana-principal-pulida.png` (antes: `imagenes/2026-10-21-ventana-principal-orden.png`). Estribos menores: `imagenes/2026-10-21-estribos-menores-pulida.png`.
 - [x] Compila (Revit 2027) sin advertencias; visor sin errores; lista desplegable abierta y probada en el visor.
 - [ ] Probado en Revit 2027 (incluida la ventana Columnetas, que no se ve en el visor).
+
+## Evidencia y estado (día 4, 2026-10-22)
+
+- Ventana con la instrucción en pasos y el resumen de qué se genera: `imagenes/2026-10-22-ventana-principal-flujos.png`; detalle del resumen («C-12: 1–10»): `imagenes/2026-10-22-resumen-generacion.png`.
+- Íconos antes y después (32 y 16 px): `imagenes/2026-10-22-iconos-ribbon.png`.
+- [x] `main` traída a la rama (colores #143, choques #131, cuadro de varillas #142, casilla #145); conflictos resueltos.
+- [x] #120: tooltips en los controles de configuración; Enter = «Aceptar este tramo» (probado en el visor: con el foco en «Espaciado», Enter aceptó el tramo 1); Enter en el nombre = Guardar; Enter/Esc en Estribos menores; tres ayudas más cortas; resumen con la lista de tramos por columna, en rangos y numerados desde 1 como la elevación.
+- [x] #121: íconos de «Acero en columnas» redibujados nítidos a 16 y 32 px, e ícono propio para «Columnetas y Viguetas».
+- [x] Compila Debug 2027 y Release 2026 sin advertencias; `PruebasTraslapos` y `PruebasVistaPrevia` con 0 fallas.
+- [ ] Prueba final en Revit 2027: armado generado igual que antes, Columnetas y los íconos del ribbon.

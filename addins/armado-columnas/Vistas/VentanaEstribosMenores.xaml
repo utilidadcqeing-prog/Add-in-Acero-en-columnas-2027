@@ -26,8 +26,8 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="TextoResumen" Grid.Column="0" VerticalAlignment="Center" Style="{StaticResource TextoAyuda}" />
-            <Button Grid.Column="1" Content="Cancelar" Width="90" Height="30" Style="{StaticResource BotonSecundario}" Margin="0,0,8,0" Click="BotonCancelar_Click" />
-            <Button Grid.Column="2" Content="Aceptar" Width="90" Height="30" Style="{StaticResource BotonPrincipal}"
+            <Button Grid.Column="1" Content="Cancelar" IsCancel="True" Width="90" Height="30" Style="{StaticResource BotonSecundario}" Margin="0,0,8,0" Click="BotonCancelar_Click" />
+            <Button Grid.Column="2" Content="Aceptar" IsDefault="True" Width="90" Height="30" Style="{StaticResource BotonPrincipal}"
                     Click="BotonAceptar_Click" />
         </Grid>
 

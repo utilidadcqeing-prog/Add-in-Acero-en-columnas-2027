@@ -70,7 +70,7 @@
              (issue #56, reunión del 11-sep) y todo se decide con Aceptar, en el
              panel del tramo. -->
         <TextBlock Grid.Row="1" Margin="0,0,0,8"
-                   Text="Elige la columna en la planta (Ctrl o arrastre para varias), configura cada tramo y aprieta Aceptar. Los tramos con ✓ son los que se generan; para sacar uno, clic en su ✓ en la elevación."
+                   Text="1. Elige la columna en la planta (Ctrl o arrastre para varias).   2. Configura el tramo y aprieta Aceptar (o Enter).   3. Genera el armado. Solo se generan los tramos con ✓; clic en un ✓ para sacarlo."
                    TextWrapping="Wrap" Foreground="{StaticResource TextoSecundario}" VerticalAlignment="Center" />
 
         <!-- Cuerpo: planta | elevación | configuración. El panel de tramos que
@@ -195,11 +195,11 @@
                      los pone ActualizarBotonesDeAceptar. -->
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
                     <Border Height="1" Background="{StaticResource Separador}" Margin="0,0,0,8" />
-                    <Button x:Name="BotonAceptar" Content="✓  Aceptar este tramo" Height="32"
+                    <Button x:Name="BotonAceptar" Content="✓  Aceptar este tramo" Height="32" IsDefault="True"
                             Style="{StaticResource BotonPrincipal}" Click="BotonAceptar_Click" />
-                    <Button x:Name="BotonAceptarMismoTipo" Height="26" Style="{StaticResource BotonSecundario}" Margin="0,4,0,0"
+                    <Button x:Name="BotonAceptarMismoTipo" ToolTip="Acepta este tramo y copia su configuración a los demás tramos del mismo tipo." Height="26" Style="{StaticResource BotonSecundario}" Margin="0,4,0,0"
                             Click="BotonAceptarMismoTipo_Click" Visibility="Collapsed" />
-                    <Button x:Name="BotonAceptarColumna" Height="26" Style="{StaticResource BotonSecundario}" Margin="0,4,0,0"
+                    <Button x:Name="BotonAceptarColumna" ToolTip="Acepta este tramo y copia su configuración a todos los tramos de la columna." Height="26" Style="{StaticResource BotonSecundario}" Margin="0,4,0,0"
                             Click="BotonAceptarColumna_Click" Visibility="Collapsed" />
                 </StackPanel>
 
@@ -217,9 +217,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones"
+                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones" ToolTip="Elige una configuración guardada para cargarla en el panel."
                                   SelectionChanged="ComboConfiguraciones_SelectionChanged" />
-                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" Content="Borrar" Style="{StaticResource BotonPeligro}"
+                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" ToolTip="Borra del modelo la configuración elegida en la lista." Content="Borrar" Style="{StaticResource BotonPeligro}"
                                 Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
                     </Grid>
                     <Grid Margin="0,4,0,0">
@@ -227,9 +227,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion"
+                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" ToolTip="Nombre con el que se guarda el panel actual. Enter = Guardar." KeyDown="CampoNombreConfiguracion_KeyDown"
                                  VerticalContentAlignment="Center" />
-                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" Content="Guardar" Style="{StaticResource BotonSecundario}"
+                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" ToolTip="Guarda el panel entero (tramo + acero longitudinal) dentro del modelo, con este nombre." Content="Guardar" Style="{StaticResource BotonSecundario}"
                                 Height="24" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
                     </Grid>
                     <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre."
@@ -242,8 +242,8 @@
                     </Border>
 
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,2">
-                        <RadioButton x:Name="RadioUniforme" Content="Uniforme" GroupName="Modo" IsChecked="True" Margin="0,0,20,0" />
-                        <RadioButton x:Name="RadioConfinado" Content="Confinado" GroupName="Modo" />
+                        <RadioButton x:Name="RadioUniforme" ToolTip="El mismo espaciado de estribos en todo el tramo." Content="Uniforme" GroupName="Modo" IsChecked="True" Margin="0,0,20,0" />
+                        <RadioButton x:Name="RadioConfinado" ToolTip="Estribos más juntos cerca de los extremos (largo L1) y más separados en el centro." Content="Confinado" GroupName="Modo" />
                     </StackPanel>
                     <!-- Issue #58: en el nudo el confinamiento queda deshabilitado,
                          y hay que decir por qué: un control gris sin explicación
@@ -253,7 +253,7 @@
                                Style="{StaticResource TextoAyuda}" />
 
                     <TextBlock Text="Barra de estribos:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboTipoBarra" />
+                    <ComboBox x:Name="ComboTipoBarra" ToolTip="Barra con la que se arman los estribos. Solo aparecen las que el cuadro de la empresa permite doblar como estribo." />
                     <!-- #64: solo se ofrecen las barras cuyo doblado coincide con el
                          cuadro. Una línea de resumen, y el detalle (cuáles y por
                          qué) plegado: en una plantilla grande son decenas de
@@ -276,20 +276,20 @@
                     <!-- Modo Uniforme -->
                     <StackPanel x:Name="PanelUniforme">
                         <TextBlock Text="Espaciado (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoEspaciadoUniforme" Text="0.20" />
+                        <TextBox x:Name="CampoEspaciadoUniforme" ToolTip="Separación entre estribos, en metros (por ejemplo 0.20)." Text="0.20" />
                     </StackPanel>
 
                     <!-- Modo Confinado -->
                     <StackPanel x:Name="PanelConfinado" Visibility="Collapsed">
                         <TextBlock Text="Longitud de confinamiento L1 (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoL1" Text="0.50" />
+                        <TextBox x:Name="CampoL1" ToolTip="Largo de la zona confinada en cada extremo del tramo, en metros." Text="0.50" />
 
                         <TextBlock Text="Espaciado confinado (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoEspaciadoConfinado" Text="0.07" />
+                        <TextBox x:Name="CampoEspaciadoConfinado" ToolTip="Separación entre estribos dentro de la zona confinada, en metros." Text="0.07" />
 
                         <TextBlock Text="Espaciado no confinado (m):" Style="{StaticResource Etiqueta}" />
-                        <TextBox x:Name="CampoEspaciadoNoConfinado" Text="0.14" />
-                        <TextBlock Text="Sugerido al doble del confinado. Si lo editas a mano, deja de recalcularse hasta que cambies de tramo."
+                        <TextBox x:Name="CampoEspaciadoNoConfinado" ToolTip="Separación entre estribos en el centro del tramo, en metros." Text="0.14" />
+                        <TextBlock Text="Se sugiere el doble del confinado. Si lo cambias a mano, se respeta hasta que cambies de tramo."
                                    Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
                     </StackPanel>
 
@@ -304,7 +304,7 @@
                     <Border Style="{StaticResource EncabezadoSeccion}">
                         <TextBlock Text="Recubrimiento (toda la columna)" Style="{StaticResource TituloSeccion}" />
                     </Border>
-                    <ComboBox x:Name="ComboRecubrimiento" SelectionChanged="ComboRecubrimiento_SelectionChanged" />
+                    <ComboBox x:Name="ComboRecubrimiento" ToolTip="Distancia del borde de la columna al acero. Solo se usa para dibujar; no cambia la columna en Revit." SelectionChanged="ComboRecubrimiento_SelectionChanged" />
                     <TextBlock Text="Se usa solo para dibujar el acero; no cambia el recubrimiento de las columnas en Revit."
                                Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
 
@@ -323,11 +323,11 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="N. barras X:" Style="{StaticResource Etiqueta}" />
-                            <ComboBox x:Name="ComboBarrasX" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
+                            <ComboBox x:Name="ComboBarrasX" ToolTip="Barras intermedias en las dos caras X, sin contar las esquinas. «4 (2 + 2)» son 2 en cada cara." ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
                             <TextBlock Text="N. barras Y:" Style="{StaticResource Etiqueta}" />
-                            <ComboBox x:Name="ComboBarrasY" ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
+                            <ComboBox x:Name="ComboBarrasY" ToolTip="Barras intermedias en las dos caras Y, sin contar las esquinas. «4 (2 + 2)» son 2 en cada cara." ItemTemplate="{StaticResource PlantillaBarrasPorCara}" />
                         </StackPanel>
                     </Grid>
 
@@ -335,25 +335,25 @@
                          A/B de los traslapos sigue, pero no decide el número
                          (Luciano, 19-oct). -->
                     <TextBlock Text="Tipo barra cara X:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraCaraX" />
+                    <ComboBox x:Name="ComboBarraCaraX" ToolTip="Número de varilla de las barras intermedias de las caras X." />
 
                     <TextBlock Text="Tipo barra cara Y:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraCaraY" />
+                    <ComboBox x:Name="ComboBarraCaraY" ToolTip="Número de varilla de las barras intermedias de las caras Y." />
 
                     <TextBlock Text="Tipo barra esquinas:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboBarraEsquinas" />
-                    <TextBlock Text="Los traslapos se alternan alrededor del perímetro (una barra sí, una no): A y B traslapan en tramos distintos."
+                    <ComboBox x:Name="ComboBarraEsquinas" ToolTip="Número de varilla de las cuatro barras de las esquinas." />
+                    <TextBlock Text="Los traslapos se alternan (una barra sí, una no): A y B traslapan en tramos distintos."
                                Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
 
                     <TextBlock Text="Longitud de barra comercial (m):" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboLongitudBarra" />
+                    <ComboBox x:Name="ComboLongitudBarra" ToolTip="Largo de la barra que se compra (6 o 12 m): ninguna varilla cortada lo supera." />
 
                     <TextBlock Text="Redondeo de varillas:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboRedondeo" ItemStringFormat="0.00 m" />
+                    <ComboBox x:Name="ComboRedondeo" ToolTip="Cada varilla mide un múltiplo exacto de este valor; los traslapos se alargan lo necesario." ItemStringFormat="0.00 m" />
 
                     <TextBlock Text="Solape mínimo de los traslapos:" Style="{StaticResource Etiqueta}" />
-                    <ComboBox x:Name="ComboSolape" />
-                    <TextBlock Text="El dibujo de A y B por número de barra, con el largo de cada varilla y cada traslapo, está en la pestaña «Traslapos» de la elevación."
+                    <ComboBox x:Name="ComboSolape" ToolTip="Solape mínimo del cuadro de la empresa: el del diámetro de cada barra, o el mayor de la columna para todas." />
+                    <TextBlock Text="Largos de varillas y traslapos: pestaña «Traslapos» de la elevación."
                                Style="{StaticResource TextoAyuda}" Margin="0,2,0,0" />
 
                     <!-- Igual que el del estribo: el anclaje en la zapata es
@@ -361,12 +361,12 @@
                     <TextBlock x:Name="EtiquetaGanchoLongitudinal" Text="Gancho de anclaje en zapata:" Style="{StaticResource Etiqueta}" Visibility="Collapsed" />
                     <ComboBox x:Name="ComboGanchoLongitudinal" Visibility="Collapsed" />
 
-                    <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
+                    <Button x:Name="BotonEstribosMenores" ToolTip="Grapas y estribos interiores de la sección (se dibujan sobre las barras)." Content="Editar estribos menores…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" Style="{StaticResource TextoAyuda}" Margin="0,4,0,0" />
 
                     <!-- #142: el cuadro de ganchos y traslapos, solo de consulta. -->
-                    <Button x:Name="BotonCuadroVarillas" Content="Ver cuadro de varillas…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,8,0,0"
+                    <Button x:Name="BotonCuadroVarillas" ToolTip="Muestra el cuadro de ganchos y traslapos de la empresa (solo consulta)." Content="Ver cuadro de varillas…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,8,0,0"
                             Click="BotonCuadroVarillas_Click" />
                 </StackPanel>
                 </ScrollViewer>
