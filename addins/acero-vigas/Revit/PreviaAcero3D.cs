@@ -40,9 +40,13 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
 
     /// <summary>
     /// Cian fluorescente (<c>#00E5FF</c>): ningún diámetro usa un color parecido (los de <see cref="ColoresDiametro"/> y los
-    /// nuevos de columnas), así el marcador no se confunde con una barra (Juan, 22-oct).
+    /// nuevos de columnas), así el marcador no se confunde con una barra (Juan, 22-oct). Un poco transparente (0 opaco,
+    /// 255 invisible): tapaba justo dónde se meten las barras (Juan, 22-oct).
     /// </summary>
-    private static readonly ColorWithTransparency ColorChoque = new(0x00, 0xE5, 0xFF, 0);
+    private static readonly ColorWithTransparency ColorChoque = new(0x00, 0xE5, 0xFF, 180);
+
+    /// <summary>Las aristas del marcador, del mismo cian pero opacas: se encuentra fácil de lejos (Juan, 22-oct).</summary>
+    private static readonly ColorWithTransparency AristaChoque = new(0x00, 0xE5, 0xFF, 0);
 
     private static readonly Guid Id = new("6E2B7B9E-3C1F-4D7A-9A53-8F1C0B4E2D71");
     private static PreviaAcero3D? servidor;
@@ -51,6 +55,7 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
     private Document? documento;
     private List<Malla> mallas = [];
     private List<Bloque>? bloques;
+    private List<Bloque>? bloquesTransparentes;
     private List<BloqueLineas>? bloquesContorno;
     private Outline? caja;
 
@@ -75,6 +80,7 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         s.caja = Caja(trazos);
         // se arman en el próximo dibujo, en el hilo de dibujo
         s.bloques = null;
+        s.bloquesTransparentes = null;
         s.bloquesContorno = null;
     }
 
@@ -87,6 +93,7 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         mallas = [];
         caja = null;
         bloques = null;
+        bloquesTransparentes = null;
         bloquesContorno = null;
     }
 
@@ -136,8 +143,11 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
 
     /// <summary>
     /// Los vértices y triángulos (índices locales) de un trazo, y su contorno: pares de puntos en pies, cada par una línea.
+    /// Las <paramref name="Transparente"/> se dibujan en la pasada de lo transparente de Revit. El contorno va de
+    /// <paramref name="ColorLineas"/>, o de <see cref="ColorContorno"/> si no tiene.
     /// </summary>
-    private sealed record Malla(List<Vertice> Vertices, List<(int A, int B, int C)> Triangulos, List<XYZ> Contorno);
+    private sealed record Malla(List<Vertice> Vertices, List<(int A, int B, int C)> Triangulos, List<XYZ> Contorno,
+        bool Transparente = false, ColorWithTransparency? ColorLineas = null);
 
     /// <summary>
     /// Un cilindro de <see cref="Lados"/> lados por cada tramo recto del trazo, del diámetro de la barra. Los tramos de los
@@ -209,7 +219,7 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
                     triangulos.Add((i, i + 2, i + 1));
                     contorno.AddRange([a, b, b, c, c, a]);
                 }
-        return new Malla(vertices, triangulos, contorno);
+        return new Malla(vertices, triangulos, contorno, Transparente: true, ColorLineas: AristaChoque);
     }
 
     /// <summary>La dirección del lado <paramref name="k"/> del tubo, de largo 1.</summary>
@@ -225,9 +235,9 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
     /// <summary>Un búfer de las líneas del contorno listo para dibujar.</summary>
     private sealed record BloqueLineas(VertexBuffer Vertices, int CantidadVertices, IndexBuffer Indices, int CantidadLineas);
 
-    /// <summary>Junta las mallas en bloques de hasta <see cref="VerticesPorBloque"/> vértices.</summary>
-    private List<Bloque> Armar() =>
-        EnBloques(mallas.Where(m => m.Vertices.Count > 0), m => m.Vertices.Count).Select(ArmarBloque).ToList();
+    /// <summary>Junta las mallas opacas o las transparentes en bloques de hasta <see cref="VerticesPorBloque"/> vértices.</summary>
+    private List<Bloque> Armar(bool transparentes) =>
+        EnBloques(mallas.Where(m => m.Transparente == transparentes && m.Vertices.Count > 0), m => m.Vertices.Count).Select(ArmarBloque).ToList();
 
     /// <summary>Lo mismo con el contorno: cada punto es un vértice.</summary>
     private List<BloqueLineas> ArmarContorno() =>
@@ -260,8 +270,9 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         var vb = new VertexBuffer(nv * VertexPositionColored.GetSizeInFloats());
         vb.Map(nv * VertexPositionColored.GetSizeInFloats());
         VertexStreamPositionColored vs = vb.GetVertexStreamPositionColored();
-        foreach (XYZ p in partes.SelectMany(m => m.Contorno))
-            vs.AddVertex(new VertexPositionColored(p, ColorContorno));
+        foreach (Malla m in partes)
+            foreach (XYZ p in m.Contorno)
+                vs.AddVertex(new VertexPositionColored(p, m.ColorLineas ?? ColorContorno));
         vb.Unmap();
 
         var ib = new IndexBuffer(nl * IndexLine.GetSizeInShortInts());
@@ -307,7 +318,8 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
     public string GetApplicationId() => "";
     public string GetSourceId() => "";
     public bool UsesHandles() => false;
-    public bool UseInTransparentPass(View view) => false;
+    /// <summary>Los marcadores de choque son transparentes: Revit llama a <see cref="RenderScene"/> otra vez para ellos.</summary>
+    public bool UseInTransparentPass(View view) => true;
 
     public bool CanExecute(View view) =>
         documento is not null && caja is not null && view is View3D && view.Name == nombreVista && view.Document.Equals(documento);
@@ -320,9 +332,16 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         {
             if (caja is null)
                 return;
-            bloques ??= Armar();
             var formato = new VertexFormat(VertexFormatBits.PositionNormalColored);
             var efecto = new EffectInstance(VertexFormatBits.PositionNormalColored);
+            if (DrawContext.IsTransparentPass())
+            {
+                foreach (Bloque b in bloquesTransparentes ??= Armar(transparentes: true))
+                    DrawContext.FlushBuffer(b.Vertices, b.CantidadVertices, b.Indices, b.CantidadTriangulos * 3, formato, efecto,
+                        PrimitiveType.TriangleList, 0, b.CantidadTriangulos);
+                return;
+            }
+            bloques ??= Armar(transparentes: false);
             foreach (Bloque b in bloques)
                 DrawContext.FlushBuffer(b.Vertices, b.CantidadVertices, b.Indices, b.CantidadTriangulos * 3, formato, efecto,
                     PrimitiveType.TriangleList, 0, b.CantidadTriangulos);
