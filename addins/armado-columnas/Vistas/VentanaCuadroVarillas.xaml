@@ -1,0 +1,34 @@
+<Window x:Class="practicacq.Vistas.VentanaCuadroVarillas"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:practicacq.Vistas"
+        Title="Cuadro de varillas"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{x:Static local:Paleta.Fondo}"
+        PreviewKeyDown="Ventana_PreviewKeyDown">
+
+    <Window.Resources>
+        <ResourceDictionary Source="Estilos.xaml" />
+    </Window.Resources>
+
+    <!-- #142: solo de consulta. Opción A del boceto del 22-oct (ventanita
+         emergente que se puede dejar abierta al lado del configurador). -->
+    <StackPanel Margin="14">
+        <TextBlock Text="Cuadro de varillas" Style="{StaticResource TituloVentana}" Margin="0,0,0,4" />
+        <TextBlock Text="Cómo deberían quedar las barras según el cuadro de ganchos y traslapos de la empresa. Es el mismo cuadro con el que el add-in genera el acero."
+                   TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Style="{StaticResource TextoAyuda}" Margin="0,0,0,10" />
+
+        <Border Background="{StaticResource Superficie}" BorderBrush="{StaticResource Borde}" BorderThickness="1" CornerRadius="4">
+            <Grid x:Name="Tabla" />
+        </Border>
+
+        <TextBlock TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Style="{StaticResource TextoAyuda}" Margin="0,8,0,0"
+                   Text="Valores en metros. E = largo recto del gancho; D = diámetro de doblado. «—»: el cuadro no lo da (la #2 no tiene traslapo en columnas; de la #6 a la #8 no hay estribo de 135°). En azul, las varillas que usa la columna activa." />
+
+        <Button Content="Cerrar" Width="90" Height="30" HorizontalAlignment="Right" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
+                Click="BotonCerrar_Click" />
+    </StackPanel>
+</Window>

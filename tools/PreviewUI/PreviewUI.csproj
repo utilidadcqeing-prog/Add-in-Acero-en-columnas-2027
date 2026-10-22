@@ -112,6 +112,16 @@
       <Link>Vistas\VentanaEstribosMenores.xaml.cs</Link>
       <DependentUpon>VentanaEstribosMenores.xaml</DependentUpon>
     </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\VentanaCuadroVarillas.xaml">
+      <Link>Vistas\VentanaCuadroVarillas.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaCuadroVarillas.xaml.cs">
+      <Link>Vistas\VentanaCuadroVarillas.xaml.cs</Link>
+      <DependentUpon>VentanaCuadroVarillas.xaml</DependentUpon>
+    </Compile>
   </ItemGroup>
 
 </Project>

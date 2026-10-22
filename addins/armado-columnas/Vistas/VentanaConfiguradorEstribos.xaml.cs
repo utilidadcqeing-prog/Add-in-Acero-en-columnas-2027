@@ -284,6 +284,10 @@ public partial class VentanaConfiguradorEstribos : Window
                  })
             combo.SelectionChanged += (_, _) => { if (!_mostrandoLongitudinal) RecalcularTraslapos(); };
 
+        // El cuadro de varillas (#142), si está abierto, sigue a las barras elegidas.
+        foreach (ComboBox combo in new[] { ComboTipoBarra, ComboBarraEsquinas, ComboBarraCaraX, ComboBarraCaraY })
+            combo.SelectionChanged += (_, _) => MarcarUsosEnCuadroVarillas();
+
         // Pestaña «Vista previa» (VentanaConfiguradorEstribos.VistaPrevia.cs).
         ConectarVistaPrevia();
 
@@ -1139,6 +1143,9 @@ public partial class VentanaConfiguradorEstribos : Window
         }
 
         RecalcularTraslapos();
+        // Otra columna puede traer las mismas barras en los combos (no salta su
+        // SelectionChanged) pero otros estribos menores.
+        MarcarUsosEnCuadroVarillas();
     }
 
     /// <summary>
@@ -1383,6 +1390,47 @@ public partial class VentanaConfiguradorEstribos : Window
         MostrarLongitudinalEnPanel(cfg);
     }
 
+    // ---------------------------------------------------- cuadro de varillas
+
+    /// <summary>La ventana del cuadro de varillas (#142) mientras está abierta; una sola a la vez.</summary>
+    private VentanaCuadroVarillas? _cuadroVarillas;
+
+    private void BotonCuadroVarillas_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cuadroVarillas is not null)
+        {
+            _cuadroVarillas.Activate();
+            return;
+        }
+
+        _cuadroVarillas = new VentanaCuadroVarillas { Owner = this };
+        _cuadroVarillas.Closed += (_, _) => _cuadroVarillas = null;
+        MarcarUsosEnCuadroVarillas();
+        _cuadroVarillas.Show();
+    }
+
+    /// <summary>Pinta en el cuadro de varillas las que usa la columna activa: las del panel y las propias de los estribos menores.</summary>
+    private void MarcarUsosEnCuadroVarillas()
+    {
+        if (_cuadroVarillas is null) return;
+
+        TipoBarra? Barra(object? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre as string);
+
+        var usos = new List<(string, TipoBarra?)>
+        {
+            ("estribos", Barra(ComboTipoBarra.SelectedItem)),
+            ("esquinas", Barra(ComboBarraEsquinas.SelectedItem)),
+            ("cara X", Barra(ComboBarraCaraX.SelectedItem)),
+            ("cara Y", Barra(ComboBarraCaraY.SelectedItem)),
+        };
+        if (_columnaIdActiva is string id && _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? cfg))
+            usos.AddRange(cfg.EstribosMenores
+                .Where(p => p.TipoBarraNombre is not null)
+                .Select(p => ("estribos menores", Barra(p.TipoBarraNombre))));
+
+        _cuadroVarillas.MarcarUsos(CuadroVarillas.UsosPorNumero(usos));
+    }
+
     private void BotonEstribosMenores_Click(object sender, RoutedEventArgs e)
     {
         if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
@@ -1415,6 +1463,7 @@ public partial class VentanaConfiguradorEstribos : Window
         cfg.EstribosMenores = dialogo.Piezas;
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
+        MarcarUsosEnCuadroVarillas();
     }
 
     // ------------------------------------------------------------- aceptar

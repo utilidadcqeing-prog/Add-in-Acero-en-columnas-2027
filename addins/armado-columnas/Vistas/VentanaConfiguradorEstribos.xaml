@@ -354,6 +354,10 @@
                     <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" TextWrapping="Wrap" Foreground="{StaticResource TextoSecundario}" FontSize="11" Margin="0,4,0,0" />
+
+                    <!-- #142: el cuadro de ganchos y traslapos, solo de consulta. -->
+                    <Button x:Name="BotonCuadroVarillas" Content="Ver cuadro de varillas…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,8,0,0"
+                            Click="BotonCuadroVarillas_Click" />
                 </StackPanel>
                 </ScrollViewer>
               </DockPanel>
