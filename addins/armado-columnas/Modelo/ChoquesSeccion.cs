@@ -64,6 +64,70 @@ public static class ChoquesSeccion
     }
 
     /// <summary>
+    /// Una grapa o un estribo menor (su eje, de <see cref="PlantaArmado.Menor"/>,
+    /// con el grosor de su barra) que se mete en planta en una longitudinal
+    /// que no es de las que abraza. Las longitudinales son continuas en
+    /// altura, así que todo cruce en planta es un choque. Marca esa barra; si
+    /// pisa varias, la primera.
+    /// </summary>
+    public static Choque? MenorSobreBarra(
+        IReadOnlyList<(double X, double Y)> eje, double diametroMm, IReadOnlyList<PiezaRedonda> barras,
+        ISet<int> abrazadas, string nombrePieza, Func<int, string> nombreVarilla)
+    {
+        foreach (PiezaRedonda barra in barras)
+        {
+            if (abrazadas.Contains(barra.Varilla)) continue;
+
+            double distancia = double.PositiveInfinity;
+            for (int i = 1; i < eje.Count; i++)
+                distancia = Math.Min(distancia, DistanciaASegmento(barra.X, barra.Y, eje[i - 1], eje[i]));
+
+            double metidaMm = (diametroMm + barra.DiametroMm) / 2 - distancia * 1000;
+            if (metidaMm <= ToleranciaMm) continue;
+
+            return new Choque(
+                string.Format(Es, "{0} pasa encima de {1}, que no abraza (se meten {2:0.0} cm).",
+                    Mayuscula(nombrePieza), nombreVarilla(barra.Varilla), metidaMm / 10),
+                new[] { Marca(barra) });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Por qué un estribo cerrado no se puede doblar con su barra -- su lado
+    /// corto, entre los ejes de su propia barra, más angosto que
+    /// <see cref="EstriboMenor.AnchoMinimoCerradoMm"/> --, o null si se puede.
+    /// Con la misma caja que se dibuja y que crea el generador, por fuera de
+    /// las barras que abraza (#132). Antes vivía en VentanaEstribosMenores.
+    /// </summary>
+    /// <param name="donde">Cómo se nombra su lugar: "fila 2", "columnas 1 a 3".</param>
+    public static string? CerradoImposible(EstriboMenor pieza, TipoBarra barra, IEnumerable<GanchoGrapa.Pieza> abrazadas, string donde)
+    {
+        if (pieza.Forma != FormaMenor.Cerrado) return null;
+
+        double diametro = barra.DiametroMm / 1000;
+        (double x1, double x2, double y1, double y2) = EstriboMenor.CajaQueAbraza(
+            abrazadas, diametro, PlantaArmado.Doblez(barra, barra.DiametroMm) / 2);
+        double anchoMm = (Math.Min(x2 - x1, y2 - y1) - diametro) * 1000;
+        double minimoMm = EstriboMenor.AnchoMinimoCerradoMm(barra);
+        if (anchoMm >= minimoMm) return null;
+
+        return string.Format(Es,
+            "El estribo cerrado de las {0} mide {1:0.0} cm de ancho (entre los ejes de su barra), y con «{2}» necesita al menos {3:0.0} cm para doblarse: " +
+            "dibújalo entre barras más separadas o usa una barra más delgada.",
+            donde, anchoMm / 10, barra.Nombre, minimoMm / 10);
+    }
+
+    private static double DistanciaASegmento(double px, double py, (double X, double Y) a, (double X, double Y) b)
+    {
+        double dx = b.X - a.X, dy = b.Y - a.Y, largo2 = dx * dx + dy * dy;
+        double t = largo2 < 1e-18 ? 0 : Math.Clamp(((px - a.X) * dx + (py - a.Y) * dy) / largo2, 0, 1);
+        double qx = a.X + t * dx - px, qy = a.Y + t * dy - py;
+        return Math.Sqrt(qx * qx + qy * qy);
+    }
+
+    /// <summary>
     /// Cómo se nombra la barra <paramref name="indice"/> en los avisos:
     /// "la esquina inferior izquierda", o "la barra 2 de la cara inferior"
     /// (las caras de abajo y de arriba se cuentan de izquierda a derecha; las

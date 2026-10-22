@@ -382,5 +382,37 @@ Probar("choques_nombre_barra", () =>
     Cierto(ChoquesSeccion.NombreBarra(barras, 1) == "la barra 1 de la cara inferior", ChoquesSeccion.NombreBarra(barras, 1));
 });
 
+Probar("choques_grapa_sobre_barra_que_no_abraza", () =>
+{
+    var trazo = new List<(double X, double Y)> { (0.05, 0.10), (0.35, 0.10) };
+    var encima = new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.11, 15.9, 4) };
+    ChoquesSeccion.Choque? c = ChoquesSeccion.MenorSobreBarra(trazo, 9.5, encima, new HashSet<int>(), "la grapa de la fila 1", Barra);
+    Cierto(c is not null && c.Motivo.Contains("pasa encima") && c.Marcas.Count == 1, c?.Motivo ?? "sin choque");
+
+    var alLado = new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.125, 15.9, 4) };
+    Cierto(ChoquesSeccion.MenorSobreBarra(trazo, 9.5, alLado, new HashSet<int>(), "la grapa", Barra) is null, "a 2,5 cm del eje no la toca");
+});
+
+Probar("choques_grapa_no_choca_con_las_que_abraza", () =>
+{
+    var trazo = new List<(double X, double Y)> { (0.05, 0.10), (0.35, 0.10) };
+    var abrazada = new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.11, 15.9, 4) };
+    Cierto(ChoquesSeccion.MenorSobreBarra(trazo, 9.5, abrazada, new HashSet<int> { 4 }, "la grapa", Barra) is null, "la abraza");
+});
+
+Probar("choques_cerrado_imposible_igual_que_antes", () =>
+{
+    var barra3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38 };
+    var cerrado = new EstriboMenor { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 0, Hasta = 0 };
+    // Dos barras #4 pegadas: la caja que las abraza es angosta para doblar #3.
+    var juntas = new[] { new GanchoGrapa.Pieza(0.10, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.10, 0.20, 0.00635, 1) };
+    string? texto = ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "fila 1");
+    Cierto(texto is not null && texto.StartsWith("El estribo cerrado de las fila 1 mide") &&
+           texto.Contains("con «#3 CQEING» necesita al menos 4,8 cm para doblarse"), texto ?? "null");
+
+    var separadas = new[] { new GanchoGrapa.Pieza(0.05, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.25, 0.20, 0.00635, 1) };
+    Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, separadas, "fila 1") is null, "una caja ancha se dobla");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;
