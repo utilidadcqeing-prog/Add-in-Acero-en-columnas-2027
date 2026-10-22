@@ -49,6 +49,12 @@
     <Compile Include="..\..\addins\armado-columnas\Vistas\Paleta.cs">
       <Link>Vistas\Paleta.cs</Link>
     </Compile>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\Cotas.cs">
+      <Link>Vistas\Cotas.cs</Link>
+    </Compile>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\DibujoArmado.cs">
+      <Link>Vistas\DibujoArmado.cs</Link>
+    </Compile>
 
     <Page Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.xaml">
       <Link>Vistas\VentanaConfiguradorEstribos.xaml</Link>
@@ -105,6 +111,26 @@
     <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaEstribosMenores.xaml.cs">
       <Link>Vistas\VentanaEstribosMenores.xaml.cs</Link>
       <DependentUpon>VentanaEstribosMenores.xaml</DependentUpon>
+    </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\VentanaCuadroVarillas.xaml">
+      <Link>Vistas\VentanaCuadroVarillas.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaCuadroVarillas.xaml.cs">
+      <Link>Vistas\VentanaCuadroVarillas.xaml.cs</Link>
+      <DependentUpon>VentanaCuadroVarillas.xaml</DependentUpon>
+    </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\VentanaChoques.xaml">
+      <Link>Vistas\VentanaChoques.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaChoques.xaml.cs">
+      <Link>Vistas\VentanaChoques.xaml.cs</Link>
+      <DependentUpon>VentanaChoques.xaml</DependentUpon>
     </Compile>
   </ItemGroup>
 

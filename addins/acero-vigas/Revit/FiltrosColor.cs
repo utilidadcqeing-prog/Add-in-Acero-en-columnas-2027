@@ -7,7 +7,8 @@ namespace CQEING.Vigas.Revit;
 /// <summary>
 /// Los colores por diámetro en Revit (#85, decisión 9 del plan docs/planes/2026-10-19-generar-acero-vigas-85.md): un
 /// filtro de vista por diámetro, <c>"CQEING Acero #5"</c>, sobre la armadura estructural con la regla "diámetro de barra =
-/// el del tipo del modelo", con el color de <see cref="ColoresDiametro"/> en líneas y relleno. Los filtros quedan en el
+/// el del tipo del modelo", con el color de <see cref="ColoresDiametro"/> en el relleno y las líneas en negro
+/// (el contorno de cada barra, Juan 21-oct). Los filtros quedan en el
 /// proyecto y se pueden meter en las plantillas de vista; pintar elemento por elemento se pierde en cada vista nueva.
 /// </summary>
 internal static class FiltrosColor
@@ -30,7 +31,7 @@ internal static class FiltrosColor
             if (tipos.Barra(n) is not { } barra)
                 continue;
             if (Filtro(doc, n, barra.BarNominalDiameter) is { } filtro)
-                filtros.Add((filtro.Id, Color(ColoresDiametro.Rgb(n), solido)));
+                filtros.Add((filtro.Id, Color(ColoresDiametro.Rgb(n), ColoresDiametro.RgbContorno, solido)));
             else
                 avisos.Add($"Revit no aceptó el filtro de color del #{n}.");
         }
@@ -51,8 +52,34 @@ internal static class FiltrosColor
             {
                 avisos.Add($"La vista \"{vista.Name}\" no acepta filtros (los controla su plantilla): no se le pusieron los colores por diámetro.");
             }
+            ConAristas(vista);
         }
         return avisos;
+    }
+
+    /// <summary>
+    /// El contorno negro de las barras son sus líneas, y en una vista sombreada sin aristas Revit no las dibuja: el
+    /// sombreado y el realista pasan a su versión con aristas (Juan, 21-oct). Los demás estilos ya muestran las líneas.
+    /// Si la plantilla controla el estilo, la vista queda como está.
+    /// </summary>
+    private static void ConAristas(View vista)
+    {
+        DisplayStyle conAristas = vista.DisplayStyle switch
+        {
+            DisplayStyle.Shading => DisplayStyle.ShadingWithEdges,
+            DisplayStyle.Realistic => DisplayStyle.RealisticWithEdges,
+            _ => vista.DisplayStyle,
+        };
+        if (conAristas == vista.DisplayStyle)
+            return;
+        try
+        {
+            vista.DisplayStyle = conAristas;
+        }
+        catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+        {
+            // la plantilla de la vista manda en el estilo visual
+        }
     }
 
     /// <summary>
@@ -76,12 +103,17 @@ internal static class FiltrosColor
         return ParameterFilterElement.Create(doc, nombre, categorias, regla);
     }
 
-    private static OverrideGraphicSettings Color((byte R, byte G, byte B) rgb, ElementId? solido)
+    /// <summary>
+    /// El relleno del color del diámetro y las líneas del contorno (<see cref="ColoresDiametro.RgbContorno"/>, casi negro):
+    /// en un corte y en una vista con aristas, cada barra queda con su contorno.
+    /// </summary>
+    private static OverrideGraphicSettings Color((byte R, byte G, byte B) rgb, (byte R, byte G, byte B) contorno, ElementId? solido)
     {
         var color = new Color(rgb.R, rgb.G, rgb.B);
+        var borde = new Color(contorno.R, contorno.G, contorno.B);
         var o = new OverrideGraphicSettings()
-            .SetProjectionLineColor(color)
-            .SetCutLineColor(color)
+            .SetProjectionLineColor(borde)
+            .SetCutLineColor(borde)
             .SetSurfaceForegroundPatternColor(color)
             .SetCutForegroundPatternColor(color);
         if (solido is not null)

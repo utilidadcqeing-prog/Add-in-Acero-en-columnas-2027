@@ -88,6 +88,12 @@ public partial class PanelPlantaColumnas : UserControl
     /// <summary>Dónde quedó cada columna dibujada, para resolver clics y arrastres sin hit-test de WPF.</summary>
     private readonly List<(string Id, Rect Caja)> _marcadores = new();
 
+    /// <summary>Lo que se muestra al pasar el puntero sobre cada columna: marca, ubicación y medidas (#133).</summary>
+    private readonly Dictionary<string, string> _descripciones = new();
+
+    /// <summary>Lado mínimo de la zona de clic de una columna, aunque a escala se dibuje más chica.</summary>
+    private const double MinimoClic = 12;
+
     /// <summary>Lo último que se dibujó, para poder repetirlo cuando cambia el tamaño del panel.</summary>
     private (IReadOnlyList<ColumnaResumen> Columnas,
              IReadOnlyList<Rejilla> Rejillas,
@@ -133,6 +139,7 @@ public partial class PanelPlantaColumnas : UserControl
     {
         Lienzo.Children.Clear();
         _marcadores.Clear();
+        _descripciones.Clear();
         _rectanguloArrastre = null;
 
         if (_ultimo is not { } estado) return;
@@ -156,7 +163,12 @@ public partial class PanelPlantaColumnas : UserControl
             maxY = Math.Max(maxY, y);
         }
 
-        foreach (ColumnaResumen c in columnas) Expandir(c.X, c.Y);
+        // Con sus lados: una columna grande en el borde tiene que entrar entera.
+        foreach (ColumnaResumen c in columnas)
+        {
+            Expandir(c.X - c.LadoX / 2, c.Y - c.LadoY / 2);
+            Expandir(c.X + c.LadoX / 2, c.Y + c.LadoY / 2);
+        }
         foreach (Rejilla r in rejillas)
         {
             Expandir(r.X1, r.Y1);
@@ -188,7 +200,7 @@ public partial class PanelPlantaColumnas : UserControl
             DibujarRejilla(r, Cx, Cy);
 
         foreach (ColumnaResumen c in columnas)
-            DibujarColumna(c, Cx(c.X), Cy(c.Y), c.Id == idActiva, idsElegidas.Contains(c.Id), idsConfiguradas.Contains(c.Id));
+            DibujarColumna(c, Cx(c.X), Cy(c.Y), escala, c.Id == idActiva, idsElegidas.Contains(c.Id), idsConfiguradas.Contains(c.Id));
 
         // Las etiquetas SIEMPRE después de todos los cuadraditos: así ninguna
         // queda tapada por una columna dibujada más tarde, y el chequeo de
@@ -213,11 +225,11 @@ public partial class PanelPlantaColumnas : UserControl
     private void DibujarEtiquetasDeUbicacion(
         IReadOnlyList<ColumnaResumen> columnas, Func<double, double> cx, Func<double, double> cy)
     {
-        const double tam = 12;
         const double aire = 2;
 
-        // Arranca ocupado por todos los cuadraditos, que ya están dibujados.
+        // Arranca ocupado por todas las columnas, que ya están dibujadas.
         List<Rect> ocupado = _marcadores.Select(m => m.Caja).ToList();
+        Dictionary<string, Rect> cajas = _marcadores.GroupBy(m => m.Id).ToDictionary(g => g.Key, g => g.First().Caja);
 
         foreach (ColumnaResumen c in columnas)
         {
@@ -236,11 +248,12 @@ public partial class PanelPlantaColumnas : UserControl
             double alto = texto.DesiredSize.Height;
             double x = cx(c.X);
             double y = cy(c.Y);
+            Rect columna = cajas.TryGetValue(c.Id, out Rect r) ? r : new Rect(x, y, 0, 0);
 
             Rect[] candidatas =
             {
-                new(x - ancho / 2, y + tam / 2 + aire, ancho, alto),   // debajo, centrada
-                new(x + tam / 2 + aire, y - alto / 2, ancho, alto),    // a la derecha
+                new(x - ancho / 2, columna.Bottom + aire, ancho, alto),   // debajo, centrada
+                new(columna.Right + aire, y - alto / 2, ancho, alto),     // a la derecha
             };
 
             if (candidatas.FirstOrDefault(r => !ocupado.Any(o => o.IntersectsWith(r))) is not { Width: > 0 } libre)
@@ -320,27 +333,37 @@ public partial class PanelPlantaColumnas : UserControl
     /// las columnas juntas se encimaba (William, 10-sep) -- y lo que se
     /// etiqueta es la marca de ubicación, que es corta.
     /// </summary>
-    private void DibujarColumna(ColumnaResumen c, double x, double y, bool activa, bool elegida, bool configurada)
+    /// <param name="escala">Píxeles por metro de la planta: la columna se dibuja de su tamaño real (#133).</param>
+    private void DibujarColumna(ColumnaResumen c, double x, double y, double escala, bool activa, bool elegida, bool configurada)
     {
-        const double tam = 12;
+        // A escala; sin lados conocidos, el cuadradito de siempre. Muy chica
+        // no se vería: como mínimo 3 px.
+        double ancho = c.LadoX > 0 ? Math.Max(3, c.LadoX * escala) : MinimoClic;
+        double alto = c.LadoY > 0 ? Math.Max(3, c.LadoY * escala) : MinimoClic;
 
         var marcador = new Rectangle
         {
-            Width = tam,
-            Height = tam,
+            Width = ancho,
+            Height = alto,
             Fill = elegida ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
             Stroke = activa ? ColorBordeActiva : (elegida ? ColorBordeMarcada : ColorBordeColumna),
             StrokeThickness = activa ? 3 : (elegida ? 2 : 1),
-            Cursor = Cursors.Hand,
-            ToolTip = c.MarcaUbicacion.Length > 0 ? $"{c.Marca}  ·  {c.MarcaUbicacion}" : c.Marca,
             // Los clics los resuelve el lienzo contra _marcadores: si cada
-            // cuadradito se los quedara, un arrastre que empieza encima de uno
-            // no llegaría nunca a ser arrastre.
+            // columna se los quedara, un arrastre que empieza encima de una
+            // no llegaría nunca a ser arrastre. Por lo mismo, el tooltip lo
+            // pone el lienzo (Lienzo_MouseMove).
             IsHitTestVisible = false,
         };
-        Canvas.SetLeft(marcador, x - tam / 2);
-        Canvas.SetTop(marcador, y - tam / 2);
+        Canvas.SetLeft(marcador, x - ancho / 2);
+        Canvas.SetTop(marcador, y - alto / 2);
         Lienzo.Children.Add(marcador);
+
+        // La zona de clic no baja de MinimoClic, aunque la columna se vea más chica.
+        double anchoClic = Math.Max(MinimoClic, ancho), altoClic = Math.Max(MinimoClic, alto);
+        var caja = new Rect(x - anchoClic / 2, y - altoClic / 2, anchoClic, altoClic);
+
+        string medidas = c.LadoX > 0 && c.LadoY > 0 ? $"{EscalaDibujo.Cm(c.LadoX)} × {EscalaDibujo.Cm(c.LadoY)}" : "";
+        _descripciones[c.Id] = string.Join("  ·  ", new[] { c.Marca, c.MarcaUbicacion, medidas }.Where(s => s.Length > 0));
 
         // El ✓ de "esta columna tiene tramos aceptados, se va a generar" --
         // mismo símbolo y mismo verde que en la elevación (issue #56), para que
@@ -355,12 +378,12 @@ public partial class PanelPlantaColumnas : UserControl
                 Foreground = ColorChulito,
                 IsHitTestVisible = false,
             };
-            Canvas.SetLeft(chulito, x + tam / 2 - 1);
-            Canvas.SetTop(chulito, y - tam / 2 - 11);
+            Canvas.SetLeft(chulito, caja.Right - 1);
+            Canvas.SetTop(chulito, caja.Top - 11);
             Lienzo.Children.Add(chulito);
         }
 
-        _marcadores.Add((c.Id, new Rect(x - tam / 2, y - tam / 2, tam, tam)));
+        _marcadores.Add((c.Id, caja));
     }
 
     // ------------------------------------------------------------ selección
@@ -375,7 +398,11 @@ public partial class PanelPlantaColumnas : UserControl
 
     private void Lienzo_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || !Lienzo.IsMouseCaptured) return;
+        if (e.LeftButton != MouseButtonState.Pressed || !Lienzo.IsMouseCaptured)
+        {
+            MostrarDescripcion(e.GetPosition(Lienzo));
+            return;
+        }
 
         Point actual = e.GetPosition(Lienzo);
         if (Math.Abs(actual.X - _inicioArrastre.X) < MinimoArrastre &&
@@ -399,6 +426,22 @@ public partial class PanelPlantaColumnas : UserControl
         _rectanguloArrastre.Height = caja.Height;
         Canvas.SetLeft(_rectanguloArrastre, caja.X);
         Canvas.SetTop(_rectanguloArrastre, caja.Y);
+    }
+
+    /// <summary>
+    /// El tooltip del lienzo con la columna bajo el puntero ("C-12 · A-1 · 25 cm
+    /// × 30 cm"). Se cambia solo cuando cambia la columna, para que no parpadee.
+    /// </summary>
+    private void MostrarDescripcion(Point p)
+    {
+        string? texto = _marcadores
+            .Where(m => m.Caja.Contains(p))
+            .Select(m => _descripciones.TryGetValue(m.Id, out string? d) ? d : null)
+            .FirstOrDefault();
+
+        if (Equals(Lienzo.ToolTip, texto)) return;
+        Lienzo.ToolTip = texto;
+        Lienzo.Cursor = texto is null ? null : Cursors.Hand;
     }
 
     private void Lienzo_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)

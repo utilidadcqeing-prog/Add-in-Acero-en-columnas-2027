@@ -4,8 +4,9 @@ using CQEING.Vigas.Calculo.Modelo;
 namespace CQEING.Vigas.Calculo.Tests;
 
 /// <summary>
-/// La sección de la maqueta (300 × 500, recubrimiento 40, estribo #3) con arriba 5 #5 (x 57.45, 103.725, 150, 196.275
-/// y 242.55) y abajo 4 #5 (x 57.45, 119.15, 180.85 y 242.55). Entre dos #5 deben quedar 15.9 + 25 = 40.9 entre centros.
+/// La sección de la maqueta (300 × 500, recubrimiento 40, estribo #3) con arriba 5 #5 (x 60.686, 103.725, 150, 196.275
+/// y 239.314) y abajo 4 #5 (x 60.686, 119.15, 180.85 y 239.314): las de esquina se apoyan en la curva del estribo y
+/// entran 3.236 (21-oct). Entre dos #5 deben quedar 15.9 + 25 = 40.9 entre centros.
 /// </summary>
 public class AlineadorEstribosTests
 {
@@ -34,8 +35,8 @@ public class AlineadorEstribosTests
         return f with { Izquierda = Math.Round(f.Izquierda, 3), Derecha = Math.Round(f.Derecha, 3) };
     }
 
-    private static readonly double[] ArribaSinMover = [57.45, 103.725, 150, 196.275, 242.55];
-    private static readonly double[] AbajoSinMover = [57.45, 119.15, 180.85, 242.55];
+    private static readonly double[] ArribaSinMover = [60.686, 103.725, 150, 196.275, 239.314];
+    private static readonly double[] AbajoSinMover = [60.686, 119.15, 180.85, 239.314];
 
     private static void NoSeAgrega(ResultadoEstribos r, TipoAviso tipo, string id = "E1")
     {
@@ -49,7 +50,7 @@ public class AlineadorEstribosTests
     {
         ResultadoEstribos r = Calcular(Abierto(S(2), I(2)));
 
-        Assert.Equal([57.45, 103.725, 180.85, 242.55], Xs(r, Posicion.Inferior));
+        Assert.Equal([60.686, 103.725, 180.85, 239.314], Xs(r, Posicion.Inferior));
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
         Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Abierto, 103.725, 103.725, 40, 460), Figura(r, "E1"));
         EstriboEnPortico ab = r.Estribos.Single(e => e.Id == "E1" && e.Tramo == "A-B");
@@ -64,7 +65,7 @@ public class AlineadorEstribosTests
     {
         ResultadoEstribos r = Calcular(Cerrado(S(2), S(4), I(2), I(3)));
 
-        Assert.Equal([57.45, 103.725, 196.275, 242.55], Xs(r, Posicion.Inferior));
+        Assert.Equal([60.686, 103.725, 196.275, 239.314], Xs(r, Posicion.Inferior));
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
         Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Cerrado, 86.275, 213.725, 40, 460), Figura(r, "E1"));
         // 2 × (117.95 + 410.5) + 2 × 113.
@@ -76,7 +77,7 @@ public class AlineadorEstribosTests
     {
         ResultadoEstribos r = Calcular(Seccion(arriba: 3), Abierto(I(2), S(2)));
 
-        Assert.Equal([57.45, 119.15, 242.55], Xs(r, Posicion.Superior));
+        Assert.Equal([60.686, 119.15, 239.314], Xs(r, Posicion.Superior));
         Assert.Equal(AbajoSinMover, Xs(r, Posicion.Inferior));
     }
 
@@ -95,7 +96,7 @@ public class AlineadorEstribosTests
     {
         ResultadoEstribos r = Calcular(Abierto(S(3), I(3)));
 
-        Assert.Equal([57.45, 103.725, 150, 242.55], Xs(r, Posicion.Inferior));
+        Assert.Equal([60.686, 105.343, 150, 239.314], Xs(r, Posicion.Inferior));
         Assert.Empty(r.Avisos);
     }
 
@@ -104,7 +105,7 @@ public class AlineadorEstribosTests
     {
         ResultadoEstribos r = Calcular(Cerrado(S(2), S(3), I(2), I(3)));
 
-        Assert.Equal([57.45, 103.725, 150, 242.55], Xs(r, Posicion.Inferior));
+        Assert.Equal([60.686, 103.725, 150, 239.314], Xs(r, Posicion.Inferior));
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
         Assert.Empty(r.Avisos);
     }
@@ -130,7 +131,7 @@ public class AlineadorEstribosTests
 
         EstriboEnPortico ea1 = Assert.Single(r.Estribos, e => e.Id == "E1");
         Assert.Equal(("A-B", 28), (ea1.Tramo, ea1.Posiciones.Count));
-        Assert.Equal([57.45, 103.725, 180.85, 242.55], Xs(r, Posicion.Inferior));
+        Assert.Equal([60.686, 103.725, 180.85, 239.314], Xs(r, Posicion.Inferior));
     }
 
     [Fact]
@@ -147,7 +148,7 @@ public class AlineadorEstribosTests
     }
 
     /// <summary>
-    /// Abajo 8 #5: la fila 2 lleva 3 (57.45, 150 y 242.55, a 73.35 de la cara). Como en la maqueta, las sueltas solo se
+    /// Abajo 8 #5: la fila 2 lleva 3 (57.45, 150 y 242.55, a 73.35 + 3.236 de la cara: apoya en la esquina, que bajó). Como en la maqueta, las sueltas solo se
     /// reparten entre dos fijas: en la punta de la fila 2 no se corren y basta con que quede la distancia libre.
     /// </summary>
     [Fact]
@@ -158,9 +159,9 @@ public class AlineadorEstribosTests
         Assert.Empty(r.Avisos);
         // La fila conserva el orden del reparto (la 1 sigue siendo la misma barra), aunque ahora quede a la derecha de la 2.
         Assert.Equal([196.275, 150, 242.55], r.Seccion.Inferior.Filas[1].Select(b => Math.Round(b.X, 3)));
-        // La rama va pegada a las barras que abraza: de la de la fila 2 (73.35 - 7.95 - 9.5) a la de arriba.
+        // La rama va pegada a las barras que abraza: de la de la fila 2 (76.586 - 7.95 - 9.5) a la de arriba.
         EstriboEnSeccion f = Figura(r, "E1");
-        Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Abierto, 196.275, 196.275, 55.9, 460), f with { Abajo = Math.Round(f.Abajo, 3) });
+        Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Abierto, 196.275, 196.275, 59.136, 460), f with { Abajo = Math.Round(f.Abajo, 3) });
     }
 
     [Fact]
@@ -203,7 +204,7 @@ public class AlineadorEstribosTests
         ResultadoEstribos r = Calcular(Abierto(S(2), I(1)));
 
         NoSeAgrega(r, TipoAviso.MueveUnaEsquina);
-        Assert.Equal(57.45, Xs(r, Posicion.Inferior)[0]);
+        Assert.Equal(60.686, Xs(r, Posicion.Inferior)[0]);
     }
 
     [Fact]
@@ -212,7 +213,7 @@ public class AlineadorEstribosTests
         ResultadoEstribos r = Calcular(Seccion(abajo: new GrupoBarras(3, 8)), Abierto(S(2), I(2)));
 
         NoSeAgrega(r, TipoAviso.NoSePuedeAlinear);
-        Assert.Equal([62.2, 150, 237.8], Xs(r, Posicion.Inferior));
+        Assert.Equal([64.045, 150, 235.955], Xs(r, Posicion.Inferior));
     }
 
     [Fact]
@@ -222,7 +223,7 @@ public class AlineadorEstribosTests
 
         NoSeAgrega(r, TipoAviso.NoSePuedeAlinear, "E2");
         Assert.Contains(r.EnSeccion, e => e.Id == "E1");
-        Assert.Equal([57.45, 103.725, 180.85, 242.55], Xs(r, Posicion.Inferior));
+        Assert.Equal([60.686, 103.725, 180.85, 239.314], Xs(r, Posicion.Inferior));
     }
 
     [Fact]

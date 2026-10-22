@@ -61,4 +61,26 @@ public class GeometriaPorticoTests
         Assert.Equal(-1150, g.InicioBarras);
         Assert.Equal(3, g.Luces.Count);
     }
+
+    [Fact]
+    public void EnLaPuntaDeUnVoladizo_ElGanchoQuedaPorDentroDelUltimoEstribo()
+    {
+        Portico p = Datos.PorticoMaqueta() with { VoladizoInicio = 1000, VoladizoFinal = 1000 };
+
+        var g = new GeometriaPortico(p, recubrimientoPuntas: 50, estriboEnVoladizo: 10);
+
+        Assert.Equal(-1140, g.InicioBarras);
+        Assert.Equal(new GeometriaPortico(p, 50).FinBarras - 10, g.FinBarras);
+    }
+
+    [Fact]
+    public void ElEstriboDelVoladizoNoMueveElExtremoQueDescansaEnColumna()
+    {
+        Portico sinVoladizos = Datos.PorticoMaqueta() with { VoladizoInicio = 0, VoladizoFinal = 0 };
+
+        var con = new GeometriaPortico(sinVoladizos, recubrimientoPuntas: 50, estriboEnVoladizo: 10);
+        var sin = new GeometriaPortico(sinVoladizos, recubrimientoPuntas: 50);
+
+        Assert.Equal((sin.InicioBarras, sin.FinBarras), (con.InicioBarras, con.FinBarras));
+    }
 }

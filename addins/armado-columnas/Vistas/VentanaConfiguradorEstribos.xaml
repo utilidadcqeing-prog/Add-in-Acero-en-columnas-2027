@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:practicacq.Vistas"
-        Title="Configurador de Estribos"
+        Title="Acero en columnas"
         Height="780" Width="1180"
         MinHeight="660" MinWidth="1000"
         WindowStartupLocation="CenterOwner"
@@ -252,7 +252,7 @@
                                Text="En los nudos el estribo va siempre uniforme: no se permite confinamiento dentro del canto de la viga."
                                Style="{StaticResource TextoAyuda}" />
 
-                    <TextBlock Text="Tipo de barra:" Style="{StaticResource Etiqueta}" />
+                    <TextBlock Text="Barra de estribos:" Style="{StaticResource Etiqueta}" />
                     <ComboBox x:Name="ComboTipoBarra" />
                     <!-- #64: solo se ofrecen las barras cuyo doblado coincide con el
                          cuadro. Una línea de resumen, y el detalle (cuáles y por
@@ -364,6 +364,10 @@
                     <Button x:Name="BotonEstribosMenores" Content="Editar estribos menores…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
                             Click="BotonEstribosMenores_Click" />
                     <TextBlock x:Name="TextoEstribosMenores" Style="{StaticResource TextoAyuda}" Margin="0,4,0,0" />
+
+                    <!-- #142: el cuadro de ganchos y traslapos, solo de consulta. -->
+                    <Button x:Name="BotonCuadroVarillas" Content="Ver cuadro de varillas…" Height="28" Style="{StaticResource BotonSecundario}" Margin="0,8,0,0"
+                            Click="BotonCuadroVarillas_Click" />
                 </StackPanel>
                 </ScrollViewer>
               </DockPanel>
@@ -384,10 +388,12 @@
                 <TextBlock x:Name="TextoResumenGeneracion" Foreground="{StaticResource ExitoTexto}" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <TextBlock x:Name="TextoEstado" Foreground="{StaticResource TextoSecundario}" TextWrapping="Wrap" />
             </StackPanel>
-            <!-- Borra armado del modelo, incluso el que no generó el add-in: se
-                 destaca como opción peligrosa (issue #118). -->
+            <!-- #145: lo que generó el add-in antes se reemplaza siempre; la casilla
+                 es solo para el acero ajeno (se conserva aunque #61 pedía sacarla).
+                 Borra armado del modelo: se destaca como opción peligrosa (#118). -->
             <Border Grid.Column="1" Style="{StaticResource CajaPeligro}" VerticalAlignment="Center" Margin="0,0,12,0">
-                <CheckBox x:Name="CheckBorrarAnteriores" Content="Borrar TODO el armado existente en estas columnas (incluido el que no generó el addin)"
+                <CheckBox x:Name="CheckBorrarAjeno" Content="Borrar también el armado que no generó el add-in en estas columnas"
+                          ToolTip="El acero que generó el add-in en estas columnas se reemplaza siempre al generar. Esto borra además el modelado a mano o con otro add-in, en toda la columna."
                           Style="{StaticResource CasillaPeligro}" />
             </Border>
             <Button Grid.Column="2" x:Name="BotonGenerar" Content="Generar armado en Revit"

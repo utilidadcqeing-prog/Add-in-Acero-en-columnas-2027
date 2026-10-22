@@ -6,11 +6,13 @@ namespace CQEING.Vigas.Calculo.Tests;
 /// <summary>
 /// Puesto de los bastones en la sección de la maqueta (#89): 30 × 50 cm, recubrimiento 4 cm, estribo #3 y barras #5.
 /// Caben 5 por fila; los puestos de la fila llena van en 57.45, 103.725, 150, 196.275 y 242.55. Un #5 entre dos #5
-/// necesita 7.95 + 25 + 15.9 + 25 + 7.95 = 81.8 mm entre centros.
+/// necesita 7.95 + 25 + 15.9 + 25 + 7.95 = 81.8 mm entre centros. La #5 de esquina de la fila 1 se apoya en la curva del
+/// estribo y entra EnCurva5 de lado y de alto (21-oct): queda en 60.686 y la fila 2 baja lo mismo.
 /// </summary>
 public class UbicadorBastonesTests
 {
     private const double Precision = 1e-6;
+    private static readonly double EnCurva5 = (19 - 7.95) * (1 - 1 / Math.Sqrt(2));
 
     private static EntradaSeccion Maqueta(IReadOnlyList<GrupoBarras> inferior, double separacion = 0, int maximoFilas = 3) =>
         new(Ancho: 300, Alto: 500, Recubrimientos.Iguales(40), DiametroEstribo: 3,
@@ -27,7 +29,7 @@ public class UbicadorBastonesTests
         BastonEnSeccion b = Assert.Single(u.Barras);
         Assert.Equal(ErrorCara.Ninguno, u.Error);
         Assert.Equal(1, b.Fila);
-        Assert.Equal(103.725, b.Barra.X, Precision);
+        Assert.Equal((57.45 + EnCurva5 + 150) / 2, b.Barra.X, Precision);
         Assert.Equal(57.45, b.Barra.Y, Precision);
     }
 
@@ -36,7 +38,7 @@ public class UbicadorBastonesTests
     {
         UbicacionBastones u = Abajo(Maqueta([new GrupoBarras(3, 5)]), new GrupoBarras(2, 5));
 
-        Assert.Equal([103.725, 196.275], u.Barras.Select(b => Math.Round(b.Barra.X, 6)));
+        Assert.Equal([Math.Round((57.45 + EnCurva5 + 150) / 2, 6), Math.Round((150 + 242.55 - EnCurva5) / 2, 6)], u.Barras.Select(b => Math.Round(b.Barra.X, 6)));
         Assert.All(u.Barras, b => Assert.Equal(1, b.Fila));
     }
 
@@ -47,7 +49,7 @@ public class UbicadorBastonesTests
 
         Assert.Equal(2, b.Fila);
         Assert.Equal(57.45, b.Barra.X, Precision);
-        Assert.Equal(73.35, b.Barra.Y, Precision);
+        Assert.Equal(73.35 + EnCurva5, b.Barra.Y, Precision);
     }
 
     [Fact]
@@ -73,7 +75,7 @@ public class UbicadorBastonesTests
     {
         BastonEnSeccion b = Assert.Single(Abajo(Maqueta([new GrupoBarras(5, 5)], separacion: 10), new GrupoBarras(1, 5)).Barras);
 
-        Assert.Equal(83.35, b.Barra.Y, Precision);
+        Assert.Equal(83.35 + EnCurva5, b.Barra.Y, Precision);
     }
 
     [Fact]
@@ -96,10 +98,14 @@ public class UbicadorBastonesTests
     [Fact]
     public void UnBastonMasGruesoMideElHuecoConSuDiametro()
     {
-        BastonEnSeccion b = Assert.Single(Abajo(Maqueta([new GrupoBarras(3, 5)]), new GrupoBarras(1, 8)).Barras);
+        // el hueco entre la esquina (60.686) y el centro es de 89.31 entre centros: un #6 pide 7.95 + 25 + 19.1 + 25 + 7.95
+        // = 85 y cabe; un #8 pide 91.3 y ya no (antes de apoyar la esquina en la curva, el hueco era de 92.55)
+        BastonEnSeccion seis = Assert.Single(Abajo(Maqueta([new GrupoBarras(3, 5)]), new GrupoBarras(1, 6)).Barras);
+        BastonEnSeccion ocho = Assert.Single(Abajo(Maqueta([new GrupoBarras(3, 5)]), new GrupoBarras(1, 8)).Barras);
 
-        Assert.Equal((1, 8), (b.Fila, b.Barra.Diametro));
-        Assert.Equal(103.725, b.Barra.X, Precision);
+        Assert.Equal((1, 6), (seis.Fila, seis.Barra.Diametro));
+        Assert.Equal((57.45 + EnCurva5 + 150) / 2, seis.Barra.X, Precision);
+        Assert.Equal((2, 8), (ocho.Fila, ocho.Barra.Diametro));
     }
 
     /// <summary>

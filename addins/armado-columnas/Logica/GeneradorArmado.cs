@@ -53,8 +53,9 @@ public static class GeneradorArmado
         var res = new ResultadoArmado();
         PlanArmado plan = opciones.Plan;
 
-        if (opciones.BorrarAnteriores)
-            res.Eliminados = BorrarAnteriores(doc, plan);
+        // #145: regenerar reemplaza, no apila. Va antes de crear nada, y en la
+        // misma transacción: si la generación falla, el acero anterior vuelve.
+        res.Eliminados = BorrarAnteriores(doc, plan, opciones.BorrarArmadoAjeno);
 
 #if DEBUG
         // Solo en Debug: el paquete publicado (Release) no deja registros.
@@ -587,6 +588,35 @@ public static class GeneradorArmado
     /// cae al camino de <c>CreateFromCurves</c> de siempre, no vale la pena
     /// tirar la columna abajo por esto cuando ya existe un camino que funciona.
     /// </summary>
+    /// <summary>~0,03 mm: por debajo, el eje ya está donde se pidió.</summary>
+    private const double ToleranciaEjePies = 1e-4;
+
+    /// <summary>
+    /// Dónde quedó cada lado del eje del estribo en planta: la X de los dos
+    /// lados verticales y la Y de los dos horizontales, leídos sin ganchos ni
+    /// radios. No sirve la caja que encierra esas curvas: en la esquina de los
+    /// ganchos Revit alarga los dos tramos que llegan ahí (~7 mm con #3,
+    /// medido el 21-oct en la columna 387983) y la caja salía más grande que
+    /// el estribo. null si no se pudo leer.
+    /// </summary>
+    private static (double X1, double X2, double Y1, double Y2)? LadosDelEje(Rebar estribo)
+    {
+        try
+        {
+            List<Line> rectas = estribo
+                .GetCenterlineCurves(false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, 0)
+                .OfType<Line>().ToList();
+            List<double> xs = rectas.Where(l => Math.Abs(l.Direction.X) < 1e-6).Select(l => l.GetEndPoint(0).X).ToList();
+            List<double> ys = rectas.Where(l => Math.Abs(l.Direction.Y) < 1e-6).Select(l => l.GetEndPoint(0).Y).ToList();
+            if (xs.Count < 2 || ys.Count < 2) return null;
+            return (xs.Min(), xs.Max(), ys.Min(), ys.Max());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static Rebar? CrearDesdeForma(
         Document doc, FamilyInstance host, IList<Curve> curvasTrasladadas,
         RebarBarType barra, RebarShape forma, HashSet<ElementId> formasRechazadas,
@@ -610,6 +640,25 @@ public static class GeneradorArmado
             if (estribo is null) return null;
 
             estribo.GetShapeDrivenAccessor().ScaleToBox(origen, vectorX, vectorY);
+
+            // La caja que se pide es el EJE de la barra, pero la forma propia
+            // "CQ Estribo" se acota por FUERA del doblez: la caja terminaba
+            // siendo la cara exterior y el estribo quedaba medio diámetro más
+            // adentro que el recubrimiento (4,48 cm en vez de 4 con #3; medido
+            // el 21-oct, docs/planes/2026-10-21-seccion-como-en-revit.md). Se
+            // mide dónde quedó cada lado y se vuelve a escalar con la caja
+            // corregida lado por lado, hasta que coincida (así sirve igual para
+            // una forma del modelo acotada por el eje).
+            (double X1, double X2, double Y1, double Y2) caja = (xMin, xMax, yMin, yMax);
+            for (int intento = 0; intento < 3 && LadosDelEje(estribo) is { } lados; intento++)
+            {
+                double dx1 = xMin - lados.X1, dx2 = xMax - lados.X2, dy1 = yMin - lados.Y1, dy2 = yMax - lados.Y2;
+                if (new[] { dx1, dx2, dy1, dy2 }.All(d => Math.Abs(d) <= ToleranciaEjePies)) break;
+
+                caja = (caja.X1 + dx1, caja.X2 + dx2, caja.Y1 + dy1, caja.Y2 + dy2);
+                estribo.GetShapeDrivenAccessor().ScaleToBox(
+                    new XYZ(caja.X1, caja.Y1, z), new XYZ(caja.X2 - caja.X1, 0, 0), new XYZ(0, caja.Y2 - caja.Y1, 0));
+            }
 
             ElementId idGancho = terminaciones.HookTypeIdAtStart;
             if (idGancho != ElementId.InvalidElementId)
@@ -681,36 +730,53 @@ public static class GeneradorArmado
     }
 
     /// <summary>
-    /// Quita TODO el acero de refuerzo (<see cref="Rebar"/>) ya hosteado en
-    /// los elementos que el plan de hoy va a tocar -- sin importar si lo
-    /// generó este add-in o si lo modeló alguien a mano (pedido explícito
-    /// del usuario, 9-sep: antes solo se borraba lo marcado por el add-in
-    /// vía <see cref="MarcaEstribos"/>; con la casilla tildada ahora se borra
-    /// cualquier armado existente en esas columnas, para no dejar una barra
-    /// vieja convivendo con la nueva). Solo alcanza a los host que aparecen
-    /// como <see cref="Tramo.IdElementoHost"/> en el plan -- no toca columnas
-    /// fuera de esta corrida. Ver el checkbox en la ventana
-    /// ("Borrar TODO el armado existente en estas columnas") -- es una
-    /// operación destructiva a propósito, el usuario la tilda explícitamente
-    /// cada vez que la quiere.
+    /// #145: antes de generar, quita el acero que este add-in generó en una
+    /// corrida anterior (el que lleva <see cref="MarcaEstribos"/>), para que
+    /// regenerar reemplace en vez de apilar un juego sobre otro. Solo en las
+    /// columnas de esta corrida (las que tienen algún tramo con ✓):
+    /// <list type="bullet">
+    /// <item>las longitudinales, en toda la columna: se vuelven a armar de
+    /// punta a punta aunque se marque un solo tramo;</item>
+    /// <item>los estribos, cajas y grapas, solo en los tramos con ✓: los de
+    /// los tramos sin ✓ no se regeneran, así que se conservan (Luciano,
+    /// 22-oct).</item>
+    /// </list>
+    /// Con <paramref name="tambienAjeno"/> (la casilla "Borrar TODO el armado
+    /// existente…", pedido del 9-sep) se borra además el acero que no generó
+    /// el add-in, en toda la columna. Se conserva aunque #61 pedía sacarla:
+    /// Luciano, 22-oct.
     /// </summary>
-    private static int BorrarAnteriores(Document doc, PlanArmado plan)
+    private static int BorrarAnteriores(Document doc, PlanArmado plan, bool tambienAjeno)
     {
-        var idsHost = plan.Columnas
-            .SelectMany(c => c.Contexto?.Tramos ?? new List<Tramo>())
-            .Select(t => t.IdElementoHost)
-            .Where(id => id is not null)
-            .Select(id => long.TryParse(id, out long v) ? new ElementId(v) : null)
-            .Where(id => id is not null)
-            .Select(id => id!)
-            .ToHashSet();
+        var hostsColumna = new HashSet<ElementId>();
+        var hostsMarcados = new HashSet<ElementId>();
+        foreach (ColumnaPlan columna in plan.Columnas)
+        {
+            if (columna.Contexto is null || columna.Tramos.All(t => t is null)) continue;
+            for (int i = 0; i < columna.Contexto.Tramos.Count; i++)
+            {
+                if (!long.TryParse(columna.Contexto.Tramos[i].IdElementoHost, out long v)) continue;
+                var host = new ElementId(v);
+                hostsColumna.Add(host);
+                if (i < columna.Tramos.Count && columna.Tramos[i] is not null) hostsMarcados.Add(host);
+            }
+        }
 
-        if (idsHost.Count == 0) return 0;
+        if (hostsColumna.Count == 0) return 0;
+
+        HashSet<ElementId> propios = new FilteredElementCollector(doc)
+            .OfClass(typeof(Rebar))
+            .WherePasses(MarcaEstribos.Filtro())
+            .ToElementIds()
+            .ToHashSet();
 
         List<ElementId> viejos = new FilteredElementCollector(doc)
             .OfClass(typeof(Rebar))
             .Cast<Rebar>()
-            .Where(r => idsHost.Contains(r.GetHostId()))
+            .Where(r => hostsColumna.Contains(r.GetHostId()))
+            .Where(r => propios.Contains(r.Id)
+                ? !EsTransversal(r) || hostsMarcados.Contains(r.GetHostId())
+                : tambienAjeno)
             .Select(r => r.Id)
             .ToList();
 
@@ -719,6 +785,16 @@ public static class GeneradorArmado
 
         return viejos.Count;
     }
+
+    /// <summary>
+    /// Estribo, caja o grapa: su plano es horizontal (normal vertical), porque
+    /// se crean con normal Z o con BasisX/BasisY. Las longitudinales se crean
+    /// con una normal horizontal (<see cref="BarraContinua"/>). Una barra que
+    /// no es de forma (a mano, libre) cuenta como longitudinal: se borra en
+    /// toda la columna.
+    /// </summary>
+    private static bool EsTransversal(Rebar r) =>
+        r.IsRebarShapeDriven() && Math.Abs(r.GetShapeDrivenAccessor().Normal.Z) > 0.9;
 
     /// <summary>
     /// Solo cuando se cayó al gancho del modelo (el propio no se pudo crear):

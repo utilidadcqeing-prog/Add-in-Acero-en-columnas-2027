@@ -355,9 +355,12 @@ Probar("paquete_vacio", () =>
 Probar("paquete_una_grapa", () =>
 {
     PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0) }, N3, Diam);
-    Igual(0.019, p.Alto, "alto");
-    Igual(0.00475, p.DesplazamientoPrincipal, "principal");
-    Igual(-0.00475, p.Piezas.Single().Desplazamiento, "grapa");
+    // Cada pieza ocupa dos pisos (#130): el principal de −14,25 a +4,75 mm,
+    // la grapa justo debajo, de −33,25 a −14,25, con su eje a −19.
+    Igual(0.038, Math.Round(p.Alto, 6), "alto");
+    Igual(0.01425, Math.Round(p.DesplazamientoPrincipal, 6), "principal");
+    Igual(-0.00475, Math.Round(p.Piezas.Single().Desplazamiento, 6), "grapa");
+    Igual(-0.019, Math.Round(p.Piezas.Single().Desplazamiento - p.DesplazamientoPrincipal, 6), "grapa respecto del principal");
 });
 
 Probar("paquete_grapas_paralelas_comparten", () =>
@@ -365,18 +368,20 @@ Probar("paquete_grapas_paralelas_comparten", () =>
     PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(
         new[] { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0), Pieza(FormaMenor.GrapaS, EjeCaja.Fila, 1, 1) }, N3, Diam);
     Cierto(p.Piezas.Select(n => n.Nivel).Distinct().Count() == 1, "un solo nivel");
-    Igual(0.019, p.Alto, "alto");
-    Igual(0.00475, p.DesplazamientoPrincipal, "principal");
+    Igual(0.038, Math.Round(p.Alto, 6), "alto");
+    Igual(0.01425, Math.Round(p.DesplazamientoPrincipal, 6), "principal");
 });
 
 Probar("paquete_cruzadas", () =>
 {
     EstriboMenor fila = Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0), columna = Pieza(FormaMenor.GrapaC, EjeCaja.Columna, 0, 0);
     PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { columna, fila }, N3, Diam);
-    Igual(-0.0095, p.Piezas.Single(n => n.Pieza == fila).Desplazamiento, "la de fila, debajo");
-    Igual(0.0095, p.Piezas.Single(n => n.Pieza == columna).Desplazamiento, "la de columna, encima");
-    Igual(0.0285, p.Alto, "alto");
-    Igual(0, p.DesplazamientoPrincipal, "principal en el centro");
+    // Fila debajo con eje a −19 mm del principal; columna encima, con su piso
+    // (eje − 1,5 d) en el techo del principal (+4,75): eje a +19.
+    Igual(-0.01425, Math.Round(p.Piezas.Single(n => n.Pieza == fila).Desplazamiento, 6), "la de fila, debajo");
+    Igual(0.02375, Math.Round(p.Piezas.Single(n => n.Pieza == columna).Desplazamiento, 6), "la de columna, encima");
+    Igual(0.057, Math.Round(p.Alto, 6), "alto");
+    Igual(0.00475, Math.Round(p.DesplazamientoPrincipal, 6), "principal");
 });
 
 Probar("paquete_caja_mas_cerca", () =>
@@ -385,7 +390,7 @@ Probar("paquete_caja_mas_cerca", () =>
     PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { grapa, caja }, N3, Diam);
     Cierto(p.Piezas.Single(n => n.Pieza == caja).Nivel == 1, "la caja en el nivel 1");
     Cierto(p.Piezas.Single(n => n.Pieza == grapa).Nivel == 2, "la grapa en el nivel 2");
-    Igual(-0.0095, p.Piezas.Single(n => n.Pieza == caja).Desplazamiento, "la caja, debajo");
+    Igual(-0.019, Math.Round(p.Piezas.Single(n => n.Pieza == caja).Desplazamiento - p.DesplazamientoPrincipal, 6), "la caja, debajo");
 });
 
 Probar("paquete_tapada", () =>
@@ -399,8 +404,9 @@ Probar("paquete_tapada", () =>
 Probar("paquete_diametros_mixtos", () =>
 {
     PaqueteEstribos.Paquete p = PaqueteEstribos.Calcular(new[] { Pieza(FormaMenor.GrapaC, EjeCaja.Fila, 0, 0, "#4") }, N3, Diam);
-    Igual(0.0111, p.DesplazamientoPrincipal - p.Piezas.Single().Desplazamiento, "distancia entre ejes");
-    Igual(0.0222, p.Alto, "alto");
+    // #4 debajo del #3: eje a 14,25 + 6,35 = 20,6 mm; ocupa hasta −20,6 − 19,05.
+    Igual(0.0206, Math.Round(p.DesplazamientoPrincipal - p.Piezas.Single().Desplazamiento, 6), "distancia entre ejes");
+    Igual(0.0444, Math.Round(p.Alto, 6), "alto");
 });
 
 Probar("paquete_cajas_que_comparten_barra", () =>
@@ -435,24 +441,284 @@ Probar("ancho_minimo_cerrado", () =>
     Cierto(EstriboMenor.AnchoMinimoCerradoMm(n3) > 38, "la caja de 3,8 cm no entra");
 });
 
-Probar("cerrado_abraza_las_barras", () =>
+Probar("cerrado_entre_filas_vecinas_se_puede_doblar", () =>
 {
-    // Barras #4 (12,7 mm) en los ejes 100 y 200; estribo #3 (9,5 mm). En un
-    // traslapo la pieza de arriba queda 12,7 mm hacia menos: el lazo tiene que
-    // tocar por dentro el lado de afuera de las dos posiciones.
-    (double desde, double hasta) = EstriboMenor.LadosQueAbrazan(100, 200, 12.7, 9.5);
-    Igual(100 - 12.7 - 6.35 - 9.5, desde, "lado de abajo");
-    Igual(200 + 6.35 + 9.5, hasta, "lado de arriba");
+    // #132 (25×30, reunión del 21-oct): un cerrado #3 entre dos filas vecinas
+    // a 42 mm entre centros de las #6 salía marcado como imposible (42 < 47,5).
+    // Pero el cerrado va por fuera de las barras: su lado corto, entre los ejes
+    // de su barra, mide 42 + 19,05 + 9,5 + lo que se abre en las esquinas.
+    var piezas = new[]
+    {
+        new GanchoGrapa.Pieza(60, 100, 9.525, 0), new GanchoGrapa.Pieza(190, 100, 9.525, 0),
+        new GanchoGrapa.Pieza(60, 142, 9.525, 0), new GanchoGrapa.Pieza(190, 142, 9.525, 0),
+    };
+    (double x1, double x2, double y1, double y2) = EstriboMenor.CajaQueAbraza(piezas, 9.5, radioDoblezInterior: 19);
+    double ancho = Math.Min(x2 - x1, y2 - y1) - 9.5;
+    double abre = (19 - 9.525) * (1 - 1 / Math.Sqrt(2));
+    Igual(Math.Round(42 + 19.05 + 9.5 + 2 * abre, 6), Math.Round(ancho, 6), "lado corto entre ejes del cerrado");
+    var n3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 57 };
+    Cierto(ancho >= EstriboMenor.AnchoMinimoCerradoMm(n3), $"entra: {ancho:0.0} mm");
+
+    // De una sola fila (las dos barras de la misma fila) sí es imposible.
+    (x1, x2, y1, y2) = EstriboMenor.CajaQueAbraza(piezas.Take(2), 9.5, radioDoblezInterior: 19);
+    Cierto(Math.Min(x2 - x1, y2 - y1) - 9.5 < EstriboMenor.AnchoMinimoCerradoMm(n3), "una sola fila no entra");
 });
 
-Probar("gancho_pasa_sobre_la_barra", () =>
+Probar("cerrado_abraza_las_barras", () =>
 {
-    // Gancho de 180° con radio de eje 33 mm; la barra longitudinal queda 11 mm
-    // por dentro de la punta del gancho. El arco pasa sobre el eje de la barra
-    // a sqrt(33² − 22²) = 24,6 mm del centro del gancho, de costado.
-    Igual(24.6, Math.Round(EstriboMenor.CorrimientoSobreBarra(33, 11), 1), "caso normal");
-    Igual(33.0, EstriboMenor.CorrimientoSobreBarra(33, 40), "barra más honda que el radio: va por el tramo recto");
-    Igual(0.0, EstriboMenor.CorrimientoSobreBarra(33, -2), "barra afuera de la punta: el centro");
+    // Columna 387983 (21-oct): cerrado #3 de las filas 0 a 2 de la cara Y, con
+    // las piezas REALES de las #6 a esa altura -- la fila 0 con las dos piezas
+    // del traslapo (92,3 y 73,2), la 2 con una (167,6). Cada lado toca por fuera
+    // la pieza más afuera: 9,55 de radio + 9,5 del cerrado.
+    var piezas = new[]
+    {
+        new GanchoGrapa.Pieza(63.8, 92.3, 9.55, 0), new GanchoGrapa.Pieza(63.8, 73.2, 9.55, 0),
+        new GanchoGrapa.Pieza(186.2, 92.3, 9.55, 0), new GanchoGrapa.Pieza(186.2, 167.6, 9.55, 0),
+        new GanchoGrapa.Pieza(63.8, 167.6, 9.55, 0),
+    };
+    (double x1, double x2, double y1, double y2) = EstriboMenor.CajaQueAbraza(piezas, 9.5, radioDoblezInterior: 0);
+    Igual(44.75, Math.Round(x1, 6), "lado izquierdo, donde va el estribo principal");
+    Igual(205.25, Math.Round(x2, 6), "lado derecho");
+    Igual(54.15, Math.Round(y1, 6), "lado de abajo, por fuera de la pieza del traslapo");
+    Igual(186.65, Math.Round(y2, 6), "lado de arriba");
+
+    // Con las esquinas dobladas (#3 a 4 d: 19 mm de radio interior), la curva
+    // atravesaba ~4 mm las barras de las esquinas del cerrado (21-oct). Cada
+    // lado se abre lo justo para que esa barra se apoye en la curva, como las
+    // esquinas del estribo principal: (19 − 9,55)(1 − 1/√2) = 2,77 mm.
+    (x1, x2, y1, y2) = EstriboMenor.CajaQueAbraza(piezas, 9.5, radioDoblezInterior: 19);
+    double abre = (19 - 9.55) * (1 - 1 / Math.Sqrt(2));
+    Igual(Math.Round(44.75 - abre, 6), Math.Round(x1, 6), "izquierdo, abierto");
+    Igual(Math.Round(205.25 + abre, 6), Math.Round(x2, 6), "derecho, abierto");
+    Igual(Math.Round(54.15 - abre, 6), Math.Round(y1, 6), "abajo, abierto");
+    Igual(Math.Round(186.65 + abre, 6), Math.Round(y2, 6), "arriba, abierto");
+
+    // La barra de la esquina queda tocando la cara interior de la curva.
+    double centroX = x1 + 9.5 + 19, centroY = y1 + 9.5 + 19;
+    Igual(Math.Round(19 - 9.55, 6), Math.Round(Math.Sqrt(Math.Pow(63.8 - centroX, 2) + Math.Pow(73.2 - centroY, 2)), 6), "apoyada en la curva");
+});
+
+Probar("traslapos_no_chocan_cerca_de_la_esquina", () =>
+{
+    // Columna 387983 (21-oct), cara izquierda, en mm y m: la #8 de esquina
+    // corre su pieza de abajo +25,4 hacia la fila 0 (a 94,2) y la #6 de la fila
+    // 0 corre la de arriba −19,1 hacia la esquina (a 96,4): se atraviesan entre
+    // 1,2 y 6,0 m. La esquina no se puede voltear (se saldría); la fila 0 sí.
+    static AcomodoTraslapos.Pieza P(double x, double y, double r, double z0, double z1) => new(x, y, r, z0, z1);
+    var esquina = new AcomodoTraslapos.Varilla(
+        new[] { P(68.8, 94.2, 12.7, 0, 6.01), P(68.8, 68.8, 12.7, 4.19, 6.71) }, null);
+    var fila0 = new AcomodoTraslapos.Varilla(
+        new[] { P(63.8, 115.5, 9.55, 0, 2.51), P(63.8, 96.4, 9.55, 1.19, 6.71) },
+        new[] { P(63.8, 134.6, 9.55, 0, 2.51), P(63.8, 115.5, 9.55, 1.19, 6.71) });
+    var fila1 = new AcomodoTraslapos.Varilla(
+        new[] { P(63.8, 179.3, 9.55, 0, 5.51), P(63.8, 160.2, 9.55, 4.19, 6.71) },
+        new[] { P(63.8, 198.4, 9.55, 0, 5.51), P(63.8, 179.3, 9.55, 4.19, 6.71) });
+
+    Cierto(AcomodoTraslapos.Choque(esquina.Opciones[0], fila0.Opciones[0]) > 50, "como salió: se atraviesan");
+    int[] elegidas = AcomodoTraslapos.Elegir(new[] { esquina, fila0, fila1 });
+    Cierto(elegidas[0] == 0 && elegidas[1] == 1 && elegidas[2] == 0, $"se voltea solo la fila 0 ({string.Join(", ", elegidas)})");
+
+    // Queda un roce de medio milímetro: la #6 real está 5 mm más abajo que la
+    // teórica. Contra 16,75 mm que se metían antes.
+    Cierto(AcomodoTraslapos.Choque(esquina.Opciones[0], fila0.Opciones[1]) < 0.6 * 4.82, "casi no se tocan");
+    Igual(0, AcomodoTraslapos.Choque(fila0.Opciones[1], fila1.Opciones[0]), "la fila 0 volteada no choca con la 1");
+});
+
+Probar("traslapos_cuatro_maneras", () =>
+{
+    // #7 de cara (normal X) en x = 104,1 entre esquinas a 62,2 y 187,8; pieza
+    // de abajo 0–2,51 m, de arriba 0,69–6,71 m. Las cuatro entran.
+    var m = AcomodoTraslapos.Cuatro(104.1, 239.4, 11.1, (1, 0), 22.2, (0, 2.51), (0.69, 6.71), (62.2, 187.8, 62.2, 239.4));
+    Cierto(m.Count == 4, $"cuatro maneras ({m.Count})");
+    Cierto(!m[0].DeArribaAAbajo && !m[0].CorridaLaDeArriba && m[0].Signo == 1, "la de siempre: abajo corrida hacia +, dibujo hacia arriba");
+    Igual(126.3, Math.Round(m[0].Piezas[0].X, 6), "la de abajo corrida");
+    Cierto(m.Single(x => x.CorridaLaDeArriba && x.Signo == 1).DeArribaAAbajo, "arriba corrida hacia +: dibujo hacia abajo");
+    Cierto(!m.Single(x => x.CorridaLaDeArriba && x.Signo == -1).DeArribaAAbajo, "arriba corrida hacia −: dibujo hacia arriba");
+    Cierto(m.Single(x => !x.CorridaLaDeArriba && x.Signo == -1).DeArribaAAbajo, "abajo corrida hacia −: dibujo hacia abajo");
+
+    // Una esquina solo puede correr hacia adentro de la cara.
+    Cierto(AcomodoTraslapos.Cuatro(62.2, 237.8, 12.7, (1, 0), 25.4, (0, 2.51), (0.69, 6.71), (62.2, 187.8, 62.2, 237.8))
+        .All(x => x.Signo == 1), "esquina izquierda: solo hacia +");
+});
+
+// Cara de arriba de la columna 387983, medida el 21-oct: #8 de esquina en
+// x 68,8 y 181,2 (y 231,2), #7 de cara en 104,1 y 145,9 (y 234,7). Tipo A
+// traslapa arriba (piezas 0-6,01 y 4,19-6,71 m), tipo B abajo (0-2,51 y
+// 0,69-6,71 m); de izquierda a derecha B, A, B, A.
+AcomodoTraslapos.Varilla[] CaraDeArriba(bool esquinasEnLosDosEjes)
+{
+    var lim = (68.8, 181.2, 68.8, 234.7);
+    var a = ((0.0, 6.01), (4.19, 6.71));
+    var b = ((0.0, 2.51), (0.69, 6.71));
+    IEnumerable<IReadOnlyList<AcomodoTraslapos.Pieza>> Maneras(double x, double y, double r, (double, double) eje, ((double, double) Abajo, (double, double) Arriba) t) =>
+        AcomodoTraslapos.Cuatro(x, y, r, eje, 2 * r, t.Abajo, t.Arriba, lim).Select(m => m.Piezas);
+    AcomodoTraslapos.Varilla Esquina(double x, ((double, double), (double, double)) t) =>
+        new(Maneras(x, 231.2, 12.7, (1, 0), t)
+            .Concat(esquinasEnLosDosEjes ? Maneras(x, 231.2, 12.7, (0, 1), t) : Enumerable.Empty<IReadOnlyList<AcomodoTraslapos.Pieza>>())
+            .ToList());
+    AcomodoTraslapos.Varilla DeCara(double x, ((double, double), (double, double)) t) =>
+        new(Maneras(x, 234.7, 11.1, (1, 0), t).ToList());
+    return new[] { Esquina(68.8, b), DeCara(104.1, a), DeCara(145.9, b), Esquina(181.2, a) };
+}
+
+double ChoqueElegido(AcomodoTraslapos.Varilla[] varillas, int[] e)
+{
+    double total = 0;
+    for (int i = 0; i < varillas.Length; i++)
+        for (int j = i + 1; j < varillas.Length; j++)
+            total += AcomodoTraslapos.Choque(varillas[i].Opciones[e[i]], varillas[j].Opciones[e[j]]);
+    return total;
+}
+
+Probar("traslapos_esquina_solo_por_esta_cara", () =>
+{
+    // Si la esquina solo puede correr su pieza a lo largo de esta cara (eje
+    // X, como antes del 21-oct), alguna pieza choca: es lo que se midió.
+    var varillas = CaraDeArriba(esquinasEnLosDosEjes: false);
+    Cierto(ChoqueElegido(varillas, AcomodoTraslapos.Elegir(varillas)) > 0, "con eje X en las esquinas choca");
+});
+
+Probar("traslapos_la_esquina_corre_por_la_otra_cara", () =>
+{
+    // Con los dos ejes, la esquina corre su pieza por la cara lateral y deja
+    // libre su lugar justo en la altura en que la #7 vecina se le acerca --
+    // como queda sola la cara de abajo.
+    var varillas = CaraDeArriba(esquinasEnLosDosEjes: true);
+    int[] e = AcomodoTraslapos.Elegir(varillas);
+    Igual(0.0, Math.Round(ChoqueElegido(varillas, e), 9), "ningún choque");
+});
+
+Probar("traslapos_no_atraviesan_el_gancho", () =>
+{
+    // Esquina de arriba a la derecha (#8 en 181,2; 231,2) donde cierra el
+    // estribo: el gancho (#3, radio 4,75) entra en diagonal hacia el centro
+    // desde la barra. Sin el gancho, la corrida va a lo largo de la cara de
+    // arriba (la manera de siempre); con él, tiene que ir por la otra cara.
+    var lim = (68.8, 181.2, 68.8, 231.2);
+    var esquina = new AcomodoTraslapos.Varilla(
+        AcomodoTraslapos.Cuatro(181.2, 231.2, 12.7, (1, 0), 25.4, (0, 6.01), (4.19, 6.71), lim).Select(m => m.Piezas)
+            .Concat(AcomodoTraslapos.Cuatro(181.2, 231.2, 12.7, (0, 1), 25.4, (0, 6.01), (4.19, 6.71), lim).Select(m => m.Piezas))
+            .ToList());
+    var gancho = Enumerable.Range(0, 12)
+        .Select(k => new AcomodoTraslapos.Pieza(181.2 - 12.7 - 4.75 - k * 3.0, 231.2 - 4.0 - k * 3.0, 4.25, 0, 6.71))
+        .ToList();
+    int sinGancho = AcomodoTraslapos.Elegir(new[] { esquina })[0];
+    int conGancho = AcomodoTraslapos.Elegir(new[] { esquina }, gancho)[0];
+    Igual(0.0, AcomodoTraslapos.Choque(esquina.Opciones[conGancho], gancho), "no toca el gancho");
+    Cierto(esquina.Opciones[conGancho].All(q => Math.Abs(q.X - 181.2) < 1e-9), "corre por la cara lateral");
+    Cierto(sinGancho == 0, "sin gancho queda la de siempre");
+});
+
+Probar("traslapos_elige_la_mejor_de_todas", () =>
+{
+    // Contra recorrer a mano todas las combinaciones, en casos al azar donde
+    // hacen falta varios cambios a la vez: siempre el mismo choque mínimo y,
+    // entre los empates, la que cambia menos varillas.
+    var azar = new Random(130);
+    for (int caso = 0; caso < 200; caso++)
+    {
+        int n = 6;
+        var varillas = Enumerable.Range(0, n).Select(_ => new AcomodoTraslapos.Varilla(
+            Enumerable.Range(0, 1 + azar.Next(3)).Select(_ => (IReadOnlyList<AcomodoTraslapos.Pieza>)new[]
+            {
+                new AcomodoTraslapos.Pieza(azar.Next(6) * 10.0, azar.Next(3) * 10.0, 6, 0, 1 + azar.Next(3)),
+            }).ToList())).ToArray();
+        var obstaculos = new[] { new AcomodoTraslapos.Pieza(azar.Next(6) * 10.0, azar.Next(3) * 10.0, 4, 0, 4) };
+
+        double Total(int[] e)
+        {
+            double t = 0;
+            for (int i = 0; i < n; i++)
+            {
+                t += AcomodoTraslapos.Choque(varillas[i].Opciones[e[i]], obstaculos);
+                for (int j = i + 1; j < n; j++) t += AcomodoTraslapos.Choque(varillas[i].Opciones[e[i]], varillas[j].Opciones[e[j]]);
+            }
+            return t;
+        }
+
+        double mejor = double.MaxValue; int menosCambios = int.MaxValue;
+        var e = new int[n];
+        void Todas(int j)
+        {
+            if (j == n)
+            {
+                double t = Total(e); int c = e.Count(k => k != 0);
+                if (t < mejor - 1e-9 || (Math.Abs(t - mejor) <= 1e-9 && c < menosCambios)) (mejor, menosCambios) = (t, c);
+                return;
+            }
+            for (int k = 0; k < varillas[j].Opciones.Count; k++) { e[j] = k; Todas(j + 1); }
+        }
+        Todas(0);
+
+        int[] elegida = AcomodoTraslapos.Elegir(varillas, obstaculos);
+        Igual(Math.Round(mejor, 6), Math.Round(Total(elegida), 6), $"caso {caso}: choque mínimo");
+        Igual(menosCambios, elegida.Count(k => k != 0), $"caso {caso}: cambios");
+        Cierto(AcomodoTraslapos.UltimaFueCompleta, "recorrió todas");
+    }
+});
+
+Probar("traslapos_sin_choque_no_se_tocan", () =>
+{
+    // Si nada choca, todas quedan como siempre.
+    var a = new AcomodoTraslapos.Varilla(new[] { new AcomodoTraslapos.Pieza(0, 0, 10, 0, 6) }, new[] { new AcomodoTraslapos.Pieza(0, 20, 10, 0, 6) });
+    var b = new AcomodoTraslapos.Varilla(new[] { new AcomodoTraslapos.Pieza(100, 0, 10, 0, 6) }, new[] { new AcomodoTraslapos.Pieza(100, 20, 10, 0, 6) });
+    Cierto(AcomodoTraslapos.Elegir(new[] { a, b }).All(v => v == 0), "ninguna volteada");
+});
+
+Probar("gancho_abraza_la_barra", () =>
+{
+    // Columna 387983 (#130): grapa #3 doblada a 4 d (radio interior 19 mm) y
+    // la #6 de la izquierda (radio 9,55) en (63,8; 115,5). La barra queda
+    // adentro del doblez tocando la punta: el centro, 19 − 9,55 = 9,45 mm
+    // hacia adentro, a la misma altura que la barra.
+    var barra = new GanchoGrapa.Pieza(63.8, 115.5, 9.55, 2510);
+    (IReadOnlyList<GanchoGrapa.Pieza> abrazadas, bool caben) = GanchoGrapa.Elegir(new[] { barra }, 19);
+    Cierto(caben && abrazadas.Count == 1, "una #6 entra en el doblez");
+    (double cx, double cy) = GanchoGrapa.CentroDelDoblez(abrazadas, 19, (1, 0));
+    Igual(73.25, Math.Round(cx, 6), "centro, a lo largo");
+    Igual(115.5, Math.Round(cy, 6), "centro, de costado");
+
+    // La otra punta, mirando hacia −X.
+    (double dx, _) = GanchoGrapa.CentroDelDoblez(new[] { new GanchoGrapa.Pieza(186.2, 120.7, 9.55, 5510) }, 19, (-1, 0));
+    Igual(176.75, Math.Round(dx, 6), "la otra punta");
+});
+
+Probar("gancho_en_el_traslapo", () =>
+{
+    // Dos #4 de un traslapo (una 12,7 mm debajo de la otra) entran juntas en el
+    // doblez de 38 mm: se abrazan las dos, el centro entre ellas, y las dos
+    // tocan la cara interior.
+    var abajo = new GanchoGrapa.Pieza(60, 100, 6.35, 1000);
+    var arriba = new GanchoGrapa.Pieza(60, 87.3, 6.35, 3000);
+    (IReadOnlyList<GanchoGrapa.Pieza> dos, bool caben) = GanchoGrapa.Elegir(new[] { abajo, arriba }, 19);
+    Cierto(caben && dos.Count == 2, "dos #4 entran");
+    (double cx, double cy) = GanchoGrapa.CentroDelDoblez(dos, 19, (1, 0));
+    Igual(93.65, Math.Round(cy, 6), "de costado, en el medio");
+    Igual(19 - 6.35, Math.Round(Math.Sqrt(Math.Pow(cx - 60, 2) + Math.Pow(cy - 100, 2)), 6), "tocan la cara interior");
+
+    // Dos #6 (19,1 mm) ocupan 38,2 mm y no entran: queda la que sigue más
+    // arriba, y se avisa.
+    var b6 = new GanchoGrapa.Pieza(63.8, 115.5, 9.55, 2510);
+    var a6 = new GanchoGrapa.Pieza(63.8, 96.4, 9.55, 6710);
+    (IReadOnlyList<GanchoGrapa.Pieza> una, bool caben6) = GanchoGrapa.Elegir(new[] { b6, a6 }, 19);
+    Cierto(!caben6 && una.Count == 1 && una[0] == a6, "dos #6 no entran: la de arriba");
+});
+
+Probar("linea_de_la_grapa", () =>
+{
+    // Con lo medido (centro del gancho 5 mm hacia adentro y 23,8 de costado,
+    // hacia donde abre), la línea que se pide deja cada centro donde se quiere.
+    (double, double) ci = (73.25, 115.5), cf = (176.75, 120.7);
+    foreach ((int li, int lf) in new[] { (1, 1), (1, -1), (-1, -1) })
+    {
+        var ((x0, y0), (x1, y1)) = GanchoGrapa.Linea(ci, cf, 5, 23.8, li, lf);
+        double largo = Math.Sqrt(Math.Pow(x1 - x0, 2) + Math.Pow(y1 - y0, 2));
+        (double ux, double uy) = ((x1 - x0) / largo, (y1 - y0) / largo);
+        Igual(73.25, Math.Round(x0 + ux * 5 - uy * li * 23.8, 6), $"inicio X ({li},{lf})");
+        Igual(115.5, Math.Round(y0 + uy * 5 + ux * li * 23.8, 6), $"inicio Y ({li},{lf})");
+        Igual(176.75, Math.Round(x1 - ux * 5 - uy * lf * 23.8, 6), $"fin X ({li},{lf})");
+        Igual(120.7, Math.Round(y1 - uy * 5 + ux * lf * 23.8, 6), $"fin Y ({li},{lf})");
+    }
 });
 
 Probar("posiciones_sin_el_ultimo_excluido", () =>
@@ -505,6 +771,48 @@ Probar("cuadro_2_cargado", () =>
     Igual(0.065, n3.Gancho180Cuadro.Extension, "#3 180° E");
     Igual(0.152, CuadroVarillas.Cuadro.Single(v => v.Numero == 8).Gancho90Cuadro.DiametroDoblado, "#8 90° D");
     Cierto(CuadroVarillas.Cuadro.Single(v => v.Numero == 6).GanchoEstribo135 is null, "#6 sin 135°");
+});
+
+// ---- #131: el acomodo de traslapos de una sección, sin Revit
+
+// Esquina inferior izquierda de una 40×40 (metros), #5, traslapo a 1,5–2,2 m.
+AcomodoTraslapos.PedidoSeccion Esquina40(bool conGancho) =>
+    new(0.06, 0.06, 0.00795, 0.0159, Esquina: true, ConGancho: conGancho, Normal: (1, 0), CentroSeccion: (0.20, 0.20),
+        Entera: (0, 6), Abajo: (0, 2.2), Arriba: (1.5, 6), Limites: (0.06, 0.34, 0.06, 0.34));
+
+Probar("planear_seccion_sin_traslapo", () =>
+{
+    var sola = Esquina40(false) with { Abajo = null, Arriba = null };
+    var r = AcomodoTraslapos.PlanearSeccion(new[] { sola }, null);
+    Cierto(r[0].Manera is null, "sin traslapo no hay manera");
+    Cierto(r[0].Eje == (1, 0), "eje = la normal");
+});
+
+Probar("planear_seccion_igual_que_elegir", () =>
+{
+    // Una sola varilla sin obstáculos: Elegir se queda con la de siempre
+    // (la primera manera del primer eje, el de la normal), como el generador.
+    var p = Esquina40(false);
+    var r = AcomodoTraslapos.PlanearSeccion(new[] { p }, null);
+    AcomodoTraslapos.Manera esperada = AcomodoTraslapos.Cuatro(
+        p.X, p.Y, p.Radio, p.Normal, p.Diametro, p.Abajo!.Value, p.Arriba!.Value,
+        (p.Limites.XMin, p.Limites.XMax, p.Limites.YMin, p.Limites.YMax))[0];
+    Cierto(r[0].Eje == (1, 0), $"eje {r[0].Eje}");
+    Cierto(r[0].Manera!.Piezas.SequenceEqual(esperada.Piezas), "las mismas piezas");
+});
+
+Probar("planear_seccion_con_gancho_no_prueba_diagonal", () =>
+{
+    // Con obstáculos donde iría la corrida en X y en Y, sin gancho la elegida
+    // es la diagonal; con gancho tiene que quedar en X o en Y.
+    var obstaculos = new[]
+    {
+        new AcomodoTraslapos.Pieza(0.0759, 0.06, 0.00795, 0, 6), new AcomodoTraslapos.Pieza(0.06, 0.0759, 0.00795, 0, 6),
+    };
+    var r = AcomodoTraslapos.PlanearSeccion(new[] { Esquina40(true) }, obstaculos);
+    Cierto(r[0].Eje == (1, 0) || r[0].Eje == (0, 1), $"eje {r[0].Eje}");
+    var sinGancho = AcomodoTraslapos.PlanearSeccion(new[] { Esquina40(false) }, obstaculos);
+    Cierto(sinGancho[0].Eje.X != 0 && sinGancho[0].Eje.Y != 0, $"sin gancho, diagonal: {sinGancho[0].Eje}");
 });
 
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");

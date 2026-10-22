@@ -9,6 +9,11 @@
     <Company>CQEING</Company>
     <Product>CQEING - Armado de columnas</Product>
     <Copyright>© CQEING</Copyright>
+    <!--
+      REVIT2026 / REVIT2027, para lo que la API de un año no tiene: PropertyLine.GetBoundary es nuevo
+      de 2027 (LectorContexto.LeerLindero; el CI compila los dos años).
+    -->
+    <DefineConstants>$(DefineConstants);REVIT$(RevitVersion)</DefineConstants>
   </PropertyGroup>
 
   <!--

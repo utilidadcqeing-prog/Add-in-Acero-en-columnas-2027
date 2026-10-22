@@ -59,7 +59,8 @@ public static class CalculoPortico
 
     /// <summary>Lo que recibe el motor para el pórtico <paramref name="p"/> con lo que eligió el usuario (también la vista previa, #84).</summary>
     internal static EntradaVigas EntradaDe(PorticoLeido p, OpcionesTablero o, Reglas r) =>
-        new(p.Portico, o.Tipo ?? p.Tipo, o.Superior, o.Inferior, r, o.Cara, Cambios: o.Cambios, Bastones: o.Bastones);
+        new(p.Portico, o.Tipo ?? p.Tipo, o.Superior, o.Inferior, r, o.Cara, Cambios: o.Cambios, Bastones: o.Bastones,
+            EstriboEnVoladizo: r.PorDiametro.TryGetValue(o.Estribos.Diametro, out ReglaDiametro? estribo) ? (int)Math.Ceiling(estribo.Diametro) : 0);
 
     /// <summary>La sección del pórtico con los recubrimientos (cm en la página, mm en el motor) y las filas del paso 1.</summary>
     internal static EntradaSeccion Seccion(PorticoLeido p, OpcionesTablero o, Reglas r)

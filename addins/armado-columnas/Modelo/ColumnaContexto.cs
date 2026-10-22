@@ -19,10 +19,18 @@ public sealed class ColumnaContexto
     /// <summary>Marca de la columna («C-12»). Si no la tiene, su id.</summary>
     public string Marca { get; init; } = "";
 
-    /// <summary>Lado de la sección paralelo al eje X global, en metros.</summary>
+    /// <summary>
+    /// Lado paralelo al eje X global de la ZONA COMÚN en planta de todos los
+    /// elementos de la columna (la intersección de sus huellas), en metros: es
+    /// donde el generador pone las barras longitudinales (#42). Si toda la
+    /// columna tiene la misma sección, es esa. La medida real de cada tramo
+    /// está en <see cref="Tramo.Seccion"/>: con un dado de 40×40 debajo de una
+    /// columna de 30×30, esto vale 30 y el tramo del dado, 40 (22-oct; antes
+    /// valía la del elemento de más abajo, y toda la columna se veía de 40).
+    /// </summary>
     public double BaseX { get; init; }
 
-    /// <summary>Lado de la sección paralelo al eje Y global, en metros.</summary>
+    /// <summary>Lo mismo que <see cref="BaseX"/>, paralelo al eje Y global.</summary>
     public double BaseY { get; init; }
 
     /// <summary>
@@ -67,6 +75,13 @@ public sealed class ColumnaContexto
 
     /// <summary>Rótulos de nivel para dibujar la elevación, ordenados de abajo hacia arriba.</summary>
     public IReadOnlyList<NivelRotulo> Niveles { get; init; } = new List<NivelRotulo>();
+
+    /// <summary>
+    /// La línea de propiedad del documento, en planta (issue #139): los
+    /// ganchos no pueden terminar del otro lado. Vacía si el modelo no tiene
+    /// línea de propiedad (o del lado del proveedor falso).
+    /// </summary>
+    public IReadOnlyList<TramoLindero> Lindero { get; init; } = new List<TramoLindero>();
 
     /// <summary>Lo que no se pudo leer bien de esta columna. Vacío es lo normal.</summary>
     public IReadOnlyList<string> Avisos { get; init; } = new List<string>();
@@ -130,6 +145,37 @@ public sealed class Tramo
     /// falso, donde no aplica.
     /// </summary>
     public string? IdElementoHost { get; init; }
+
+    /// <summary>
+    /// Lados de la sección del elemento que contiene este tramo, en metros. 0
+    /// = no se leyó (proveedor falso, configuraciones viejas): se usa la de la
+    /// columna. Ver <see cref="Seccion"/>.
+    /// </summary>
+    public double LadoX { get; init; }
+
+    /// <summary>Ver <see cref="LadoX"/>.</summary>
+    public double LadoY { get; init; }
+
+    /// <summary>
+    /// Dónde arranca la zona común de la columna (<see cref="ColumnaContexto.BaseX"/>)
+    /// dentro de este tramo, medido desde su esquina de abajo a la izquierda,
+    /// en metros. 0 cuando el tramo es la zona común.
+    /// </summary>
+    public double ComunDesdeX { get; init; }
+
+    /// <summary>Ver <see cref="ComunDesdeX"/>.</summary>
+    public double ComunDesdeY { get; init; }
+
+    /// <summary>
+    /// La sección de este tramo para dibujarla: sus lados y el corrimiento que
+    /// hay que sumarle a lo que se calcula en la zona común (barras, estribos
+    /// menores) para llevarlo a este tramo. Sin medida propia, la de la
+    /// columna sin corrimiento.
+    /// </summary>
+    public (double LadoX, double LadoY, double DesdeX, double DesdeY) Seccion(ColumnaContexto columna) =>
+        LadoX > 0 && LadoY > 0
+            ? (LadoX, LadoY, ComunDesdeX, ComunDesdeY)
+            : (columna.BaseX, columna.BaseY, 0, 0);
 }
 
 /// <summary>Una etiqueta de la elevación: «N+8.41  P3».</summary>

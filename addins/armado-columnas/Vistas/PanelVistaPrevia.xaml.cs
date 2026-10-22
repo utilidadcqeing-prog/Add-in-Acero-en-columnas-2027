@@ -29,20 +29,36 @@ public partial class PanelVistaPrevia : UserControl
     private static readonly Brush ColorTapada = Paleta.TapadaClara;
 
     private const double AnchoLienzo = 350;
-    private const double AltoPlanta = 170;
+    private const double AltoPlanta = 190;
     private const double YElevaciones = AltoPlanta + 24;
     private const double AltoElevaciones = 300;
-    /// <summary>Por debajo de esto el ancho de una elevación se exagera (con nota).</summary>
-    private const double AnchoMinimoElevacion = 60;
+    /// <summary>En cada elevación: a la izquierda las cotas por zona, a la derecha la del alto del tramo.</summary>
+    private const double MargenCotasZonas = 34;
+    private const double MargenCotaAlto = 22;
 
     /// <summary>Una barra en la elevación: dónde cae a lo ancho de la vista (metros) y su diámetro.</summary>
     private sealed record BarraVista(double Posicion, double DiametroMm);
 
     public PanelVistaPrevia() => InitializeComponent();
 
+    /// <summary>Vuelve a dibujar lo último que se mostró (al cambiar "Sección normal / Zona de traslapo").</summary>
+    private Action? _redibujar;
+
+    /// <summary>Mientras Mostrar acomoda el selector: sus cambios no tienen que volver a dibujar.</summary>
+    private bool _ajustandoSelector;
+
+    private void OpcionSeccion_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!_ajustandoSelector) _redibujar?.Invoke();
+    }
+
     /// <summary>Sin dibujo: solo un texto (por ejemplo, "Elige una columna").</summary>
     public void MostrarMensaje(string mensaje)
     {
+        _redibujar = null;
+        // Sin dibujo no hay nada que elegir.
+        OpcionSeccionNormal.IsEnabled = false;
+        OpcionZonaTraslapo.IsEnabled = false;
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
@@ -50,18 +66,21 @@ public partial class PanelVistaPrevia : UserControl
     }
 
     /// <param name="cfgLong">Con los estribos menores de la columna ya cargados.</param>
-    /// <param name="diametroDeBarraMm">Diámetro de un tipo de barra por su nombre, o null si no existe.</param>
+    /// <param name="barraDe">Un tipo de barra por su nombre (diámetro y doblado), o null si no existe.</param>
     /// <param name="diametroEstriboPlantaMm">
     /// El estribo más grueso de la columna: el generador corre las longitudinales
     /// con ese (<c>GeneradorLongitudinal</c>, "diametroEstribo").
     /// </param>
     public void Mostrar(
         ColumnaContexto columna, Tramo tramo, ConfigTramo cfgTramo, ConfigLongitudinal cfgLong,
-        double recubrimiento, Func<string?, double?> diametroDeBarraMm, double diametroEstriboPlantaMm)
+        double recubrimiento, Func<string?, TipoBarra?> barraDe, double diametroEstriboPlantaMm)
     {
+        _redibujar = () => Mostrar(columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm);
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
+
+        double? diametroDeBarraMm(string? nombre) => string.IsNullOrEmpty(nombre) ? null : barraDe(nombre)?.DiametroMm;
 
         double? dEsquina = diametroDeBarraMm(cfgLong.BarraDe(PosicionBarra.Esquina));
         double? dCaraX = diametroDeBarraMm(cfgLong.BarraDe(PosicionBarra.CaraX));
@@ -79,15 +98,24 @@ public partial class PanelVistaPrevia : UserControl
             _ => dCaraY.Value,
         };
 
-        double ladoX = columna.BaseX, ladoY = columna.BaseY;
-        IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras =
-            SeccionPlanta.Calcular(ladoX, ladoY, recubrimiento, diametroEstriboPlantaMm, cfgLong, DiametroDe);
-
         // El estribo principal del tramo activo y su paquete con los menores
         // (en los nudos no van menores, como en GeneradorArmado). El tramo
         // contra zapata no lleva estribos (Luciano, 20-oct): no se dibujan.
         bool sinEstribos = tramo.Tipo == TipoTramo.ContraZapata;
         double? dEstribo = sinEstribos ? null : diametroDeBarraMm(cfgTramo.TipoBarraNombre);
+
+        // Las esquinas, metidas en la curva del estribo como las deja el
+        // generador (sin estribo, donde da la cuenta). Las barras y los menores
+        // se calculan en la zona común de la columna, donde las pone el
+        // generador; el hormigón y el estribo, con la medida del tramo, y lo
+        // primero se corre (dx, dy) a su lugar dentro del tramo. Con la misma
+        // sección en toda la columna, el corrimiento es 0 (dado de 40×40 bajo
+        // una de 30×30: 22-oct).
+        double ladoX = columna.BaseX, ladoY = columna.BaseY;
+        (double tramoX, double tramoY, double dx, double dy) = tramo.Seccion(columna);
+        double doblezEstribo = dEstribo is double dd ? PlantaArmado.Doblez(barraDe(cfgTramo.TipoBarraNombre), dd) : 0;
+        IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras = SeccionPlanta.Calcular(
+            ladoX, ladoY, recubrimiento, diametroEstriboPlantaMm, cfgLong, DiametroDe, doblezEstribo * 1000);
         List<EstriboMenor> piezas = tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata
             ? new List<EstriboMenor>()
             : cfgLong.MenoresParaGenerar();
@@ -108,93 +136,147 @@ public partial class PanelVistaPrevia : UserControl
         double XColumna(int c) => SeccionPlanta.PosicionIntermedia(insetEsq, ladoX - insetEsq, columnas, c);
         double YFila(int f) => SeccionPlanta.PosicionIntermedia(insetEsq, ladoY - insetEsq, filas, f);
 
-        DibujarPlanta(ladoX, ladoY, recubrimiento, dEstribo, barras, piezas, DiametroPieza, XColumna, YFila, columnas, filas);
+        double DoblezPieza(EstriboMenor p) =>
+            PlantaArmado.Doblez(barraDe(p.TipoBarraNombre) ?? barraDe(cfgTramo.TipoBarraNombre), DiametroPieza(p));
+
+        // Los choques (#131), de la sección normal o de la zona de traslapo
+        // según el selector; sin traslapo, el selector queda en "normal".
+        ChoquesSeccion.Resultado choques = ChoquesSeccion.DeTramo(
+            columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm);
+        _ajustandoSelector = true;
+        OpcionSeccionNormal.IsEnabled = true;
+        OpcionZonaTraslapo.IsEnabled = choques.HayTraslapo;
+        if (!choques.HayTraslapo) OpcionSeccionNormal.IsChecked = true;
+        _ajustandoSelector = false;
+        bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
+        IReadOnlyList<ChoquesSeccion.Choque> aMarcar = verTraslapo ? choques.Traslapo : choques.Normal;
+
+        DibujarPlanta(tramoX, tramoY, (ladoX / 2, ladoY / 2), dx, dy, recubrimiento, dEstribo, doblezEstribo, barras, piezas,
+            DiametroPieza, DoblezPieza, XColumna, YFila, columnas, filas, aMarcar, verTraslapo ? choques.PiezasTraslapo : null);
 
         // Frente: se mira la cara de abajo (paralela a X); costado: la de la izquierda (paralela a Y).
         List<BarraVista> frente = barras
             .Where(b => b.Y < ladoY / 2 && b.Posicion != PosicionBarra.CaraY)
-            .Select(b => new BarraVista(b.X, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
+            .Select(b => new BarraVista(b.X + dx, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
         List<BarraVista> costado = barras
             .Where(b => b.X < ladoX / 2 && b.Posicion != PosicionBarra.CaraX)
-            .Select(b => new BarraVista(b.Y, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
+            .Select(b => new BarraVista(b.Y + dy, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
 
         Tramo? debajo = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice - 1);
         Tramo? encima = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice + 1);
 
+        // Los vecinos (nudo o zapata) se muestran recortados, solo para ubicar el
+        // tramo. Las dos elevaciones van a la misma escala, y el ancho a la misma
+        // que el alto (#133: nada exagerado). Si la columna es tan ancha que no
+        // entra, se achica todo junto.
         double anchoVista = (AnchoLienzo - 3 * 16) / 2;
-        bool exagerado = false;
-        exagerado |= DibujarElevacion("De frente (cara X)", 16, anchoVista, ladoX, tramo, debajo, encima, frente, dEstribo,
-            reparto, paquete, DiametroPieza, EjeCaja.Fila, XColumna);
-        exagerado |= DibujarElevacion("De costado (cara Y)", 32 + anchoVista, anchoVista, ladoY, tramo, debajo, encima, costado, dEstribo,
-            reparto, paquete, DiametroPieza, EjeCaja.Columna, YFila);
+        double zMin = tramo.ZInferior - (debajo is null ? 0 : Math.Min(debajo.Altura, 0.4));
+        double zMax = tramo.ZSuperior + (encima is null ? 0 : Math.Min(encima.Altura, 0.4));
+        double escalaElevacion = EscalaDibujo.Ajustar(
+            Math.Max(tramoX, tramoY), zMax - zMin, anchoVista - MargenCotasZonas - MargenCotaAlto, AltoElevaciones);
+
+        DibujarElevacion("De frente (cara X)", 16, tramoX, zMin, zMax, escalaElevacion, tramo, debajo, encima, frente, dEstribo,
+            reparto, paquete, DiametroPieza, EjeCaja.Fila, c => XColumna(c) + dx);
+        DibujarElevacion("De costado (cara Y)", 32 + anchoVista, tramoY, zMin, zMax, escalaElevacion, tramo, debajo, encima, costado, dEstribo,
+            reparto, paquete, DiametroPieza, EjeCaja.Columna, f => YFila(f) + dy);
 
         Lienzo.Height = YElevaciones + AltoElevaciones + 30;
 
         LlenarLeyenda(barras.Select(b => b.DiametroMm)
             .Concat(dEstribo is double de ? new[] { de } : Array.Empty<double>())
             .Concat(piezas.Select(DiametroPieza)));
-        LlenarResumen(cfgLong, barras, dEstribo, reparto, piezas, DiametroPieza, exagerado, sinEstribos);
+        LlenarResumen(cfgLong, barras, dEstribo, reparto, piezas, DiametroPieza, sinEstribos);
+
+        int cuantos = choques.Normal.Count + choques.Traslapo.Count;
+        if (cuantos > 0)
+            AgregarNota(
+                $"⚠ {cuantos} choque(s) (se puede generar igual): {choques.Normal.Count} en la sección normal, " +
+                $"{choques.Traslapo.Count} en la zona de traslapo. Pasa el mouse por las marcas rojas para ver el motivo.",
+                Paleta.Error, negrita: true);
+        if (choques.VarillasSinRevisarEnTraslapo > 0)
+            AgregarNota(ChoquesSeccion.NotaSinRevisar(choques.VarillasSinRevisarEnTraslapo), ColorAviso);
     }
 
     // ------------------------------------------------------------- planta
 
+    /// <param name="ladoX">Los lados del tramo: el hormigón, el estribo y las cotas.</param>
+    /// <param name="centroComun">El centro de la zona común, donde se calcularon barras y menores.</param>
+    /// <param name="dx">Lo que hay que correr lo calculado en la zona común para ponerlo en el tramo.</param>
     private void DibujarPlanta(
-        double ladoX, double ladoY, double recubrimiento, double? dEstribo,
+        double ladoX, double ladoY, (double X, double Y) centroComun, double dx, double dy,
+        double recubrimiento, double? dEstribo, double doblezEstribo,
         IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza,
-        Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas)
+        Func<EstriboMenor, double> doblezPieza, Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas,
+        IReadOnlyList<ChoquesSeccion.Choque> choques, IReadOnlyList<ChoquesSeccion.PiezaRedonda>? piezasTraslapo)
     {
         Texto("Desde arriba", 16, 0, 11, FontWeights.SemiBold);
 
-        double escala = Math.Min((AnchoLienzo - 120) / ladoX, (AltoPlanta - 40) / ladoY);
+        double escala = EscalaDibujo.Ajustar(ladoX, ladoY, AnchoLienzo - 120, AltoPlanta - 60);
         double ancho = ladoX * escala, alto = ladoY * escala;
         double ox = (AnchoLienzo - ancho) / 2, oy = 22;
         Point P(double x, double y) => new(ox + x * escala, oy + alto - y * escala);
+        Point Q(double x, double y) => P(x + dx, y + dy);
 
         Agregar(new Rectangle { Width = ancho, Height = alto, Fill = ColorHormigon, Stroke = ColorContorno }, ox, oy);
 
+        // Estribo principal como lo deja Revit: cara exterior al recubrimiento,
+        // esquinas curvas y los ganchos de 135° abajo a la izquierda.
         if (dEstribo is double de)
+            Lienzo.Children.Add(DibujoArmado.Trazo(
+                PlantaArmado.EstriboCerrado(recubrimiento, ladoX - recubrimiento, recubrimiento, ladoY - recubrimiento,
+                    de / 1000, doblezEstribo, PlantaArmado.Cola135(de)),
+                P, Pincel(de), Math.Max(1.2, de / 1000 * escala)));
+
+        // Estribos menores, abrazando las barras que enganchan (PlantaArmado.Menor).
+        List<SeccionPlanta.BarraEnPlanta> deCaraY = barras.Where(b => b.Posicion == PosicionBarra.CaraY).ToList();
+        List<SeccionPlanta.BarraEnPlanta> deCaraX = barras.Where(b => b.Posicion == PosicionBarra.CaraX).ToList();
+        (GanchoGrapa.Pieza, GanchoGrapa.Pieza) BarrasDe(EjeCaja eje, int k)
         {
-            double r = recubrimiento + de / 2000;
-            Point a = P(r, ladoY - r), b = P(ladoX - r, r);
-            Agregar(new Rectangle
+            if (eje == EjeCaja.Fila)
             {
-                Width = b.X - a.X, Height = b.Y - a.Y, RadiusX = 4, RadiusY = 4,
-                Stroke = Pincel(de), StrokeThickness = Math.Max(1.5, de / 1000 * escala),
-            }, a.X, a.Y);
+                double r = deCaraY[0].DiametroMm / 2000;
+                return (new(deCaraY.Min(b => b.X), yFila(k), r, 0), new(deCaraY.Max(b => b.X), yFila(k), r, 0));
+            }
+            double rx = deCaraX[0].DiametroMm / 2000;
+            return (new(xColumna(k), deCaraX.Min(b => b.Y), rx, 0), new(xColumna(k), deCaraX.Max(b => b.Y), rx, 0));
         }
 
-        // Estribos menores: entre las barras de los dos extremos de la sección.
-        double xIzq = barras.Min(b => b.X), xDer = barras.Max(b => b.X);
-        double yAba = barras.Min(b => b.Y), yArr = barras.Max(b => b.Y);
-        foreach (EstriboMenor p in piezas)
+        // Los cerrados abajo de todo, para que no tapen a las grapas.
+        foreach (EstriboMenor p in piezas.OrderBy(p => p.Forma == FormaMenor.Cerrado ? 0 : 1))
         {
-            if (p.Eje == EjeCaja.Fila ? p.Hasta >= filas : p.Hasta >= columnas) continue;
+            if (p.Eje == EjeCaja.Fila ? p.Hasta >= filas || deCaraY.Count == 0 : p.Hasta >= columnas || deCaraX.Count == 0) continue;
             bool tapada = PaqueteEstribos.EstaTapada(p, piezas);
             Brush color = tapada ? ColorTapada : Pincel(diametroPieza(p));
             double grosor = Math.Max(1.2, diametroPieza(p) / 1000 * escala);
-
-            if (p.Forma == FormaMenor.Cerrado)
-            {
-                Point a = p.Eje == EjeCaja.Fila ? P(xIzq, yFila(p.Hasta)) : P(xColumna(p.Desde), yArr);
-                Point b = p.Eje == EjeCaja.Fila ? P(xDer, yFila(p.Desde)) : P(xColumna(p.Hasta), yAba);
-                Agregar(new Rectangle { Width = Math.Max(1, b.X - a.X), Height = Math.Max(1, b.Y - a.Y), Stroke = color, StrokeThickness = grosor }, a.X, a.Y);
-            }
-            else
-            {
-                (Point a, Point b) = p.Eje == EjeCaja.Fila
-                    ? (P(xIzq, yFila(p.Desde)), P(xDer, yFila(p.Desde)))
-                    : (P(xColumna(p.Desde), yAba), P(xColumna(p.Desde), yArr));
-                Linea(a, b, color, grosor, tapada);
-            }
+            Lienzo.Children.Add(DibujoArmado.Trazo(
+                PlantaArmado.Menor(p, k => BarrasDe(p.Eje, k), centroComun, diametroPieza(p), doblezPieza(p)),
+                Q, color, grosor, tapada ? 0.6 : 1));
         }
 
         foreach (SeccionPlanta.BarraEnPlanta barra in barras)
         {
-            double radio = Math.Max(2.5, barra.DiametroMm / 2000 * escala);
-            Point c = P(barra.X, barra.Y);
+            // Su diámetro a escala; el mínimo es solo para que no desaparezca.
+            double radio = Math.Max(1, barra.DiametroMm / 2000 * escala);
+            Point c = Q(barra.X, barra.Y);
             Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(barra.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
                 c.X - radio, c.Y - radio);
         }
+
+        // Zona de traslapo: las piezas de las varillas que traslapan, con la
+        // corrida al lado de la pedida (la pedida coincide con la barra).
+        if (piezasTraslapo is not null)
+            foreach (ChoquesSeccion.PiezaRedonda pieza in piezasTraslapo)
+            {
+                double radio = Math.Max(1, pieza.DiametroMm / 2000 * escala);
+                Point c = Q(pieza.X, pieza.Y);
+                Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(pieza.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
+                    c.X - radio, c.Y - radio);
+            }
+
+        // Los choques, encima de todo para que se lean al pasar el mouse.
+        foreach (ChoquesSeccion.Choque choque in choques)
+            foreach ((double X, double Y, double Radio) marca in choque.Marcas)
+                Lienzo.Children.Add(DibujoArmado.MarcaChoque(Q(marca.X, marca.Y), Math.Max(1, marca.Radio * escala), choque.Motivo));
 
         // Cuántas intermedias lleva cada cara.
         string cx = (columnas).ToString(), cy = (filas).ToString();
@@ -202,33 +284,27 @@ public partial class PanelVistaPrevia : UserControl
         Texto(cx, ox + ancho / 2 - 3, oy - 15, 11);
         Texto(cy, ox - 12, oy + alto / 2 - 8, 11);
         Texto(cy, ox + ancho + 5, oy + alto / 2 - 8, 11);
+
+        // Las medidas de la sección (#133).
+        Cotas.Horizontal(Lienzo, ox, ox + ancho, oy + alto + 22, EscalaDibujo.Cm(ladoX));
+        Cotas.Vertical(Lienzo, ox + ancho + 20, oy, oy + alto, EscalaDibujo.Cm(ladoY));
     }
 
     // ---------------------------------------------------------- elevación
 
-    /// <returns>true si hubo que exagerar el ancho para que se lea.</returns>
-    private bool DibujarElevacion(
-        string titulo, double x0, double anchoVista, double lado, Tramo tramo, Tramo? debajo, Tramo? encima,
+    /// <param name="escala">Píxeles por metro, la misma a lo ancho y a lo alto.</param>
+    private void DibujarElevacion(
+        string titulo, double x0, double lado, double zMin, double zMax, double escala, Tramo tramo, Tramo? debajo, Tramo? encima,
         List<BarraVista> barras, double? dEstribo, RepartoEstribos.Resultado? reparto, PaqueteEstribos.Paquete? paquete,
         Func<EstriboMenor, double> diametroPieza, EjeCaja ejeQueCorre, Func<int, double> posicionIndice)
     {
         Texto(titulo, x0, YElevaciones - 18, 11, FontWeights.SemiBold);
 
-        // Los vecinos (nudo o zapata) se muestran recortados, solo para ubicar el tramo.
-        double extraAbajo = debajo is null ? 0 : Math.Min(debajo.Altura, 0.4);
-        double extraArriba = encima is null ? 0 : Math.Min(encima.Altura, 0.4);
-        double zMin = tramo.ZInferior - extraAbajo, zMax = tramo.ZSuperior + extraArriba;
-        double escala = AltoElevaciones / Math.Max(0.1, zMax - zMin);
-
-        double margenCotas = 34;
-        double anchoReal = lado * escala;
-        double anchoDibujo = Math.Min(anchoVista - margenCotas - 4, Math.Max(anchoReal, AnchoMinimoElevacion));
-        bool exagerado = anchoDibujo > anchoReal + 0.5;
-        double escalaX = anchoDibujo / lado;
-        double ox = x0 + margenCotas;
+        double anchoDibujo = lado * escala;
+        double ox = x0 + MargenCotasZonas;
 
         double Y(double z) => YElevaciones + (zMax - z) * escala;
-        double X(double posicion) => ox + posicion * escalaX;
+        double X(double posicion) => ox + posicion * escala;
 
         Agregar(new Rectangle { Width = anchoDibujo, Height = (tramo.ZSuperior - tramo.ZInferior) * escala, Fill = ColorHormigon, Stroke = ColorContorno },
             ox, Y(tramo.ZSuperior));
@@ -244,9 +320,13 @@ public partial class PanelVistaPrevia : UserControl
 
         // Barras longitudinales, de punta a punta de lo que se muestra.
         foreach (BarraVista b in barras)
-            Linea(new Point(X(b.Posicion), Y(zMax)), new Point(X(b.Posicion), Y(zMin)), Pincel(b.DiametroMm), Math.Max(1.5, b.DiametroMm / 1000 * escalaX), false);
+            Linea(new Point(X(b.Posicion), Y(zMax)), new Point(X(b.Posicion), Y(zMin)), Pincel(b.DiametroMm), Math.Max(1.5, b.DiametroMm / 1000 * escala), false);
 
-        if (reparto is null || paquete is null || dEstribo is not double de) return exagerado;
+        // El ancho de la cara y el alto del tramo.
+        Cotas.Horizontal(Lienzo, ox, ox + anchoDibujo, Y(zMin) + 5, EscalaDibujo.Cm(lado));
+        Cotas.Vertical(Lienzo, ox + anchoDibujo + 6, Y(tramo.ZSuperior), Y(tramo.ZInferior), EscalaDibujo.M(tramo.ZSuperior - tramo.ZInferior));
+
+        if (reparto is null || paquete is null || dEstribo is not double de) return;
 
         double xIzq = barras.Min(b => b.Posicion), xDer = barras.Max(b => b.Posicion);
         foreach (double z in reparto.Alturas)
@@ -281,9 +361,6 @@ public partial class PanelVistaPrevia : UserControl
             t.LayoutTransform = new RotateTransform(-90);
             Agregar(t, xc + 2, (ya + yb) / 2 - 12);
         }
-
-        Texto($"{lado * 100:0} cm", ox + anchoDibujo / 2 - 14, Y(zMin) + 2, 10);
-        return exagerado;
     }
 
     // ------------------------------------------------------------ textos
@@ -301,7 +378,7 @@ public partial class PanelVistaPrevia : UserControl
 
     private void LlenarResumen(
         ConfigLongitudinal cfg, IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras, double? dEstribo,
-        RepartoEstribos.Resultado? reparto, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza, bool exagerado,
+        RepartoEstribos.Resultado? reparto, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza,
         bool sinEstribos)
     {
         string NumeroDe(PosicionBarra p) => Numero(barras.First(b => b.Posicion == p).DiametroMm);
@@ -339,8 +416,6 @@ public partial class PanelVistaPrevia : UserControl
 
             if (reparto.Aviso is not null) AgregarNota($"Este tramo: {reparto.Aviso}", ColorAviso);
         }
-
-        if (exagerado) AgregarNota("Ancho exagerado en las elevaciones para que se lea.", ColorTexto);
     }
 
     private static string NombreForma(FormaMenor forma) => forma switch

@@ -87,19 +87,26 @@ public sealed class LectorContexto : IProveedorContexto
     /// </summary>
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
         AgruparPilas(LeerElementos())
-            .Select(pila => new ColumnaResumen(
-                IdTexto(pila[0].Instancia.Id),
-                Marca(pila[0].Instancia),
-                ColumnaResumen.CalcularEsColumneta(AMetros(LadoX(pila[0].Solido)), AMetros(LadoY(pila[0].Solido))),
+            .Select(pila => (pila, Comun: ZonaComun(pila, new List<string>())))
+            .Select(p => (p.pila, LadoX: AMetros(p.Comun.XMax - p.Comun.XMin), LadoY: AMetros(p.Comun.YMax - p.Comun.YMin)))
+            .Select(p => new ColumnaResumen(
+                IdTexto(p.pila[0].Instancia.Id),
+                Marca(p.pila[0].Instancia),
+                // La zona común, como la sección de la ventana: un dado más
+                // ancho debajo no la vuelve más grande (22-oct).
+                ColumnaResumen.CalcularEsColumneta(p.LadoX, p.LadoY),
                 // El centro en planta del elemento de más abajo de la pila --
                 // mismo criterio que ya usa AgruparPilas para agrupar (ver
                 // ElementoColumna.Centro): alcanza para ubicar la columna en
                 // el selector visual, aunque la sección esté rotada (ver
                 // GeometriaSeccion.ValidarRectangular, misma limitación que
                 // ya tiene el resto del generador para columnas rotadas).
-                AMetros(pila[0].Centro.X),
-                AMetros(pila[0].Centro.Y),
-                MarcaUbicacion(pila[0].Instancia)))
+                AMetros(p.pila[0].Centro.X),
+                AMetros(p.pila[0].Centro.Y),
+                MarcaUbicacion(p.pila[0].Instancia),
+                // Los lados, para dibujarla a escala en el selector (#133).
+                p.LadoX,
+                p.LadoY))
             .ToList();
 
     /// <summary>
@@ -156,10 +163,19 @@ public sealed class LectorContexto : IProveedorContexto
         string? idZapata = null;
         const double AnclajeSobreElFondo = 0.075; // 7.5cm, issue #26.
 
+        // Las barras longitudinales van en la zona común de toda la pila (como
+        // en GeneradorLongitudinal); cada tramo guarda además su propia medida
+        // y dónde le cae esa zona, para dibujarlo como queda en Revit (22-oct).
+        Huella comun = ZonaComun(pila, avisos);
+
         foreach (ElementoColumna el in pila)
         {
             double zArranque = el.ZInf;
             bool sobreZapata = false;
+            Huella huella = HuellaPlanta(el.Solido);
+            var seccion = (
+                LadoX: AMetros(huella.XMax - huella.XMin), LadoY: AMetros(huella.YMax - huella.YMin),
+                DesdeX: AMetros(comun.XMin - huella.XMin), DesdeY: AMetros(comun.YMin - huella.YMin));
 
             // La zapata solo puede tocar el elemento de más abajo de la pila:
             // más arriba no hay nada contra qué arrancar.
@@ -203,7 +219,7 @@ public sealed class LectorContexto : IProveedorContexto
 
             tramos.AddRange(ArmarTramos(
                 zArranque, el.ZSup, nudos, sobreZapata, IdTexto(el.Instancia.Id), tramos.Count,
-                AMetros(LeerRecubrimiento(el.Instancia) ?? 0)));
+                AMetros(LeerRecubrimiento(el.Instancia) ?? 0), seccion));
 
             primero = false;
         }
@@ -245,8 +261,8 @@ public sealed class LectorContexto : IProveedorContexto
         return new ColumnaContexto
         {
             Marca = Marca(base_.Instancia),
-            BaseX = AMetros(LadoX(base_.Solido)),
-            BaseY = AMetros(LadoY(base_.Solido)),
+            BaseX = AMetros(comun.XMax - comun.XMin),
+            BaseY = AMetros(comun.YMax - comun.YMin),
             Recubrimiento = AMetros(Recubrimiento(base_.Instancia, avisos)),
             ZInferior = AMetros(zInferiorGlobal),
             ZInferiorLongitudinal = AMetros(zInferiorLongitudinalGlobal),
@@ -254,9 +270,59 @@ public sealed class LectorContexto : IProveedorContexto
             ZSuperior = AMetros(pila[^1].ZSup),
             Tramos = tramos,
             Niveles = Rotulos(zInferiorGlobal, pila[^1].ZSup),
+            Lindero = LeerLindero(),
             Avisos = avisos
         };
     }
+
+    /// <summary>
+    /// Las líneas de propiedad del documento, en planta (issue #139). Se usa
+    /// <see cref="PropertyLine.GetBoundary"/>, la API pública; los segmentos
+    /// sueltos de la categoría no son públicos. Las curvas que no son rectas
+    /// se pasan a tramos con <see cref="Curve.Tessellate"/>. La altura a la que
+    /// se dibujó no importa. Medido contra Revit real el 22-oct
+    /// (con un comando de diagnóstico temporal, ya sacado).
+    ///
+    /// <c>GetBoundary</c> es nuevo de la API 2027. En 2026 se leen las curvas
+    /// de su geometría (<see cref="Element.get_Geometry"/>, pública en los dos
+    /// años): el diagnóstico del 22-oct dio las mismas 4 líneas por los dos
+    /// caminos (en 2027; en Revit 2026 no está medido).
+    /// </summary>
+    private List<TramoLindero> LeerLindero()
+    {
+        var tramos = new List<TramoLindero>();
+        foreach (PropertyLine linea in new FilteredElementCollector(_doc).OfClass(typeof(PropertyLine)).Cast<PropertyLine>())
+            foreach (Curve curva in CurvasDe(linea))
+            {
+                IList<XYZ> puntos = curva.Tessellate();
+                for (int i = 1; i < puntos.Count; i++)
+                    tramos.Add(new TramoLindero(
+                        AMetros(puntos[i - 1].X), AMetros(puntos[i - 1].Y), AMetros(puntos[i].X), AMetros(puntos[i].Y)));
+            }
+
+        return tramos;
+    }
+
+#if REVIT2026
+    private static IEnumerable<Curve> CurvasDe(PropertyLine linea) =>
+        CurvasDe(linea.get_Geometry(new Options()));
+
+    private static IEnumerable<Curve> CurvasDe(GeometryElement? geometria)
+    {
+        if (geometria is null) yield break;
+        foreach (GeometryObject objeto in geometria)
+        {
+            if (objeto is Curve curva)
+                yield return curva;
+            else if (objeto is GeometryInstance instancia)
+                foreach (Curve deInstancia in CurvasDe(instancia.GetInstanceGeometry()))
+                    yield return deInstancia;
+        }
+    }
+#else
+    private static IEnumerable<Curve> CurvasDe(PropertyLine linea) =>
+        linea.GetBoundary().SelectMany(lazo => lazo);
+#endif
 
     // ------------------------------------------------------------ agrupado
 
@@ -338,8 +404,25 @@ public sealed class LectorContexto : IProveedorContexto
 
         if (cambia)
             avisos.Add(
-                "La sección cambia entre los elementos que forman esta columna. " +
-                "Se usó la del tramo más bajo para toda la columna.");
+                "La sección cambia entre los elementos que forman esta columna (por ejemplo, un dado más ancho). " +
+                "Cada tramo se dibuja con su medida, y las barras longitudinales van en la zona común a todos, " +
+                "como las genera el add-in.");
+    }
+
+    /// <summary>
+    /// La intersección en planta de las huellas de toda la pila: donde
+    /// <c>GeneradorLongitudinal</c> pone las barras (#42). Si los elementos no
+    /// se superponen en planta, la del de más abajo, con aviso.
+    /// </summary>
+    private static Huella ZonaComun(List<ElementoColumna> pila, List<string> avisos)
+    {
+        List<Huella> huellas = pila.Select(el => HuellaPlanta(el.Solido)).ToList();
+        var comun = new Huella(
+            huellas.Max(h => h.XMin), huellas.Min(h => h.XMax), huellas.Max(h => h.YMin), huellas.Min(h => h.YMax));
+        if (comun.XMax > comun.XMin && comun.YMax > comun.YMin) return comun;
+
+        avisos.Add("Los elementos de esta columna no se superponen en planta: se dibuja con la sección del de más abajo.");
+        return huellas[0];
     }
 
     // ---------------------------------------------------------------- tramos
@@ -357,7 +440,8 @@ public sealed class LectorContexto : IProveedorContexto
         bool sobreZapata,
         string idElementoHost,
         int indiceBase,
-        double recubrimientoMetros)
+        double recubrimientoMetros,
+        (double LadoX, double LadoY, double DesdeX, double DesdeY) seccion)
     {
         var tramos = new List<Tramo>();
         double cursor = zArranque;
@@ -378,7 +462,11 @@ public sealed class LectorContexto : IProveedorContexto
                     ? TipoTramo.ContraZapata
                     : tipo,
                 IdElementoHost = idElementoHost,
-                Recubrimiento = recubrimientoMetros
+                Recubrimiento = recubrimientoMetros,
+                LadoX = seccion.LadoX,
+                LadoY = seccion.LadoY,
+                ComunDesdeX = seccion.DesdeX,
+                ComunDesdeY = seccion.DesdeY,
             });
         }
 
