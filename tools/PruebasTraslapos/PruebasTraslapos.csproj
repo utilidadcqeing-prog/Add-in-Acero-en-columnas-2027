@@ -21,6 +21,8 @@
     <Compile Include="..\..\addins\armado-columnas\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\PosicionBarra.cs" Link="Modelo\PosicionBarra.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\EstriboMenor.cs" Link="Modelo\EstriboMenor.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\GanchoGrapa.cs" Link="Modelo\GanchoGrapa.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\AcomodoTraslapos.cs" Link="Modelo\AcomodoTraslapos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\PaqueteEstribos.cs" Link="Modelo\PaqueteEstribos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\TipoBarra.cs" Link="Modelo\TipoBarra.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\NombreEmpalme.cs" Link="Modelo\NombreEmpalme.cs" />
