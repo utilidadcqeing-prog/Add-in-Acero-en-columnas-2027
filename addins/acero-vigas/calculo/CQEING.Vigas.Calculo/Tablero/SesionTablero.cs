@@ -49,10 +49,13 @@ public enum AccionRevit
 /// abierto, las reglas y si está "En vivo". Atiende los mensajes de la página y dice qué contestar y qué hacer en Revit.
 /// <paramref name="nominalesDelModelo"/> da el diámetro nominal en mm de cada tipo de barra del modelo (#85); null = todos los de las
 /// reglas. <paramref name="configuracionDeViga"/> da lo que guardó una generación anterior en la viga con ese id
-/// (<see cref="ConfiguracionGuardada"/>), o null; sin ella no se recupera nada.
+/// (<see cref="ConfiguracionGuardada"/>), o null; sin ella no se recupera nada. <paramref name="dobladosDelModelo"/> da
+/// el diámetro y los doblados de los tipos de barra del modelo, para que los choques del alzado sean los de la vista
+/// previa 3D (H3 del plan de choques de 22-oct); null = los de las reglas.
 /// </summary>
 public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas almacen, string proyecto,
-    Func<IEnumerable<double>>? nominalesDelModelo = null, Func<string, string?>? configuracionDeViga = null)
+    Func<IEnumerable<double>>? nominalesDelModelo = null, Func<string, string?>? configuracionDeViga = null,
+    Func<Reglas, IReadOnlyDictionary<int, DobladoBarra>>? dobladosDelModelo = null)
 {
     private readonly Dictionary<string, OpcionesTablero> opciones = [];
 
@@ -96,6 +99,12 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             case Previsualizar(string id, OpcionesTablero o, PedidoEdicion pedido):
                 // no guarda las opciones: es solo ver qué pasaría (#84)
                 return Buscar(id) is { } p ? [new AJs(ProtocoloTablero.Previa(EditorTablero.Previsualizar(p, o, reglas.Reglas, pedido)))] : [];
+            case PedirArreglos(string id, OpcionesTablero o, int n, int choque):
+                // como la vista previa, no guarda las opciones
+                return Buscar(id) is { } conChoque
+                    ? [new AJs(ProtocoloTablero.Arreglos(new ArreglosVista(n, choque,
+                        ArreglosChoque.Buscar(id, conChoque, o, reglas.Reglas, dobladosDelModelo?.Invoke(reglas.Reglas), choque))))]
+                    : [];
             case SeleccionarEnRevit:
                 return [new ARevit(AccionRevit.PedirSeleccion, [])];
             case VerEnRevit(string id):
@@ -113,12 +122,17 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 return [Vista()];
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
-            case Generar(IReadOnlyList<string> ids, var estadosPagina):
+            case Generar(IReadOnlyList<string> ids, var estadosPagina, bool forzar):
+                AGenerar generar = AGenerar(ids, estadosPagina);
+                // Decisión 8 del plan de choques: avisa los choques de todos los que se generan, no solo del abierto. No
+                // bloquea: "Generar de todos modos" vuelve con forzar.
+                if (!forzar && ConChoques(generar) is { Count: > 0 } conChoques)
+                    return [new AJs(ProtocoloTablero.Choques(conChoques))];
                 // Lo generado ya se ve de verdad: la vista previa encima estorbaría.
                 if (en3d is null)
-                    return [AGenerar(ids, estadosPagina)];
+                    return [generar];
                 en3d = null;
-                return [new APrevia3d(null, reglas.Reglas), AGenerar(ids, estadosPagina)];
+                return [new APrevia3d(null, reglas.Reglas), generar];
             default:
                 return [];
         }
@@ -144,7 +158,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 saltados.Add($"{id}: ya no está en el modelo.");
                 continue;
             }
-            OpcionesTablero o = opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto;
+            OpcionesTablero o = Opciones(id);
             if (PlanificadorAcero.Planificar(id, p, o, reglas.Reglas) is not { } plan || p.Ubicacion is null)
             {
                 saltados.Add($"{id}: no se puede generar; revisa los avisos del tablero.");
@@ -160,15 +174,26 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         return new AGenerar(aGenerar, saltados, reglas.Reglas);
     }
 
+    /// <summary>Los pórticos de <paramref name="generar"/> con choques, con cuántos puntos tiene cada uno, en su orden.</summary>
+    private List<PorticoConChoques> ConChoques(AGenerar generar)
+    {
+        IReadOnlyDictionary<int, DobladoBarra>? doblados = dobladosDelModelo?.Invoke(reglas.Reglas);
+        return generar.Porticos
+            .Select(p => new PorticoConChoques(p.Id, ArmadorChoques.Detectar(p.Plan, p.Ubicacion, reglas.Reglas, doblados).Count))
+            .Where(p => p.Cantidad > 0).ToList();
+    }
+
     /// <summary>La vista previa del pórtico con sus opciones; sin plan (no se puede generar) queda vacía.</summary>
     private APrevia3d Previa3d(string id)
     {
         PorticoAGenerar? p = Buscar(id) is { Ubicacion: { } u } portico
-            && PlanificadorAcero.Planificar(id, portico, opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto, reglas.Reglas) is { } plan
+            && PlanificadorAcero.Planificar(id, portico, Opciones(id), reglas.Reglas) is { } plan
             ? new PorticoAGenerar(id, portico.Vigas, u, plan)
             : null;
         return new APrevia3d(p, reglas.Reglas);
     }
+
+    private OpcionesTablero Opciones(string id) => opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto;
 
     private IReadOnlyList<int> Disponibles() =>
         nominalesDelModelo is null ? reglas.Reglas.PorDiametro.Keys.Order().ToList() : DiametrosDisponibles.De(nominalesDelModelo(), reglas.Reglas);
@@ -265,11 +290,21 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         PorticoLeido? abierto = actual is null ? null : Buscar(actual);
         VistaPortico? vista = abierto is null
             ? null
-            : ArmadorVista.Armar(abierto, opciones.GetValueOrDefault(actual!) ?? OpcionesTablero.PorDefecto, reglas.Reglas)
-                with { Id = actual!, Estado = estados.GetValueOrDefault(actual!) };
+            : ConChoques(actual!, abierto, ArmadorVista.Armar(abierto, Opciones(actual!), reglas.Reglas)
+                with { Id = actual!, Estado = estados.GetValueOrDefault(actual!) });
         var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
             ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
             : l with { Id = p.Id }).ToList();
         return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos, Disponibles())));
     }
+
+    /// <summary>
+    /// Los puntos donde las barras del pórtico abierto se tocan, sobre el mismo plan que crea "Generar". Van solo como
+    /// puntos en el alzado, sin aviso en la lista (Juan, 22-oct). Sin ubicación en el modelo o sin plan (no se puede
+    /// generar) no se revisan.
+    /// </summary>
+    private VistaPortico ConChoques(string id, PorticoLeido p, VistaPortico v) =>
+        p.Ubicacion is { } u && PlanificadorAcero.Planificar(id, p, Opciones(id), reglas.Reglas) is { } plan
+            ? v with { Choques = ArmadorChoques.Armar(plan, u, reglas.Reglas, dobladosDelModelo?.Invoke(reglas.Reglas)) }
+            : v;
 }

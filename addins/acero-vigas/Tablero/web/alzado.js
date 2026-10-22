@@ -49,8 +49,10 @@
 
   // Capas (#100, Carlos 1:07:24–1:08:17): lo que se apaga para seguir trabajando sin salir del dibujo. Lo elegido es de
   // cada usuario y se queda en esta página (decisión 12): no viaja a C#.
-  const CAPAS = [['media', 'Línea de media luz'], ['corte', 'Corte 1-1'], ['textos', 'Textos'], ['estribos', 'Estribos'], ['colsec', 'Sección de columnas']];
-  const CAPAS0 = { media: true, corte: true, textos: true, estribos: true, colsec: false, pulgadas: false };
+  const CAPAS = [['media', 'Línea de media luz'], ['corte', 'Corte 1-1'], ['textos', 'Textos'], ['estribos', 'Estribos'], ['colsec', 'Sección de columnas'],
+    ['choques', 'Choques']];
+  const CAPAS0 = { media: true, corte: true, textos: true, estribos: true, colsec: false, choques: true, pulgadas: false };
+  const ROJO = '#D92D20';
   const CLAVE_CAPAS = 'cqeing.vigas.capas';
   const leerCapas = () => {
     try { return { ...CAPAS0, ...JSON.parse(window.localStorage.getItem(CLAVE_CAPAS) || '{}') }; } catch (e) { return { ...CAPAS0 }; }
@@ -63,7 +65,7 @@
     constructor(props) {
       super(props);
       this.state = { z: null, tx: 0, ty: 0, drag: null, cutDrag: false, selLocal: 'S1', selLapLocal: '', hover: '', rk: '', hd: null,
-        capas: leerCapas(), capasOpen: false };
+        capas: leerCapas(), capasOpen: false, choque: -1 };
       // Esc mientras se arrastra un punto: el elemento queda como estaba
       this.esc = (e) => { if (e.key === 'Escape') this.soltarPunto(false); };
     }
@@ -196,6 +198,18 @@
         a: (pulg ? z.cantidadPulgadas : z.cantidad) || '', b: z.separacion || '', c: z.largo || '' }));
       const secs = (p.secciones || []).map((s) => ({ x: X(s.x), t: s.texto }));
 
+      // choques (plan docs/planes/2026-10-22-choques-entre-barras-vigas.md, paso 4): un punto rojo sobre la barra o el
+      // bastón que lo sufre, en su x (el alzado no está a escala en vertical). El clic elige esa pieza y abre su panel.
+      // Uno sin barra en el alzado (dos estribos entre sí) va sobre la línea de los estribos. Mientras se arrastra, no
+      // se pintan: son del pórtico de antes del salto.
+      const choques = capas.choques && !cur ? (p.choques || []).map((c, i) => {
+        const d = b.find((x) => x.id === c.elemento) || t.find((x) => x.id === c.elemento);
+        return { i, x: X(c.x), y: d ? d.y : yE, enBarra: !!d, tip: c.texto + ' · ' + c.pista, on: i === this.state.choque || i === this.props.choqueAbierto,
+          pick: () => { pickBar(c.elemento)(); if (this.props.onChoque) this.props.onChoque(i); }, entra: () => this.setState({ choque: i }),
+          sale: () => this.setState((s) => (s.choque === i ? { choque: -1 } : null)) };
+      }) : [];
+      const choqueOn = choques.find((c) => c.i === this.state.choque);
+
       const ap = p.apoyos;
       // un apoyo que es viga se dibuja como su sección, a la altura de la viga; las columnas y muros, de alto completo
       const cols = ap.map((a) => ({ x: X(a.caraIzquierda), w: X(a.caraDerecha) - X(a.caraIzquierda), y: a.esViga ? 40 : 14, h: (a.esViga ? 90 : 152) + ex }));
@@ -327,6 +341,30 @@
         }
       }
 
+      // al pasar por un choque, abajo dice qué toca a qué, cuánto se mete y qué se puede hacer
+      if (choqueOn && !cur) { foot = choqueOn.tip + ' · clic para ver cómo arreglarlo'; footCol = ROJO; }
+
+      // el globo del choque abierto (decisión 7): qué toca a qué, la pista y los arreglos que probó C#. Al pasar por un
+      // arreglo se resaltan el punto y la pieza; sin ninguno que sirva, lo dice.
+      const abierto = choques.find((c) => c.i === this.props.choqueAbierto);
+      let globo = null;
+      if (abierto) {
+        const dato = p.choques[abierto.i], lista = this.props.arreglos;
+        const xs = v.tx + abierto.x * v.z, ys = v.ty + (abierto.enBarra && inv ? FH - abierto.y : abierto.y) * v.z;
+        const ANCHO = 300;
+        globo = {
+          left: Math.max(4, Math.min(W - ANCHO - 4, xs - ANCHO / 2)) + 'px', ancho: ANCHO + 'px',
+          // debajo del punto si está en la mitad de arriba; si no, encima
+          pos: ys < H / 2 ? 'top: ' + Math.round(ys + 14) + 'px' : 'bottom: ' + Math.round(H - ys + 14) + 'px',
+          texto: dato.texto, pista: dato.pista, cargando: !lista, vacio: !!lista && !lista.length,
+          cerrar: () => { if (this.props.onCerrarChoque) this.props.onCerrarChoque(); },
+          botones: (lista || []).map((a) => ({ texto: a.texto,
+            aplicar: () => { this.setState({ choque: -1, hover: '' }); if (this.props.onArreglo) this.props.onArreglo(a); },
+            entra: () => this.setState({ choque: abierto.i, hover: dato.elemento }),
+            sale: () => this.setState({ choque: -1, hover: '' }) })),
+        };
+      }
+
       const zoomAt = (mx, my, f) => {
         const z = Math.min(Math.max(v.z * f, fitZ * 0.4), fitZ * 12);
         const s = z / v.z;
@@ -343,6 +381,7 @@
         yColSec: 30, yEje: 192 + ex,
         caption: (inv ? 'Cimentación' : 'Aérea') + ' · alzado · vertical ×3',
         b, l, t, st, yE, secs, colSecs, cols, luces, vol, ejes, cut, ganchos, puntos3, fantasma, foot, footCol, k, halo, haloHover, ley,
+        choquesEnBarra: choques.filter((c) => c.enBarra), choquesSueltos: choques.filter((c) => !c.enBarra), hayChoques: choques.length > 0, globo,
         // la x del mouse pasa a m y se pega al salto más cercano de los que mandó C#
         hdMove: (e) => {
           const h = this.state.hd;
@@ -420,6 +459,11 @@
       // los textos llevan un borde del color del fondo para leerse sobre las líneas (#100)
       const texto = (x, y, t, col, tam, peso) => (t ? html`<text x="${x}" y="${y}" text-anchor="middle" font-size="${tam * k}" font-weight="${peso}" font-family="IBM Plex Mono, monospace" fill="${col}" stroke="#F1F3F5" stroke-width="${3.5 * k}" stroke-linejoin="round" paint-order="stroke" pointer-events="none">${t}</text>` : null);
       const rotulo = (x) => texto(x.lx, x.ly, x.lt, x.col, 10, 500);
+      // el punto de un choque, con una zona de clic más grande que él; el elegido por el puntero crece
+      const choque = (c) => html`<g data-clic style="cursor: pointer" onClick=${c.pick} onPointerEnter=${c.entra} onPointerLeave=${c.sale}>
+        <circle cx="${c.x}" cy="${c.y}" r="${(c.on ? 6.5 : 5) * k}" fill="${ROJO}" stroke="#FFFFFF" stroke-width="1.5" vector-effect="${NS}"></circle>
+        <circle cx="${c.x}" cy="${c.y}" r="${11 * k}" fill="transparent" aria-label=${c.tip}><title>${c.tip}</title></circle>
+      </g>`;
       return html`
 <div style="position: relative; width: ${v.wpx}; height: ${v.hpx}; overflow: hidden; background: #FAFBFC; border: 1px solid #D9DDE2; border-radius: 6px; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; color: #16191D; cursor: ${v.cursor}; user-select: none; touch-action: none" onPointerDown=${v.down} onPointerMove=${v.move} onPointerUp=${v.up} onPointerLeave=${v.up} onClick=${v.clicFondo} onWheel=${v.wheel} onDblClick=${v.fitView}>
   <svg width="${v.w}" height="${v.h}" style="display: block" role="img" aria-label="Alzado del pórtico con barras, traslapos, bastones y estribos">
@@ -439,6 +483,7 @@
         ${v.b.filter((x) => !x.isC).map(barra)}
         ${v.t.filter((x) => x.top).map(barra)}
         ${v.t.filter((x) => !x.top).map(barra)}
+        ${v.choquesEnBarra.map(choque)}
         ${v.fantasma ? html`
         ${v.fantasma.laps.map((x) => html`<rect x="${x.x}" y="${x.y}" width="${x.w}" height="18" fill="none" stroke="#9AA3AD" stroke-width="1.2" stroke-dasharray="4 3" vector-effect="${NS}" pointer-events="none"></rect>`)}
         <polyline points="${v.fantasma.pts}" fill="none" stroke="#9AA3AD" stroke-width="1.6" stroke-dasharray="5 4" vector-effect="${NS}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></polyline>` : null}
@@ -454,6 +499,7 @@
         ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 10 * k, z.b, '#3F4A57', 9, 400)) : null}
         ${v.estTextos ? v.st.map((z) => texto(z.x, v.yE + 20 * k, z.c, '#3F4A57', 9, 400)) : null}
       </g>
+      ${v.choquesSueltos.map(choque)}
       ${v.textosOn ? html`
       ${v.secs.map((s) => texto(s.x, 9, s.t, '#5E6670', 9, 400))}
       ${v.l.map((x) => texto(x.lx, x.ly, x.lt, '#3F4A57', 9, 600))}
@@ -481,10 +527,26 @@
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d=${o.icono} stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>${o.texto}
     </button>`)}
   </div>`)}
+  ${v.globo ? html`
+  <div role="dialog" aria-label="Choque entre barras" style="position: absolute; left: ${v.globo.left}; ${v.globo.pos}; width: ${v.globo.ancho}; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: #FFFFFF; border: 1px solid #F1B5AE; border-radius: 8px; box-shadow: 0 8px 24px rgba(22, 25, 29, 0.16); font-size: 12px; line-height: 1.4; cursor: default; z-index: 3" onPointerDown=${v.stop} onDblClick=${v.stop} onWheel=${v.stop}>
+    <div style="display: flex; gap: 8px; align-items: flex-start">
+      <span aria-hidden="true" style="flex-shrink: 0; width: 10px; height: 10px; margin-top: 3px; border-radius: 50%; background: ${ROJO}"></span>
+      <b style="flex: 1">${v.globo.texto}</b>
+      <button type="button" aria-label="Cerrar" onClick=${v.globo.cerrar} style="flex-shrink: 0; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #3F4A57; cursor: pointer; display: grid; place-items: center">
+        <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+      </button>
+    </div>
+    <span style="color: #3F4A57">${v.globo.pista}</span>
+    ${v.globo.cargando ? html`<span style="color: #5E6670">Buscando arreglos…</span>` : null}
+    ${v.globo.vacio ? html`<span style="color: #5E6670">No hay un arreglo automático: corrígelo a mano.</span>` : null}
+    ${v.globo.botones.map((a) => html`
+    <button type="button" onClick=${a.aplicar} onPointerEnter=${a.entra} onPointerLeave=${a.sale} style="min-height: 30px; padding: 4px 10px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; font-weight: 600; color: #1F5FAF; text-align: left; cursor: pointer">${a.texto}</button>`)}
+  </div>` : null}
   <div style="position: absolute; top: 8px; left: 10px; max-width: ${v.w - 260}px; display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5E6670; pointer-events: none; white-space: nowrap">
     <span>${v.caption}</span>
     ${v.ley.map((d) => html`<span style="display: flex; align-items: center; gap: 4px"><span style="width: 9px; height: 9px; border-radius: 50%; background: ${d.c}"></span>${d.t}</span>`)}
     <span style="display: flex; align-items: center; gap: 4px"><span style="width: 12px; height: 8px; background: rgba(94,102,112,0.14); border: 1px solid #5E6670"></span>traslapo</span>
+    ${v.hayChoques ? html`<span style="display: flex; align-items: center; gap: 4px; color: ${ROJO}"><span style="width: 9px; height: 9px; border-radius: 50%; background: ${ROJO}"></span>choque</span>` : null}
   </div>
   <div style="position: absolute; top: 5px; right: 5px; display: flex; gap: 6px; align-items: flex-start" onPointerDown=${v.stop} onDblClick=${v.stop} onWheel=${v.stop}>
   <div style="position: relative">

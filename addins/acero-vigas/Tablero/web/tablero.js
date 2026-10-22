@@ -101,6 +101,16 @@
       + ', dentro del voladizo ' + eje + '. El add-in nunca lo pone ahí: solo queda si lo confirmas.';
   };
 
+  // "Hay 7 choques entre barras en Pórtico 1 (y 3 en Pórtico 2)." con los nombres de la lista.
+  const textoChoquesGen = (porticos, lista) => {
+    const nombre = (id) => (lista.find((p) => p.id === id) || { nombre: id }).nombre;
+    const cuantos = (n) => n + (n === 1 ? ' choque' : ' choques');
+    const [primero, ...resto] = porticos;
+    return 'Hay ' + cuantos(primero.cantidad) + ' entre barras en ' + nombre(primero.id)
+      + (resto.length ? ' (y ' + resto.map((p) => p.cantidad + ' en ' + nombre(p.id)).join(', ') + ')' : '')
+      + '. Puedes revisarlos antes o generar de todos modos.';
+  };
+
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
@@ -157,7 +167,7 @@
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
         cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
-        vw: window.innerWidth, vh: window.innerHeight },
+        vw: window.innerWidth, vh: window.innerHeight, choqueAbierto: -1, arreglos: null, deshacer: null },
       OPCIONES0, props.inicial || {});
       this.opcionesPorPortico = {};
       this.alCambiarTamano = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
@@ -261,6 +271,56 @@
       this.cambiar({ cambios: { ...s.cambios, movidos, ganchos }, bastPuntas: puntas, confirmVol: null });
     }
 
+    // "Generar en Revit" (#85). Sin forzar, si algún pórtico tiene choques C# no genera y contesta "choques" (decisión 8
+    // del plan de choques); "Generar de todos modos" vuelve a mandar los mismos con forzar.
+    generar(ids, forzar) {
+      this.idsGenerar = ids;
+      this.props.enviar({ tipo: 'generar', ids, estados: this.estadosParaGenerar(ids), forzar });
+    }
+
+    choquesAlGenerar(porticos) {
+      if (porticos && porticos.length && this.idsGenerar) this.setState({ choquesGen: { porticos, ids: this.idsGenerar } });
+    }
+
+    // Los arreglos de un choque (plan docs/planes/2026-10-22-choques-entre-barras-vigas.md, decisión 7): C# los prueba
+    // antes de ofrecerlos. Se piden al abrir el punto, con las opciones de ahora; los que traen otro número son viejos.
+    abrirChoque(i) {
+      const v = this.props.vista, opciones = opcionesDe(this.state);
+      if (!v || !v.actual || !opciones) return;
+      this.nArreglos = this.siguiente();
+      this.setState({ choqueAbierto: i, arreglos: null });
+      this.props.enviar({ tipo: 'arreglos', id: v.actual.id, opciones, n: this.nArreglos, choque: i });
+    }
+
+    arreglosRecibidos(a) {
+      if (a && a.n === this.nArreglos && a.choque === this.state.choqueAbierto) this.setState({ arreglos: a.arreglos });
+    }
+
+    // Aplica el arreglo como lo probó C# (ArreglosChoque.Aplicar) y guarda la página como estaba, para "Deshacer".
+    aplicarArreglo(arreglo) {
+      const s = this.state, c = arreglo.cambio, antes = this.estadoDeLaPagina();
+      if (c.tipo === 'salto') {
+        this.aplicarSalto({ cambios: c.saltos });
+      } else {
+        const clave = c.donde === 'estMarc' && s.estMarc ? 'estMarc' : 'est', e = s[clave], adicionales = e.adicionales || [];
+        const nuevo = c.tipo === 'gancho' ? { ...e, estG: c.valor }
+          : c.tipo === 'forma' ? { ...e, adicionales: adicionales.map((a, j) => (j === c.indice ? { ...a, forma: c.valor } : a)) }
+          : { ...e, adicionales: adicionales.filter((a, j) => j !== c.indice) };
+        this.cambiar({ [clave]: nuevo });
+      }
+      this.setState({ choqueAbierto: -1, arreglos: null, deshacer: { antes, texto: arreglo.texto } });
+      clearTimeout(this._deshacer);
+      this._deshacer = setTimeout(() => this.setState({ deshacer: null }), 10000);
+    }
+
+    deshacerArreglo() {
+      const d = this.state.deshacer;
+      if (!d) return;
+      clearTimeout(this._deshacer);
+      this.setState({ deshacer: null });
+      this.cambiar(d.antes);
+    }
+
     say(t) {
       this.setState({ toast: t });
       clearTimeout(this._t);
@@ -306,6 +366,8 @@
         const tarjeta = ahora && document.querySelector('[data-portico="' + CSS.escape(ahora) + '"]');
         if (tarjeta) tarjeta.scrollIntoView({ block: 'nearest' });
       }
+      // Con otra vista los choques pueden ser otros: el globo abierto se cierra.
+      if (prev.vista !== this.props.vista && s.choqueAbierto >= 0) this.setState({ choqueAbierto: -1, arreglos: null });
       // Al soltar la línea 1-1, se sigue viendo donde quedó hasta que llega el cálculo de C#.
       if (prev.vista !== this.props.vista && !this.arrastrandoCorte && this.state.cutLive != null) this.setState({ cutLive: null });
       if (this.state.guardando && prev.vista !== this.props.vista) {
@@ -706,12 +768,25 @@
         genOff: elegidos ? enLista.length === 0 : !P || !P.sePuedeGenerar,
         genBg: (elegidos ? enLista.length > 0 : P && P.sePuedeGenerar) ? '#1F5FAF' : '#9AA3AD',
         disponibles: vista.diametrosDisponibles || null, hasToast: !!s.toast, toast: s.toast,
+        // choques: el globo del punto abierto, sus arreglos y "Aplicado · Deshacer"
+        choqueAbierto: s.choqueAbierto, arreglos: s.arreglos, onChoque: (i) => this.abrirChoque(i), onArreglo: (a) => this.aplicarArreglo(a),
+        onCerrarChoque: () => this.setState({ choqueAbierto: -1, arreglos: null }),
+        deshacer: s.deshacer ? s.deshacer.texto : '', deshacerArreglo: () => this.deshacerArreglo(),
         hasConfirmGen: !!s.confirmGen,
         confirmGenText: s.confirmGen ? 'Se generará el acero de ' + (s.confirmGen.length === 1
           ? (PORS.find((p) => p.id === s.confirmGen[0]) || { nombre: s.confirmGen[0] }).nombre
           : s.confirmGen.length + ' pórticos') + '. Lo que el add-in generó antes en ' + (s.confirmGen.length === 1 ? 'él' : 'ellos') + ' se reemplaza.' : '',
-        confirmGenYes: () => { enviar({ tipo: 'generar', ids: s.confirmGen, estados: this.estadosParaGenerar(s.confirmGen) }); this.setState({ confirmGen: null }); },
+        confirmGenYes: () => { this.generar(s.confirmGen, false); this.setState({ confirmGen: null }); },
         confirmGenNo: () => this.setState({ confirmGen: null }),
+        // los choques al generar (decisión 8 del plan de choques): no bloquea, pregunta
+        hasChoquesGen: !!s.choquesGen,
+        choquesGenText: s.choquesGen ? textoChoquesGen(s.choquesGen.porticos, PORS) : '',
+        choquesGenRevisar: () => {
+          const primero = s.choquesGen.porticos[0].id;
+          this.setState({ choquesGen: null, tab: 'alzado' });
+          if (!P || P.id !== primero) enviar({ tipo: 'elegirPortico', id: primero });
+        },
+        choquesGenForzar: () => { this.generar(s.choquesGen.ids, true); this.setState({ choquesGen: null }); },
         // #85: el resumen de "Generar en Revit", una línea por cosa; se queda hasta cerrarlo
         resumen: s.resumen ? { titulo: s.resumen[0], lineas: s.resumen.slice(1) } : null, closeResumen: () => this.setState({ resumen: null }),
         pickEl: (id) => (id ? selectBar(id) : this.setState({ sel: NADA })), pickLap: (id) => { const L = lapsAll.find((x) => x.id === id); if (L) selectLap(L); },
@@ -864,7 +939,7 @@
 
         ${v.isAlzado ? html`
           <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
-            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} />
+            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} choqueAbierto=${v.choqueAbierto} arreglos=${v.arreglos} onChoque=${v.onChoque} onArreglo=${v.onArreglo} onCerrarChoque=${v.onCerrarChoque} />
             ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
           </div>` : null}
         ${v.isCorte ? html`
@@ -1355,8 +1430,26 @@
         </div>
       </div>
     </div>` : null}
+  ${v.hasChoquesGen ? html`
+    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(22, 25, 29, 0.32)">
+      <div role="alertdialog" aria-labelledby="chq-t" aria-describedby="chq-d" style="width: 440px; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 8px; box-shadow: 0 12px 32px rgba(22, 25, 29, 0.22)">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span id="chq-t" style="font-weight: 600; font-size: 15px">Hay barras que se tocan</span>
+          <span id="chq-d" style="font-size: 12px; color: #5E6670; line-height: 1.5">${v.choquesGenText}</span>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" onClick=${v.choquesGenRevisar} style="height: 32px; padding: 0 14px; border: 1px solid #1F5FAF; border-radius: 6px; background: #1F5FAF; font: inherit; font-weight: 600; color: #FFFFFF; cursor: pointer">Revisar</button>
+          <button type="button" onClick=${v.choquesGenForzar} style="height: 32px; padding: 0 14px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">Generar de todos modos</button>
+        </div>
+      </div>
+    </div>` : null}
   ${v.hasToast ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">${v.toast}</div>` : null}
+  ${v.deshacer ? html`
+    <div role="status" style="position: absolute; left: 50%; bottom: ${v.hasToast ? 64 : 20}px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 8px 10px 8px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; white-space: nowrap">
+      <span>Aplicado: ${v.deshacer}</span>
+      <button type="button" onClick=${v.deshacerArreglo} style="height: 28px; padding: 0 12px; border: 1px solid #5E6670; border-radius: 6px; background: transparent; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">Deshacer</button>
+    </div>` : null}
   ${v.resumen ? html`
     <div role="status" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); max-height: 45%; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: 8px; background: #16191D; color: #FFFFFF; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 20px rgba(0,0,0,.25)">
       <div style="display: flex; align-items: flex-start; gap: 12px">
@@ -1381,6 +1474,8 @@
       if (m.tipo === 'vista') this.setState({ vista: m.vista });
       else if (m.tipo === 'aviso' && this.tablero) this.tablero.aviso(m.texto);
       else if (m.tipo === 'previa' && this.tablero) this.tablero.previa(m.previa);
+      else if (m.tipo === 'arreglos' && this.tablero) this.tablero.arreglosRecibidos(m.arreglos);
+      else if (m.tipo === 'choques' && this.tablero) this.tablero.choquesAlGenerar(m.porticos);
       // #85: el resumen de la generación; la primera línea es el título y las demás, una por falla o diferencia.
       else if (m.tipo === 'generado' && this.tablero) this.tablero.setState({ resumen: m.texto.split('\n') });
     }

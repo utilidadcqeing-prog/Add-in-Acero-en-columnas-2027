@@ -19,6 +19,9 @@ public static class MarcoPortico
         return new Punto3(u.OrigenX + x * u.Ux - lado * u.Uy, u.OrigenY + x * u.Uy + lado * u.Ux, u.ZAbajo + yCorte);
     }
 
+    /// <summary>La x de un punto del modelo en el marco del pórtico: mm desde el eje A, a lo largo del pórtico.</summary>
+    public static double EnPortico(UbicacionPortico u, Punto3 p) => (p.X - u.OrigenX) * u.Ux + (p.Y - u.OrigenY) * u.Uy;
+
     /// <summary>
     /// La viga que contiene <paramref name="x"/> o, si cae fuera de todas (en un apoyo, por ejemplo), la más cercana; con
     /// empate, la primera. Null si el pórtico no tiene vigas.

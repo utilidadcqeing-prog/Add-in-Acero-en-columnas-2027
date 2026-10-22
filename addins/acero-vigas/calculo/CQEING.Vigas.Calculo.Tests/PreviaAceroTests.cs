@@ -159,6 +159,23 @@ public class PreviaAceroTests
     }
 
     [Fact]
+    public void CadaTrazoDiceDeQuePiezaEs()
+    {
+        // para los choques (plan de 22-oct): qué toca a qué, y los estribos de una corrida con su tramo
+        var baston = Barra() with { Pieza = "BS1" };
+        var cerrado = new GrupoEstribos("E", "1-2", TipoEstribo.Cerrado, 3, GanchoEstribo.De135, 40, 260, 40, 460, new Corrida(500, 2, 100), "101");
+        var abierto = new GrupoEstribos("E1", "2-3", TipoEstribo.Abierto, 3, GanchoEstribo.De135, 200, 200, 40, 460, new Corrida(500, 1, 0), "101",
+            new Rama(200, 440, 60, 16));
+
+        IReadOnlyList<Trazo> t = PreviaAcero.Trazos(new PlanAcero("P", [Barra()], [baston], [], [cerrado, abierto], []), U, Reglas.Generales, Doblados);
+
+        Assert.Equal(
+            [("S1", TipoTrazo.Barra, null), ("BS1", TipoTrazo.Baston, null), ("E", TipoTrazo.Estribo, "1-2"),
+                ("E", TipoTrazo.Estribo, "1-2"), ("E1", TipoTrazo.Grapa, "2-3")],
+            t.Select(x => (x.Pieza, x.Tipo, x.Tramo)));
+    }
+
+    [Fact]
     public void SinDobladosDelModeloUsaElDiametroDeLasReglas()
     {
         Trazo t = Assert.Single(PreviaAcero.Trazos(new PlanAcero("P", [Barra()], [], [], [], []), U, Reglas.Generales));

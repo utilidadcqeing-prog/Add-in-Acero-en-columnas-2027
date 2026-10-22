@@ -3,11 +3,22 @@ using CQEING.Vigas.Calculo.Porticos;
 
 namespace CQEING.Vigas.Calculo.Generacion;
 
+/// <summary>De qué es un <see cref="Trazo"/>: la grapa es el estribo abierto.</summary>
+public enum TipoTrazo
+{
+    Barra,
+    Baston,
+    Estribo,
+    Grapa,
+}
+
 /// <summary>
 /// Una barra de la vista previa 3D: su eje, en mm del modelo, con los dobleces ya partidos en tramos rectos.
 /// <paramref name="Numero"/> es el diámetro en octavos (para el color) y <paramref name="Diametro"/>, el real en mm.
+/// <paramref name="Pieza"/> es el id del tablero (<c>S1</c>, <c>BS1</c>, <c>E</c>, <c>E1</c>) y <paramref name="Tramo"/>,
+/// el del estribo (null en las piezas longitudinales): con ellos se dice qué toca a qué en los choques.
 /// </summary>
-public sealed record Trazo(IReadOnlyList<Punto3> Puntos, int Numero, double Diametro);
+public sealed record Trazo(IReadOnlyList<Punto3> Puntos, int Numero, double Diametro, string Pieza, TipoTrazo Tipo, string? Tramo = null);
 
 /// <summary>
 /// El diámetro de una barra del modelo y los de doblado de su gancho y de su estribo, en mm (de su tipo en Revit).
@@ -37,17 +48,20 @@ public static class PreviaAcero
     public static IReadOnlyList<Trazo> Trazos(PlanAcero plan, UbicacionPortico u, Reglas r, IReadOnlyDictionary<int, DobladoBarra>? doblados = null)
     {
         var trazos = new List<Trazo>();
-        foreach (PiezaLongitudinal p in plan.Barras.Concat(plan.Bastones))
-            trazos.Add(Longitudinal(p, u, r.PorDiametro[p.Diametro], Doblado(r, p.Diametro, doblados)));
+        foreach (PiezaLongitudinal p in plan.Barras)
+            trazos.Add(Longitudinal(p, TipoTrazo.Barra, u, r.PorDiametro[p.Diametro], Doblado(r, p.Diametro, doblados)));
+        foreach (PiezaLongitudinal p in plan.Bastones)
+            trazos.Add(Longitudinal(p, TipoTrazo.Baston, u, r.PorDiametro[p.Diametro], Doblado(r, p.Diametro, doblados)));
         foreach (GrupoEstribos g in plan.Estribos)
         {
             DobladoBarra d = Doblado(r, g.Diametro, doblados);
             if (EnElCorte(g, u.Ancho, r, d) is not { } corte)
                 continue;
+            TipoTrazo tipo = g.Tipo == TipoEstribo.Cerrado ? TipoTrazo.Estribo : TipoTrazo.Grapa;
             for (int i = 0; i < g.Corrida.Cantidad; i++)
             {
                 double x = g.Corrida.Primero + i * g.Corrida.Separacion;
-                trazos.Add(new Trazo(corte.Select(c => MarcoPortico.AlModelo(u, x, c.X, c.Y)).ToList(), g.Diametro, d.Diametro));
+                trazos.Add(new Trazo(corte.Select(c => MarcoPortico.AlModelo(u, x, c.X, c.Y)).ToList(), g.Diametro, d.Diametro, g.Pieza, tipo, g.Tramo));
             }
         }
         return trazos;
@@ -71,7 +85,7 @@ public static class PreviaAcero
             : new DobladoBarra(r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro);
 
     /// <summary>La parte recta en (XCorte, YCorte), con un gancho en cada punta que lo lleve, doblando hacia adentro.</summary>
-    private static Trazo Longitudinal(PiezaLongitudinal p, UbicacionPortico u, ReglaDiametro regla, DobladoBarra d)
+    private static Trazo Longitudinal(PiezaLongitudinal p, TipoTrazo tipo, UbicacionPortico u, ReglaDiametro regla, DobladoBarra d)
     {
         // En el plano (x a lo largo, y del corte). s: hacia dónde dobla el gancho (abajo en la capa superior).
         double s = p.Capa == Posicion.Superior ? -1 : 1;
@@ -80,7 +94,7 @@ public static class PreviaAcero
         puntos.Add((p.Desde, p.YCorte));
         puntos.Add((p.Hasta, p.YCorte));
         puntos.AddRange(Gancho(p.GanchoFin, p.Hasta, 1));
-        return new Trazo(puntos.Select(q => MarcoPortico.AlModelo(u, q.X, p.XCorte, q.Y)).ToList(), p.Diametro, d.Diametro);
+        return new Trazo(puntos.Select(q => MarcoPortico.AlModelo(u, q.X, p.XCorte, q.Y)).ToList(), p.Diametro, d.Diametro, p.Pieza, tipo);
 
         // afuera: −1 en el inicio (la barra sigue hacia −x), +1 en el fin. Del doblez a la punta de la cola.
         List<(double X, double Y)> Gancho(TipoGancho tipo, double punta, double afuera)

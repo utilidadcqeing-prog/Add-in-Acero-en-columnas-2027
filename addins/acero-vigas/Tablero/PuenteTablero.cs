@@ -3,6 +3,7 @@ using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.DB.Structure;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
+using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
 using CQEING.Vigas.Calculo.Tablero;
@@ -31,7 +32,7 @@ internal sealed class PuenteTablero
         this.uiapp = uiapp;
         leido = uiapp.ActiveUIDocument?.Document;
         sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "", NominalesDelModelo,
-            ConfiguracionDeViga);
+            ConfiguracionDeViga, DobladosDelModelo);
 
         ventana.MensajeRecibido += json => acciones.Encolar(app => Atender(app, ProtocoloTablero.Leer(json)));
         acciones.Fallo += texto => ventana.Enviar(ProtocoloTablero.Aviso($"No se pudo hacer en Revit: {texto}"));
@@ -65,6 +66,11 @@ internal sealed class PuenteTablero
         ? []
         : new FilteredElementCollector(leido).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
             .Select(t => LectorModelo.Mm(t.BarNominalDiameter)).ToList();
+
+    /// <summary>Los doblados de los tipos de barra del documento leído, para los choques del tablero (los de la vista previa 3D).</summary>
+    private IReadOnlyDictionary<int, DobladoBarra> DobladosDelModelo(Reglas reglas) => leido is null
+        ? new Dictionary<int, DobladoBarra>()
+        : PreviaAcero3D.Doblados(leido, reglas.PorDiametro.Keys, reglas);
 
     /// <summary>Lo que guardó una generación anterior en la viga (plan de 22-oct, recordar el pórtico), o null.</summary>
     private string? ConfiguracionDeViga(string id) =>

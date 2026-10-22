@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
 using CQEING.Vigas.Calculo.Tablero;
@@ -293,13 +294,145 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Empty(Sesion().Manejar(new Desconocido("otro")));
     }
 
-    private SesionTablero ConUbicacion(IReadOnlyList<double>? nominales = null, Func<string, string?>? guardado = null)
+    private SesionTablero ConUbicacion(IReadOnlyList<double>? nominales = null, Func<string, string?>? guardado = null,
+        Func<Reglas, IReadOnlyDictionary<int, DobladoBarra>>? doblados = null)
     {
         lectura = new([PlanificadorAceroTests.Portico()], []);
         var s = new SesionTablero(() => lectura, new AlmacenReglas(Path.Combine(carpeta, "reglas.json")), "Proyecto de prueba",
-            nominales is null ? null : () => nominales, guardado);
+            nominales is null ? null : () => nominales, guardado, doblados);
         s.Manejar(new Listo());
         return s;
+    }
+
+    // Choques entre barras (plan docs/planes/2026-10-22-choques-entre-barras-vigas.md, paso 3).
+
+    private static List<string> TextosDeChoques(JsonElement actual) =>
+        actual.GetProperty("choques").EnumerateArray().Select(c => c.GetProperty("texto").GetString()!).ToList();
+
+    [Fact]
+    public void LaVistaTraeLosChoquesDelPorticoAbiertoSinAviso()
+    {
+        // solo los puntos del alzado: el aviso en la lista sobraba (Juan, 22-oct)
+        JsonElement actual = VistaDe([ConUbicacion().Vista()]).GetProperty("actual");
+
+        JsonElement primero = actual.GetProperty("choques")[0];
+        Assert.Equal(7, actual.GetProperty("choques").GetArrayLength());
+        Assert.Equal(("BS1", 8), (primero.GetProperty("elemento").GetString(), primero.GetProperty("veces").GetInt32()));
+        Assert.DoesNotContain(actual.GetProperty("avisos").EnumerateArray(), a => a.GetProperty("texto").GetString()!.Contains("choque"));
+    }
+
+    [Fact]
+    public void SinBastonesLaMaquetaNoTieneChoques()
+    {
+        SesionTablero s = ConUbicacion();
+        OpcionesTablero sinBastones = OpcionesTablero.PorDefecto with { Bastones = new ArmadoBastones(new GrupoBarras(0, 5), new GrupoBarras(0, 5)) };
+
+        JsonElement actual = VistaDe(s.Manejar(new Calcular("Pórtico 1", sinBastones))).GetProperty("actual");
+
+        Assert.Empty(TextosDeChoques(actual));
+    }
+
+    [Fact]
+    public void SinUbicacionEnElModeloNoSeRevisanLosChoques()
+    {
+        SesionTablero s = Sesion();
+
+        JsonElement actual = VistaDe(s.Manejar(new Listo())).GetProperty("actual");
+
+        Assert.Equal(JsonValueKind.Null, actual.GetProperty("choques").ValueKind);
+    }
+
+    [Fact]
+    public void LosArreglosDeUnChoqueVuelvenConSuNumeroYNoGuardanLasOpciones()
+    {
+        SesionTablero s = ConUbicacion();
+        string antes = s.Vista().Json;
+
+        AJs js = Assert.Single(s.Manejar(new PedirArreglos("Pórtico 1", OpcionesTablero.PorDefecto, 4, 1)).OfType<AJs>());
+
+        JsonElement raiz = JsonDocument.Parse(js.Json).RootElement;
+        Assert.Equal("arreglos", raiz.GetProperty("tipo").GetString());
+        JsonElement arreglos = raiz.GetProperty("arreglos");
+        Assert.Equal((4, 1), (arreglos.GetProperty("n").GetInt32(), arreglos.GetProperty("choque").GetInt32()));
+        JsonElement acortar = arreglos.GetProperty("arreglos")[2];
+        Assert.Equal("Acortar BS2: 2.00 → 1.00 m", acortar.GetProperty("texto").GetString());
+        Assert.Equal("puntas", acortar.GetProperty("cambio").GetProperty("saltos")[0].GetProperty("tipo").GetString());
+        Assert.Equal(antes, s.Vista().Json);
+    }
+
+    [Fact]
+    public void LosArreglosDeUnPorticoQueNoEstaNoContestan()
+    {
+        Assert.Empty(ConUbicacion().Manejar(new PedirArreglos("Otro", OpcionesTablero.PorDefecto, 1, 0)));
+    }
+
+    // Avisar al generar (decisión 8 del plan de choques, paso 7).
+
+    private static readonly OpcionesTablero SinBastones =
+        OpcionesTablero.PorDefecto with { Bastones = new ArmadoBastones(new GrupoBarras(0, 5), new GrupoBarras(0, 5)) };
+
+    [Fact]
+    public void ConChoquesYSinForzarNoGeneraYContestaLaLista()
+    {
+        // la maqueta por defecto tiene los 7 choques de H6
+        SesionTablero s = ConUbicacion();
+
+        IReadOnlyList<Salida> salidas = s.Manejar(new Generar(["Pórtico 1"]));
+
+        Assert.Empty(salidas.OfType<AGenerar>());
+        JsonElement raiz = JsonDocument.Parse(Assert.Single(salidas.OfType<AJs>()).Json).RootElement;
+        Assert.Equal("choques", raiz.GetProperty("tipo").GetString());
+        JsonElement portico = Assert.Single(raiz.GetProperty("porticos").EnumerateArray());
+        Assert.Equal(("Pórtico 1", 7), (portico.GetProperty("id").GetString(), portico.GetProperty("cantidad").GetInt32()));
+    }
+
+    [Fact]
+    public void ConChoquesYForzandoGenera()
+    {
+        SesionTablero s = ConUbicacion();
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], Forzar: true)).OfType<AGenerar>());
+
+        Assert.Equal("Pórtico 1", Assert.Single(g.Porticos).Id);
+    }
+
+    [Fact]
+    public void SinChoquesGeneraDirecto()
+    {
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new Calcular("Pórtico 1", SinBastones));
+
+        IReadOnlyList<Salida> salidas = s.Manejar(new Generar(["Pórtico 1"]));
+
+        Assert.Single(salidas.OfType<AGenerar>());
+        Assert.Empty(salidas.OfType<AJs>());
+    }
+
+    [Fact]
+    public void ConChoquesLaVistaPrevia3dNoSeQuita()
+    {
+        // no se generó nada: el 3D sigue mostrando la vista previa
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new Abrir3d("Pórtico 1"));
+
+        Assert.Empty(s.Manejar(new Generar(["Pórtico 1"])).OfType<APrevia3d>());
+    }
+
+    [Fact]
+    public void LosChoquesUsanLosDobladosDelModelo()
+    {
+        // los de la vista previa 3D (H3): con el estribo doblado a 6 d la curva de la esquina cambia y el choque también
+        Reglas? recibidas = null;
+        SesionTablero s = ConUbicacion(doblados: r =>
+        {
+            recibidas = r;
+            return new Dictionary<int, DobladoBarra> { [3] = new(9.5, 57, 57) };
+        });
+
+        List<string> conModelo = TextosDeChoques(VistaDe([s.Vista()]).GetProperty("actual"));
+
+        Assert.NotNull(recibidas);
+        Assert.NotEqual(TextosDeChoques(VistaDe([ConUbicacion().Vista()]).GetProperty("actual")), conModelo);
     }
 
     // Recordar el pórtico generado (plan docs/planes/2026-10-22-recordar-portico-generado-vigas.md).
@@ -311,7 +444,7 @@ public sealed class SesionTableroTests : IDisposable
     private static string? GuardadoEnLa102(string viga) => viga == "102" ? ConfiguracionGuardada.Escribir(CuatroArriba, EstadoPagina) : null;
 
     private static int BarrasS1(SesionTablero s, IReadOnlyDictionary<string, string>? estados = null) =>
-        Assert.Single(Assert.Single(s.Manejar(new Generar(["Pórtico 1"], estados)).OfType<AGenerar>()).Porticos).Plan.Barras.Count(b => b.Pieza == "S1");
+        Assert.Single(Assert.Single(s.Manejar(new Generar(["Pórtico 1"], estados, Forzar: true)).OfType<AGenerar>()).Porticos).Plan.Barras.Count(b => b.Pieza == "S1");
 
     [Fact]
     public void LoGuardadoEnLasVigasSeRecuperaAlLeerElModelo()
@@ -348,7 +481,7 @@ public sealed class SesionTableroTests : IDisposable
         SesionTablero s = ConUbicacion(guardado: _ => null);
         s.Manejar(new Calcular("Pórtico 1", CuatroArriba));
 
-        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], new Dictionary<string, string> { ["Pórtico 1"] = EstadoPagina })).OfType<AGenerar>());
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], new Dictionary<string, string> { ["Pórtico 1"] = EstadoPagina }, Forzar: true)).OfType<AGenerar>());
 
         (OpcionesTablero o, string? estado) = ConfiguracionGuardada.Leer(Assert.Single(g.Porticos).Configuracion)!.Value;
         Assert.Equal((4, EstadoPagina), (o.Superior[0].Cantidad, estado));
@@ -360,7 +493,7 @@ public sealed class SesionTableroTests : IDisposable
     {
         SesionTablero s = ConUbicacion(guardado: GuardadoEnLa102);
 
-        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<AGenerar>());
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], Forzar: true)).OfType<AGenerar>());
 
         Assert.Equal(EstadoPagina, ConfiguracionGuardada.Leer(Assert.Single(g.Porticos).Configuracion)!.Value.Estado);
     }
@@ -371,7 +504,7 @@ public sealed class SesionTableroTests : IDisposable
         SesionTablero s = ConUbicacion();
         s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] }));
 
-        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<AGenerar>());
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], Forzar: true)).OfType<AGenerar>());
 
         PorticoAGenerar p = Assert.Single(g.Porticos);
         Assert.Equal(("Pórtico 1", 4), (p.Id, p.Plan.Barras.Count(b => b.Pieza == "S1")));
@@ -401,7 +534,7 @@ public sealed class SesionTableroTests : IDisposable
         APrevia3d cambio = Assert.Single(s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] })).OfType<APrevia3d>());
         Assert.Equal(4, cambio.Portico!.Plan.Barras.Count(b => b.Pieza == "S1"));
 
-        Assert.Null(Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<APrevia3d>()).Portico);
+        Assert.Null(Assert.Single(s.Manejar(new Generar(["Pórtico 1"], Forzar: true)).OfType<APrevia3d>()).Portico);
         Assert.Empty(s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto)).OfType<APrevia3d>());
     }
 
@@ -411,7 +544,7 @@ public sealed class SesionTableroTests : IDisposable
         SesionTablero s = ConUbicacion();
 
         Assert.Empty(s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto)).OfType<APrevia3d>());
-        Assert.Empty(s.Manejar(new Generar(["Pórtico 1"])).OfType<APrevia3d>());
+        Assert.Empty(s.Manejar(new Generar(["Pórtico 1"], Forzar: true)).OfType<APrevia3d>());
     }
 
     [Fact]
@@ -420,7 +553,7 @@ public sealed class SesionTableroTests : IDisposable
         SesionTablero s = ConUbicacion();
         s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(30, 8)] }));
 
-        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1", "Pórtico 9"])).OfType<AGenerar>());
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1", "Pórtico 9"], Forzar: true)).OfType<AGenerar>());
 
         Assert.Empty(g.Porticos);
         Assert.Equal(["Pórtico 1: no se puede generar; revisa los avisos del tablero.", "Pórtico 9: ya no está en el modelo."], g.Saltados);
@@ -431,7 +564,7 @@ public sealed class SesionTableroTests : IDisposable
     {
         SesionTablero s = ConUbicacion([9.525, 12.7]);
 
-        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<AGenerar>());
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], Forzar: true)).OfType<AGenerar>());
 
         Assert.Empty(g.Porticos);
         Assert.Equal(["Pórtico 1: el modelo no tiene un tipo de barra para el #5."], g.Saltados);

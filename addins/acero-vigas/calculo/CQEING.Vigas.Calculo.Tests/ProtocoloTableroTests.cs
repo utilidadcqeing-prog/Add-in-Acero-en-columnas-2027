@@ -135,6 +135,39 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LeeElPedidoDeArreglosDeUnChoque()
+    {
+        string json = $$"""{"tipo":"arreglos","id":"P1","n":4,"choque":2,"opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";
+
+        var m = Assert.IsType<PedirArreglos>(ProtocoloTablero.Leer(json));
+
+        Assert.Equal(("P1", 4, 2), (m.Id, m.N, m.Choque));
+    }
+
+    [Fact]
+    public void GenerarLeeForzar()
+    {
+        Assert.Equal(new Generar(["P1"]).Forzar, Assert.IsType<Generar>(ProtocoloTablero.Leer("""{"tipo":"generar","ids":["P1"]}""")).Forzar);
+        Assert.True(Assert.IsType<Generar>(ProtocoloTablero.Leer("""{"tipo":"generar","ids":["P1"],"forzar":true}""")).Forzar);
+    }
+
+    [Fact]
+    public void EscribeLosChoquesAlGenerar()
+    {
+        string json = ProtocoloTablero.Choques([new PorticoConChoques("Pórtico 1", 7)]);
+
+        Assert.Equal("""{"tipo":"choques","porticos":[{"id":"Pórtico 1","cantidad":7}]}""", json);
+    }
+
+    [Fact]
+    public void ArreglosSinChoqueEsDesconocido()
+    {
+        string json = $$"""{"tipo":"arreglos","id":"P1","n":4,"opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";
+
+        Assert.Equal(new Desconocido("arreglos"), ProtocoloTablero.Leer(json));
+    }
+
+    [Fact]
     public void PrevisualizarSinPedidoEsDesconocido()
     {
         string json = $$"""{"tipo":"previsualizar","id":"P1","opciones":{{OpcionesJson(OpcionesTablero.PorDefecto)}}}""";

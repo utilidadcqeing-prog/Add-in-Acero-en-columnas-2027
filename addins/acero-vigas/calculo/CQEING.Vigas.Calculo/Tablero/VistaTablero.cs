@@ -108,6 +108,14 @@ public sealed record FilaEstribos(string Id, string Tipo, int Cantidad, string D
 /// </summary>
 public sealed record AvisoVista(string Tipo, string Elemento, string Texto, bool CambiarCara = false);
 
+/// <summary>
+/// Un punto donde dos barras se meten una en la otra (plan docs/planes/2026-10-22-choques-entre-barras-vigas.md), para
+/// pintarlo en el alzado: <paramref name="X"/> en m desde el eje A, sobre la barra o el bastón <paramref name="Elemento"/>
+/// (su id del alzado, el que se elige al hacer clic). <paramref name="Texto"/> dice qué toca a qué y cuánto se mete;
+/// <paramref name="Pista"/>, qué se puede hacer; <paramref name="Veces"/>, cuántos estribos de la corrida chocan igual.
+/// </summary>
+public sealed record ChoqueVista(double X, string Elemento, string Texto, string Pista, int Veces, double SeMeteMm);
+
 /// <summary>Un tramo del pórtico, en m.</summary>
 public sealed record Rango(double Desde, double Hasta);
 
@@ -130,6 +138,8 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// <paramref name="Secciones"/>: la de cada tramo, para escribirla arriba de él.
 /// <paramref name="Estado"/>: el estado de la página con que se generó el pórtico (guardado en sus vigas o mandado al
 /// generar en esta sesión); la página lo usa si no tiene uno propio en memoria. Null si no hay.
+/// <paramref name="Choques"/>: los puntos donde las barras se tocan, de izquierda a derecha; null si no se revisaron
+/// (sin ubicación en el modelo o sin plan).
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -158,7 +168,8 @@ public sealed record VistaPortico(
     IReadOnlyList<double>? PosicionesEstribos = null,
     IReadOnlyList<DiametroVista>? Diametros = null,
     IReadOnlyList<SeccionEnAlzado>? Secciones = null,
-    string? Estado = null);
+    string? Estado = null,
+    IReadOnlyList<ChoqueVista>? Choques = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).
