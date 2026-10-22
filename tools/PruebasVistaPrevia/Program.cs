@@ -25,16 +25,16 @@ void Color(ColoresVarilla.ColorRgb real, byte r, byte g, byte b, string que) =>
 
 Probar("color_varillas_del_cuadro", () =>
 {
-    Color(ColoresVarilla.ColorDe(9.5), 184, 134, 11, "#3");
-    Color(ColoresVarilla.ColorDe(15.9), 211, 47, 47, "#5");
-    Color(ColoresVarilla.ColorDe(25.4), 21, 101, 192, "#8");
+    Color(ColoresVarilla.ColorDe(9.5), 251, 188, 4, "#3");
+    Color(ColoresVarilla.ColorDe(15.9), 234, 67, 53, "#5");
+    Color(ColoresVarilla.ColorDe(25.4), 66, 133, 244, "#8");
 });
 
 Probar("color_varillas_9_a_11_fuera_del_cuadro", () =>
 {
-    Color(ColoresVarilla.ColorDe(28.7), 0, 131, 143, "#9");
-    Color(ColoresVarilla.ColorDe(32.3), 46, 125, 50, "#10");
-    Color(ColoresVarilla.ColorDe(35.8), 109, 76, 65, "#11");
+    Color(ColoresVarilla.ColorDe(28.7), 139, 69, 19, "#9");
+    Color(ColoresVarilla.ColorDe(32.3), 0, 0, 0, "#10");
+    Color(ColoresVarilla.ColorDe(35.8), 233, 30, 99, "#11");
 });
 
 Probar("color_gris_para_otro_diametro", () =>
@@ -47,7 +47,7 @@ Probar("color_gris_para_otro_diametro", () =>
 
 // Una métrica de 16 mm cae dentro de la tolerancia del #5: mismo criterio
 // que el resto del add-in (CuadroVarillas.PorDiametro).
-Probar("color_metrica_16_sale_como_5", () => Color(ColoresVarilla.ColorDe(16.0), 211, 47, 47, "16 mm"));
+Probar("color_metrica_16_sale_como_5", () => Color(ColoresVarilla.ColorDe(16.0), 234, 67, 53, "16 mm"));
 
 Probar("numero_de_varilla_por_diametro", () =>
 {
@@ -196,8 +196,8 @@ Probar("posicion_intermedia", () => Igual(1, SeccionPlanta.PosicionIntermedia(0,
 Probar("color_filtro_empresa", () =>
 {
     // Los filtros "ACERO #N" del proyecto se repintan con la tabla (Luciano, 20-oct).
-    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3") == new ColoresVarilla.ColorRgb(184, 134, 11), "ACERO #3");
-    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("acero  #8") == new ColoresVarilla.ColorRgb(21, 101, 192), "acero  #8");
+    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3") == new ColoresVarilla.ColorRgb(251, 188, 4), "ACERO #3");
+    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("acero  #8") == new ColoresVarilla.ColorRgb(66, 133, 244), "acero  #8");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #2") == ColoresVarilla.Gris, "ACERO #2 en gris");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("Acero_Columnas") is null, "Acero_Columnas no se toca");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("CQEING #3") is null, "los nuestros no cuentan");
