@@ -65,7 +65,7 @@ public sealed class ProveedorContextoFalso : IProveedorContexto
                 (double x, double y) = _posiciones.TryGetValue(IdDe(c), out var pos) ? pos : (0.0, 0.0);
                 string ubicacion = _marcasDeUbicacion.TryGetValue(IdDe(c), out string? u) ? u : "";
                 return new ColumnaResumen(
-                    IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY), x, y, ubicacion);
+                    IdDe(c), c.Marca, ColumnaResumen.CalcularEsColumneta(c.BaseX, c.BaseY), x, y, ubicacion, c.BaseX, c.BaseY);
             })
             .ToList();
 

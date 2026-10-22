@@ -29,11 +29,12 @@ public partial class PanelVistaPrevia : UserControl
     private static readonly Brush ColorTapada = Paleta.TapadaClara;
 
     private const double AnchoLienzo = 350;
-    private const double AltoPlanta = 170;
+    private const double AltoPlanta = 190;
     private const double YElevaciones = AltoPlanta + 24;
     private const double AltoElevaciones = 300;
-    /// <summary>Por debajo de esto el ancho de una elevación se exagera (con nota).</summary>
-    private const double AnchoMinimoElevacion = 60;
+    /// <summary>En cada elevación: a la izquierda las cotas por zona, a la derecha la del alto del tramo.</summary>
+    private const double MargenCotasZonas = 34;
+    private const double MargenCotaAlto = 22;
 
     /// <summary>Una barra en la elevación: dónde cae a lo ancho de la vista (metros) y su diámetro.</summary>
     private sealed record BarraVista(double Posicion, double DiametroMm);
@@ -121,11 +122,19 @@ public partial class PanelVistaPrevia : UserControl
         Tramo? debajo = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice - 1);
         Tramo? encima = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice + 1);
 
+        // Los vecinos (nudo o zapata) se muestran recortados, solo para ubicar el
+        // tramo. Las dos elevaciones van a la misma escala, y el ancho a la misma
+        // que el alto (#133: nada exagerado). Si la columna es tan ancha que no
+        // entra, se achica todo junto.
         double anchoVista = (AnchoLienzo - 3 * 16) / 2;
-        bool exagerado = false;
-        exagerado |= DibujarElevacion("De frente (cara X)", 16, anchoVista, ladoX, tramo, debajo, encima, frente, dEstribo,
+        double zMin = tramo.ZInferior - (debajo is null ? 0 : Math.Min(debajo.Altura, 0.4));
+        double zMax = tramo.ZSuperior + (encima is null ? 0 : Math.Min(encima.Altura, 0.4));
+        double escalaElevacion = EscalaDibujo.Ajustar(
+            Math.Max(ladoX, ladoY), zMax - zMin, anchoVista - MargenCotasZonas - MargenCotaAlto, AltoElevaciones);
+
+        DibujarElevacion("De frente (cara X)", 16, ladoX, zMin, zMax, escalaElevacion, tramo, debajo, encima, frente, dEstribo,
             reparto, paquete, DiametroPieza, EjeCaja.Fila, XColumna);
-        exagerado |= DibujarElevacion("De costado (cara Y)", 32 + anchoVista, anchoVista, ladoY, tramo, debajo, encima, costado, dEstribo,
+        DibujarElevacion("De costado (cara Y)", 32 + anchoVista, ladoY, zMin, zMax, escalaElevacion, tramo, debajo, encima, costado, dEstribo,
             reparto, paquete, DiametroPieza, EjeCaja.Columna, YFila);
 
         Lienzo.Height = YElevaciones + AltoElevaciones + 30;
@@ -133,7 +142,7 @@ public partial class PanelVistaPrevia : UserControl
         LlenarLeyenda(barras.Select(b => b.DiametroMm)
             .Concat(dEstribo is double de ? new[] { de } : Array.Empty<double>())
             .Concat(piezas.Select(DiametroPieza)));
-        LlenarResumen(cfgLong, barras, dEstribo, reparto, piezas, DiametroPieza, exagerado, sinEstribos);
+        LlenarResumen(cfgLong, barras, dEstribo, reparto, piezas, DiametroPieza, sinEstribos);
     }
 
     // ------------------------------------------------------------- planta
@@ -145,7 +154,7 @@ public partial class PanelVistaPrevia : UserControl
     {
         Texto("Desde arriba", 16, 0, 11, FontWeights.SemiBold);
 
-        double escala = Math.Min((AnchoLienzo - 120) / ladoX, (AltoPlanta - 40) / ladoY);
+        double escala = EscalaDibujo.Ajustar(ladoX, ladoY, AnchoLienzo - 120, AltoPlanta - 60);
         double ancho = ladoX * escala, alto = ladoY * escala;
         double ox = (AnchoLienzo - ancho) / 2, oy = 22;
         Point P(double x, double y) => new(ox + x * escala, oy + alto - y * escala);
@@ -202,33 +211,27 @@ public partial class PanelVistaPrevia : UserControl
         Texto(cx, ox + ancho / 2 - 3, oy - 15, 11);
         Texto(cy, ox - 12, oy + alto / 2 - 8, 11);
         Texto(cy, ox + ancho + 5, oy + alto / 2 - 8, 11);
+
+        // Las medidas de la sección (#133).
+        Cotas.Horizontal(Lienzo, ox, ox + ancho, oy + alto + 22, EscalaDibujo.Cm(ladoX));
+        Cotas.Vertical(Lienzo, ox + ancho + 20, oy, oy + alto, EscalaDibujo.Cm(ladoY));
     }
 
     // ---------------------------------------------------------- elevación
 
-    /// <returns>true si hubo que exagerar el ancho para que se lea.</returns>
-    private bool DibujarElevacion(
-        string titulo, double x0, double anchoVista, double lado, Tramo tramo, Tramo? debajo, Tramo? encima,
+    /// <param name="escala">Píxeles por metro, la misma a lo ancho y a lo alto.</param>
+    private void DibujarElevacion(
+        string titulo, double x0, double lado, double zMin, double zMax, double escala, Tramo tramo, Tramo? debajo, Tramo? encima,
         List<BarraVista> barras, double? dEstribo, RepartoEstribos.Resultado? reparto, PaqueteEstribos.Paquete? paquete,
         Func<EstriboMenor, double> diametroPieza, EjeCaja ejeQueCorre, Func<int, double> posicionIndice)
     {
         Texto(titulo, x0, YElevaciones - 18, 11, FontWeights.SemiBold);
 
-        // Los vecinos (nudo o zapata) se muestran recortados, solo para ubicar el tramo.
-        double extraAbajo = debajo is null ? 0 : Math.Min(debajo.Altura, 0.4);
-        double extraArriba = encima is null ? 0 : Math.Min(encima.Altura, 0.4);
-        double zMin = tramo.ZInferior - extraAbajo, zMax = tramo.ZSuperior + extraArriba;
-        double escala = AltoElevaciones / Math.Max(0.1, zMax - zMin);
-
-        double margenCotas = 34;
-        double anchoReal = lado * escala;
-        double anchoDibujo = Math.Min(anchoVista - margenCotas - 4, Math.Max(anchoReal, AnchoMinimoElevacion));
-        bool exagerado = anchoDibujo > anchoReal + 0.5;
-        double escalaX = anchoDibujo / lado;
-        double ox = x0 + margenCotas;
+        double anchoDibujo = lado * escala;
+        double ox = x0 + MargenCotasZonas;
 
         double Y(double z) => YElevaciones + (zMax - z) * escala;
-        double X(double posicion) => ox + posicion * escalaX;
+        double X(double posicion) => ox + posicion * escala;
 
         Agregar(new Rectangle { Width = anchoDibujo, Height = (tramo.ZSuperior - tramo.ZInferior) * escala, Fill = ColorHormigon, Stroke = ColorContorno },
             ox, Y(tramo.ZSuperior));
@@ -244,9 +247,13 @@ public partial class PanelVistaPrevia : UserControl
 
         // Barras longitudinales, de punta a punta de lo que se muestra.
         foreach (BarraVista b in barras)
-            Linea(new Point(X(b.Posicion), Y(zMax)), new Point(X(b.Posicion), Y(zMin)), Pincel(b.DiametroMm), Math.Max(1.5, b.DiametroMm / 1000 * escalaX), false);
+            Linea(new Point(X(b.Posicion), Y(zMax)), new Point(X(b.Posicion), Y(zMin)), Pincel(b.DiametroMm), Math.Max(1.5, b.DiametroMm / 1000 * escala), false);
 
-        if (reparto is null || paquete is null || dEstribo is not double de) return exagerado;
+        // El ancho de la cara y el alto del tramo.
+        Cotas.Horizontal(Lienzo, ox, ox + anchoDibujo, Y(zMin) + 5, EscalaDibujo.Cm(lado));
+        Cotas.Vertical(Lienzo, ox + anchoDibujo + 6, Y(tramo.ZSuperior), Y(tramo.ZInferior), EscalaDibujo.M(tramo.ZSuperior - tramo.ZInferior));
+
+        if (reparto is null || paquete is null || dEstribo is not double de) return;
 
         double xIzq = barras.Min(b => b.Posicion), xDer = barras.Max(b => b.Posicion);
         foreach (double z in reparto.Alturas)
@@ -281,9 +288,6 @@ public partial class PanelVistaPrevia : UserControl
             t.LayoutTransform = new RotateTransform(-90);
             Agregar(t, xc + 2, (ya + yb) / 2 - 12);
         }
-
-        Texto($"{lado * 100:0} cm", ox + anchoDibujo / 2 - 14, Y(zMin) + 2, 10);
-        return exagerado;
     }
 
     // ------------------------------------------------------------ textos
@@ -301,7 +305,7 @@ public partial class PanelVistaPrevia : UserControl
 
     private void LlenarResumen(
         ConfigLongitudinal cfg, IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras, double? dEstribo,
-        RepartoEstribos.Resultado? reparto, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza, bool exagerado,
+        RepartoEstribos.Resultado? reparto, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza,
         bool sinEstribos)
     {
         string NumeroDe(PosicionBarra p) => Numero(barras.First(b => b.Posicion == p).DiametroMm);
@@ -339,8 +343,6 @@ public partial class PanelVistaPrevia : UserControl
 
             if (reparto.Aviso is not null) AgregarNota($"Este tramo: {reparto.Aviso}", ColorAviso);
         }
-
-        if (exagerado) AgregarNota("Ancho exagerado en las elevaciones para que se lea.", ColorTexto);
     }
 
     private static string NombreForma(FormaMenor forma) => forma switch

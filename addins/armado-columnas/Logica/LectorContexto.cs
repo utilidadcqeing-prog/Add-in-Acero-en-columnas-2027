@@ -99,7 +99,10 @@ public sealed class LectorContexto : IProveedorContexto
                 // ya tiene el resto del generador para columnas rotadas).
                 AMetros(pila[0].Centro.X),
                 AMetros(pila[0].Centro.Y),
-                MarcaUbicacion(pila[0].Instancia)))
+                MarcaUbicacion(pila[0].Instancia),
+                // Los lados, para dibujarla a escala en el selector (#133).
+                AMetros(LadoX(pila[0].Solido)),
+                AMetros(LadoY(pila[0].Solido))))
             .ToList();
 
     /// <summary>

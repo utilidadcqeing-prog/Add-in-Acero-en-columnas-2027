@@ -32,8 +32,12 @@ using practicacq.Modelo;
 /// </summary>
 public partial class VentanaEstribosMenores : Window
 {
-    private const double Lado = 260;
-    private const double Margen = 40;
+    /// <summary>Lo más que ocupa el lado mayor de la sección, en píxeles: el otro sale de la proporción real (#133).</summary>
+    private const double CajaDibujo = 300;
+    private const double MargenIzquierdo = 40;
+    private const double MargenArriba = 16;
+    private const double MargenDerecho = 40;
+    private const double MargenAbajo = 44;
 
     /// <summary>A cuántos píxeles del centro de una barra se la considera "debajo del mouse".</summary>
     private const double RadioCaptura = 12;
@@ -57,7 +61,25 @@ public partial class VentanaEstribosMenores : Window
     /// <param name="BarraEstribo">La barra de "Igual al estribo": la del tramo activo.</param>
     public sealed record MedidasSeccion(double PasoColumnas, double PasoFilas, Func<string?, TipoBarra?> Barra, string? BarraEstribo);
 
+    /// <summary>
+    /// La sección real, para dibujarla a escala y con sus medidas (#133, #134):
+    /// lados y recubrimiento en metros, diámetros en mm. Con
+    /// <paramref name="DiametrosDeReserva"/> todavía falta elegir alguna barra y
+    /// se dibuja con diámetros aproximados.
+    /// </summary>
+    public sealed record SeccionReal(
+        double LadoX, double LadoY, double Recubrimiento,
+        double DiametroEsquinaMm, double DiametroCaraXMm, double DiametroCaraYMm, double DiametroEstriboMm,
+        bool DiametrosDeReserva);
+
     private readonly MedidasSeccion? _medidas;
+    private readonly SeccionReal _seccion;
+
+    /// <summary>Píxeles por metro, la misma en los dos ejes.</summary>
+    private readonly double _escala;
+
+    /// <summary>Del borde de la sección al eje de cada barra (m), como <see cref="SeccionPlanta"/>.</summary>
+    private readonly double _insetEsquina, _insetCaraX, _insetCaraY, _insetReferencia;
 
     private readonly int _filas;
     private readonly int _columnas;
@@ -79,10 +101,21 @@ public partial class VentanaEstribosMenores : Window
 
     public VentanaEstribosMenores(
         int barrasPorCaraX, int barrasPorCaraY, IEnumerable<EstriboMenor> piezas, IReadOnlyList<string> barrasAptas,
-        MedidasSeccion? medidas = null)
+        SeccionReal seccion, MedidasSeccion? medidas = null)
     {
         InitializeComponent();
         _medidas = medidas;
+        _seccion = seccion;
+        _escala = EscalaDibujo.Ajustar(seccion.LadoX, seccion.LadoY, CajaDibujo, CajaDibujo);
+
+        double InsetDe(double diametroMm) =>
+            SeccionPlanta.Inset(seccion.Recubrimiento, seccion.DiametroEstriboMm / 1000, diametroMm / 1000);
+        _insetEsquina = InsetDe(seccion.DiametroEsquinaMm);
+        _insetCaraX = InsetDe(seccion.DiametroCaraXMm);
+        _insetCaraY = InsetDe(seccion.DiametroCaraYMm);
+        // Las intermedias se reparten entre las esquinas corridas con la barra
+        // más gruesa, igual que en SeccionPlanta.Calcular.
+        _insetReferencia = Math.Max(_insetEsquina, Math.Max(_insetCaraX, _insetCaraY));
 
         _columnas = Math.Max(1, barrasPorCaraX / 2);
         _filas = Math.Max(1, barrasPorCaraY / 2);
@@ -101,7 +134,10 @@ public partial class VentanaEstribosMenores : Window
             .Distinct()
             .ToList();
 
-        TextoEncabezado.Text = $"X = {barrasPorCaraX} · Y = {barrasPorCaraY} (+ 4 esquinas). Vista desde arriba, como en el modelo.";
+        TextoEncabezado.Text =
+            $"Sección {EscalaDibujo.Cm(seccion.LadoX)} × {EscalaDibujo.Cm(seccion.LadoY)} · recubrimiento {EscalaDibujo.Cm(seccion.Recubrimiento)} · " +
+            $"X = {barrasPorCaraX} · Y = {barrasPorCaraY} (+ 4 esquinas). Vista desde arriba, a escala, como en el modelo." +
+            (seccion.DiametrosDeReserva ? " Faltan barras por elegir: se dibujan con un diámetro aproximado." : "");
 
         DibujarIcono(IconoGrapaC, FormaMenor.GrapaC);
         DibujarIcono(IconoGrapaS, FormaMenor.GrapaS);
@@ -112,16 +148,30 @@ public partial class VentanaEstribosMenores : Window
 
     // ----------------------------------------------------------------- geometría
 
-    private static double Izquierda => Margen;
-    private static double Derecha => Margen + Lado;
-    private static double Arriba => Margen;
-    private static double Abajo => Margen + Lado;
+    /// <summary>De metros desde la cara izquierda de la sección a píxeles.</summary>
+    private double PX(double x) => MargenIzquierdo + x * _escala;
 
-    /// <summary>Fila 0 abajo, como en el modelo; repartidas parejo entre las esquinas.</summary>
-    private double Y(int fila) => Abajo - (fila + 1) * (Lado / (_filas + 1));
+    /// <summary>De metros desde la cara de abajo a píxeles (en el lienzo la Y crece hacia abajo).</summary>
+    private double PY(double y) => MargenArriba + (_seccion.LadoY - y) * _escala;
+
+    /// <summary>Dónde van las intermedias de las caras izquierda y derecha (las de eje <see cref="EjeCaja.Fila"/>).</summary>
+    private double Izquierda => PX(_insetCaraY);
+    private double Derecha => PX(_seccion.LadoX - _insetCaraY);
+
+    /// <summary>Dónde van las intermedias de las caras de arriba y de abajo (las de eje <see cref="EjeCaja.Columna"/>).</summary>
+    private double Arriba => PY(_seccion.LadoY - _insetCaraX);
+    private double Abajo => PY(_insetCaraX);
+
+    /// <summary>Fila 0 abajo, como en el modelo; repartidas parejo entre las esquinas, como en el generador.</summary>
+    private double Y(int fila) =>
+        PY(SeccionPlanta.PosicionIntermedia(_insetReferencia, _seccion.LadoY - _insetReferencia, _filas, fila));
 
     /// <summary>Columna 0 a la izquierda.</summary>
-    private double X(int columna) => Izquierda + (columna + 1) * (Lado / (_columnas + 1));
+    private double X(int columna) =>
+        PX(SeccionPlanta.PosicionIntermedia(_insetReferencia, _seccion.LadoX - _insetReferencia, _columnas, columna));
+
+    /// <summary>Radio en píxeles de una barra, con un mínimo para que se pueda ver y elegir.</summary>
+    private double Radio(double diametroMm) => Math.Max(4, diametroMm / 2000 * _escala);
 
     /// <summary>
     /// La barra intermedia bajo el punto, si hay una: las de las caras izquierda
@@ -206,14 +256,20 @@ public partial class VentanaEstribosMenores : Window
 
     private void Dibujar()
     {
+        double ancho = _seccion.LadoX * _escala, alto = _seccion.LadoY * _escala;
         Lienzo.Children.Clear();
-        Lienzo.Width = Margen * 2 + Lado;
-        Lienzo.Height = Margen * 2 + Lado;
+        Lienzo.Width = MargenIzquierdo + ancho + MargenDerecho;
+        Lienzo.Height = MargenArriba + alto + MargenAbajo;
 
-        // Sección y estribo principal.
-        Agregar(new Rectangle { Width = Lado + 24, Height = Lado + 24, Fill = Paleta.Hormigon },
-            Izquierda - 12, Arriba - 12);
-        Agregar(new Rectangle { Width = Lado, Height = Lado, Stroke = ColorEstribo, StrokeThickness = 3 }, Izquierda, Arriba);
+        // Sección (el hormigón, a escala) y estribo principal, por su eje.
+        Agregar(new Rectangle { Width = ancho, Height = alto, Fill = Paleta.Hormigon, Stroke = Paleta.Contorno }, PX(0), PY(_seccion.LadoY));
+        double ejeEstribo = _seccion.Recubrimiento + _seccion.DiametroEstriboMm / 2000;
+        Agregar(new Rectangle
+        {
+            Width = Math.Max(1, (_seccion.LadoX - 2 * ejeEstribo) * _escala),
+            Height = Math.Max(1, (_seccion.LadoY - 2 * ejeEstribo) * _escala),
+            Stroke = ColorEstribo, StrokeThickness = Math.Max(1.5, _seccion.DiametroEstriboMm / 1000 * _escala),
+        }, PX(ejeEstribo), PY(_seccion.LadoY - ejeEstribo));
 
         // Los cerrados abajo de todo, para que no tapen a las grapas.
         foreach (EstriboMenor pieza in _piezas.OrderBy(p => p.Forma == FormaMenor.Cerrado ? 0 : 1))
@@ -224,32 +280,39 @@ public partial class VentanaEstribosMenores : Window
             DibujarPieza(propuesta, ColorDePieza(propuesta), seleccionada: false, opacidad: 0.45);
 
         // Barras: esquinas e intermedias, con la que está bajo el mouse resaltada.
-        foreach ((double x, double y) in new[] { (Izquierda, Arriba), (Derecha, Arriba), (Izquierda, Abajo), (Derecha, Abajo) })
-            Punto(x, y, 6, Paleta.Superficie);
+        double izqEsq = PX(_insetEsquina), derEsq = PX(_seccion.LadoX - _insetEsquina);
+        double arrEsq = PY(_seccion.LadoY - _insetEsquina), abaEsq = PY(_insetEsquina);
+        foreach ((double x, double y) in new[] { (izqEsq, arrEsq), (derEsq, arrEsq), (izqEsq, abaEsq), (derEsq, abaEsq) })
+            Punto(x, y, Radio(_seccion.DiametroEsquinaMm), Paleta.Superficie);
 
         (EjeCaja Eje, int Indice)? bajoMouse = _mouse is Point m && _herramienta is not null ? BarraEn(m) : null;
         for (int f = 0; f < _filas; f++)
             foreach (double x in new[] { Izquierda, Derecha })
-                PuntoIntermedio(x, Y(f), (EjeCaja.Fila, f), bajoMouse);
+                PuntoIntermedio(x, Y(f), Radio(_seccion.DiametroCaraYMm), (EjeCaja.Fila, f), bajoMouse);
         for (int c = 0; c < _columnas; c++)
             foreach (double y in new[] { Arriba, Abajo })
-                PuntoIntermedio(X(c), y, (EjeCaja.Columna, c), bajoMouse);
+                PuntoIntermedio(X(c), y, Radio(_seccion.DiametroCaraXMm), (EjeCaja.Columna, c), bajoMouse);
 
-        // Rótulos de fila y columna, desde 1.
-        for (int f = 0; f < _filas; f++) Texto($"F{f + 1}", Izquierda - 34, Y(f) - 8);
-        for (int c = 0; c < _columnas; c++) Texto($"C{c + 1}", X(c) - 8, Abajo + 12);
+        // Rótulos de fila y columna, desde 1, por fuera de la sección.
+        for (int f = 0; f < _filas; f++) Texto($"F{f + 1}", PX(0) - 30, Y(f) - 8);
+        for (int c = 0; c < _columnas; c++) Texto($"C{c + 1}", X(c) - 8, PY(0) + 3);
+
+        // Las medidas de la sección (#134).
+        Cotas.Horizontal(Lienzo, PX(0), PX(_seccion.LadoX), PY(0) + 24, EscalaDibujo.Cm(_seccion.LadoX));
+        Cotas.Vertical(Lienzo, PX(_seccion.LadoX) + 14, PY(_seccion.LadoY), PY(0), EscalaDibujo.Cm(_seccion.LadoY));
 
         ActualizarPaleta();
         ActualizarPanelPieza();
         ActualizarNotas();
     }
 
-    private void PuntoIntermedio(double x, double y, (EjeCaja, int) barra, (EjeCaja, int)? bajoMouse)
+    private void PuntoIntermedio(double x, double y, double radio, (EjeCaja, int) barra, (EjeCaja, int)? bajoMouse)
     {
         bool primero = _primerClic is { } p && p.Equals(barra);
+        double aro = Math.Max(11, radio + 5);
         if (primero || Equals(bajoMouse, barra))
-            Agregar(new Ellipse { Width = 22, Height = 22, Stroke = ColorDe(_herramienta ?? FormaMenor.Cerrado), StrokeThickness = 2 }, x - 11, y - 11);
-        Punto(x, y, 5, Paleta.ErrorClaro);
+            Agregar(new Ellipse { Width = 2 * aro, Height = 2 * aro, Stroke = ColorDe(_herramienta ?? FormaMenor.Cerrado), StrokeThickness = 2 }, x - aro, y - aro);
+        Punto(x, y, radio, Paleta.ErrorClaro);
     }
 
     private void DibujarPieza(EstriboMenor pieza, Brush color, bool seleccionada, double opacidad)

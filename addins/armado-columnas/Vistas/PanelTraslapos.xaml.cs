@@ -37,6 +37,9 @@ public partial class PanelTraslapos : UserControl
     /// <summary>Dónde va el primer plan, y cuánto se corre cada uno de los siguientes.</summary>
     private const double XPrimero = 125;
     private const double Separacion = 150;
+    /// <summary>Dónde arranca la columna dibujada, y lo más ancha que puede quedar.</summary>
+    private const double XColumna = 14;
+    private const double AnchoMaximoColumna = 44;
 
     public PanelTraslapos() => InitializeComponent();
 
@@ -59,7 +62,11 @@ public partial class PanelTraslapos : UserControl
 
         double zMin = Math.Min(columna.ZInferiorLongitudinal, columna.ZInferior);
         double zMax = columna.ZSuperior;
-        double escala = Math.Max(1, Lienzo.Height - MargenSuperior - MargenInferior) / Math.Max(0.01, zMax - zMin);
+        // El ancho de la columna a la misma escala que el alto (#133). No puede
+        // pasar de AnchoMaximoColumna: a la derecha van las cotas del primer plan.
+        double escala = EscalaDibujo.Ajustar(
+            columna.BaseX, Math.Max(0.01, zMax - zMin), AnchoMaximoColumna, Lienzo.Height - MargenSuperior - MargenInferior);
+        double anchoColumna = Math.Max(2, columna.BaseX * escala);
         double Y(double z) => MargenSuperior + (zMax - z) * escala;
 
         // Fondo: zapata y nudos de lado a lado, después el contorno de la columna.
@@ -67,7 +74,8 @@ public partial class PanelTraslapos : UserControl
             Rectangulo(8, Y(columna.ZInferior), ancho, Y(zMin) - Y(columna.ZInferior) + 4, ColorZapata, null);
         foreach (Tramo nudo in columna.Tramos.Where(t => t.Tipo == TipoTramo.DentroDeViga))
             Rectangulo(8, Y(nudo.ZSuperior), ancho, Y(nudo.ZInferior) - Y(nudo.ZSuperior), ColorNudo, null);
-        Rectangulo(20, Y(zMax), 26, Y(columna.ZInferior) - Y(zMax), null, ColorContorno);
+        Rectangulo(XColumna, Y(zMax), anchoColumna, Y(columna.ZInferior) - Y(zMax), null, ColorContorno);
+        Cotas.Horizontal(Lienzo, XColumna, XColumna + anchoColumna, Y(zMin) + 6, EscalaDibujo.Cm(columna.BaseX));
 
         for (int i = 0; i < planes.Count; i++)
             DibujarTipo(planes[i], $"Tipo {planes[i].Nombre}", XPrimero + i * Separacion, planes[i].Grupo == "A" ? ColorA : ColorB, Y);

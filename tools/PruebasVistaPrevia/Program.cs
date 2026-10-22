@@ -204,5 +204,33 @@ Probar("color_filtro_empresa", () =>
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3 vigas") is null, "solo el nombre exacto");
 });
 
+// ---- #133: la columna a escala real en todos los dibujos
+
+Probar("escala_25x30_no_queda_cuadrada", () =>
+{
+    double e = EscalaDibujo.Ajustar(0.25, 0.30, 300, 300);
+    Igual(1000, e, "manda el lado de 30 cm");
+    Igual(250, 0.25 * e, "ancho");
+    Igual(300, 0.30 * e, "alto");
+});
+
+Probar("escala_120x50_entra_sin_deformarse", () =>
+{
+    double e = EscalaDibujo.Ajustar(1.20, 0.50, 300, 300);
+    Igual(250, e, "manda el lado de 120 cm");
+    Igual(1.20 / 0.50, (1.20 * e) / (0.50 * e), "misma proporción que la columna");
+    Cierto(0.50 * e <= 300, "el alto también entra");
+});
+
+Probar("escala_cuadrada_queda_cuadrada", () =>
+    Igual(130 / 0.40, EscalaDibujo.Ajustar(0.40, 0.40, 230, 130), "manda el alto disponible"));
+
+Probar("texto_cotas", () =>
+{
+    Cierto(EscalaDibujo.Cm(0.25) == "25 cm", EscalaDibujo.Cm(0.25));
+    Cierto(EscalaDibujo.Cm(0.225) == "22,5 cm", EscalaDibujo.Cm(0.225));
+    Cierto(EscalaDibujo.M(3) == "3,00 m", EscalaDibujo.M(3));
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

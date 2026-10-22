@@ -1217,6 +1217,27 @@ public partial class VentanaConfiguradorEstribos : Window
             estribo);
     }
 
+    /// <summary>
+    /// La sección de la columna activa para dibujarla a escala en el panel de
+    /// estribos menores (#133, #134). Si falta elegir alguna barra se usa un
+    /// diámetro de reserva (#4 las longitudinales, #3 el estribo) y el panel lo
+    /// avisa: la forma de la sección ya se puede ver.
+    /// </summary>
+    private VentanaEstribosMenores.SeccionReal SeccionParaEstribosMenores(string idColumna, ColumnaContexto columna)
+    {
+        const double reservaLongitudinalMm = 12.7, reservaEstriboMm = 9.5;
+
+        double? Diametro(object? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre as string)?.DiametroMm;
+        double? esquina = Diametro(ComboBarraEsquinas.SelectedItem), caraX = Diametro(ComboBarraCaraX.SelectedItem),
+            caraY = Diametro(ComboBarraCaraY.SelectedItem), estribo = Diametro(ComboTipoBarra.SelectedItem);
+
+        return new VentanaEstribosMenores.SeccionReal(
+            columna.BaseX, columna.BaseY,
+            _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : columna.Recubrimiento,
+            esquina ?? reservaLongitudinalMm, caraX ?? reservaLongitudinalMm, caraY ?? reservaLongitudinalMm, estribo ?? reservaEstriboMm,
+            DiametrosDeReserva: esquina is null || caraX is null || caraY is null || estribo is null);
+    }
+
     /// <summary>Las barras que se ofrecen para los estribos menores: las mismas aptas que para el estribo (#64).</summary>
     private IReadOnlyList<string> BarrasAptasParaEstribo() => BarrasAptas(_barras).Select(b => b.Nombre).ToList();
 
@@ -1394,6 +1415,7 @@ public partial class VentanaConfiguradorEstribos : Window
             barrasX, barrasY,
             actual?.EstribosMenores ?? new List<EstriboMenor>(),
             BarrasAptasParaEstribo(),
+            SeccionParaEstribosMenores(idColumna, _columnaActiva),
             MedidasParaEstribosMenores(idColumna, barrasX, barrasY))
         { Owner = this };
 
@@ -1629,12 +1651,14 @@ public partial class VentanaConfiguradorEstribos : Window
 
         const double margenSuperior = 24;
         const double margenInferior = 24;
-        const double anchoColumna = 46;
         const double xColumna = 172;
         const double sobresaleNudo = 16;
         const double anchoEtiqueta = 130;
         const double xLeaderIni = 138;
         double xLeaderFin = xColumna - 4;
+        // La columna crece hacia la derecha: a la izquierda están los rótulos
+        // de nivel y los chulitos.
+        double anchoMaximo = CanvasElevacion.Width - xColumna - sobresaleNudo - 6;
 
         double zMin = _columnaActiva.ZInferior;
         double zMax = _columnaActiva.ZSuperior;
@@ -1646,7 +1670,10 @@ public partial class VentanaConfiguradorEstribos : Window
 
         double alturaDisponible = Math.Max(1, CanvasElevacion.Height - margenSuperior - margenInferior);
         double rango = Math.Max(0.01, zMax - zMin);
-        double escala = alturaDisponible / rango;
+        // El ancho a la misma escala que el alto (#133): la columna se ve con
+        // su ancho real (el lado X, como "de frente" en la vista previa).
+        double escala = EscalaDibujo.Ajustar(_columnaActiva.BaseX, rango, anchoMaximo, alturaDisponible);
+        double anchoColumna = Math.Max(2, _columnaActiva.BaseX * escala);
         double Y(double cota) => margenSuperior + (zMax - cota) * escala;
 
         // 1) Contorno continuo de la columna, de punta a punta.
@@ -1661,6 +1688,8 @@ public partial class VentanaConfiguradorEstribos : Window
         Canvas.SetLeft(contorno, xColumna);
         Canvas.SetTop(contorno, Y(_columnaActiva.ZSuperior));
         CanvasElevacion.Children.Add(contorno);
+        Cotas.Horizontal(CanvasElevacion, xColumna, xColumna + anchoColumna, Y(_columnaActiva.ZInferior) + 6,
+            EscalaDibujo.Cm(_columnaActiva.BaseX));
 
         // 2) Rótulos de nivel con línea guía punteada hasta la columna.
         foreach (NivelRotulo nivel in _columnaActiva.Niveles)
