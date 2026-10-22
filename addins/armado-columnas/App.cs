@@ -10,9 +10,9 @@ public class App : IExternalApplication
 
         panelEstructural.AddItem(CintaCqeing.CrearBoton(
             "ComandoEstribos",
-            "Estribos\nde Columna",
+            "Acero en\ncolumnas",
             "practicacq.ComandoEstribos",
-            "Genera el acero de estribos con espaciado uniforme en las columnas seleccionadas.",
+            "Genera el acero de las columnas seleccionadas: barras longitudinales con sus traslapos, estribos y estribos menores.",
             "icono"));
 
         RibbonPanel panelHerramientas = CintaCqeing.ObtenerPanel(app, "Herramientas");
