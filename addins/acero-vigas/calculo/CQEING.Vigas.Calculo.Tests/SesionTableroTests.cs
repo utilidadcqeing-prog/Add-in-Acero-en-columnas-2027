@@ -293,13 +293,76 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Empty(Sesion().Manejar(new Desconocido("otro")));
     }
 
-    private SesionTablero ConUbicacion(IReadOnlyList<double>? nominales = null)
+    private SesionTablero ConUbicacion(IReadOnlyList<double>? nominales = null, Func<string, string?>? guardado = null)
     {
         lectura = new([PlanificadorAceroTests.Portico()], []);
         var s = new SesionTablero(() => lectura, new AlmacenReglas(Path.Combine(carpeta, "reglas.json")), "Proyecto de prueba",
-            nominales is null ? null : () => nominales);
+            nominales is null ? null : () => nominales, guardado);
         s.Manejar(new Listo());
         return s;
+    }
+
+    // Recordar el pórtico generado (plan docs/planes/2026-10-22-recordar-portico-generado-vigas.md).
+    private const string EstadoPagina = """{"sup":[{"n":4,"d":"#5"}]}""";
+
+    private static readonly OpcionesTablero CuatroArriba = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] };
+
+    /// <summary>Solo la viga 102 del pórtico tiene algo guardado.</summary>
+    private static string? GuardadoEnLa102(string viga) => viga == "102" ? ConfiguracionGuardada.Escribir(CuatroArriba, EstadoPagina) : null;
+
+    private static int BarrasS1(SesionTablero s, IReadOnlyDictionary<string, string>? estados = null) =>
+        Assert.Single(Assert.Single(s.Manejar(new Generar(["Pórtico 1"], estados)).OfType<AGenerar>()).Porticos).Plan.Barras.Count(b => b.Pieza == "S1");
+
+    [Fact]
+    public void LoGuardadoEnLasVigasSeRecuperaAlLeerElModelo()
+    {
+        SesionTablero s = ConUbicacion(guardado: GuardadoEnLa102);
+
+        Assert.Equal(EstadoPagina, VistaDe([s.Vista()]).GetProperty("actual").GetProperty("estado").GetString());
+        Assert.Equal(4, BarrasS1(s));
+    }
+
+    [Fact]
+    public void SinNadaGuardadoArrancaConLosValoresPorDefecto()
+    {
+        SesionTablero s = ConUbicacion(guardado: _ => null);
+
+        Assert.Equal(JsonValueKind.Null, VistaDe([s.Vista()]).GetProperty("actual").GetProperty("estado").ValueKind);
+        Assert.Equal(OpcionesTablero.PorDefecto.Superior[0].Cantidad, BarrasS1(s));
+    }
+
+    [Fact]
+    public void LoCambiadoEnLaSesionMandaSobreLoGuardado()
+    {
+        SesionTablero s = ConUbicacion(guardado: GuardadoEnLa102);
+        s.Manejar(new Calcular("Pórtico 1", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(2, 5)] }));
+
+        s.Recargar();
+
+        Assert.Equal(2, BarrasS1(s));
+    }
+
+    [Fact]
+    public void GenerarLlevaLaConfiguracionConElEstadoQueMandaLaPagina()
+    {
+        SesionTablero s = ConUbicacion(guardado: _ => null);
+        s.Manejar(new Calcular("Pórtico 1", CuatroArriba));
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"], new Dictionary<string, string> { ["Pórtico 1"] = EstadoPagina })).OfType<AGenerar>());
+
+        (OpcionesTablero o, string? estado) = ConfiguracionGuardada.Leer(Assert.Single(g.Porticos).Configuracion)!.Value;
+        Assert.Equal((4, EstadoPagina), (o.Superior[0].Cantidad, estado));
+        Assert.Equal(EstadoPagina, VistaDe([s.Vista()]).GetProperty("actual").GetProperty("estado").GetString());
+    }
+
+    [Fact]
+    public void SinEstadoDeLaPagina_GenerarLlevaElRecuperado()
+    {
+        SesionTablero s = ConUbicacion(guardado: GuardadoEnLa102);
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1"])).OfType<AGenerar>());
+
+        Assert.Equal(EstadoPagina, ConfiguracionGuardada.Leer(Assert.Single(g.Porticos).Configuracion)!.Value.Estado);
     }
 
     [Fact]

@@ -35,8 +35,11 @@ public sealed record VerTodos() : MensajeTablero;
 /// <summary>"Guardar y bloquear" en la pantalla Reglas, con los textos de sus campos.</summary>
 public sealed record GuardarReglas(VistaReglas Reglas) : MensajeTablero;
 
-/// <summary>"Generar en Revit" (#85): el acero de los pórticos <paramref name="Ids"/>.</summary>
-public sealed record Generar(IReadOnlyList<string> Ids) : MensajeTablero;
+/// <summary>
+/// "Generar en Revit" (#85): el acero de los pórticos <paramref name="Ids"/>. <paramref name="Estados"/> es el estado de
+/// la página de cada pórtico (JSON como texto), para guardarlo con el acero (plan de 22-oct, recordar el pórtico).
+/// </summary>
+public sealed record Generar(IReadOnlyList<string> Ids, IReadOnlyDictionary<string, string>? Estados = null) : MensajeTablero;
 
 /// <summary>Un mensaje que no se entiende (<paramref name="Tipo"/> vacío si ni siquiera trae tipo): se ignora.</summary>
 public sealed record Desconocido(string Tipo) : MensajeTablero;
@@ -84,7 +87,8 @@ public static class ProtocoloTablero
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
                 "cambiarEnVivo" => new CambiarEnVivo(nodo["activo"]?.GetValue<bool>() ?? false),
                 "verTodos" => new VerTodos(),
-                "generar" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } ids ? new Generar(ids) : new Desconocido(tipo),
+                "generar" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } ids
+                    ? new Generar(ids, nodo["estados"]?.Deserialize<Dictionary<string, string>>(Json)) : new Desconocido(tipo),
                 "guardarReglas" => nodo["reglas"]?.Deserialize<VistaReglas>(Json) is { PorDiametro: not null } r
                     ? new GuardarReglas(r) : new Desconocido(tipo),
                 _ => new Desconocido(tipo),
@@ -144,7 +148,7 @@ public static class ProtocoloTablero
     /// Las opciones de la página; lo que no trae sale de <see cref="OpcionesTablero.PorDefecto"/>. Sin barras arriba o
     /// abajo no hay nada que calcular: null.
     /// </summary>
-    private static OpcionesTablero? Opciones(JsonNode? nodo)
+    internal static OpcionesTablero? Opciones(JsonNode? nodo)
     {
         OpcionesTablero? o = nodo?.Deserialize<OpcionesTablero>(Json);
         if (o?.Superior is not { Count: > 0 } || o.Inferior is not { Count: > 0 })

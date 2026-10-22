@@ -25,8 +25,12 @@ public sealed record AGenerar(IReadOnlyList<PorticoAGenerar> Porticos, IReadOnly
 /// </summary>
 public sealed record APrevia3d(PorticoAGenerar? Portico, Reglas Reglas) : Salida;
 
-/// <summary>Un pórtico para generar: <paramref name="Vigas"/> son las suyas, para borrar lo que el add-in creó antes en ellas.</summary>
-public sealed record PorticoAGenerar(string Id, IReadOnlyList<string> Vigas, UbicacionPortico Ubicacion, PlanAcero Plan);
+/// <summary>
+/// Un pórtico para generar: <paramref name="Vigas"/> son las suyas, para borrar lo que el add-in creó antes en ellas.
+/// <paramref name="Configuracion"/> es lo que se guarda en cada viga (<see cref="ConfiguracionGuardada"/>); vacía en la
+/// vista previa 3D, que no guarda nada.
+/// </summary>
+public sealed record PorticoAGenerar(string Id, IReadOnlyList<string> Vigas, UbicacionPortico Ubicacion, PlanAcero Plan, string Configuracion = "");
 
 public enum AccionRevit
 {
@@ -44,12 +48,16 @@ public enum AccionRevit
 /// El estado del tablero de un documento (#83), sin Revit: los pórticos leídos, las opciones de cada uno, el que está
 /// abierto, las reglas y si está "En vivo". Atiende los mensajes de la página y dice qué contestar y qué hacer en Revit.
 /// <paramref name="nominalesDelModelo"/> da el diámetro nominal en mm de cada tipo de barra del modelo (#85); null = todos los de las
-/// reglas.
+/// reglas. <paramref name="configuracionDeViga"/> da lo que guardó una generación anterior en la viga con ese id
+/// (<see cref="ConfiguracionGuardada"/>), o null; sin ella no se recupera nada.
 /// </summary>
 public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas almacen, string proyecto,
-    Func<IEnumerable<double>>? nominalesDelModelo = null)
+    Func<IEnumerable<double>>? nominalesDelModelo = null, Func<string, string?>? configuracionDeViga = null)
 {
     private readonly Dictionary<string, OpcionesTablero> opciones = [];
+
+    /// <summary>El estado de la página con que se generó cada pórtico (recuperado de sus vigas o mandado al generar).</summary>
+    private readonly Dictionary<string, string> estados = [];
     private ResultadoLectura lectura = new([], []);
     private List<PorticoConId> porticos = [];
     private List<string>? elegidos;
@@ -105,12 +113,12 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 return [Vista()];
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
-            case Generar(IReadOnlyList<string> ids):
+            case Generar(IReadOnlyList<string> ids, var estadosPagina):
                 // Lo generado ya se ve de verdad: la vista previa encima estorbaría.
                 if (en3d is null)
-                    return [AGenerar(ids)];
+                    return [AGenerar(ids, estadosPagina)];
                 en3d = null;
-                return [new APrevia3d(null, reglas.Reglas), AGenerar(ids)];
+                return [new APrevia3d(null, reglas.Reglas), AGenerar(ids, estadosPagina)];
             default:
                 return [];
         }
@@ -118,10 +126,14 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
 
     /// <summary>
     /// Arma lo que se genera de cada pórtico con las opciones que tiene en el tablero (o las de base). Se saltan los que ya
-    /// no están, los que el tablero no deja generar y los que usan un diámetro sin tipo de barra en el modelo.
+    /// no están, los que el tablero no deja generar y los que usan un diámetro sin tipo de barra en el modelo. Cada uno
+    /// lleva su configuración para guardarla en sus vigas: sus opciones y el estado de la página (el que manda ahora o, si
+    /// no lo manda, el que ya tenía).
     /// </summary>
-    private AGenerar AGenerar(IReadOnlyList<string> ids)
+    private AGenerar AGenerar(IReadOnlyList<string> ids, IReadOnlyDictionary<string, string>? estadosPagina)
     {
+        foreach ((string id, string estado) in estadosPagina ?? new Dictionary<string, string>())
+            estados[id] = estado;
         HashSet<int> disponibles = Disponibles().ToHashSet();
         var aGenerar = new List<PorticoAGenerar>();
         var saltados = new List<string>();
@@ -132,8 +144,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 saltados.Add($"{id}: ya no está en el modelo.");
                 continue;
             }
-            if (PlanificadorAcero.Planificar(id, p, opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto, reglas.Reglas) is not { } plan
-                || p.Ubicacion is null)
+            OpcionesTablero o = opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto;
+            if (PlanificadorAcero.Planificar(id, p, o, reglas.Reglas) is not { } plan || p.Ubicacion is null)
             {
                 saltados.Add($"{id}: no se puede generar; revisa los avisos del tablero.");
                 continue;
@@ -143,7 +155,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 saltados.Add($"{id}: el modelo no tiene un tipo de barra para el {string.Join(", ", faltan.Select(d => $"#{d}"))}.");
                 continue;
             }
-            aGenerar.Add(new PorticoAGenerar(id, p.Vigas, p.Ubicacion, plan));
+            aGenerar.Add(new PorticoAGenerar(id, p.Vigas, p.Ubicacion, plan, ConfiguracionGuardada.Escribir(o, estados.GetValueOrDefault(id))));
         }
         return new AGenerar(aGenerar, saltados, reglas.Reglas);
     }
@@ -163,7 +175,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
 
     /// <summary>
     /// Vuelve a leer el modelo (otro documento, o el mismo con cambios). Las opciones de cada pórtico se conservan
-    /// mientras su nombre exista; si el abierto ya no está, se abre el primero (o ninguno).
+    /// mientras su nombre exista; si el abierto ya no está, se abre el primero (o ninguno). Un pórtico sin opciones en
+    /// esta sesión toma las que guardó una generación anterior en sus vigas, si las hay.
     /// </summary>
     public void Recargar(string? proyectoNuevo = null)
     {
@@ -173,10 +186,24 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         porticos = ConId(lectura.Porticos);
         foreach (string nombre in opciones.Keys.Where(n => Buscar(n) is null).ToList())
             opciones.Remove(nombre);
+        foreach (string nombre in estados.Keys.Where(n => Buscar(n) is null).ToList())
+            estados.Remove(nombre);
+        foreach (PorticoConId p in porticos.Where(p => !opciones.ContainsKey(p.Id)))
+            if (Guardada(p.Portico) is ({ } o, var estado))
+            {
+                opciones[p.Id] = o;
+                if (estado is not null)
+                    estados[p.Id] = estado;
+            }
         if (actual is null || Buscar(actual) is null)
             actual = porticos.FirstOrDefault()?.Id;
         elegidos = elegidos?.Where(id => Buscar(id) is not null).ToList() is { Count: > 0 } siguen ? siguen : null;
     }
+
+    /// <summary>La configuración de la primera viga del pórtico que tenga una que se entienda (decisión 2 del plan).</summary>
+    private (OpcionesTablero Opciones, string? Estado)? Guardada(PorticoLeido p) =>
+        configuracionDeViga is null ? null
+            : p.Vigas.Select(configuracionDeViga).OfType<string>().Select(ConfiguracionGuardada.Leer).FirstOrDefault(c => c is not null);
 
     /// <summary>Todas las vigas de los pórticos leídos (el botón "Todas" de la barra de selección).</summary>
     public IReadOnlyList<string> Vigas => porticos.SelectMany(p => p.Portico.Vigas).ToList();
@@ -238,7 +265,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         PorticoLeido? abierto = actual is null ? null : Buscar(actual);
         VistaPortico? vista = abierto is null
             ? null
-            : ArmadorVista.Armar(abierto, opciones.GetValueOrDefault(actual!) ?? OpcionesTablero.PorDefecto, reglas.Reglas) with { Id = actual! };
+            : ArmadorVista.Armar(abierto, opciones.GetValueOrDefault(actual!) ?? OpcionesTablero.PorDefecto, reglas.Reglas)
+                with { Id = actual!, Estado = estados.GetValueOrDefault(actual!) };
         var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
             ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
             : l with { Id = p.Id }).ToList();

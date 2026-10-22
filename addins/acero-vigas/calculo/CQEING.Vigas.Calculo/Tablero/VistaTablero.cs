@@ -127,6 +127,8 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// <paramref name="PosicionesEstribos"/> es el centro de cada estribo cerrado, en m, para dibujarlos en el alzado donde van.
 /// <paramref name="Diametros"/> son los de las barras y bastones del pórtico, del más grueso al más delgado (la leyenda).
 /// <paramref name="Secciones"/>: la de cada tramo, para escribirla arriba de él.
+/// <paramref name="Estado"/>: el estado de la página con que se generó el pórtico (guardado en sus vigas o mandado al
+/// generar en esta sesión); la página lo usa si no tiene uno propio en memoria. Null si no hay.
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -154,7 +156,8 @@ public sealed record VistaPortico(
     CorteVista? Corte = null,
     IReadOnlyList<double>? PosicionesEstribos = null,
     IReadOnlyList<DiametroVista>? Diametros = null,
-    IReadOnlyList<SeccionEnAlzado>? Secciones = null);
+    IReadOnlyList<SeccionEnAlzado>? Secciones = null,
+    string? Estado = null);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).

@@ -35,6 +35,17 @@
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
     cambios: { barras: {}, traslapos: {}, movidos: {}, ganchos: {} }, bastPuntas: {},
   };
+  // El estado de la página con que se generó el pórtico (VistaPortico.Estado, guardado en sus vigas): solo las claves de
+  // OPCIONES0. null si no hay o no se entiende.
+  const estadoGuardado = (actual) => {
+    if (!actual || !actual.estado) return null;
+    try {
+      const e = JSON.parse(actual.estado);
+      return Object.keys(e).filter((k) => k in OPCIONES0).reduce((o, k) => ({ ...o, [k]: e[k] }), {});
+    } catch (err) {
+      return null;
+    }
+  };
   // Ancho de la ventana del corte que sale al arrastrar la línea 1-1 (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
   const ANCHO_CORTE = 260;
   const CLAVES_OPCIONES = Object.keys(OPCIONES0);
@@ -156,6 +167,21 @@
       window.addEventListener('resize', this.alCambiarTamano);
     }
 
+    // Lo que el usuario eligió para el pórtico abierto (las claves de OPCIONES0).
+    estadoDeLaPagina() {
+      return CLAVES_OPCIONES.reduce((o, k) => ({ ...o, [k]: this.state[k] }), {});
+    }
+
+    // El estado de la página de cada pórtico que se genera, como texto, para guardarlo en sus vigas: el abierto, como
+    // está ahora; los demás, el que quedó en memoria (los que nunca se abrieron no mandan nada y C# usa el guardado).
+    estadosParaGenerar(ids) {
+      const actual = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
+      return ids.reduce((o, id) => {
+        const e = id === actual ? this.estadoDeLaPagina() : this.opcionesPorPortico[id];
+        return e ? { ...o, [id]: JSON.stringify(e) } : o;
+      }, {});
+    }
+
     componentWillUnmount() {
       window.removeEventListener('resize', this.alCambiarTamano);
     }
@@ -266,11 +292,12 @@
       }
       const antes = prev.vista && prev.vista.actual ? prev.vista.actual.id : null;
       const ahora = this.props.vista && this.props.vista.actual ? this.props.vista.actual.id : null;
-      // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas.
+      // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas. Sin
+      // ninguna en memoria, las que se guardaron en sus vigas al generarlo (plan de 22-oct, recordar el pórtico).
       if (antes !== ahora) {
-        const guardadas = ahora ? this.opcionesPorPortico[ahora] : null;
+        const guardadas = ahora ? this.opcionesPorPortico[ahora] || estadoGuardado(this.props.vista.actual) : null;
         if (antes) {
-          this.opcionesPorPortico[antes] = CLAVES_OPCIONES.reduce((o, k) => ({ ...o, [k]: this.state[k] }), {});
+          this.opcionesPorPortico[antes] = this.estadoDeLaPagina();
           this.setState({ ...OPCIONES0, ...guardadas });
         } else if (guardadas) {
           this.setState(guardadas);
@@ -676,7 +703,7 @@
         confirmGenText: s.confirmGen ? 'Se generará el acero de ' + (s.confirmGen.length === 1
           ? (PORS.find((p) => p.id === s.confirmGen[0]) || { nombre: s.confirmGen[0] }).nombre
           : s.confirmGen.length + ' pórticos') + '. Lo que el add-in generó antes en ' + (s.confirmGen.length === 1 ? 'él' : 'ellos') + ' se reemplaza.' : '',
-        confirmGenYes: () => { enviar({ tipo: 'generar', ids: s.confirmGen }); this.setState({ confirmGen: null }); },
+        confirmGenYes: () => { enviar({ tipo: 'generar', ids: s.confirmGen, estados: this.estadosParaGenerar(s.confirmGen) }); this.setState({ confirmGen: null }); },
         confirmGenNo: () => this.setState({ confirmGen: null }),
         // #85: el resumen de "Generar en Revit", una línea por cosa; se queda hasta cerrarlo
         resumen: s.resumen ? { titulo: s.resumen[0], lineas: s.resumen.slice(1) } : null, closeResumen: () => this.setState({ resumen: null }),

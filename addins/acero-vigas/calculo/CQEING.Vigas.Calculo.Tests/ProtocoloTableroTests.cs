@@ -199,6 +199,15 @@ public class ProtocoloTableroTests
         MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1","Pórtico 2"]}""");
 
         Assert.Equal(["Pórtico 1", "Pórtico 2"], Assert.IsType<Generar>(m).Ids);
+        Assert.Null(((Generar)m).Estados);
+    }
+
+    [Fact]
+    public void GenerarTraeElEstadoDeLaPaginaDeCadaPortico()
+    {
+        MensajeTablero m = ProtocoloTablero.Leer("""{"tipo":"generar","ids":["Pórtico 1"],"estados":{"Pórtico 1":"{\"rec\":\"5\"}"}}""");
+
+        Assert.Equal("""{"rec":"5"}""", Assert.IsType<Generar>(m).Estados!["Pórtico 1"]);
         Assert.IsType<Desconocido>(ProtocoloTablero.Leer("""{"tipo":"generar"}"""));
     }
 

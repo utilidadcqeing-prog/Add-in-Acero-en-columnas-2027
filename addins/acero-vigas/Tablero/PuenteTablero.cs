@@ -30,7 +30,8 @@ internal sealed class PuenteTablero
         this.ventana = ventana;
         this.uiapp = uiapp;
         leido = uiapp.ActiveUIDocument?.Document;
-        sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "", NominalesDelModelo);
+        sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "", NominalesDelModelo,
+            ConfiguracionDeViga);
 
         ventana.MensajeRecibido += json => acciones.Encolar(app => Atender(app, ProtocoloTablero.Leer(json)));
         acciones.Fallo += texto => ventana.Enviar(ProtocoloTablero.Aviso($"No se pudo hacer en Revit: {texto}"));
@@ -64,6 +65,10 @@ internal sealed class PuenteTablero
         ? []
         : new FilteredElementCollector(leido).OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
             .Select(t => LectorModelo.Mm(t.BarNominalDiameter)).ToList();
+
+    /// <summary>Lo que guardó una generación anterior en la viga (plan de 22-oct, recordar el pórtico), o null.</summary>
+    private string? ConfiguracionDeViga(string id) =>
+        leido is not null && long.TryParse(id, out long n) ? ConfiguracionPortico.Leer(leido.GetElement(new ElementId(n))) : null;
 
     private void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {
