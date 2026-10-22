@@ -131,7 +131,11 @@ public static class ChoquesSeccion
         // Lo mismo que PanelVistaPrevia: el tramo contra zapata no lleva
         // estribos, y en los nudos no van menores.
         double? dEstribo = tramo.Tipo == TipoTramo.ContraZapata ? null : Diametro(cfgTramo.TipoBarraNombre);
+        // Todo se cuenta en la zona común de la columna, donde el generador pone
+        // las barras; el estribo, que es del tramo, se corre a ese marco
+        // (PanelVistaPrevia hace la cuenta al revés para dibujar).
         double ladoX = columna.BaseX, ladoY = columna.BaseY;
+        (double tramoX, double tramoY, double dx, double dy) = tramo.Seccion(columna);
         double doblezEstribo = dEstribo is double dd ? PlantaArmado.Doblez(barraDe(cfgTramo.TipoBarraNombre), dd) : 0;
         IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras = SeccionPlanta.Calcular(
             ladoX, ladoY, recubrimiento, diametroEstriboPlantaMm, cfgLong, DiametroDe, doblezEstribo * 1000);
@@ -231,7 +235,7 @@ public static class ChoquesSeccion
 
         IReadOnlyList<AcomodoTraslapos.Pieza> ganchos = dEstribo is double de
             ? GanchosDelEstribo(
-                PlantaArmado.EstriboCerrado(recubrimiento, ladoX - recubrimiento, recubrimiento, ladoY - recubrimiento,
+                PlantaArmado.EstriboCerrado(recubrimiento - dx, tramoX - recubrimiento - dx, recubrimiento - dy, tramoY - recubrimiento - dy,
                     de / 1000, doblezEstribo, PlantaArmado.Cola135(de)),
                 de / 1000, columna.ZInferiorLongitudinal, columna.ZSuperior)
             : Array.Empty<AcomodoTraslapos.Pieza>();

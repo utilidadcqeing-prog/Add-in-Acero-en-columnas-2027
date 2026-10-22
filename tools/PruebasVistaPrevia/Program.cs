@@ -549,5 +549,39 @@ Probar("choques_traslapo_nombra_la_pieza_corrida", () =>
     Cierto(r.Traslapo.Any(c => c.Motivo.Contains("la pieza corrida de")), string.Join(" | ", r.Traslapo.Select(c => c.Motivo)));
 });
 
+// ---- Sección propia de cada tramo (dado de 40×40 debajo de una columna de 30×30, 22-oct)
+
+Probar("tramo_sin_medida_usa_la_de_la_columna", () =>
+{
+    ColumnaContexto c = ColumnaDePrueba(0.30, 3);
+    (double x, double y, double dx, double dy) = c.Tramos[0].Seccion(c);
+    Igual(0.30, x, "lado X"); Igual(0.30, y, "lado Y"); Igual(0, dx, "dx"); Igual(0, dy, "dy");
+});
+
+Probar("tramo_con_medida_propia", () =>
+{
+    ColumnaContexto c = ColumnaDePrueba(0.30, 3);
+    var dado = new Tramo { LadoX = 0.40, LadoY = 0.40, ComunDesdeX = 0.05, ComunDesdeY = 0.05 };
+    (double x, double y, double dx, double dy) = dado.Seccion(c);
+    Igual(0.40, x, "lado X"); Igual(0.40, y, "lado Y"); Igual(0.05, dx, "dx"); Igual(0.05, dy, "dy");
+});
+
+Probar("choques_igual_con_la_misma_seccion_en_toda_la_columna", () =>
+{
+    // Con medida propia igual a la de la columna, nada se corre: los mismos
+    // choques que sin ella (el caso de siempre no cambia).
+    ColumnaContexto sinMedida = ColumnaDePrueba(0.40, 9);
+    Tramo t = sinMedida.Tramos[0];
+    var conMedida = new ColumnaContexto
+    {
+        Marca = sinMedida.Marca, BaseX = 0.40, BaseY = 0.40, Recubrimiento = 0.04,
+        ZInferior = 0, ZInferiorLongitudinal = 0, ZSuperior = 9,
+        Tramos = new List<Tramo> { new() { Indice = 0, ZInferior = 0, ZSuperior = 9, Tipo = t.Tipo, LadoX = 0.40, LadoY = 0.40 } },
+    };
+    ConfigLongitudinal l = LongDePrueba("#6", 3, comercial: 6);
+    string Motivos(ChoquesSeccion.Resultado r) => string.Join(" | ", r.Normal.Concat(r.Traslapo).Select(c => c.Motivo));
+    Cierto(Motivos(ChoquesDe(sinMedida, l)) == Motivos(ChoquesDe(conMedida, l)), "los mismos choques");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

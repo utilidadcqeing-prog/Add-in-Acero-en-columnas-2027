@@ -105,8 +105,14 @@ public partial class PanelVistaPrevia : UserControl
         double? dEstribo = sinEstribos ? null : diametroDeBarraMm(cfgTramo.TipoBarraNombre);
 
         // Las esquinas, metidas en la curva del estribo como las deja el
-        // generador (sin estribo, donde da la cuenta).
+        // generador (sin estribo, donde da la cuenta). Las barras y los menores
+        // se calculan en la zona común de la columna, donde las pone el
+        // generador; el hormigón y el estribo, con la medida del tramo, y lo
+        // primero se corre (dx, dy) a su lugar dentro del tramo. Con la misma
+        // sección en toda la columna, el corrimiento es 0 (dado de 40×40 bajo
+        // una de 30×30: 22-oct).
         double ladoX = columna.BaseX, ladoY = columna.BaseY;
+        (double tramoX, double tramoY, double dx, double dy) = tramo.Seccion(columna);
         double doblezEstribo = dEstribo is double dd ? PlantaArmado.Doblez(barraDe(cfgTramo.TipoBarraNombre), dd) : 0;
         IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras = SeccionPlanta.Calcular(
             ladoX, ladoY, recubrimiento, diametroEstriboPlantaMm, cfgLong, DiametroDe, doblezEstribo * 1000);
@@ -145,16 +151,16 @@ public partial class PanelVistaPrevia : UserControl
         bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
         IReadOnlyList<ChoquesSeccion.Choque> aMarcar = verTraslapo ? choques.Traslapo : choques.Normal;
 
-        DibujarPlanta(ladoX, ladoY, recubrimiento, dEstribo, doblezEstribo, barras, piezas, DiametroPieza, DoblezPieza,
-            XColumna, YFila, columnas, filas, aMarcar, verTraslapo ? choques.PiezasTraslapo : null);
+        DibujarPlanta(tramoX, tramoY, (ladoX / 2, ladoY / 2), dx, dy, recubrimiento, dEstribo, doblezEstribo, barras, piezas,
+            DiametroPieza, DoblezPieza, XColumna, YFila, columnas, filas, aMarcar, verTraslapo ? choques.PiezasTraslapo : null);
 
         // Frente: se mira la cara de abajo (paralela a X); costado: la de la izquierda (paralela a Y).
         List<BarraVista> frente = barras
             .Where(b => b.Y < ladoY / 2 && b.Posicion != PosicionBarra.CaraY)
-            .Select(b => new BarraVista(b.X, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
+            .Select(b => new BarraVista(b.X + dx, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
         List<BarraVista> costado = barras
             .Where(b => b.X < ladoX / 2 && b.Posicion != PosicionBarra.CaraX)
-            .Select(b => new BarraVista(b.Y, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
+            .Select(b => new BarraVista(b.Y + dy, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
 
         Tramo? debajo = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice - 1);
         Tramo? encima = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice + 1);
@@ -167,12 +173,12 @@ public partial class PanelVistaPrevia : UserControl
         double zMin = tramo.ZInferior - (debajo is null ? 0 : Math.Min(debajo.Altura, 0.4));
         double zMax = tramo.ZSuperior + (encima is null ? 0 : Math.Min(encima.Altura, 0.4));
         double escalaElevacion = EscalaDibujo.Ajustar(
-            Math.Max(ladoX, ladoY), zMax - zMin, anchoVista - MargenCotasZonas - MargenCotaAlto, AltoElevaciones);
+            Math.Max(tramoX, tramoY), zMax - zMin, anchoVista - MargenCotasZonas - MargenCotaAlto, AltoElevaciones);
 
-        DibujarElevacion("De frente (cara X)", 16, ladoX, zMin, zMax, escalaElevacion, tramo, debajo, encima, frente, dEstribo,
-            reparto, paquete, DiametroPieza, EjeCaja.Fila, XColumna);
-        DibujarElevacion("De costado (cara Y)", 32 + anchoVista, ladoY, zMin, zMax, escalaElevacion, tramo, debajo, encima, costado, dEstribo,
-            reparto, paquete, DiametroPieza, EjeCaja.Columna, YFila);
+        DibujarElevacion("De frente (cara X)", 16, tramoX, zMin, zMax, escalaElevacion, tramo, debajo, encima, frente, dEstribo,
+            reparto, paquete, DiametroPieza, EjeCaja.Fila, c => XColumna(c) + dx);
+        DibujarElevacion("De costado (cara Y)", 32 + anchoVista, tramoY, zMin, zMax, escalaElevacion, tramo, debajo, encima, costado, dEstribo,
+            reparto, paquete, DiametroPieza, EjeCaja.Columna, f => YFila(f) + dy);
 
         Lienzo.Height = YElevaciones + AltoElevaciones + 30;
 
@@ -193,8 +199,12 @@ public partial class PanelVistaPrevia : UserControl
 
     // ------------------------------------------------------------- planta
 
+    /// <param name="ladoX">Los lados del tramo: el hormigón, el estribo y las cotas.</param>
+    /// <param name="centroComun">El centro de la zona común, donde se calcularon barras y menores.</param>
+    /// <param name="dx">Lo que hay que correr lo calculado en la zona común para ponerlo en el tramo.</param>
     private void DibujarPlanta(
-        double ladoX, double ladoY, double recubrimiento, double? dEstribo, double doblezEstribo,
+        double ladoX, double ladoY, (double X, double Y) centroComun, double dx, double dy,
+        double recubrimiento, double? dEstribo, double doblezEstribo,
         IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras, List<EstriboMenor> piezas, Func<EstriboMenor, double> diametroPieza,
         Func<EstriboMenor, double> doblezPieza, Func<int, double> xColumna, Func<int, double> yFila, int columnas, int filas,
         IReadOnlyList<ChoquesSeccion.Choque> choques, IReadOnlyList<ChoquesSeccion.PiezaRedonda>? piezasTraslapo)
@@ -205,6 +215,7 @@ public partial class PanelVistaPrevia : UserControl
         double ancho = ladoX * escala, alto = ladoY * escala;
         double ox = (AnchoLienzo - ancho) / 2, oy = 22;
         Point P(double x, double y) => new(ox + x * escala, oy + alto - y * escala);
+        Point Q(double x, double y) => P(x + dx, y + dy);
 
         Agregar(new Rectangle { Width = ancho, Height = alto, Fill = ColorHormigon, Stroke = ColorContorno }, ox, oy);
 
@@ -238,15 +249,15 @@ public partial class PanelVistaPrevia : UserControl
             Brush color = tapada ? ColorTapada : Pincel(diametroPieza(p));
             double grosor = Math.Max(1.2, diametroPieza(p) / 1000 * escala);
             Lienzo.Children.Add(DibujoArmado.Trazo(
-                PlantaArmado.Menor(p, k => BarrasDe(p.Eje, k), (ladoX / 2, ladoY / 2), diametroPieza(p), doblezPieza(p)),
-                P, color, grosor, tapada ? 0.6 : 1));
+                PlantaArmado.Menor(p, k => BarrasDe(p.Eje, k), centroComun, diametroPieza(p), doblezPieza(p)),
+                Q, color, grosor, tapada ? 0.6 : 1));
         }
 
         foreach (SeccionPlanta.BarraEnPlanta barra in barras)
         {
             // Su diámetro a escala; el mínimo es solo para que no desaparezca.
             double radio = Math.Max(1, barra.DiametroMm / 2000 * escala);
-            Point c = P(barra.X, barra.Y);
+            Point c = Q(barra.X, barra.Y);
             Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(barra.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
                 c.X - radio, c.Y - radio);
         }
@@ -257,7 +268,7 @@ public partial class PanelVistaPrevia : UserControl
             foreach (ChoquesSeccion.PiezaRedonda pieza in piezasTraslapo)
             {
                 double radio = Math.Max(1, pieza.DiametroMm / 2000 * escala);
-                Point c = P(pieza.X, pieza.Y);
+                Point c = Q(pieza.X, pieza.Y);
                 Agregar(new Ellipse { Width = 2 * radio, Height = 2 * radio, Fill = Pincel(pieza.DiametroMm), Stroke = Paleta.Texto, StrokeThickness = 0.5 },
                     c.X - radio, c.Y - radio);
             }
@@ -265,7 +276,7 @@ public partial class PanelVistaPrevia : UserControl
         // Los choques, encima de todo para que se lean al pasar el mouse.
         foreach (ChoquesSeccion.Choque choque in choques)
             foreach ((double X, double Y, double Radio) marca in choque.Marcas)
-                Lienzo.Children.Add(DibujoArmado.MarcaChoque(P(marca.X, marca.Y), Math.Max(1, marca.Radio * escala), choque.Motivo));
+                Lienzo.Children.Add(DibujoArmado.MarcaChoque(Q(marca.X, marca.Y), Math.Max(1, marca.Radio * escala), choque.Motivo));
 
         // Cuántas intermedias lleva cada cara.
         string cx = (columnas).ToString(), cy = (filas).ToString();
