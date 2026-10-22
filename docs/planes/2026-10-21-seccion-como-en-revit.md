@@ -198,5 +198,14 @@ Hallazgos de la medición (21-10), para después:
   centros de los ganchos en y 51 y 244 mm, con las barras en 45,6 y 254,4 (lo
   justo sería 53,5 y 246,5). La de abajo queda adentro con 2,5 mm de juego; la
   de arriba se mete ~2,5 mm en la cara interior del gancho. El diagnóstico
-  muestra 1 mm. **Para revisar en el #130** (`GanchoGrapa.Linea` /
-  `MedirGanchoDeGrapa`).
+  muestra 1 mm.
+  - **Causa (21-10):** en una grapa recta la punta pedida queda justo en el
+    recubrimiento (barra en rec + dE + rb, centro del gancho en rec + dE + D/2,
+    punta en rec + dE − d = rec). Con el tramo inclinado, la punta pedida cae
+    ~2,5 mm dentro del recubrimiento (aunque el arco no pasa de él), y Revit
+    corre la barra entera hasta que la punta quede en el borde: las dos puntas
+    de 394279 y de 394621 quedaron exactamente en ±0,125 m.
+  - **Decisión (21-10, Luciano):** se deja así por ahora. Pasa solo en las
+    grapas inclinadas (traslapos y base con la pieza corrida). Si se retoma:
+    probar en Revit cómo se maneja a qué está pegada la punta de la grapa
+    (restricciones de la barra) o volver a ubicarla después de crearla.
