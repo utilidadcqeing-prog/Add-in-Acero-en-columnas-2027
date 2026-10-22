@@ -28,7 +28,7 @@ public sealed record PiezaLongitudinal(
 /// id del tablero (<c>E</c> el cerrado de las esquinas, <c>E1</c>… los adicionales). <paramref name="Izquierda"/>,
 /// <paramref name="Derecha"/>, <paramref name="Abajo"/> y <paramref name="Arriba"/> son sus caras exteriores en el corte,
 /// en mm, como <see cref="EstriboEnSeccion"/>; en el abierto, izquierda y derecha son la X de su rama.
-/// <paramref name="Host"/> es la viga del tramo.
+/// <paramref name="Host"/> es la viga del tramo. <paramref name="Forma"/> solo cuenta en el abierto.
 /// </summary>
 public sealed record GrupoEstribos(
     string Pieza,
@@ -42,13 +42,26 @@ public sealed record GrupoEstribos(
     double Arriba,
     Corrida Corrida,
     string Host,
-    Rama? Rama = null);
+    Rama? Rama = null,
+    FormaGrapa Forma = FormaGrapa.C);
 
 /// <summary>
 /// Las dos barras que abraza un estribo abierto, por su centro en el corte (mm), y el diámetro mayor de las dos (hallazgo
 /// E13): la rama va al lado de ellas y sus ganchos las abrazan.
 /// </summary>
-public sealed record Rama(double X, double YArriba, double YAbajo, double Diametro);
+public sealed record Rama(double X, double YArriba, double YAbajo, double Diametro)
+{
+    /// <summary>
+    /// De qué lado de cada barra va la rama, en la X del corte: +1 a la derecha, −1 a la izquierda. En C va hacia el
+    /// centro de la viga en las dos; en S, abajo pasa al otro lado de la barra y la rama queda un poco en diagonal, para
+    /// que cada gancho abrace su barra desde un lado distinto (hallazgo H6 del plan de 22-oct).
+    /// </summary>
+    public (int Abajo, int Arriba) Lados(double anchoViga, FormaGrapa forma)
+    {
+        int alCentro = X <= anchoViga / 2 ? 1 : -1;
+        return (forma == FormaGrapa.S ? -alCentro : alCentro, alCentro);
+    }
+}
 
 /// <summary>
 /// Todo lo que se crea en Revit para un pórtico. <paramref name="Portico"/> es su id en el tablero.

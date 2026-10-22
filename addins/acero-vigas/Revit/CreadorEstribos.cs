@@ -83,13 +83,17 @@ internal static class CreadorEstribos
                 }
                 catch (Autodesk.Revit.Exceptions.ArgumentException)
                 {
-                    // la forma puede no tener posiciones de gancho: no bloquea
+                    // la forma puede no tener posiciones de gancho, o no aceptar ese ángulo: se mira abajo
                 }
                 doc.Regenerate();
-                if (!TieneDiagonal(conForma, u))
+                // Tarea 4 del plan de 22-oct: la forma del documento trae sus ganchos (135° casi siempre). Si no tomó el
+                // gancho elegido (el de 180°), se usa el lazo por curvas para este grupo; la forma sigue sirviendo a los demás.
+                bool conSuGancho = conForma.GetHookTypeId(0) == gancho.Id && conForma.GetHookTypeId(1) == gancho.Id;
+                if (conSuGancho && !TieneDiagonal(conForma, u))
                     return conForma;
                 doc.Delete(conForma.Id);
-                formasMalas.Add(forma.Id);
+                if (conSuGancho)
+                    formasMalas.Add(forma.Id);
             }
         }
 
@@ -119,40 +123,43 @@ internal static class CreadorEstribos
     /// (hallazgo E13: antes la rama iba por el eje de las barras y los ganchos se abrían hacia afuera). La rama queda del
     /// lado del centro de la viga, a un radio de doblado del eje de las barras: así el doblez del gancho queda centrado en
     /// la barra y la cola entra al núcleo. Los ganchos que doblen hacia el otro lado se voltean después de regenerar
-    /// (<see cref="CorregirAbierto"/>).
+    /// (<see cref="CorregirAbierto"/>). En S, abajo la rama pasa al otro lado de su barra (<see cref="Rama.Lados"/>): queda
+    /// un poco en diagonal y los ganchos salen uno hacia cada lado (Left/Right, diagnóstico de la grapa en S del 20-oct).
+    /// Se crea con estilo de estribo, como refuerzo transversal: toma el doblado de estribo del tipo de barra (4 d en el #3)
+    /// y no el de gancho (6 d), con el que el gancho de 180° se metía 4.9 mm en las barras vecinas (H8 del plan de 22-oct;
+    /// probado en Revit: arco de R 23.8 en vez de 33.3).
     /// </summary>
     private static Rebar? Abierto(Document doc, UbicacionPortico u, GrupoEstribos g, RebarBarType barra, TiposAcero tipos, Element host, double d)
     {
         if (g.Rama is not { } rama)
             return null;
-        double radio = LectorModelo.Mm(barra.StandardHookBendDiameter) / 2 + d / 2;
-        double xRama = rama.X + LadoDeLaRama(u, rama) * radio;
+        double radio = LectorModelo.Mm(barra.StirrupTieBendDiameter) / 2 + d / 2;
+        (int ladoAbajo, int ladoArriba) = rama.Lados(u.Ancho, g.Forma);
         double x = g.Corrida.Primero;
         // Revit toma la punta de la línea como la cara exterior del doblez (medido con las barras corridas; sexta prueba: el
         // gancho daba la vuelta 30 mm por encima de la barra). El doblez abraza la barra, su cara interior la toca: la cara
         // exterior queda un diámetro de estribo más allá de la cara de la barra. Centrado en la barra (radio + d/2) se
         // salía 2 cm del cerrado y lo cruzaba (medido el 21-oct en la viga 388501).
         double alDoblez = rama.Diametro / 2 + d;
-        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, xRama, rama.YAbajo - alDoblez), CreadorBarras.Punto(u, x, xRama, rama.YArriba + alDoblez));
+        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, rama.X + ladoAbajo * radio, rama.YAbajo - alDoblez),
+            CreadorBarras.Punto(u, x, rama.X + ladoArriba * radio, rama.YArriba + alDoblez));
         RebarHookType? gancho = tipos.GanchoGrapa(g.Gancho, g.Diametro);
         using var terminaciones = new BarTerminationsData(doc);
         if (gancho is not null)
         {
             terminaciones.HookTypeIdAtStart = gancho.Id;
             terminaciones.HookTypeIdAtEnd = gancho.Id;
-            terminaciones.TerminationOrientationAtStart = RebarTerminationOrientation.Right;
+            terminaciones.TerminationOrientationAtStart = g.Forma == FormaGrapa.S ? RebarTerminationOrientation.Left : RebarTerminationOrientation.Right;
             terminaciones.TerminationOrientationAtEnd = RebarTerminationOrientation.Right;
         }
-        return Rebar.CreateFromCurves(doc, RebarStyle.Standard, barra, host, Direccion(u), new List<Curve> { linea }, terminaciones,
+        return Rebar.CreateFromCurves(doc, RebarStyle.StirrupTie, barra, host, Direccion(u), new List<Curve> { linea }, terminaciones,
             useExistingShapeIfPossible: true, createNewShape: true);
     }
 
-    /// <summary>+1 si la rama va a la derecha de las barras (en la X del corte), −1 si a la izquierda: hacia el centro.</summary>
-    private static int LadoDeLaRama(UbicacionPortico u, Rama rama) => rama.X <= u.Ancho / 2 ? 1 : -1;
-
     /// <summary>
     /// Deja los dos ganchos del abierto dando la vuelta a su barra: la punta de cada gancho tiene que quedar del lado de la
-    /// barra, no del lado de la rama. Llamar después de regenerar. Devuelve si volteó alguno.
+    /// barra, no del lado de la rama. En S cada punta tiene su lado, así que los ganchos quedan hacia lados opuestos.
+    /// Llamar después de regenerar. Devuelve si volteó alguno.
     /// </summary>
     public static bool CorregirAbierto(Rebar r, UbicacionPortico u, GrupoEstribos g)
     {
@@ -161,11 +168,13 @@ internal static class CreadorEstribos
         IList<Curve> curvas = r.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
         if (curvas.Count < 2)
             return false;
-        XYZ haciaLaBarra = CreadorBarras.Lateral(u) * LadoDeLaRama(u, rama); // −X del corte si la rama está a la derecha
+        // −X del corte si la rama está a la derecha de la barra: el inicio de la línea es la punta de abajo
+        (int ladoAbajo, int ladoArriba) = rama.Lados(u.Ancho, g.Forma);
+        XYZ lateral = CreadorBarras.Lateral(u);
         XYZ inicioRama = curvas.First(c => c.Length > 0).GetEndPoint(0);
         bool volteo = false;
-        volteo |= Voltear(r, 0, curvas[0].GetEndPoint(0), curvas.Count > 2 ? curvas[2].GetEndPoint(0) : inicioRama, haciaLaBarra);
-        volteo |= Voltear(r, 1, curvas[^1].GetEndPoint(1), curvas.Count > 2 ? curvas[^3].GetEndPoint(1) : inicioRama, haciaLaBarra);
+        volteo |= Voltear(r, 0, curvas[0].GetEndPoint(0), curvas.Count > 2 ? curvas[2].GetEndPoint(0) : inicioRama, lateral * ladoAbajo);
+        volteo |= Voltear(r, 1, curvas[^1].GetEndPoint(1), curvas.Count > 2 ? curvas[^3].GetEndPoint(1) : inicioRama, lateral * ladoArriba);
         return volteo;
     }
 

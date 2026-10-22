@@ -36,19 +36,13 @@ public static class PreviaAcero
     /// <param name="doblados">El de cada diámetro del modelo; uno que falte usa el diámetro de las reglas y doblado de 4d.</param>
     public static IReadOnlyList<Trazo> Trazos(PlanAcero plan, UbicacionPortico u, Reglas r, IReadOnlyDictionary<int, DobladoBarra>? doblados = null)
     {
-        DobladoBarra Doblado(int n) => doblados?.GetValueOrDefault(n) is { } d ? d
-            : new DobladoBarra(r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro);
-
         var trazos = new List<Trazo>();
         foreach (PiezaLongitudinal p in plan.Barras.Concat(plan.Bastones))
-            trazos.Add(Longitudinal(p, u, r.PorDiametro[p.Diametro], Doblado(p.Diametro)));
+            trazos.Add(Longitudinal(p, u, r.PorDiametro[p.Diametro], Doblado(r, p.Diametro, doblados)));
         foreach (GrupoEstribos g in plan.Estribos)
         {
-            DobladoBarra d = Doblado(g.Diametro);
-            int grados = g.Gancho == GanchoEstribo.De135 ? 135 : 90;
-            double cola = grados == 135 && r.PorDiametro[g.Diametro].Estribo135.E is int e ? e : 6 * d.Diametro;
-            List<(double X, double Y)>? corte = g.Tipo == TipoEstribo.Cerrado ? Cerrado(g, d, grados, cola) : Abierto(g, u, d, grados, cola);
-            if (corte is null)
+            DobladoBarra d = Doblado(r, g.Diametro, doblados);
+            if (EnElCorte(g, u.Ancho, r, d) is not { } corte)
                 continue;
             for (int i = 0; i < g.Corrida.Cantidad; i++)
             {
@@ -58,6 +52,23 @@ public static class PreviaAcero
         }
         return trazos;
     }
+
+    /// <summary>
+    /// El estribo en el corte, por su eje y con sus ganchos, en mm (x desde la cara izquierda, y desde la de abajo): el
+    /// mismo trazo que la vista previa 3D y que el corte 1-1 del tablero. Null si es un abierto sin sus barras.
+    /// </summary>
+    /// <param name="d">El doblado del modelo; sin él, el diámetro de las reglas y doblado de 4 d.</param>
+    public static List<(double X, double Y)>? EnElCorte(GrupoEstribos g, double anchoViga, Reglas r, DobladoBarra? d = null)
+    {
+        d ??= Doblado(r, g.Diametro, null);
+        (int grados, int? e) = GanchoPropio.DeEstribo(g.Gancho, r.PorDiametro[g.Diametro]);
+        double cola = e ?? 6 * d.Diametro;
+        return g.Tipo == TipoEstribo.Cerrado ? Cerrado(g, d, grados, cola) : Abierto(g, anchoViga, d, grados, cola);
+    }
+
+    private static DobladoBarra Doblado(Reglas r, int n, IReadOnlyDictionary<int, DobladoBarra>? doblados) =>
+        doblados?.GetValueOrDefault(n) is { } d ? d
+            : new DobladoBarra(r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro);
 
     /// <summary>La parte recta en (XCorte, YCorte), con un gancho en cada punta que lo lleve, doblando hacia adentro.</summary>
     private static Trazo Longitudinal(PiezaLongitudinal p, UbicacionPortico u, ReglaDiametro regla, DobladoBarra d)
@@ -117,33 +128,36 @@ public static class PreviaAcero
     }
 
     /// <summary>
-    /// La rama al lado de sus dos barras, del lado del centro de la viga, con un gancho que abraza cada barra (la toca por
-    /// fuera) y la cola hacia el núcleo. Null si el plan no trae sus barras.
+    /// La rama al lado de sus dos barras, con un gancho que abraza cada barra (la toca por fuera) y la cola hacia el núcleo.
+    /// En C la rama va del lado del centro de la viga en las dos barras. En S, abajo pasa al otro lado de la barra (hallazgo
+    /// H6 del plan de 22-oct): la rama queda un poco en diagonal y cada gancho dobla hacia un lado. Null si el plan no
+    /// trae sus barras.
     /// </summary>
-    private static List<(double X, double Y)>? Abierto(GrupoEstribos g, UbicacionPortico u, DobladoBarra d, int grados, double cola)
+    private static List<(double X, double Y)>? Abierto(GrupoEstribos g, double anchoViga, DobladoBarra d, int grados, double cola)
     {
         if (g.Rama is not { } rama)
             return null;
-        double r = d.Gancho / 2 + d.Diametro / 2;
-        double hacia = rama.X <= u.Ancho / 2 ? 1 : -1; // de la barra hacia el centro: ahí va la rama
-        double xRama = rama.X + hacia * r;
+        // Se dobla como estribo (H8 del plan de 22-oct: con el doblado de gancho, 6 d, el de 180° no cabía entre barras).
+        double r = d.Estribo / 2 + d.Diametro / 2;
+        (int haciaAbajo, int hacia) = rama.Lados(anchoViga, g.Forma);
         // El doblez abraza la barra: su cara interior toca la barra por encima (abajo, por debajo), así que su centro va
         // medio doblado menos medio diámetro de barra hacia adentro (centrado en la barra, el gancho cruzaba el cerrado).
-        double alCentro = d.Gancho / 2 - rama.Diametro / 2;
+        double alCentro = d.Estribo / 2 - rama.Diametro / 2;
         double yArriba = rama.YArriba - alCentro, yAbajo = rama.YAbajo + alCentro;
-        // Ángulos medidos desde la rama: 180° (o 0°) es el punto de la rama a la altura del centro del doblez.
-        double desde = hacia > 0 ? 0 : 180;
-        double giro = hacia > 0 ? 1 : -1; // arriba gira pasando por encima de la barra, hacia el lado de la barra
-        List<(double X, double Y)> abajo = Arco((rama.X, yAbajo), r, desde - giro * grados, desde);
-        List<(double X, double Y)> arriba = Arco((rama.X, yArriba), r, desde, desde + giro * grados);
+        // Ángulos medidos desde la rama: 180° (o 0°) es el punto de la rama a la altura del centro del doblez. El giro
+        // pasa por encima de la barra de arriba (por debajo de la de abajo), hacia el lado de la barra.
+        (double desde, double giro) Lado(int h) => h > 0 ? (0, 1) : (180, -1);
+        (double desdeAbajo, double giroAbajo) = Lado(haciaAbajo);
+        (double desdeArriba, double giroArriba) = Lado(hacia);
+        List<(double X, double Y)> abajo = Arco((rama.X, yAbajo), r, desdeAbajo - giroAbajo * grados, desdeAbajo);
+        List<(double X, double Y)> arriba = Arco((rama.X, yArriba), r, desdeArriba, desdeArriba + giroArriba * grados);
         var lazo = new List<(double X, double Y)>
         {
-            Mas(abajo[0], Tangente(desde - giro * grados), -giro * cola),
+            Mas(abajo[0], Tangente(desdeAbajo - giroAbajo * grados), -giroAbajo * cola),
         };
         lazo.AddRange(abajo);
-        lazo.Add((xRama, yArriba));
-        lazo.AddRange(arriba.Skip(1));
-        lazo.Add(Mas(arriba[^1], Tangente(desde + giro * grados), giro * cola));
+        lazo.AddRange(arriba);
+        lazo.Add(Mas(arriba[^1], Tangente(desdeArriba + giroArriba * grados), giroArriba * cola));
         return lazo;
     }
 

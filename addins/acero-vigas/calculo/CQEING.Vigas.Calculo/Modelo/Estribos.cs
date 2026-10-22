@@ -7,11 +7,22 @@ public enum TipoEstribo
     Abierto,
 }
 
-/// <summary>Gancho de los estribos: de 135° (por defecto) o de 90°.</summary>
+/// <summary>
+/// Gancho de los estribos: de 135° (por defecto), de 90° o de 180° (Carlos, 22-oct, min 50:36: "manejemos el gancho a
+/// 180"; el de 180° sale de la fila de ganchos de 180° del cuadro).
+/// </summary>
 public enum GanchoEstribo
 {
     De135,
     De90,
+    De180,
+}
+
+/// <summary>Forma del estribo abierto: en C, los dos ganchos hacia el mismo lado; en S, uno hacia cada lado.</summary>
+public enum FormaGrapa
+{
+    C,
+    S,
 }
 
 /// <summary>
@@ -20,8 +31,11 @@ public enum GanchoEstribo
 /// </summary>
 public sealed record PuntoBarra(Posicion Cara, int Fila, int Numero);
 
-/// <summary>Un estribo adicional; <paramref name="Barras"/> va en el orden en que se eligieron.</summary>
-public sealed record EstriboAdicional(TipoEstribo Tipo, IReadOnlyList<PuntoBarra> Barras);
+/// <summary>
+/// Un estribo adicional; <paramref name="Barras"/> va en el orden en que se eligieron. <paramref name="Forma"/> solo
+/// cuenta en el abierto (la elige el usuario, Juan 22-oct).
+/// </summary>
+public sealed record EstriboAdicional(TipoEstribo Tipo, IReadOnlyList<PuntoBarra> Barras, FormaGrapa Forma = FormaGrapa.C);
 
 /// <summary>
 /// Los estribos del paso 3 del tablero (#90), del pórtico o de un tramo. <paramref name="Diametro"/> es el número de la
@@ -80,7 +94,7 @@ public sealed record EntradaEstribos(
 /// <summary>
 /// Los estribos iguales de un tramo: <c>"E"</c> es el cerrado de las esquinas y <c>"E1"</c>, <c>"E2"</c>… los
 /// adicionales, como en la lista de la maqueta. <paramref name="Posiciones"/> son sus centros en mm desde el eje A; <paramref name="Largo"/> (mm, por el
-/// eje del estribo) incluye los ganchos.
+/// eje del estribo) incluye los ganchos. <paramref name="Forma"/> es la del adicional abierto; el cerrado va en C.
 /// </summary>
 public sealed record EstriboEnPortico(
     string Id,
@@ -90,7 +104,8 @@ public sealed record EstriboEnPortico(
     GanchoEstribo Gancho,
     IReadOnlyList<double> Posiciones,
     double Largo,
-    double Kg);
+    double Kg,
+    FormaGrapa Forma = FormaGrapa.C);
 
 /// <summary>
 /// Un estribo en el corte, por sus caras exteriores en mm (x desde la cara izquierda, y desde la de abajo). El abierto

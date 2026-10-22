@@ -305,6 +305,19 @@ public class PlanificadorAceroTests
         Assert.All(Planificar(o).Estribos.Where(g => g.Pieza == "E"), g => Assert.Null(g.Rama));
     }
 
+    [Fact]
+    public void Estribos_LaGrapaEnSLlegaAlPlanConSuGancho()
+    {
+        var adicional = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)],
+            FormaGrapa.S);
+        var o = OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(Gancho: GanchoEstribo.De180, Adicionales: [adicional]) };
+
+        PlanAcero plan = Planificar(o);
+
+        Assert.All(plan.Estribos.Where(g => g.Pieza == "E1"), g => Assert.Equal((FormaGrapa.S, GanchoEstribo.De180), (g.Forma, g.Gancho)));
+        Assert.All(plan.Estribos.Where(g => g.Pieza == "E"), g => Assert.Equal(FormaGrapa.C, g.Forma));
+    }
+
     /// <summary>
     /// Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". El adicional va pegado al lado
     /// del cerrado, un diámetro de estribo más allá, y no en su mismo plano (ahí sus ganchos cruzaban el cerrado).

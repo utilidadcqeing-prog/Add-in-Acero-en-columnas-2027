@@ -65,30 +65,31 @@ internal sealed class TiposAcero
 
     /// <summary>
     /// El gancho propio de los estribos del #<paramref name="numero"/> (<c>"CQEING Estribo 135° #3"</c>, estilo de estribo):
-    /// extensión recta E del cuadro de Carlos (6 diámetros en el #3), o 6 diámetros si el cuadro no la trae (#6 a #8, y el
-    /// de 90°). Crea o ajusta el tipo: dentro de una transacción.
+    /// extensión recta E del cuadro de Carlos (57 mm en el 135° del #3, 65 mm en el 180°), o 6 diámetros si el cuadro no
+    /// la trae (#6 a #8 en 135°, y el de 90°). Crea o ajusta el tipo: dentro de una transacción.
     /// </summary>
     public RebarHookType GanchoEstribo(GanchoEstribo g, int numero)
     {
-        int grados = g == Calculo.Modelo.GanchoEstribo.De135 ? 135 : 90;
+        (int grados, int? e) = GanchoPropio.DeEstribo(g, reglas.PorDiametro[numero]);
         double d = Barra(numero) is { } barra ? LectorModelo.Mm(barra.BarNominalDiameter) : reglas.PorDiametro[numero].Diametro;
-        double multiplicador = grados == 135 && reglas.PorDiametro[numero].Estribo135.E is int e ? e / d : 6;
-        return Propio(GanchoPropio.Nombre(grados, numero, estribo: true), RebarStyle.StirrupTie, grados, multiplicador);
+        return Propio(GanchoPropio.Nombre(grados, numero, estribo: true), RebarStyle.StirrupTie, grados, e is int cola ? cola / d : 6);
     }
 
     /// <summary>
-    /// El gancho del estribo abierto (<c>"CQEING Grapa 135° #3"</c>): estilo de barra, porque la rama es una barra recta
-    /// (como la grapa de columnas), con la cola de estribo, la extensión E del cuadro (57 mm en el #3) o 6 diámetros. Con
-    /// la cola de barra (B completo, 84 mm) la punta quedaba a 25 mm de la cara de la viga (sexta prueba).
+    /// El gancho del estribo abierto (<c>"CQEING Grapa 135° #3 estribo"</c>), con la cola de estribo: la extensión E del
+    /// cuadro (57 mm en el 135° del #3, 65 mm en el 180°) o 6 diámetros. Con la cola de barra (B completo, 84 mm) la punta
+    /// quedaba a 25 mm de la cara de la viga (sexta prueba). Revit, sin este tipo, deja la cola de 180° en 4 d (diagnóstico
+    /// de la grapa en S, 20-oct). Estilo de estribo, como la grapa (H8 del plan de 22-oct). El nombre es otro que el de
+    /// los tipos de estilo de barra que dejaron las versiones anteriores, para no cambiarles el estilo a las grapas que ya
+    /// los usan.
     /// </summary>
     public RebarHookType? GanchoGrapa(GanchoEstribo g, int numero)
     {
         if (Barra(numero) is not { } barra)
             return null;
-        int grados = g == Calculo.Modelo.GanchoEstribo.De135 ? 135 : 90;
+        (int grados, int? e) = GanchoPropio.DeEstribo(g, reglas.PorDiametro[numero]);
         double d = LectorModelo.Mm(barra.BarNominalDiameter);
-        double multiplicador = grados == 135 && reglas.PorDiametro[numero].Estribo135.E is int e ? e / d : 6;
-        return Propio($"CQEING Grapa {grados}° #{numero}", RebarStyle.Standard, grados, multiplicador);
+        return Propio($"CQEING Grapa {grados}° #{numero} estribo", RebarStyle.StirrupTie, grados, e is int cola ? cola / d : 6);
     }
 
     /// <summary>

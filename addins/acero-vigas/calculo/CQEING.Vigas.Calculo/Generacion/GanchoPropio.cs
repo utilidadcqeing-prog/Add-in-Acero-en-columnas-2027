@@ -1,3 +1,5 @@
+using CQEING.Vigas.Calculo.Modelo;
+
 namespace CQEING.Vigas.Calculo.Generacion;
 
 /// <summary>
@@ -23,6 +25,18 @@ public static class GanchoPropio
         double radio = doblado / 2 + diametro / 2;
         return Math.Max(diametro, b + radio + diametro / 2 - radio * grados * Math.PI / 180);
     }
+
+    /// <summary>
+    /// El ángulo del gancho de un estribo y su cola: la extensión recta E del cuadro de Carlos, del bloque de estribos de
+    /// 135° o del de ganchos de 180° (H2 del plan de 22-oct). Null si el cuadro no la trae (el de 90° y el 135° del #6 al
+    /// #8): quien lo usa pone 6 diámetros.
+    /// </summary>
+    public static (int Grados, int? Cola) DeEstribo(GanchoEstribo g, ReglaDiametro r) => g switch
+    {
+        GanchoEstribo.De135 => (135, r.Estribo135.E),
+        GanchoEstribo.De180 => (180, r.Gancho180.E),
+        _ => (90, null),
+    };
 
     /// <summary>El nombre del tipo: <c>"CQEING 90° #5"</c>, o <c>"CQEING Estribo 135° #3"</c>.</summary>
     public static string Nombre(int grados, int numero, bool estribo = false) =>

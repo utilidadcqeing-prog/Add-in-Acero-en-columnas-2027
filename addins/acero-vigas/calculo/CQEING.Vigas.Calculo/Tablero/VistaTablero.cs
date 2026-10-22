@@ -87,8 +87,14 @@ public sealed record BarraSeccion(string Id, string Nombre, bool Arriba, int Fil
 /// <summary>Un diámetro que hay en el pórtico, para la leyenda: <c>"#5"</c> (o <c>"⅝\""</c>) y su color.</summary>
 public sealed record DiametroVista(string Nombre, string Color, string NombrePulgadas = "");
 
-/// <summary>Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba.</summary>
-public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo);
+/// <summary>
+/// Un estribo en el corte, por sus caras exteriores en cm; las y desde la cara de arriba. <paramref name="Forma"/> es
+/// <c>"C"</c> o <c>"S"</c> (solo cuenta en el abierto). <paramref name="Puntos"/> es el trazo de un adicional por su
+/// eje, con sus ganchos según el ángulo y la forma, en cm ([x, y] con la y desde arriba); null en el cerrado de las
+/// esquinas, que la página dibuja como un rectángulo.
+/// </summary>
+public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo, string Forma = "C",
+    IReadOnlyList<double[]>? Puntos = null);
 
 public sealed record SeccionVista(double AnchoCm, double AltoCm, IReadOnlyList<BarraSeccion> Barras, IReadOnlyList<FiguraSeccion> Figuras);
 
@@ -156,8 +162,11 @@ public sealed record VistaPortico(
 /// </summary>
 public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string Multiplo, string DistanciaLibreCm, bool Varilla12, string? Problema);
 
-/// <summary>Una fila de la tabla de reglas: traslapo, gancho de 90°, estribo de 135° y peso por metro.</summary>
-public sealed record ReglaVista(string D, string T, string G, string E, string K);
+/// <summary>
+/// Una fila de la tabla de reglas: traslapo, gancho de 90°, gancho de 180° (<paramref name="G180"/>, el de los estribos
+/// de 180°: tarea 6 del plan de 22-oct), estribo de 135° y peso por metro.
+/// </summary>
+public sealed record ReglaVista(string D, string T, string G, string G180, string E, string K);
 
 // La edición (#84): la página pide ver un cambio antes de aplicarlo y C# contesta con lo que pasaría.
 

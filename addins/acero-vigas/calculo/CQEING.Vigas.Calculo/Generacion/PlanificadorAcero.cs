@@ -141,7 +141,7 @@ public static class PlanificadorAcero
             grupos.AddRange(corridas.Select(c => new GrupoEstribos(e.Id, e.Tramo, e.Tipo, e.Diametro, e.Gancho,
                 caras.Izquierda, caras.Derecha, caras.Abajo, caras.Arriba, c,
                 MarcoPortico.VigaEn(u, c.Primero + (c.Cantidad - 1) * c.Separacion / 2) ?? throw new InvalidOperationException("El pórtico no tiene vigas."),
-                rama)));
+                rama, e.Forma)));
         }
         return grupos;
     }
@@ -150,7 +150,7 @@ public static class PlanificadorAcero
     /// Las barras que abraza un abierto en <paramref name="x"/>: la de arriba más alta y la de abajo más baja en esa x (las
     /// de la fila de cada cara), ya alineadas por el motor (hallazgo E13).
     /// </summary>
-    private static Rama? RamaDe(ResultadoSeccion s, double x, Reglas r)
+    internal static Rama? RamaDe(ResultadoSeccion s, double x, Reglas r)
     {
         BarraEnSeccion? arriba = s.Superior.Filas.SelectMany(f => f).Where(b => Math.Abs(b.X - x) < 0.5).MaxBy(b => b.Y);
         BarraEnSeccion? abajo = s.Inferior.Filas.SelectMany(f => f).Where(b => Math.Abs(b.X - x) < 0.5).MinBy(b => b.Y);

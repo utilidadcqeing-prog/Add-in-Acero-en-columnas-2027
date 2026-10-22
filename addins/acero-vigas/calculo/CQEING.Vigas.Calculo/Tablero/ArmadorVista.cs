@@ -1,5 +1,6 @@
 using System.Globalization;
 using CQEING.Vigas.Calculo.Estribos;
+using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
 using CQEING.Vigas.Calculo.Seccion;
@@ -101,7 +102,7 @@ public static class ArmadorVista
         {
             ReglaDiametro x = r.PorDiametro[d];
             return new ReglaVista($"#{d}", x.Traslapo is int t ? F(t / 1000.0, "0.00") : "", F(x.Gancho90.B / 1000.0, "0.000"),
-                F(x.Estribo135.B / 1000.0, "0.000"), F(x.KgPorMetro, "0.000"));
+                F(x.Gancho180.B / 1000.0, "0.000"), F(x.Estribo135.B / 1000.0, "0.000"), F(x.KgPorMetro, "0.000"));
         }).ToList();
         return new VistaReglas(filas, F(r.Modulo / 1000.0, "0.00"), F(r.DistanciaLibre / 10, "0.##"), r.Varilla == 12000, c.Problema);
     }
@@ -122,6 +123,7 @@ public static class ArmadorVista
             {
                 Traslapo = string.IsNullOrWhiteSpace(fila.T) ? null : Mm(fila.T),
                 Gancho90 = x.Gancho90 with { B = Mm(fila.G) },
+                Gancho180 = x.Gancho180 with { B = Mm(fila.G180) },
                 Estribo135 = x.Estribo135 with { B = Mm(fila.E) },
                 KgPorMetro = Numero(fila.K) ?? 0,
             };
@@ -258,9 +260,20 @@ public static class ArmadorVista
                     .Select((b, i) => Barra($"p{letra}{i + 1}", $"{nombre} {i + 1} (detrás)", arriba, b.Fila - 1, b.Barra, false, true)));
         }
 
-        HashSet<string> delTramo = re.Estribos.Where(x => x.Tramo == corte.Tramo).Select(x => x.Id).ToHashSet();
-        var figuras = re.EnSeccion.Where(f => delTramo.Contains(f.Id)).Select(f => new FiguraSeccion(f.Id, f.Tipo.ToString(),
-            Cm(f.Izquierda), Cm(f.Derecha), Cm(alto - f.Arriba), Cm(alto - f.Abajo))).ToList();
+        Dictionary<string, EstriboEnPortico> delTramo = re.Estribos.Where(x => x.Tramo == corte.Tramo).ToDictionary(x => x.Id);
+        // Los adicionales, con el mismo trazo que la vista previa 3D: sus ganchos según el ángulo y la forma (Juan, 22-oct).
+        IReadOnlyList<double[]>? Trazo(EstriboEnSeccion f, EstriboEnPortico x)
+        {
+            if (f.Id == MotorEstribos.IdCerrado)
+                return null;
+            Rama? rama = f.Tipo == TipoEstribo.Abierto ? PlanificadorAcero.RamaDe(re.Seccion, f.Izquierda, r) : null;
+            var unoSolo = new GrupoEstribos(f.Id, x.Tramo, f.Tipo, x.Diametro, x.Gancho, f.Izquierda, f.Derecha, f.Abajo, f.Arriba,
+                new Corrida(0, 1, 0), "", rama, x.Forma);
+            return PreviaAcero.EnElCorte(unoSolo, Ancho(p), r)?.Select(q => new[] { Cm(q.X), Cm(alto - q.Y) }).ToList();
+        }
+        var figuras = re.EnSeccion.Where(f => delTramo.ContainsKey(f.Id)).Select(f => new FiguraSeccion(f.Id, f.Tipo.ToString(),
+            Cm(f.Izquierda), Cm(f.Derecha), Cm(alto - f.Arriba), Cm(alto - f.Abajo), delTramo[f.Id].Forma.ToString(),
+            Trazo(f, delTramo[f.Id]))).ToList();
         var barras = Cara(re.Seccion.Superior, true).Concat(Cara(re.Seccion.Inferior, false)).Concat(bastones).ToList();
         return (new SeccionVista(Cm(Ancho(p)), Cm(alto), barras, figuras), proyeccion, aviso);
     }

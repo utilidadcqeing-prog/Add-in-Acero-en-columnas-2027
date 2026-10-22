@@ -371,7 +371,7 @@ public class ArmadorVistaTests
         VistaReglas v = ArmadorVista.Reglas(new ReglasCargadas(Reglas.Generales, null));
 
         Assert.Equal(["#3", "#4", "#5", "#6", "#7", "#8"], v.PorDiametro.Select(d => d.D));
-        Assert.Equal(new ReglaVista("#3", "0.55", "0.166", "0.113", "0.560"), v.PorDiametro[0]);
+        Assert.Equal(new ReglaVista("#3", "0.55", "0.166", "0.142", "0.113", "0.560"), v.PorDiametro[0]);
         Assert.Equal(("0.50", "2.5", false, (string?)null), (v.Multiplo, v.DistanciaLibreCm, v.Varilla12, v.Problema));
     }
 
@@ -391,6 +391,28 @@ public class ArmadorVistaTests
         Assert.Equal((950, 250, 25, 12000), (r.PorDiametro[5].Traslapo!.Value, r.Modulo, r.DistanciaLibre, r.Varilla));
         Assert.Equal(Reglas.Generales.PorDiametro[2], r.PorDiametro[2]);
         Assert.Empty(r.Validar());
+    }
+
+    [Fact]
+    public void ElGancho180DeLaPantallaCambiaSoloSuLargo()
+    {
+        VistaReglas pantalla = ArmadorVista.Reglas(new ReglasCargadas(Reglas.Generales, null));
+        pantalla = pantalla with { PorDiametro = pantalla.PorDiametro.Select(d => d.D == "#3" ? d with { G180 = "0.150" } : d).ToList() };
+
+        Reglas r = ArmadorVista.ReglasDe(pantalla, Reglas.Generales);
+
+        // B cambia; E, D y A del cuadro quedan (la cola del estribo de 180° sigue en 65)
+        Assert.Equal(Reglas.Generales.PorDiametro[3].Gancho180 with { B = 150 }, r.PorDiametro[3].Gancho180);
+        Assert.Equal(Reglas.Generales.PorDiametro[4], r.PorDiametro[4]);
+    }
+
+    [Fact]
+    public void UnGancho180VacioHaceFallarLasReglas()
+    {
+        VistaReglas pantalla = ArmadorVista.Reglas(new ReglasCargadas(Reglas.Generales, null));
+        pantalla = pantalla with { PorDiametro = pantalla.PorDiametro.Select(d => d.D == "#3" ? d with { G180 = "" } : d).ToList() };
+
+        Assert.Equal(["El gancho de 180° del #3 debe ser mayor que 0."], ArmadorVista.ReglasDe(pantalla, Reglas.Generales).Validar());
     }
 
     [Fact]
@@ -457,6 +479,57 @@ public class ArmadorVistaTests
         Assert.Equal(("A-B", "B-C"), (enAB.Corte!.Tramo, enBC.Corte!.Tramo));
         Assert.Equal(["E"], enAB.Seccion.Figuras.Select(f => f.Id));
         Assert.Equal(["E", "E1"], enBC.Seccion.Figuras.Select(f => f.Id));
+    }
+
+    [Fact]
+    public void ElCorteDiceLaFormaDeLaGrapa()
+    {
+        var enS = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)],
+            FormaGrapa.S);
+
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Estribos = new ConfigEstribos(Adicionales: [enS]), Corte = new OpcionesCorte(X: 2200) });
+
+        Assert.Equal([("E", "C"), ("E1", "S")], v.Seccion.Figuras.Select(f => (f.Id, f.Forma)));
+    }
+
+    private static FiguraSeccion GrapaEnElCorte(GanchoEstribo gancho, FormaGrapa forma)
+    {
+        var grapa = new EstriboAdicional(TipoEstribo.Abierto, [new PuntoBarra(Posicion.Superior, 1, 2), new PuntoBarra(Posicion.Inferior, 1, 2)], forma);
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with
+        {
+            Estribos = new ConfigEstribos(Gancho: gancho, Adicionales: [grapa]),
+            Corte = new OpcionesCorte(X: 2200),
+        });
+        return v.Seccion.Figuras.Single(f => f.Id == "E1");
+    }
+
+    private static double Cola(FiguraSeccion f) => Math.Sqrt(Math.Pow(f.Puntos![0][0] - f.Puntos[1][0], 2) + Math.Pow(f.Puntos[0][1] - f.Puntos[1][1], 2));
+
+    [Fact]
+    public void ElCorteDibujaElGanchoDelAdicionalSegunSuAngulo()
+    {
+        // la cola en cm: la E del cuadro del #3 (5.7 en 135°, 6.5 en 180°) o 6 diámetros en 90° (5.7)
+        Assert.Equal(6.5, Cola(GrapaEnElCorte(GanchoEstribo.De180, FormaGrapa.C)), 6);
+        Assert.Equal(5.7, Cola(GrapaEnElCorte(GanchoEstribo.De135, FormaGrapa.C)), 6);
+        Assert.Equal(6 * 0.95, Cola(GrapaEnElCorte(GanchoEstribo.De90, FormaGrapa.C)), 6);
+    }
+
+    [Fact]
+    public void EnElCorteLaGrapaEnSTieneLasColasAUnLadoYAlOtroDeSusBarras()
+    {
+        FiguraSeccion c = GrapaEnElCorte(GanchoEstribo.De180, FormaGrapa.C), s = GrapaEnElCorte(GanchoEstribo.De180, FormaGrapa.S);
+        double Lado(FiguraSeccion f, double[] p) => Math.Sign(p[0] - f.Izquierda);
+
+        Assert.Equal(Lado(c, c.Puntos![0]), Lado(c, c.Puntos[^1]));
+        Assert.Equal(-Lado(s, s.Puntos![0]), Lado(s, s.Puntos[^1]));
+    }
+
+    [Fact]
+    public void ElCerradoDeLasEsquinasNoTraeTrazo()
+    {
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Corte = new OpcionesCorte(X: 2200) });
+
+        Assert.Null(v.Seccion.Figuras.Single(f => f.Id == "E").Puntos);
     }
 
     [Fact]

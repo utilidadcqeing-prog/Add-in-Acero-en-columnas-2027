@@ -57,8 +57,8 @@ public static class MotorEstribos
             IReadOnlyList<double> posiciones = DistribuidorEstribos.Posiciones(t, c, regla.Diametro);
             double alto = AltoAlEje(seccion, regla);
             int gancho = Gancho(regla, c.Gancho);
-            EstriboEnPortico Estribo(string id, TipoEstribo tipo, double largo) =>
-                new(id, tipo, t.Nombre, c.Diametro, c.Gancho, posiciones, largo, Kg(posiciones.Count, largo, regla));
+            EstriboEnPortico Estribo(string id, TipoEstribo tipo, double largo, FormaGrapa forma = FormaGrapa.C) =>
+                new(id, tipo, t.Nombre, c.Diametro, c.Gancho, posiciones, largo, Kg(posiciones.Count, largo, regla), forma);
 
             estribos.Add(Estribo(IdCerrado, TipoEstribo.Cerrado, Largo(TipoEstribo.Cerrado, seccion.Ancho - 2 * rec.Lados - regla.Diametro, alto, gancho)));
             // Los adicionales van solo en los tramos de su configuración, con las posiciones del cerrado de ese tramo.
@@ -68,7 +68,7 @@ public static class MotorEstribos
                     continue;
                 // Por dentro, el cerrado abraza siempre las mismas barras; por el eje, crece con el estribo del tramo.
                 double ancho = f.Derecha - f.Izquierda - 2 * estriboSeccion + regla.Diametro;
-                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, ancho, alto, gancho)));
+                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, ancho, alto, gancho), a.Tipo == TipoEstribo.Abierto ? a.Forma : FormaGrapa.C));
             }
         }
         return new ResultadoEstribos(estribos, corte, [principal, .. figuras], avisos);
@@ -113,7 +113,12 @@ public static class MotorEstribos
     private static double AltoAlEje(EntradaSeccion s, ReglaDiametro estribo) =>
         s.Alto - s.Recubrimiento.Arriba - s.Recubrimiento.Abajo - estribo.Diametro;
 
-    private static int Gancho(ReglaDiametro r, GanchoEstribo g) => g == GanchoEstribo.De135 ? r.Estribo135.B : r.Gancho90.B;
+    private static int Gancho(ReglaDiametro r, GanchoEstribo g) => g switch
+    {
+        GanchoEstribo.De135 => r.Estribo135.B,
+        GanchoEstribo.De180 => r.Gancho180.B,
+        _ => r.Gancho90.B,
+    };
 
     /// <summary>Decisión 8: el cerrado da la vuelta completa y el abierto es una sola rama; los dos llevan dos ganchos.</summary>
     private static double Largo(TipoEstribo tipo, double ancho, double alto, int gancho) =>

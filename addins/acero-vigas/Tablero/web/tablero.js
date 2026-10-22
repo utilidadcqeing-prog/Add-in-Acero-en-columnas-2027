@@ -48,9 +48,10 @@
     const opcional = (x) => (String(x).trim() === '' ? null : n(x));
     // la fila a mano de cada tipo (#84): '' = Auto
     const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
-    const estribos = (e) => ({ diametro: diametro(e.estD), gancho: e.estG === '135°' ? 'De135' : 'De90',
+    const estribos = (e) => ({ diametro: diametro(e.estD), gancho: ({ '135°': 'De135', '180°': 'De180' })[e.estG] || 'De90',
       largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)),
-      adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
+      adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, forma: a.forma || 'C',
+        barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
     try {
       const largos = {};
@@ -95,6 +96,10 @@
       <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: 2px solid #8A939D; border-radius: 4px"></div>
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
+      ${sec.trazos.length ? html`
+        <svg aria-hidden="true" width=${sec.wpx} height=${sec.hpx} style="position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none">
+          ${sec.trazos.map((pts) => html`<polyline points=${pts} fill="none" stroke="#0F7B6C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`)}
+        </svg>` : null}
       ${sec.proy.map((d) => html`
         <div role="img" aria-label=${d.label} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; border: 1.5px dashed #5E6670; border-radius: 50%; box-sizing: border-box"></div>`)}
       ${sec.dots.map((d) => html`
@@ -300,7 +305,7 @@
     guardarReglas(reglas, salir) {
       this.salirDeReglas = !!salir;
       this.setState({ guardando: true });
-      this.props.enviar({ tipo: 'guardarReglas', reglas: { porDiametro: reglas.rules.map((r) => ({ d: r.d, t: r.t, g: r.g, e: r.e, k: r.k })),
+      this.props.enviar({ tipo: 'guardarReglas', reglas: { porDiametro: reglas.rules.map((r) => ({ d: r.d, t: r.t, g: r.g, g180: r.g180, e: r.e, k: r.k })),
         multiplo: reglas.mult, distanciaLibreCm: reglas.gap, varilla12: reglas.bar12, problema: null } });
     }
 
@@ -526,7 +531,10 @@
         }),
         // lo que se ve detrás, hasta la profundidad: círculos vacíos con borde punteado
         proy: (C ? C.proyeccion : []).map((b) => ({ x: (b.x - b.d / 2) * K + 'px', y: (b.y - b.d / 2) * K + 'px', s: b.d * K + 'px', label: b.nombre })),
-        adds: secc.figuras.filter((f) => f.id !== 'E').map((f) => (f.tipo === 'Cerrado'
+        // los adicionales con su trazo de C# (PreviaAcero.EnElCorte): los ganchos según el ángulo y la forma C/S, como
+        // salen en Revit (Juan, 22-oct). Sin trazo (no debería pasar), la figura simple de antes.
+        trazos: secc.figuras.filter((f) => f.id !== 'E' && f.puntos).map((f) => f.puntos.map((p) => p[0] * K + ',' + p[1] * K).join(' ')),
+        adds: secc.figuras.filter((f) => f.id !== 'E' && !f.puntos).map((f) => (f.tipo === 'Cerrado'
           ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
           : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' })),
         stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
@@ -611,6 +619,11 @@
             const a = P ? P.avisos.find((x) => x.elemento === id && DESCARTA.includes(x.tipo)) : null;
             return a ? 'No se agrega: ' + a.texto : '';
           })(),
+          // la grapa en C o en S (Juan, 22-oct): solo el abierto
+          isAbierto: ea.tipo === 'Abierto',
+          formas: ['C', 'S'].map((f) => ({ f, pressed: (ea.forma || 'C') === f ? 'true' : 'false', label: 'Adicional ' + (i + 1) + ' en ' + f,
+            style: (ea.forma || 'C') === f ? on : off,
+            pick: () => ponerAdicionales(misAdicionales.map((x, j) => (j === i ? { ...x, forma: f } : x))) })),
           removeLabel: 'Quitar adicional ' + (i + 1), remove: () => ponerAdicionales(misAdicionales.filter((_, j) => j !== i)) })),
         isPicking: !!pk, noPick: !pk, pickNotDone: !pk || nArriba !== limite || nAbajo !== limite,
         pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
@@ -650,7 +663,8 @@
         lockBtn: lockedNow ? 'Desbloquear' : 'Guardar y bloquear', lockPath: lockedNow ? 'M4.5 6V4.2a2.5 2.5 0 015 0V6' : 'M4.5 6V4.2a2.5 2.5 0 014.6-1.3',
         rules: rulesData.map((r, i) => {
           const set = (key) => (e) => this.setState({ rules: rulesData.map((x, j) => (j === i ? { ...x, [key]: e.target.value } : x)) });
-          return { d: r.d, t: r.t, g: r.g, e: r.e, k: r.k, labT: 'Traslapo ' + r.d, labG: 'Gancho 90° ' + r.d, labE: 'Gancho de estribo 135° ' + r.d, labK: 'Peso por metro ' + r.d, setT: set('t'), setG: set('g'), setE: set('e'), setK: set('k') };
+          return { d: r.d, t: r.t, g: r.g, g180: r.g180, e: r.e, k: r.k, labT: 'Traslapo ' + r.d, labG: 'Gancho 90° ' + r.d, labG180: 'Gancho 180° ' + r.d,
+            labE: 'Gancho de estribo 135° ' + r.d, labK: 'Peso por metro ' + r.d, setT: set('t'), setG: set('g'), setG180: set('g180'), setE: set('e'), setK: set('k') };
         }),
         liveDot: vista.enVivo ? '#1E7A46' : '#9AA3AD', liveText: vista.enVivo ? 'En vivo con Revit' : 'Sin enlace con Revit',
         // #85, decisión 4: con la lista filtrada por "Seleccionar en Revit" se generan todos los de la lista (la sesión salta
@@ -1135,7 +1149,7 @@
                 ${opcionesDiametro(v.disponibles, 3, 4, v.estD, true)}
               </select>
               <select aria-label="Gancho del estribo" value=${v.estG} onChange=${v.setEstG} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
-                <option value="135°">135°</option><option value="90°">90°</option>
+                <option value="135°">135°</option><option value="90°">90°</option><option value="180°">180°</option>
               </select>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px">
@@ -1168,6 +1182,11 @@
                     <span style="color: #5E6670">${ea.desc}</span>
                     ${ea.motivo ? html`<span role="status" style="color: #B42318">${ea.motivo}</span>` : null}
                   </div>
+                  ${ea.isAbierto ? html`
+                    <div role="group" aria-label="Forma de la grapa" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                      ${ea.formas.map((fo) => html`
+                        <button type="button" aria-label=${fo.label} aria-pressed=${fo.pressed} onClick=${fo.pick} style="height: 26px; width: 28px; padding: 0; border: 0; font: inherit; font-weight: 600; cursor: pointer; ${fo.style}">${fo.f}</button>`)}
+                    </div>` : null}
                   <button type="button" aria-label=${ea.removeLabel} onClick=${ea.remove} style="height: 28px; padding: 0 8px; border: 0; background: transparent; font: inherit; color: #B42318; cursor: pointer">Quitar</button>
                 </div>`)}
               ${v.noPick ? html`
@@ -1254,18 +1273,19 @@
             </div>
             <span style="font-size: 12px; color: #5E6670; margin-top: -8px">Si un tramo no se puede resolver con 6 m, se usa una de 12 m.</span>
             <div style="display: flex; flex-direction: column; gap: 6px">
-              <div style="display: grid; grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
-                <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Estribo 135°</span><span>kg/m</span>
+              <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
+                <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Gancho 180°</span><span>Estribo 135°</span><span>kg/m</span>
               </div>
               ${v.rules.map((ru) => html`
-                <div style="display: grid; grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 5px; align-items: center">
+                <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; align-items: center">
                   <span style="color: #3F4A57">${ru.d}</span>
                   <input type="text" aria-label=${ru.labT} value=${ru.t} onInput=${ru.setT} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labG} value=${ru.g} onInput=${ru.setG} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
+                  <input type="text" aria-label=${ru.labG180} value=${ru.g180} onInput=${ru.setG180} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labE} value=${ru.e} onInput=${ru.setE} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labK} value=${ru.k} onInput=${ru.setK} disabled=${v.locked} style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 6px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                 </div>`)}
-              <span style="font-size: 12px; color: #5E6670; line-height: 1.45">Valores en metros, de los cuadros de ganchos y traslapos. El traslapo depende solo del diámetro. Las barras terminan con gancho de 90°; el estribo de 135° sale del cuadro de dimensiones mínimas.</span>
+              <span style="font-size: 12px; color: #5E6670; line-height: 1.45">Valores en metros, de los cuadros de ganchos y traslapos. El traslapo depende solo del diámetro. Las barras terminan con gancho de 90°; el estribo de 135° sale del cuadro de dimensiones mínimas y el de 180°, de la columna Gancho 180°.</span>
             </div>
           </div>` : null}
       </div>
