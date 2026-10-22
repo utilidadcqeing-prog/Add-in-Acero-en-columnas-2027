@@ -407,7 +407,7 @@ Probar("choques_cerrado_imposible_igual_que_antes", () =>
     // Dos barras #4 pegadas: la caja que las abraza es angosta para doblar #3.
     var juntas = new[] { new GanchoGrapa.Pieza(0.10, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.10, 0.20, 0.00635, 1) };
     string? texto = ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "fila 1");
-    Cierto(texto is not null && texto.StartsWith("El estribo cerrado de las fila 1 mide") &&
+    Cierto(texto is not null && texto.StartsWith("El estribo cerrado de la fila 1 mide") &&
            texto.Contains("con «#3 CQEING» necesita al menos 4,8 cm para doblarse"), texto ?? "null");
 
     var separadas = new[] { new GanchoGrapa.Pieza(0.05, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.25, 0.20, 0.00635, 1) };
@@ -500,6 +500,53 @@ Probar("choques_varios_traslapos_se_avisan", () =>
     // no se revisa; tiene que decirse.
     ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 15), LongDePrueba("#6", 3, comercial: 6));
     Cierto(r.VarillasSinRevisarEnTraslapo > 0, $"{r.VarillasSinRevisarEnTraslapo} varillas sin revisar");
+});
+
+// ---- #131: detalles de la revisión final
+
+Probar("choques_grapa_a_ras_de_una_barra", () =>
+{
+    // Grapa #3 (r 4,75 mm) y barra #5 (r 7,95 mm): se tocan a 12,7 mm entre ejes.
+    var trazo = new List<(double X, double Y)> { (0.05, 0.10), (0.35, 0.10) };
+    ChoquesSeccion.Choque? Con(double dy) => ChoquesSeccion.MenorSobreBarra(
+        trazo, 9.5, new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.10 + dy, 15.9, 4) }, new HashSet<int>(), "la grapa", Barra);
+    Cierto(Con(0.0120) is null, "se meten 0,7 mm: dentro de la tolerancia de 1 mm");
+    Cierto(Con(0.0115) is not null, "se meten 1,2 mm: choque");
+});
+
+Probar("choques_tramo_dentro_de_viga", () =>
+{
+    ConfigLongitudinal l = LongDePrueba("#6", 3);
+    l.EstribosMenores = new List<EstriboMenor> { new() { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 1, Hasta = 1 } };
+    Cierto(!ChoquesDe(ColumnaDePrueba(0.40, 3, TipoTramo.DentroDeViga), l).Normal.Any(c => c.Motivo.Contains("estribo cerrado")),
+        "en el nudo no van menores");
+});
+
+Probar("choques_columna_normal_con_grapas_sin_avisos", () =>
+{
+    ConfigLongitudinal l = LongDePrueba("#5", 1);
+    l.EstribosMenores = new List<EstriboMenor>
+    {
+        new() { Forma = FormaMenor.GrapaC, Eje = EjeCaja.Fila, Desde = 0, Hasta = 0 },
+        new() { Forma = FormaMenor.GrapaS, Eje = EjeCaja.Columna, Desde = 0, Hasta = 0 },
+    };
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 3), l);
+    Cierto(!r.Todos.Any(), string.Join(" | ", r.Todos.Select(c => c.Motivo)));
+});
+
+Probar("choques_texto_de_la_fila", () =>
+{
+    var barra3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38 };
+    var cerrado = new EstriboMenor { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 0, Hasta = 0 };
+    var juntas = new[] { new GanchoGrapa.Pieza(0.10, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.10, 0.20, 0.00635, 1) };
+    Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "fila 1")!.StartsWith("El estribo cerrado de la fila 1 mide"), "singular");
+    Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "filas 1 a 2")!.StartsWith("El estribo cerrado de las filas 1 a 2 mide"), "plural");
+});
+
+Probar("choques_traslapo_nombra_la_pieza_corrida", () =>
+{
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 9), LongDePrueba("#6", 3, comercial: 6));
+    Cierto(r.Traslapo.Any(c => c.Motivo.Contains("la pieza corrida de")), string.Join(" | ", r.Traslapo.Select(c => c.Motivo)));
 });
 
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");

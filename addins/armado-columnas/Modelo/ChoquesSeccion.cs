@@ -61,7 +61,11 @@ public static class ChoquesSeccion
     /// Cada par de piezas de varillas distintas que comparten altura y quedan
     /// más juntas que <see cref="SeparacionMinimaMm"/>: un choque por par.
     /// </summary>
-    public static IReadOnlyList<Choque> BarrasJuntas(IReadOnlyList<PiezaRedonda> piezas, Func<int, string> nombreVarilla)
+    public static IReadOnlyList<Choque> BarrasJuntas(IReadOnlyList<PiezaRedonda> piezas, Func<int, string> nombreVarilla) =>
+        BarrasJuntasPorPieza(piezas, p => nombreVarilla(p.Varilla));
+
+    /// <summary>Como <see cref="BarrasJuntas"/>, nombrando cada pieza (en el traslapo, "la pieza corrida de …").</summary>
+    private static IReadOnlyList<Choque> BarrasJuntasPorPieza(IReadOnlyList<PiezaRedonda> piezas, Func<PiezaRedonda, string> nombrePieza)
     {
         var choques = new List<Choque>();
         for (int i = 0; i < piezas.Count; i++)
@@ -77,7 +81,7 @@ public static class ChoquesSeccion
 
                 choques.Add(new Choque(
                     string.Format(Es, "{0} y {1} quedan a {2:0.0} cm libres; se piden {3:0.0} cm.",
-                        Mayuscula(nombreVarilla(a.Varilla)), nombreVarilla(b.Varilla), Math.Max(0, libreMm) / 10, minimoMm / 10),
+                        Mayuscula(nombrePieza(a)), nombrePieza(b), Math.Max(0, libreMm) / 10, minimoMm / 10),
                     new[] { Marca(a), Marca(b) },
                     $"juntas:{Math.Min(a.Varilla, b.Varilla)}-{Math.Max(a.Varilla, b.Varilla)}"));
             }
@@ -171,7 +175,7 @@ public static class ChoquesSeccion
                 .SelectMany(k => { (int a, int b) = IndicesDe(p.Eje, k); return new[] { a, b }; })
                 .Distinct().ToList();
             string donde = Donde(p);
-            string nombrePieza = p.Forma == FormaMenor.Cerrado ? $"el estribo cerrado de las {donde}" : $"la grapa de la {donde}";
+            string nombrePieza = p.Forma == FormaMenor.Cerrado ? $"el estribo cerrado {DeLa(donde)} {donde}" : $"la grapa de la {donde}";
 
             if (p.Forma == FormaMenor.Cerrado &&
                 CerradoImposible(p, barraPieza, abrazadas.Select(Pieza), donde) is string imposible)
@@ -188,8 +192,10 @@ public static class ChoquesSeccion
 
         // La zona de traslapo: dónde quedan las piezas corridas, con la misma
         // cuenta que el generador.
+        // Con o sin gancho de anclaje, el mismo criterio que la pestaña «Traslapos».
+        PlanTraslapos.Columna columnaTraslapos = PlanTraslapos.Columna.De(columna);
         PlanTraslapos.Resultado plan = PlanTraslapos.Calcular(
-            PlanTraslapos.Columna.De(columna),
+            columnaTraslapos,
             barras.Where((_, i) => i % 2 == 0).Select(b => b.DiametroMm),
             barras.Where((_, i) => i % 2 == 1).Select(b => b.DiametroMm),
             new PlanTraslapos.Opciones(cfgLong.LongitudComercialBarra, cfgLong.RedondeoVarillas, cfgLong.SolapeMayorDeLosDos));
@@ -216,7 +222,7 @@ public static class ChoquesSeccion
 
             pedidos.Add(new AcomodoTraslapos.PedidoSeccion(
                 b.X, b.Y, b.DiametroMm / 2000, b.DiametroMm / 1000, b.Posicion == PosicionBarra.Esquina,
-                ConGancho: columna.IdZapata is not null, Normal: normalBarra, CentroSeccion: (ladoX / 2, ladoY / 2),
+                ConGancho: columnaTraslapos.ConGanchos, Normal: normalBarra, CentroSeccion: (ladoX / 2, ladoY / 2),
                 Entera: (columna.ZInferiorLongitudinal, columna.ZSuperior),
                 Abajo: unTraslapo ? (tipo.Piezas[0].ZDesde, tipo.Piezas[0].ZHasta) : null,
                 Arriba: unTraslapo ? (tipo.Piezas[1].ZDesde, tipo.Piezas[1].ZHasta) : null,
@@ -251,7 +257,12 @@ public static class ChoquesSeccion
         }
 
         var yaAvisados = normal.Select(c => c.Motivo).ToHashSet();
-        var traslapo = BarrasJuntas(enTraslapo, Nombre)
+        // La pieza que no está donde se pidió la barra es la corrida.
+        string NombreEnTraslapo(PiezaRedonda p) =>
+            Math.Abs(p.X - barras[p.Varilla].X) + Math.Abs(p.Y - barras[p.Varilla].Y) > 1e-6
+                ? $"la pieza corrida de {Nombre(p.Varilla)}"
+                : Nombre(p.Varilla);
+        var traslapo = BarrasJuntasPorPieza(enTraslapo, NombreEnTraslapo)
             .Where(c => !yaAvisados.Contains(c.Motivo))
             .Select(c => c with { Motivo = "En la zona de traslapo: " + Minuscula(c.Motivo), Clave = "traslapo:" + c.Clave })
             .ToList();
@@ -284,9 +295,9 @@ public static class ChoquesSeccion
     private static IReadOnlyList<AcomodoTraslapos.Pieza> GanchosDelEstribo(
         IReadOnlyList<(double X, double Y)> eje, double diametro, double zInf, double zSup)
     {
-        // EstriboCerrado arranca y termina con su gancho: 6 puntos del arco de
-        // 45° (pasos de 7,5°) más la punta de la cola en cada extremo.
-        const int PuntosDelGancho = 8;
+        // EstriboCerrado arranca y termina con su gancho: los puntos del arco
+        // de 45° (de punta a punta) más la punta de la cola en cada extremo.
+        const int PuntosDelGancho = (int)(45 / PlantaArmado.PasoGrados) + 2;
         double radio = diametro / 2;
         var trocitos = new List<AcomodoTraslapos.Pieza>();
         foreach (IEnumerable<(double X, double Y)> punta in new[] { eje.Take(PuntosDelGancho), eje.Skip(Math.Max(0, eje.Count - PuntosDelGancho)) })
@@ -369,10 +380,14 @@ public static class ChoquesSeccion
         if (anchoMm >= minimoMm) return null;
 
         return string.Format(Es,
-            "El estribo cerrado de las {0} mide {1:0.0} cm de ancho (entre los ejes de su barra), y con «{2}» necesita al menos {3:0.0} cm para doblarse: " +
+            "El estribo cerrado {4} {0} mide {1:0.0} cm de ancho (entre los ejes de su barra), y con «{2}» necesita al menos {3:0.0} cm para doblarse: " +
             "dibújalo entre barras más separadas o usa una barra más delgada.",
-            donde, anchoMm / 10, barra.Nombre, minimoMm / 10);
+            donde, anchoMm / 10, barra.Nombre, minimoMm / 10, DeLa(donde));
     }
+
+    /// <summary>"de la" para una fila o columna, "de las" para un rango ("filas 1 a 3").</summary>
+    private static string DeLa(string donde) =>
+        donde.StartsWith("filas", StringComparison.Ordinal) || donde.StartsWith("columnas", StringComparison.Ordinal) ? "de las" : "de la";
 
     private static double DistanciaASegmento(double px, double py, (double X, double Y) a, (double X, double Y) b)
     {

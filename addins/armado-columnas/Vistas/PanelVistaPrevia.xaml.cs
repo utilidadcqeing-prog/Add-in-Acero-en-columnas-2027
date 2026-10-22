@@ -56,6 +56,9 @@ public partial class PanelVistaPrevia : UserControl
     public void MostrarMensaje(string mensaje)
     {
         _redibujar = null;
+        // Sin dibujo no hay nada que elegir.
+        OpcionSeccionNormal.IsEnabled = false;
+        OpcionZonaTraslapo.IsEnabled = false;
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
@@ -135,6 +138,7 @@ public partial class PanelVistaPrevia : UserControl
         ChoquesSeccion.Resultado choques = ChoquesSeccion.DeTramo(
             columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm);
         _ajustandoSelector = true;
+        OpcionSeccionNormal.IsEnabled = true;
         OpcionZonaTraslapo.IsEnabled = choques.HayTraslapo;
         if (!choques.HayTraslapo) OpcionSeccionNormal.IsChecked = true;
         _ajustandoSelector = false;

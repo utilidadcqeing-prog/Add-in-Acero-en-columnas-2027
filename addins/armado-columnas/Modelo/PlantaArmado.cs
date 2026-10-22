@@ -24,7 +24,7 @@ using System.Linq;
 public static class PlantaArmado
 {
     /// <summary>Cada cuántos grados se toma un punto de un arco.</summary>
-    private const double PasoGrados = 7.5;
+    public const double PasoGrados = 7.5;
 
     private static readonly double Raiz2 = Math.Sqrt(2) / 2;
 

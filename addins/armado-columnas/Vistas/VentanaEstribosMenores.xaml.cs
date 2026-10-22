@@ -344,8 +344,10 @@ public partial class VentanaEstribosMenores : Window
 
         // Los choques (#131): en la zona de traslapo, además las piezas corridas.
         _choques = _choquesDe?.Invoke(_piezas) ?? ChoquesSeccion.Resultado.Vacio;
+        _ajustandoSelector = true;
         OpcionZonaTraslapo.IsEnabled = _choques.HayTraslapo;
         if (!_choques.HayTraslapo && OpcionZonaTraslapo.IsChecked == true) OpcionSeccionNormal.IsChecked = true;
+        _ajustandoSelector = false;
         bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
         if (verTraslapo)
             foreach (ChoquesSeccion.PiezaRedonda pieza in _choques.PiezasTraslapo)
@@ -535,10 +537,13 @@ public partial class VentanaEstribosMenores : Window
         }
     }
 
+    /// <summary>Mientras Dibujar acomoda el selector: sus cambios no tienen que volver a dibujar.</summary>
+    private bool _ajustandoSelector;
+
     private void OpcionSeccion_Checked(object sender, RoutedEventArgs e)
     {
         // El XAML marca "Sección normal" mientras se construye la ventana, antes de tener sección.
-        if (IsLoaded) Dibujar();
+        if (IsLoaded && !_ajustandoSelector) Dibujar();
     }
 
     private void ActualizarNotas()
@@ -548,7 +553,10 @@ public partial class VentanaEstribosMenores : Window
         // el mouse por su marca roja (una nota por choque tapaba la sección).
         bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
         List<string> imposibles = _piezas.Select(Imposible).OfType<string>().ToList();
-        int choques = (verTraslapo ? _choques.Traslapo : _choques.Normal).Count(c => !imposibles.Contains(c.Motivo));
+        // Los cerrados que no se doblan ya salen arriba (Imposible): no se cuentan
+        // dos veces, aunque sus medidas difieran en un mm (otro estribo del tramo).
+        int choques = (verTraslapo ? _choques.Traslapo : _choques.Normal)
+            .Count(c => !c.Clave.StartsWith("cerrado:", StringComparison.Ordinal));
         var resumenChoques = new List<string>();
         if (choques > 0)
             resumenChoques.Add(

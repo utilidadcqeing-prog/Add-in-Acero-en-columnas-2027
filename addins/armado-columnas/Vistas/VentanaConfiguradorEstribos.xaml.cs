@@ -1920,8 +1920,18 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
-        // #131: si algo choca, se avisa y se deja seguir.
-        IReadOnlyList<(string Columna, string Motivo)> choques = ChoquesDelPlan(plan);
+        // #131: si algo choca, se avisa y se deja seguir. Un error al revisar
+        // nunca impide generar: se genera como si no hubiera choques.
+        IReadOnlyList<(string Columna, string Motivo)> choques;
+        try
+        {
+            choques = ChoquesDelPlan(plan);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[#131] No se pudieron revisar los choques antes de generar: {ex}");
+            choques = Array.Empty<(string, string)>();
+        }
         if (choques.Count > 0 && new VentanaChoques(choques) { Owner = this }.ShowDialog() != true)
         {
             TextoEstado.Text = "Generación cancelada: revisa los choques marcados en rojo.";

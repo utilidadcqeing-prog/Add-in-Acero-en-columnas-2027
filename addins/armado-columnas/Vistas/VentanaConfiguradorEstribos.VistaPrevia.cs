@@ -111,6 +111,9 @@ public partial class VentanaConfiguradorEstribos
         if (tramo is null) return null;
 
         (ConfigTramo cfgTramo, double recubrimiento, double estriboMasGrueso) = EntradasDeLaSeccion(idColumna, columna);
+        // Si se usa otro tramo, con SU estribo (lo guardado), no con el del panel.
+        if (tramo != activo && _configPorTramo.TryGetValue((idColumna, tramo.Indice), out ConfigTramo? guardada))
+            cfgTramo = guardada;
         ConfigLongitudinal longitudinal = LeerLongitudinalConEstribosMenores();
         return piezas =>
         {
