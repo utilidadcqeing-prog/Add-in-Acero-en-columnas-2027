@@ -369,7 +369,7 @@ public static class GeneradorLongitudinal
         // cara Y), que no recorre el perímetro -- dejaba barras vecinas en el
         // mismo grupo, incluso en el caso más simple de solo 4 esquinas
         // (quedaban juntas las dos de la derecha).
-        var anillo = new List<(RebarBarType Barra, double X, double Y, XYZ Normal)>();
+        var anillo = new List<(RebarBarType Barra, double X, double Y, XYZ Normal, bool Esquina)>();
 
         double xEsqIzq = referencia.XMin + insetEsquinas;
         double xEsqDer = referencia.XMax - insetEsquinas;
@@ -394,12 +394,20 @@ public static class GeneradorLongitudinal
         //    en las dos de abajo, X en las dos de arriba. En la esquina
         //    superior derecha los dos lados positivos se salen: ahí
         //    BarraContinua corre la varilla entera un diámetro para el otro
-        //    lado (ver BarraContinua.Alinear y los límites de abajo).
+        //    lado (ver BarraContinua.Alinear y los límites de abajo). Este es
+        //    solo el eje de partida: desde el 21-oct el sentido del dibujo
+        //    elige hacia qué lado se corre, y en las esquinas se prueban los
+        //    dos ejes (ver más abajo, AcomodoTraslapos.Cuatro).
         //
         // La barra de cada posición sale de cfg.Anillo(), el mismo orden en
         // que se recorre acá: así A/B (dónde traslapa) y la cara (qué número
         // lleva) no se pueden desincronizar.
         RebarBarType BarraDe(int indice) => barraPorPosicion[posiciones[indice]];
+
+        // Los estribos principales ya están creados: dónde quedaron sus
+        // dobleces y sus ganchos de verdad.
+        EstribosMedidos estribos = MedirEstribos(doc, pila.Select(c => c.Host));
+        IReadOnlyList<AcomodoTraslapos.Pieza> ganchos = estribos.Ganchos;
 
         void AgregarEsquina(bool izquierda, bool abajo)
         {
@@ -407,7 +415,19 @@ public static class GeneradorLongitudinal
             double inset = Inset(barra);
             double x = izquierda ? referencia.XMin + inset : referencia.XMax - inset;
             double y = abajo ? referencia.YMin + inset : referencia.YMax - inset;
-            anillo.Add((barra, x, y, abajo ? XYZ.BasisY : XYZ.BasisX));
+
+            // La barra de esquina va dentro del doblez del estribo, tocándolo
+            // (como la de una grapa, #130). La cuenta del inset la deja unos
+            // milímetros afuera, pisando el doblez: con la normal en X o en Y
+            // Revit la arrimaba sola, pero con la normal diagonal no (medido
+            // el 21-oct en la columna 387983: quedó en (3,307; -0,088) en vez
+            // de (3,314; -0,081), metida 8,8 mm en el doblez del gancho).
+            (double xd, double yd) = EnElDoblez(estribos.Dobleces, x, y, barra.BarNominalDiameter / 2);
+            if (Math.Abs(xd - x) + Math.Abs(yd - y) > 1e-6)
+                BarraContinua.Traza?.Invoke(
+                    $"ESQUINA «{barra.Name}» dentro del doblez del estribo: ({GeometriaSeccion.Metros(x):0.####}, {GeometriaSeccion.Metros(y):0.####}) -> " +
+                    $"({GeometriaSeccion.Metros(xd):0.####}, {GeometriaSeccion.Metros(yd):0.####}).");
+            anillo.Add((barra, xd, yd, abajo ? XYZ.BasisY : XYZ.BasisX, true));
         }
 
         // Intermedias de las caras inferior/superior: varían en X.
@@ -416,7 +436,7 @@ public static class GeneradorLongitudinal
             RebarBarType barra = BarraDe(anillo.Count);
             double x = PosicionIntermedia(xEsqIzq, xEsqDer, columnas, c);
             double y = abajo ? referencia.YMin + Inset(barra) : referencia.YMax - Inset(barra);
-            anillo.Add((barra, x, y, XYZ.BasisX));
+            anillo.Add((barra, x, y, XYZ.BasisX, false));
         }
 
         // Intermedias de las caras izquierda/derecha: varían en Y.
@@ -425,7 +445,7 @@ public static class GeneradorLongitudinal
             RebarBarType barra = BarraDe(anillo.Count);
             double y = PosicionIntermedia(yEsqAbajo, yEsqArriba, filas, f);
             double x = izquierda ? referencia.XMin + Inset(barra) : referencia.XMax - Inset(barra);
-            anillo.Add((barra, x, y, XYZ.BasisY));
+            anillo.Add((barra, x, y, XYZ.BasisY, false));
         }
 
         AgregarEsquina(izquierda: true, abajo: true);
@@ -451,9 +471,21 @@ public static class GeneradorLongitudinal
         var avisosDeBarras = new HashSet<string>();
 
         int piezas = 0;
+        int ganchosGirados = 0;
+        // Las varillas creadas: se terminan de acomodar todas juntas al final,
+        // para que las piezas corridas de los traslapos no choquen entre sí.
+        var creadas = new List<(BarraContinua.Pedido Pedido, IReadOnlyList<Rebar> Cadena)>();
+
+        // Primero se arma el pedido de cada varilla y se elige, ANTES de crear
+        // nada, cómo dejar cada una para que las piezas corridas no choquen:
+        // de cuál pieza se corre y hacia dónde sale el sentido del dibujo
+        // (AcomodoTraslapos.Cuatro). Después, con las piezas ya en el modelo,
+        // BarraContinua.Acomodar afina el lado con las posiciones reales.
+        var pedidos = new List<BarraContinua.Pedido>();
+        var seccion = new List<AcomodoTraslapos.PedidoSeccion>();
         for (int i = 0; i < anillo.Count; i++)
         {
-            (RebarBarType barraDeLaPosicion, double x, double y, XYZ normal) = anillo[i];
+            (RebarBarType barraDeLaPosicion, double x, double y, XYZ normal, bool esquina) = anillo[i];
 
             PlanTraslapos.PlanTipo plan = planTraslapos.De(grupoA: i % 2 == 0, EstandarCQ.DiametroMm(barraDeLaPosicion));
 
@@ -475,19 +507,151 @@ public static class GeneradorLongitudinal
             var limites = new BarraContinua.Limites(
                 Math.Min(xEsqIzq, x), Math.Max(xEsqDer, x), Math.Min(yEsqAbajo, y), Math.Max(yEsqArriba, y));
 
-            BarraContinua.Resultado creada = BarraContinua.Crear(doc, new BarraContinua.Pedido(
+            var pedido = new BarraContinua.Pedido(
                 barraDeLaPosicion, x, y, normal,
                 EstandarCQ.APies(contexto.ZInferiorLongitudinal), EstandarCQ.APies(contexto.ZSuperior),
                 traslapos, pila,
                 GanchoDe(barraDeLaPosicion), GanchoDe(barraDeLaPosicion), orientacionAbajo, orientacionArriba,
-                limites));
+                limites);
+            pedidos.Add(pedido);
+
+            // Las cuatro maneras solo están medidas con un traslapo (dos
+            // piezas); con más, la varilla va como siempre. Qué ejes se
+            // prueban y por qué: AcomodoTraslapos.PlanearSeccion (la misma
+            // cuenta que muestra la ventana, #131).
+            bool unTraslapo = traslapos.Count == 1 && plan.Piezas.Count == 2;
+            seccion.Add(new AcomodoTraslapos.PedidoSeccion(
+                x, y, barraDeLaPosicion.BarNominalDiameter / 2, barraDeLaPosicion.BarNominalDiameter, esquina,
+                ConGancho: pedido.GanchoAbajo is not null || pedido.GanchoArriba is not null,
+                Normal: (normal.X, normal.Y),
+                CentroSeccion: ((referencia.XMin + referencia.XMax) / 2, (referencia.YMin + referencia.YMax) / 2),
+                Entera: (pedido.ZInicio, pedido.ZFin),
+                Abajo: unTraslapo ? (EstandarCQ.APies(plan.Piezas[0].ZDesde), EstandarCQ.APies(plan.Piezas[0].ZHasta)) : null,
+                Arriba: unTraslapo ? (EstandarCQ.APies(plan.Piezas[1].ZDesde), EstandarCQ.APies(plan.Piezas[1].ZHasta)) : null,
+                Limites: (limites.XMin, limites.XMax, limites.YMin, limites.YMax)));
+        }
+
+        // Ninguna pieza corrida puede atravesar los ganchos del estribo
+        // principal (Luciano, 21-oct).
+        IReadOnlyList<(AcomodoTraslapos.Manera? Manera, (double X, double Y) Eje)> planeadas =
+            AcomodoTraslapos.PlanearSeccion(seccion, ganchos);
+        if (!AcomodoTraslapos.UltimaFueCompleta)
+            BarraContinua.Traza?.Invoke("ACOMODO: llegó al tope de pasos; quedan las maneras más buenas que encontró hasta ahí.");
+
+        for (int i = 0; i < pedidos.Count; i++)
+        {
+            (AcomodoTraslapos.Manera Manera, XYZ Normal)? elegida = planeadas[i].Manera is { } mp
+                ? (mp, new XYZ(planeadas[i].Eje.X, planeadas[i].Eje.Y, 0))
+                : null;
+            AcomodoTraslapos.Manera? manera = elegida?.Manera;
+            BarraContinua.Pedido pedido = pedidos[i];
+            if (elegida is { } e)
+            {
+                pedido = pedido with { DeArribaAAbajo = e.Manera.DeArribaAAbajo };
+
+                // Con la normal diagonal, Revit no respeta mover la cadena en
+                // diagonal después (medido el 21-oct: de dos esquinas, una vez
+                // quedó bien una y otra vez la otra; la que no, corrida 36 mm en
+                // Y y atravesando el estribo). Si la corrida tiene que quedar
+                // hacia −normal, se dibuja la varilla ya corrida un diámetro
+                // hacia −normal: Revit corre la pieza donde empieza el dibujo
+                // +1 diámetro, que la deja en la posición pedida, y la otra
+                // queda corrida donde se planeó. Así no hay nada que mover.
+                bool diagonal = !e.Normal.IsAlmostEqualTo(XYZ.BasisX) && !e.Normal.IsAlmostEqualTo(XYZ.BasisY);
+                if (diagonal && e.Manera.Signo < 0)
+                    pedido = pedido with { Desfase = e.Normal.Negate() * pedido.Barra.BarNominalDiameter };
+                if (!e.Normal.IsAlmostEqualTo(pedido.Normal))
+                {
+                    // El gancho dobla según la normal: se recalcula hacia adentro.
+                    (RebarTerminationOrientation abajo, RebarTerminationOrientation arriba) =
+                        OrientacionesHaciaAdentro(referencia, pedido.X, pedido.Y, e.Normal);
+                    pedido = pedido with { Normal = e.Normal, OrientacionAbajo = abajo, OrientacionArriba = arriba };
+                    BarraContinua.Traza?.Invoke(
+                        $"EJE ({e.Normal.X:0.###}, {e.Normal.Y:0.###}) para la esquina «{pedido.Barra.Name}» en ({GeometriaSeccion.Metros(pedido.X):0.###}, " +
+                        $"{GeometriaSeccion.Metros(pedido.Y):0.###}): así su pieza corrida va por la otra cara y no choca.");
+                }
+            }
+            if (manera is not null && pedido.DeArribaAAbajo)
+                BarraContinua.Traza?.Invoke(
+                    $"DIBUJO de arriba hacia abajo para la varilla «{pedido.Barra.Name}» en ({GeometriaSeccion.Metros(pedido.X):0.###}, " +
+                    $"{GeometriaSeccion.Metros(pedido.Y):0.###}): así se corre su pieza de " +
+                    $"{(manera.CorridaLaDeArriba ? "arriba" : "abajo")} y no choca.");
+
+            // En el borde del lote (#139): el gancho que, mirando hacia el
+            // centro, terminaría del lado del vecino se gira al otro lado.
+            switch (LadoLejosDelLindero(contexto.Lindero, pedido))
+            {
+                case { Girado: { } girado }:
+                    pedido = girado;
+                    ganchosGirados++;
+                    BarraContinua.Traza?.Invoke(
+                        $"LINDERO: gancho girado para la varilla «{pedido.Barra.Name}» en ({GeometriaSeccion.Metros(pedido.X):0.###}, " +
+                        $"{GeometriaSeccion.Metros(pedido.Y):0.###}): hacia el centro cruzaba la línea de propiedad.");
+                    break;
+                case { SinSalida: true }:
+                    avisosDeBarras.Add(
+                        "un gancho cruza la línea de propiedad para los dos lados (columna más angosta que el gancho); revisarlo en el modelo.");
+                    break;
+            }
+
+            BarraContinua.Resultado creada = BarraContinua.Crear(doc, pedido);
 
             piezas += creada.Piezas;
             if (creada.Aviso is not null) avisosDeBarras.Add(creada.Aviso);
+            if (creada.Cadena is { Count: > 0 } cadena) creadas.Add((pedido, cadena));
+        }
+
+        // Dónde quedó de verdad cada varilla, ya acomodada: las grapas y los
+        // cerrados la buscan acá (#130).
+        IReadOnlyList<IReadOnlyList<BarraContinua.PiezaReal>> acomodadas = BarraContinua.Acomodar(doc, creadas, ganchos);
+        var barrasReales = new List<BarraReal>();
+        for (int i = 0; i < creadas.Count; i++)
+            if (acomodadas[i].Count > 0)
+                barrasReales.Add(new BarraReal(creadas[i].Pedido.Barra.BarNominalDiameter / 2, acomodadas[i]));
+
+        // Si aun así alguna pieza atraviesa el gancho del estribo, se avisa
+        // (Luciano, 21-oct). Puede ser la pieza corrida de un traslapo o la
+        // barra misma, en su posición, si la cola del gancho le pasa encima.
+        double tolerancia = UnitUtils.ConvertToInternalUnits(1, UnitTypeId.Millimeters);
+        foreach (BarraReal b in barrasReales)
+        {
+            var piezasReales = b.Piezas.Select(q => new AcomodoTraslapos.Pieza(q.X, q.Y, b.Radio, q.ZInf, q.ZSup)).ToList();
+            double metida = AcomodoTraslapos.MaximaMetida(piezasReales, ganchos);
+            if (metida <= tolerancia) continue;
+            BarraContinua.PiezaReal primera = b.Piezas[0];
+            res.Avisos.Add(
+                $"{contexto.Marca}: la barra longitudinal en ({GeometriaSeccion.Metros(primera.X):0.###}, {GeometriaSeccion.Metros(primera.Y):0.###}) m " +
+                $"atraviesa el gancho del estribo ({GeometriaSeccion.Metros(metida) * 1000:0.#} mm); no hay lugar para dejarla sin tocarlo. " +
+                "Revisar la separación de las barras o la esquina donde cierra el estribo.");
+        }
+
+        // Y si alguna pieza quedó fuera de las esquinas, está atravesando el
+        // estribo: pasó el 21-oct cuando Revit no respetó el movimiento en
+        // diagonal de una cadena (ver arriba, la normal diagonal).
+        for (int i = 0; i < creadas.Count; i++)
+        {
+            BarraContinua.Limites l = creadas[i].Pedido.Limites;
+            foreach (BarraContinua.PiezaReal q in acomodadas[i])
+            {
+                double afuera = Math.Max(
+                    Math.Max(l.XMin - q.X, q.X - l.XMax),
+                    Math.Max(l.YMin - q.Y, q.Y - l.YMax));
+                if (afuera <= tolerancia) continue;
+                res.Avisos.Add(
+                    $"{contexto.Marca}: una pieza de la barra longitudinal en ({GeometriaSeccion.Metros(creadas[i].Pedido.X):0.###}, " +
+                    $"{GeometriaSeccion.Metros(creadas[i].Pedido.Y):0.###}) m quedó en ({GeometriaSeccion.Metros(q.X):0.###}, {GeometriaSeccion.Metros(q.Y):0.###}) m, " +
+                    $"{GeometriaSeccion.Metros(afuera) * 1000:0.#} mm por fuera de las esquinas: atraviesa el estribo. Revisarla en el modelo.");
+                break;
+            }
         }
 
         foreach (string aviso in avisosDeBarras)
             res.Avisos.Add($"{contexto.Marca}: {aviso}");
+
+        if (ganchosGirados > 0)
+            res.Avisos.Add(
+                $"{contexto.Marca}: está sobre la línea de propiedad; {ganchosGirados} varilla(s) llevan el gancho girado " +
+                "para que no termine del lado del vecino.");
 
         if (piezas > 0)
             res.Detalles.Add(
@@ -498,8 +662,102 @@ public static class GeneradorLongitudinal
             columnas, filas, insetEsquinas, insetX, insetY, recubrimientoPies, diametroEstribo,
             barraPorPosicion.GetValueOrDefault(PosicionBarra.CaraX)?.BarNominalDiameter ?? 0,
             barraPorPosicion.GetValueOrDefault(PosicionBarra.CaraY)?.BarNominalDiameter ?? 0,
-            referencia, res);
+            barrasReales, referencia, res);
     }
+
+    /// <summary>
+    /// Los ganchos de los estribos de la columna, en trocitos, para que las
+    /// piezas corridas de los traslapos no los atraviesen: en la esquina donde
+    /// cierra el estribo, el gancho entra en diagonal hacia el centro y una
+    /// pieza corrida a lo largo de la cara le queda encima (Luciano, 21-oct).
+    ///
+    /// Se mide el estribo de verdad: la línea con ganchos menos la línea sin
+    /// ganchos dice cuántos tramos son gancho en cada punta. Cada trocito es un
+    /// círculo del radio de la barra del estribo (medio milímetro menos, para
+    /// que la barra de esquina, que el gancho abraza, no cuente como choque) y
+    /// cubre las alturas del juego entero: en planta todos los estribos del
+    /// juego son iguales.
+    /// </summary>
+    /// <remarks>
+    /// También devuelve los dobleces (los arcos, con sus ganchos incluidos):
+    /// centro en planta y radio por dentro, para poner la barra de esquina
+    /// dentro del doblez (<see cref="EnElDoblez"/>).
+    /// </remarks>
+    private static EstribosMedidos MedirEstribos(Document doc, IEnumerable<FamilyInstance> hosts)
+    {
+        var ids = new HashSet<ElementId>(hosts.Select(h => h.Id));
+        var trocitos = new List<AcomodoTraslapos.Pieza>();
+        var dobleces = new List<(double X, double Y, double RadioInterior)>();
+        double tolerancia = UnitUtils.ConvertToInternalUnits(0.5, UnitTypeId.Millimeters);
+        foreach (Rebar r in new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>())
+        {
+            try
+            {
+                if (!ids.Contains(r.GetHostId())) continue;
+                if (doc.GetElement(r.GetShapeId()) is not RebarShape { RebarStyle: RebarStyle.StirrupTie }) continue;
+                if (doc.GetElement(r.GetTypeId()) is not RebarBarType barra) continue;
+                if (r.get_BoundingBox(null) is not { } caja) continue;
+
+                IList<Curve> con = r.GetTransformedCenterlineCurves(true, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
+                foreach (Arc arco in con.OfType<Arc>())
+                    dobleces.Add((arco.Center.X, arco.Center.Y, arco.Radius - barra.BarNominalDiameter / 2));
+
+                bool ganchoInicio = r.GetHookTypeId(0) != ElementId.InvalidElementId;
+                bool ganchoFin = r.GetHookTypeId(1) != ElementId.InvalidElementId;
+                if (!ganchoInicio && !ganchoFin) continue;
+
+                IList<Curve> sin = r.GetTransformedCenterlineCurves(true, true, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
+                int extra = con.Count - sin.Count;
+                int puntas = (ganchoInicio ? 1 : 0) + (ganchoFin ? 1 : 0);
+                if (extra <= 0 || extra % puntas != 0) continue;
+                int porPunta = extra / puntas;
+
+                var deGancho = new List<Curve>();
+                if (ganchoInicio) deGancho.AddRange(con.Take(porPunta));
+                if (ganchoFin) deGancho.AddRange(con.Skip(con.Count - porPunta));
+
+                double radio = barra.BarNominalDiameter / 2;
+                foreach (Curve c in deGancho)
+                {
+                    int pasos = Math.Max(1, (int)Math.Ceiling(c.Length / (radio / 2)));
+                    for (int k = 0; k <= pasos; k++)
+                    {
+                        XYZ q = c.Evaluate((double)k / pasos, normalized: true);
+                        trocitos.Add(new AcomodoTraslapos.Pieza(q.X, q.Y, radio - tolerancia, caja.Min.Z, caja.Max.Z));
+                    }
+                }
+
+                BarraContinua.Traza?.Invoke(
+                    $"GANCHOS del estribo {r.Id.Value}: {porPunta} tramo(s) por punta, Z {GeometriaSeccion.Metros(caja.Min.Z):0.###} -> " +
+                    $"{GeometriaSeccion.Metros(caja.Max.Z):0.###}; " +
+                    string.Join("; ", deGancho.Select(c =>
+                        $"({GeometriaSeccion.Metros(c.GetEndPoint(0).X) * 1000:0.0}, {GeometriaSeccion.Metros(c.GetEndPoint(0).Y) * 1000:0.0}) -> " +
+                        $"({GeometriaSeccion.Metros(c.GetEndPoint(1).X) * 1000:0.0}, {GeometriaSeccion.Metros(c.GetEndPoint(1).Y) * 1000:0.0}) mm")));
+            }
+            catch
+            {
+                // best-effort: ese estribo no se mira
+            }
+        }
+
+        return new EstribosMedidos(trocitos, dobleces);
+    }
+
+    /// <summary>Lo medido de los estribos principales: sus ganchos en trocitos y sus dobleces.</summary>
+    private sealed record EstribosMedidos(
+        IReadOnlyList<AcomodoTraslapos.Pieza> Ganchos,
+        IReadOnlyList<(double X, double Y, double RadioInterior)> Dobleces);
+
+    /// <summary>
+    /// <see cref="SeccionPlanta.EnElDoblez"/> con los dobleces medidos y un
+    /// alcance de 4 cm (en pies). La misma cuenta dibuja la vista previa.
+    /// </summary>
+    private static (double X, double Y) EnElDoblez(
+        IReadOnlyList<(double X, double Y, double RadioInterior)> dobleces, double x, double y, double radio) =>
+        SeccionPlanta.EnElDoblez(dobleces, x, y, radio, UnitUtils.ConvertToInternalUnits(0.04, UnitTypeId.Meters));
+
+    /// <summary>Una varilla longitudinal ya creada: su radio y dónde quedó cada pieza (pies).</summary>
+    private sealed record BarraReal(double Radio, IReadOnlyList<BarraContinua.PiezaReal> Piezas);
 
     /// <summary>
     /// Los estribos menores (grapas en C y en S, y cerrados) de cada tramo
@@ -532,6 +790,7 @@ public static class GeneradorLongitudinal
         double diametroEstribo,
         double diametroCaraX,
         double diametroCaraY,
+        List<BarraReal> barrasReales,
         FootprintHost referencia,
         ResultadoArmado res)
     {
@@ -548,6 +807,69 @@ public static class GeneradorLongitudinal
         void Avisar(string aviso)
         {
             if (avisos.Add(aviso) && !res.Avisos.Contains(aviso)) res.Avisos.Add(aviso);
+        }
+
+        // Las piezas que engancha una punta de grapa a la altura z: las de la
+        // varilla REAL más cercana a la posición teórica (Revit las corre unos
+        // milímetros, #130). Sin varilla real cerca, la teórica.
+        List<GanchoGrapa.Pieza> PiezasEn(XYZ teorica, double radioTeorico, double z)
+        {
+            static double Distancia(BarraContinua.PiezaReal p, XYZ q) => Math.Sqrt((p.X - q.X) * (p.X - q.X) + (p.Y - q.Y) * (p.Y - q.Y));
+
+            BarraReal? cercana = barrasReales.MinBy(b => b.Piezas.Min(p => Distancia(p, teorica)));
+            if (cercana is not null && cercana.Piezas.Min(p => Distancia(p, teorica)) <= EstandarCQ.APies(0.03))
+            {
+                List<GanchoGrapa.Pieza> enZ = cercana.Piezas
+                    .Where(p => p.ZInf - Tolerancia <= z && z <= p.ZSup + Tolerancia)
+                    .Select(p => new GanchoGrapa.Pieza(p.X, p.Y, cercana.Radio, p.ZSup))
+                    .ToList();
+                if (enZ.Count > 0) return enZ;
+            }
+
+            return new List<GanchoGrapa.Pieza> { new(teorica.X, teorica.Y, radioTeorico, z) };
+        }
+
+        // La línea de la grapa para que cada gancho ABRACE su barra: la barra
+        // adentro del doblez, tocando la cara interior en la punta (#130).
+        // Antes el arco se ponía pasando por el eje de la barra y la
+        // atravesaba (docs/planes/2026-10-21-diagnostico-grapas-130.md).
+        // Si en las dos puntas las piezas que hay a esa altura entran juntas
+        // en un doblez de ese radio interior (en un traslapo son dos).
+        bool CabenEnElDoblez((XYZ desde, XYZ hasta) teoricas, double z, EstriboMenor pieza, double radioInterior)
+        {
+            double radioTeorico = (pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX) / 2;
+            return GanchoGrapa.Entran(PiezasEn(teoricas.desde, radioTeorico, z), radioInterior) &&
+                   GanchoGrapa.Entran(PiezasEn(teoricas.hasta, radioTeorico, z), radioInterior);
+        }
+
+        (XYZ, XYZ) LineaQueAbraza((XYZ desde, XYZ hasta) teoricas, double z, GanchoMedido medido, EstriboMenor pieza, XYZ centroSeccion)
+        {
+            XYZ u = (teoricas.hasta - teoricas.desde).Normalize();
+            double radioTeorico = (pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX) / 2;
+
+            (double X, double Y) Centro(XYZ teorica, (double X, double Y) haciaAdentro)
+            {
+                (IReadOnlyList<GanchoGrapa.Pieza> abrazadas, bool caben) =
+                    GanchoGrapa.Elegir(PiezasEn(teorica, radioTeorico, z), medido.RadioInterior);
+                if (!caben)
+                    Avisar($"{contexto.Marca}: en algunos traslapos las dos piezas de la barra no entran juntas en el doblez " +
+                           $"de la grapa ({GeometriaSeccion.Metros(2 * medido.RadioInterior) * 1000:0} mm por dentro), ni con el " +
+                           "doblez del cuadro; ahí la grapa abraza solo la pieza que sigue hacia arriba y choca con la otra.");
+                return GanchoGrapa.CentroDelDoblez(abrazadas, medido.RadioInterior, haciaAdentro);
+            }
+
+            (double X, double Y) centroInicio = Centro(teoricas.desde, (u.X, u.Y));
+            (double X, double Y) centroFin = Centro(teoricas.hasta, (-u.X, -u.Y));
+
+            // Hacia qué lado abre cada gancho, igual que en IntentarGrapa: la C
+            // hacia el centro; "Voltear" invierte las dos puntas y la S, la del fin.
+            int ladoCentro = XYZ.BasisZ.CrossProduct(u).DotProduct(centroSeccion - teoricas.desde) >= 0 ? 1 : -1;
+            int ladoInicio = pieza.Volteado ? -ladoCentro : ladoCentro;
+            int ladoFin = (pieza.Forma == FormaMenor.GrapaS) != pieza.Volteado ? -ladoCentro : ladoCentro;
+
+            ((double X, double Y) d, (double X, double Y) h) =
+                GanchoGrapa.Linea(centroInicio, centroFin, medido.Axial, medido.Lateral, ladoInicio, ladoFin);
+            return (new XYZ(d.X, d.Y, z), new XYZ(h.X, h.Y, z));
         }
 
         // Prioridad caja-sobre-grapa: una grapa dentro de un cerrado de su
@@ -568,12 +890,16 @@ public static class GeneradorLongitudinal
         }
 
         // Dónde queda REALMENTE el gancho de una grapa se mide una vez por
-        // barra y gancho (ver MedirCorreccionDeGrapa): no depende del tramo ni
+        // barra y gancho (ver MedirGanchoDeGrapa): no depende del tramo ni
         // de si es C o S (diagnóstico del 20-oct: misma geometría de gancho).
-        // Qué gancho usan las grapas de cada barra y eje, y su corrección:
+        // Qué gancho usan las grapas de cada barra y eje, y su medida:
         // primero dobladas como el estribo (Luciano, 20-oct); si Revit no las
         // acepta, con el 180° del cuadro.
-        var juegos = new Dictionary<(ElementId Barra, EjeCaja Eje), (bool Estribo, RebarHookType Gancho, (double Axial, double Lateral) Correccion)>();
+        var juegos = new Dictionary<(ElementId Barra, EjeCaja Eje), (bool Estribo, RebarHookType Gancho, GanchoMedido? Medida)>();
+        // En los traslapos donde las dos piezas no entran en el doblez del
+        // estribo, la grapa va con el 180° del cuadro, más grande (Luciano,
+        // 21-oct): también se mide una vez por barra y eje.
+        var juegosGrandes = new Dictionary<(ElementId Barra, EjeCaja Eje), (RebarHookType Gancho, GanchoMedido Medida)?>();
         TiposPropios.Pieza<RebarHookType> ganchoGrapaEstribo = propios.GanchoGrapaEstribo();
 
         // Una pieza que falla en un tramo falla igual en todas sus alturas: se
@@ -651,30 +977,42 @@ public static class GeneradorLongitudinal
                         propios.AjustarExtension(barra, ganchoCaja, e135) is string avisoAjuste)
                         Avisar($"{contexto.Marca}: {avisoAjuste}");
 
-                    // El cerrado ABRAZA las barras por fuera (Luciano, 20-oct):
-                    // en su eje, sus lados tocan por dentro el lado de afuera de
-                    // las barras del rango, con lugar para la pieza corrida de
-                    // un traslapo; en el perpendicular va hasta donde va el
-                    // estribo principal, abrazando también las de las caras.
-                    // Son las medidas por FUERA (ScaleToBox, medido el 20-oct:
-                    // una caja pedida de 18,5 cm sale con CQ A = 0,19).
-                    double grueso = Math.Max(diametroEstribo, barraEstribo.BarNominalDiameter);
-                    double borde = recubrimiento + Math.Max(0, grueso - barra.BarNominalDiameter);
-                    (double desdeEje, double hastaEje) = pieza.Eje == EjeCaja.Fila
-                        ? EstriboMenor.LadosQueAbrazan(
-                            PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Desde),
-                            PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Hasta),
-                            diametroCaraY, barra.BarNominalDiameter)
-                        : EstriboMenor.LadosQueAbrazan(
-                            PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Desde),
-                            PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Hasta),
-                            diametroCaraX, barra.BarNominalDiameter);
-                    (double x1, double x2, double y1, double y2) = pieza.Eje == EjeCaja.Fila
-                        ? (xMin + borde, xMax - borde, Math.Max(desdeEje, yMin + borde), Math.Min(hastaEje, yMax - borde))
-                        : (Math.Max(desdeEje, xMin + borde), Math.Min(hastaEje, xMax - borde), yMin + borde, yMax - borde);
+                    // El cerrado ABRAZA por fuera las barras de las filas (o
+                    // columnas) de su rango, en las dos caras (Luciano, 20-oct):
+                    // cada lado toca la pieza REAL que más sale para ese lado, a
+                    // la altura de cada cerrado -- con las dos piezas si cae en
+                    // un traslapo (#130). Antes salía de la posición teórica y
+                    // del recubrimiento: atravesaba una pieza corrida 5 mm y
+                    // quedaba 4,75 mm despegado de las barras de las caras
+                    // (medido el 21-oct en la columna 387983). Son las medidas
+                    // por FUERA (ScaleToBox, medido el 20-oct: una caja pedida
+                    // de 18,5 cm sale con CQ A = 0,19).
+                    double diametroAbrazada = pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX;
+                    double insetAbrazada = SeccionPlanta.Inset(recubrimiento, diametroEstribo, diametroAbrazada);
+                    IEnumerable<XYZ> TeoricasDelRango()
+                    {
+                        for (int k = pieza.Desde; k <= pieza.Hasta; k++)
+                        {
+                            if (pieza.Eje == EjeCaja.Fila)
+                            {
+                                double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, k);
+                                yield return new XYZ(xMin + insetAbrazada, y, 0);
+                                yield return new XYZ(xMax - insetAbrazada, y, 0);
+                            }
+                            else
+                            {
+                                double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, k);
+                                yield return new XYZ(x, yMin + insetAbrazada, 0);
+                                yield return new XYZ(x, yMax - insetAbrazada, 0);
+                            }
+                        }
+                    }
 
                     foreach (double z in ordenadas)
                     {
+                        (double x1, double x2, double y1, double y2) = EstriboMenor.CajaQueAbraza(
+                            TeoricasDelRango().SelectMany(t => PiezasEn(t, diametroAbrazada / 2, z + corrimiento)),
+                            barra.BarNominalDiameter, barra.StirrupTieBendDiameter / 2);
                         int antes = creadas;
                         CrearCaja(doc, host, barra, ganchoCaja, formaEstribo, formasRechazadas, x1, x2, y1, y2, z + corrimiento,
                             contexto.Marca, res, ref creadas);
@@ -684,39 +1022,29 @@ public static class GeneradorLongitudinal
                     continue;
                 }
 
-                // Con los ganchos, la grapa llega hasta la cara EXTERIOR del
-                // estribo (el recubrimiento) y nunca más afuera: así están las
-                // grapas del modelo de referencia que Luciano dio por buenas
-                // (20-oct, medido con el MCP de Revit). La línea va por el
-                // MEDIO de las dos posiciones que puede tener la barra que
-                // engancha: en un traslapo la pieza de arriba queda un
-                // diámetro hacia −Y (caras izquierda/derecha) o −X (caras de
-                // abajo/arriba) de la de abajo, que va en la posición teórica
-                // -- medido con el MCP el 20-oct en dos columnas --, y el
-                // gancho tiene que pasar sobre las dos.
-                // La corrección medida se aplica encima, en IntentarGrapa.
-                (XYZ desde, XYZ hasta) Extremos(double z)
+                // Dónde CREE la cuenta que están las dos barras que engancha la
+                // grapa, una en cada punta (la posición teórica, sin traslapo).
+                // Solo sirve para encontrar la varilla real (ver PiezasEn) y
+                // para la grapa de prueba.
+                double diametroEnganchada = pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX;
+                double insetEnganchada = SeccionPlanta.Inset(recubrimiento, diametroEstribo, diametroEnganchada);
+                (XYZ desde, XYZ hasta) Teoricas(double z)
                 {
                     if (pieza.Eje == EjeCaja.Fila)
                     {
-                        double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Desde) - diametroCaraY / 2;
-                        return (new XYZ(xMin + recubrimiento, y, z), new XYZ(xMax - recubrimiento, y, z));
+                        double y = PosicionIntermedia(yMin + insetEsquinas, yMax - insetEsquinas, filas, pieza.Desde);
+                        return (new XYZ(xMin + insetEnganchada, y, z), new XYZ(xMax - insetEnganchada, y, z));
                     }
 
-                    double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Desde) - diametroCaraX / 2;
-                    return (new XYZ(x, yMin + recubrimiento, z), new XYZ(x, yMax - recubrimiento, z));
+                    double x = PosicionIntermedia(xMin + insetEsquinas, xMax - insetEsquinas, columnas, pieza.Desde);
+                    return (new XYZ(x, yMin + insetEnganchada, z), new XYZ(x, yMax - insetEnganchada, z));
                 }
-
-                // Del eje de la punta del gancho al eje de la barra enganchada.
-                double diametroEnganchada = pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX;
-                double profundidadBarra = Math.Max(diametroEstribo, barraEstribo.BarNominalDiameter) +
-                    diametroEnganchada / 2 - barra.BarNominalDiameter / 2;
 
                 var centroPrueba = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, z0 + corrimiento);
                 var claveJuego = (barra.Id, pieza.Eje);
                 if (!juegos.TryGetValue(claveJuego, out var juego))
                 {
-                    (XYZ pd, XYZ ph) = Extremos(z0 + corrimiento);
+                    (XYZ pd, XYZ ph) = Teoricas(z0 + corrimiento);
                     TiposPropios.Pieza<RebarShape> formaEstriboC = propios.FormaGrapaEstribo(FormaMenor.GrapaC);
                     string? motivoEstribo = ganchoGrapaEstribo.Aviso ?? formaEstriboC.Aviso;
                     bool listo = false;
@@ -724,7 +1052,7 @@ public static class GeneradorLongitudinal
                     {
                         if (varilla is not null && propios.AjustarExtension(barra, gE, varilla.Gancho180Cuadro) is string avisoE)
                             Avisar($"{contexto.Marca}: {avisoE}");
-                        if (MedirCorreccionDeGrapa(doc, host, barra, gE, fE, pd, ph, centroPrueba, profundidadBarra,
+                        if (MedirGanchoDeGrapa(doc, host, barra, gE, fE, pd, ph, centroPrueba,
                                 contexto.Marca, res, out string motivoE) is { } medida)
                         {
                             juego = (true, gE, medida);
@@ -747,29 +1075,77 @@ public static class GeneradorLongitudinal
                             propios.AjustarExtension(barra, ganchoGrapa, varilla.Gancho180Cuadro) is string avisoGrapa)
                             Avisar($"{contexto.Marca}: {avisoGrapa}");
 
-                        (double Axial, double Lateral)? medida = MedirCorreccionDeGrapa(doc, host, barra, ganchoGrapa,
-                            FormaGrapa(FormaMenor.GrapaC), pd, ph, centroPrueba, profundidadBarra, contexto.Marca, res, out string motivoC);
+                        GanchoMedido? medida = MedirGanchoDeGrapa(doc, host, barra, ganchoGrapa,
+                            FormaGrapa(FormaMenor.GrapaC), pd, ph, centroPrueba, contexto.Marca, res, out string motivoC);
                         if (medida is null)
                             Avisar($"{contexto.Marca}: no se pudo medir dónde queda el gancho de las grapas ({motivoC}); " +
-                                   "se generan sin corregir y el gancho puede no pasar sobre la barra longitudinal.");
-                        juego = (false, ganchoGrapa, medida ?? (0, 0));
+                                   "se generan de recubrimiento a recubrimiento y el gancho puede no abrazar la barra longitudinal.");
+                        juego = (false, ganchoGrapa, medida);
                     }
 
                     juegos[claveJuego] = juego;
                 }
 
-                (double Axial, double Lateral) correccion = juego.Correccion;
                 RebarShape? formaGrapa = juego.Estribo
                     ? propios.FormaGrapaEstribo(pieza.Forma).Tipo
                     : FormaGrapa(pieza.Forma);
+
+                // El juego grande (180° del cuadro) para los traslapos: solo
+                // si el normal es el doblado como el estribo, que es más chico.
+                (RebarHookType Gancho, GanchoMedido Medida)? Grande()
+                {
+                    if (juegosGrandes.TryGetValue(claveJuego, out var ya)) return ya;
+
+                    (RebarHookType, GanchoMedido)? grande = null;
+                    if (juego.Estribo && ganchoGrapa is not null)
+                    {
+                        if (ganchoGrapa == ganchoGrapaPropio.Tipo && varilla is not null &&
+                            propios.AjustarExtension(barra, ganchoGrapa, varilla.Gancho180Cuadro) is string avisoGrande)
+                            Avisar($"{contexto.Marca}: {avisoGrande}");
+                        (XYZ pd, XYZ ph) = Teoricas(z0 + corrimiento);
+                        if (MedirGanchoDeGrapa(doc, host, barra, ganchoGrapa, FormaGrapa(FormaMenor.GrapaC), pd, ph, centroPrueba,
+                                contexto.Marca, res, out string motivoGrande) is { } medidaGrande &&
+                            medidaGrande.RadioInterior > (juego.Medida?.RadioInterior ?? 0))
+                            grande = (ganchoGrapa, medidaGrande);
+                        else if (motivoGrande.Length > 0)
+                            Avisar($"{contexto.Marca}: no se pudo medir el gancho de 180° del cuadro para las grapas de los traslapos ({motivoGrande}).");
+                    }
+
+                    juegosGrandes[claveJuego] = grande;
+                    return grande;
+                }
+
                 foreach (double z in ordenadas)
                 {
-                    (XYZ desde, XYZ hasta) = Extremos(z + corrimiento);
                     var centro = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, z + corrimiento);
+                    (XYZ desde, XYZ hasta) teoricas = Teoricas(z + corrimiento);
+
+                    RebarHookType gancho = juego.Gancho;
+                    RebarShape? forma = formaGrapa;
+                    GanchoMedido? medido = juego.Medida;
+                    if (medido is not null && !CabenEnElDoblez(teoricas, z + corrimiento, pieza, medido.RadioInterior) &&
+                        Grande() is { } grande)
+                    {
+                        (gancho, forma, medido) = (grande.Gancho, FormaGrapa(pieza.Forma), grande.Medida);
+                        Avisar($"{contexto.Marca}: en los traslapos, las grapas van con el doblez del gancho de 180° del cuadro " +
+                               $"({GeometriaSeccion.Metros(2 * grande.Medida.RadioInterior) * 1000:0} mm por dentro) para abrazar " +
+                               "las dos piezas de la barra.");
+                    }
+
+                    (XYZ desde, XYZ hasta) = medido is not null
+                        ? LineaQueAbraza(teoricas, z + corrimiento, medido, pieza, centro)
+                        : DeRecubrimientoARecubrimiento(teoricas);
                     int antes = creadas;
-                    CrearGrapa(doc, host, barra, juego.Gancho, ganchoTramo, formaGrapa, pieza.Forma, pieza.Volteado,
-                        desde, hasta, centro, correccion, contexto.Marca, res, ref creadas);
+                    CrearGrapa(doc, host, barra, gancho, ganchoTramo, forma, pieza.Forma, pieza.Volteado,
+                        desde, hasta, centro, contexto.Marca, res, ref creadas);
                     if (creadas == antes) break;
+                }
+
+                // Sin medida del gancho: la línea cruda, como antes del 20-oct.
+                (XYZ, XYZ) DeRecubrimientoARecubrimiento((XYZ desde, XYZ hasta) t)
+                {
+                    XYZ u = (t.hasta - t.desde).Normalize();
+                    return (t.desde - u * (insetEnganchada - recubrimiento), t.hasta + u * (insetEnganchada - recubrimiento));
                 }
             }
         }
@@ -902,6 +1278,34 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
+    /// Regla del #139 (Luciano, 22-oct): el gancho sigue mirando hacia el
+    /// centro (<see cref="OrientacionesHaciaAdentro"/>) y solo se gira el que
+    /// cruzaría la línea de propiedad. Girarlo lo deja sobre el mismo eje,
+    /// del lado del lote. <c>Girado</c> = el pedido con el gancho del otro
+    /// lado; <c>SinSalida</c> = cruza para los dos lados y se deja como está.
+    /// Medido el 22-oct: docs/planes/2026-10-22-ganchos-zapata-y-lindero-138-139.md.
+    /// </summary>
+    private static (BarraContinua.Pedido? Girado, bool SinSalida) LadoLejosDelLindero(
+        IReadOnlyList<TramoLindero> lindero, BarraContinua.Pedido p)
+    {
+        if (lindero.Count == 0 || (p.GanchoAbajo is null && p.GanchoArriba is null)) return (null, false);
+
+        // Mismo eje que OrientacionesHaciaAdentro: Positiva dobla hacia +haciaDondeDobla.
+        XYZ haciaDondeDobla = XYZ.BasisZ.CrossProduct(p.Normal);
+        double signo = p.OrientacionAbajo == OrientacionPositiva ? 1 : -1;
+        double x = GeometriaSeccion.Metros(p.X), y = GeometriaSeccion.Metros(p.Y);
+        double alcance = Lindero.AlcanceGancho90(EstandarCQ.DiametroMm(p.Barra));
+
+        bool Cruza(double s) => Lindero.Cruza(lindero, x, y, s * haciaDondeDobla.X, s * haciaDondeDobla.Y, alcance);
+
+        if (!Cruza(signo)) return (null, false);
+        if (Cruza(-signo)) return (null, true);
+
+        RebarTerminationOrientation otra = signo > 0 ? OrientacionNegativa : OrientacionPositiva;
+        return (p with { OrientacionAbajo = otra, OrientacionArriba = otra }, false);
+    }
+
+    /// <summary>
     /// Gancho hacia el lado positivo de <c>tangente × normal</c>. Confirmado
     /// contra Revit real el 11-sep (ver <see cref="OrientacionesHaciaAdentro"/>):
     /// es <c>Right</c>, no <c>Left</c> como se había asumido al escribir esto.
@@ -921,17 +1325,17 @@ public static class GeneradorLongitudinal
     private static void CrearGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho, RebarHookType? ganchoRespaldo,
         RebarShape? formaGrapa, FormaMenor forma, bool volteado,
-        XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion,
+        XYZ desde, XYZ hasta, XYZ centroSeccion,
         string marcaColumna, ResultadoArmado res, ref int creadas)
     {
-        if (IntentarGrapa(doc, host, barra, gancho, formaGrapa, forma, volteado, desde, hasta, centroSeccion, correccion, out string motivo) is not null)
+        if (IntentarGrapa(doc, host, barra, gancho, formaGrapa, forma, volteado, desde, hasta, centroSeccion, out string motivo) is not null)
         {
             creadas++;
             return;
         }
 
         if (ganchoRespaldo is not null && ganchoRespaldo.Id != gancho.Id &&
-            IntentarGrapa(doc, host, barra, ganchoRespaldo, formaGrapa, forma, volteado, desde, hasta, centroSeccion, correccion, out _) is not null)
+            IntentarGrapa(doc, host, barra, ganchoRespaldo, formaGrapa, forma, volteado, desde, hasta, centroSeccion, out _) is not null)
         {
             res.Avisos.Add(
                 $"{marcaColumna}: el gancho «{gancho.Name}» no le sirvió a Revit para una grapa ({motivo}); " +
@@ -949,7 +1353,7 @@ public static class GeneradorLongitudinal
     private static Rebar? IntentarGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho,
         RebarShape? formaGrapa, FormaMenor forma, bool volteado,
-        XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion, out string motivo)
+        XYZ desde, XYZ hasta, XYZ centroSeccion, out string motivo)
     {
         motivo = "";
         try
@@ -999,14 +1403,8 @@ public static class GeneradorLongitudinal
             RebarTerminationOrientation orientacionInicio = volteado ? otra : orientacion;
             RebarTerminationOrientation orientacionFin = (forma == FormaMenor.GrapaS) != volteado ? otra : orientacion;
 
-            // Los puntos que entran son donde tiene que terminar la grapa (la
-            // cara exterior del estribo), sobre la línea de las barras. La
-            // corrección medida (con la C de siempre) deja la punta del gancho
-            // ahí y el tramo recto sobre esa línea; una punta cuyo gancho gira
-            // al revés se corre al revés.
-            (desde, hasta) = AplicarCorreccion(desde, hasta, centroSeccion, correccion,
-                orientacionInicio == orientacion ? 1 : -1, orientacionFin == orientacion ? 1 : -1);
-
+            // La línea ya viene calculada para que cada gancho abrace su barra
+            // (GanchoGrapa.Linea, con el mismo criterio de lados que acá).
             var curvas = new List<Curve> { Line.CreateBound(desde, hasta) };
 
             // Camino preferido: la forma NATIVA de un segmento con estilo
@@ -1067,32 +1465,34 @@ public static class GeneradorLongitudinal
     }
 
     /// <summary>
-    /// Cuánto hay que correr la línea de la grapa para que la punta de cada
-    /// gancho termine en la cara exterior del estribo y el tramo recto pase
-    /// por la línea de las barras, como en el modelo de referencia que
-    /// Luciano dio por bueno (20-oct). Antes (10-sep a 20-oct) se ponía la
-    /// longitudinal en el MEDIO del gancho: con el doblez de 180° del cuadro
-    /// el gancho se salía del estribo y la S quedaba muy en diagonal.
+    /// Lo medido en una grapa de prueba, en pies: dónde queda el centro del
+    /// gancho del inicio respecto de la punta de la línea pedida -- <c>Axial</c>
+    /// a lo largo de la grapa (hacia adentro) y <c>Lateral</c> de costado (hacia
+    /// el centro de la sección, hacia donde abre la C) -- y el radio interior
+    /// del doblez. Con eso <see cref="GanchoGrapa.Linea"/> calcula la línea que
+    /// deja cada gancho donde tiene que ir.
+    /// </summary>
+    private sealed record GanchoMedido(double Axial, double Lateral, double RadioInterior);
+
+    /// <summary>
+    /// Dónde queda REALMENTE el gancho de una grapa respecto de la línea que se
+    /// le pide a Revit.
     ///
     /// No se calcula con una fórmula: se MIDE contra Revit (regla del CLAUDE.md,
     /// y el error que se repitió nueve veces con este mismo gancho). Se crea una
-    /// grapa de prueba con la línea cruda, se le leen las curvas CON ganchos y
-    /// radios reales -- <c>GetCenterlineCurves(false, false, false, ...)</c>,
-    /// justo lo que el diagnóstico nunca había pedido -- y se toma el centro del
-    /// arco del gancho. La grapa de prueba se borra.
-    ///
-    /// El resultado va en el marco local de la grapa: <c>Axial</c> a lo largo de
-    /// la barra y <c>Lateral</c> hacia el centro de la sección, que es hacia
-    /// donde gira el gancho. Así el mismo par sirve para las cuatro
-    /// orientaciones de grapa de la sección.
+    /// grapa de prueba (una C) con la línea cruda, se le leen las curvas CON
+    /// ganchos y radios reales -- <c>GetCenterlineCurves(false, false, false, ...)</c> --
+    /// y se toma el centro y el radio del arco del gancho. La grapa de prueba se
+    /// borra. Qué hacer con eso (que el gancho abrace la barra, #130) ya no es
+    /// de acá: lo resuelve <see cref="GanchoGrapa"/>.
     /// </summary>
-    private static (double Axial, double Lateral)? MedirCorreccionDeGrapa(
+    private static GanchoMedido? MedirGanchoDeGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho, RebarShape? formaGrapa,
-        XYZ desde, XYZ hasta, XYZ centroSeccion, double profundidadBarra, string marcaColumna, ResultadoArmado res,
+        XYZ desde, XYZ hasta, XYZ centroSeccion, string marcaColumna, ResultadoArmado res,
         out string motivo)
     {
         Rebar? prueba = IntentarGrapa(doc, host, barra, gancho, formaGrapa, FormaMenor.GrapaC, volteado: false,
-            desde, hasta, centroSeccion, (0, 0), out motivo);
+            desde, hasta, centroSeccion, out motivo);
         if (prueba is null) return null;
 
         try
@@ -1111,28 +1511,17 @@ public static class GeneradorLongitudinal
             }
 
             XYZ direccion = (hasta - desde).Normalize();
-            XYZ haciaElCentro = HaciaElCentro(desde, direccion, centroSeccion);
-
-            // Axial: cuánto se pasa la punta del gancho (lo más lejano del
-            // arco, por fuera de la barra) de "desde"; positivo = se pasa
-            // hacia afuera, y la línea se acorta eso. Lateral: el centro del
-            // gancho tiene que quedar de costado de la línea pedida (la de las
-            // barras) justo lo que hace falta para que el arco pase sobre
-            // ellas (EstriboMenor.CorrimientoSobreBarra), del lado hacia el
-            // que se abre el gancho.
-            XYZ punta = arco.Center - direccion * (arco.Radius + barra.BarNominalDiameter / 2);
-            double axial = (desde - punta).DotProduct(direccion);
-            double centroMedido = (arco.Center - desde).DotProduct(haciaElCentro);
-            double sobreBarra = EstriboMenor.CorrimientoSobreBarra(arco.Radius, profundidadBarra);
-            double lateral = Math.Sign(centroMedido) * sobreBarra - centroMedido;
+            var medido = new GanchoMedido(
+                (arco.Center - desde).DotProduct(direccion),
+                (arco.Center - desde).DotProduct(HaciaElCentro(desde, direccion, centroSeccion)),
+                arco.Radius - barra.BarNominalDiameter / 2);
 
             res.Detalles.Add(
-                $"{marcaColumna}: gancho de grapa medido en Revit -- radio {GeometriaSeccion.Metros(arco.Radius) * 100:0.0} cm; " +
-                $"la línea se corrige {GeometriaSeccion.Metros(axial) * 100:0.0} cm a lo largo y " +
-                $"{GeometriaSeccion.Metros(lateral) * 100:0.0} cm hacia el centro para que el gancho termine en la " +
-                "cara del estribo y pase sobre las barras.");
+                $"{marcaColumna}: gancho de grapa medido en Revit -- doblez de {GeometriaSeccion.Metros(2 * medido.RadioInterior) * 1000:0} mm " +
+                $"por dentro; su centro queda {GeometriaSeccion.Metros(medido.Axial) * 100:0.0} cm hacia adentro y " +
+                $"{GeometriaSeccion.Metros(medido.Lateral) * 100:0.0} cm de costado de la punta pedida.");
 
-            return (axial, lateral);
+            return medido;
         }
         catch (Exception ex)
         {
@@ -1143,34 +1532,6 @@ public static class GeneradorLongitudinal
         {
             Descartar(doc, prueba);
         }
-    }
-
-    /// <summary>
-    /// Aplica la corrección medida: los dos extremos se corren simétricamente a
-    /// lo largo de la barra y la línea entera se corre de costado hacia el
-    /// centro. El corrimiento lateral es uno solo para toda la línea porque los
-    /// dos ganchos giran para el mismo lado (misma
-    /// <see cref="RebarTerminationOrientation"/>, ver <c>IntentarGrapa</c>).
-    /// </summary>
-    /// <param name="signoInicio">+1 si el gancho de esa punta gira como en la grapa medida; −1 si gira al revés (S o volteada).</param>
-    private static (XYZ Desde, XYZ Hasta) AplicarCorreccion(
-        XYZ desde, XYZ hasta, XYZ centroSeccion, (double Axial, double Lateral) correccion, int signoInicio, int signoFin)
-    {
-        if (Math.Abs(correccion.Axial) < Tolerancia && Math.Abs(correccion.Lateral) < Tolerancia)
-            return (desde, hasta);
-
-        XYZ direccion = (hasta - desde).Normalize();
-        XYZ lateral = HaciaElCentro(desde, direccion, centroSeccion) * correccion.Lateral;
-        XYZ lateralInicio = lateral * signoInicio, lateralFin = lateral * signoFin;
-
-        // La corrección axial acorta (o alarga) los DOS extremos. En una sección
-        // muy chica podría dejar la grapa de largo cero o invertida, y ahí
-        // Line.CreateBound tira excepción: se prefiere la grapa sin corregir.
-        if ((hasta - desde).GetLength() - 2 * Math.Abs(correccion.Axial) <= Tolerancia)
-            return (desde + lateralInicio, hasta + lateralFin);
-
-        return (desde + direccion * correccion.Axial + lateralInicio,
-                hasta - direccion * correccion.Axial + lateralFin);
     }
 
     /// <summary>

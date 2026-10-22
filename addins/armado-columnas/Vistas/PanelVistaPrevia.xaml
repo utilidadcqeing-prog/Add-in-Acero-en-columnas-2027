@@ -6,6 +6,14 @@
          leyenda va arriba y el resumen abajo, fuera del scroll. -->
     <DockPanel>
         <WrapPanel x:Name="Leyenda" DockPanel.Dock="Top" Margin="0,0,0,6" />
+        <!-- #131: la sección como es en casi todo el tramo, o en la zona de
+             traslapo (con las piezas corridas). Los choques se marcan en rojo. -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+            <RadioButton x:Name="OpcionSeccionNormal" Content="Sección normal" GroupName="SeccionChoques" IsChecked="True"
+                         Margin="0,0,16,0" Checked="OpcionSeccion_Checked" />
+            <RadioButton x:Name="OpcionZonaTraslapo" Content="Zona de traslapo" GroupName="SeccionChoques"
+                         Checked="OpcionSeccion_Checked" />
+        </StackPanel>
         <StackPanel x:Name="Resumen" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <Canvas x:Name="Lienzo" Width="350" Height="520" Background="Transparent"
