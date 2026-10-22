@@ -550,7 +550,10 @@ public partial class VentanaEstribosMenores : Window
             .Where(p => PaqueteEstribos.EstaTapada(p, _piezas))
             .Select(p => $"La {Nombre(p.Forma).ToLowerInvariant()} de la {Donde(p)} queda dentro de un estribo cerrado y no se va a generar.")
             .Concat(imposibles)
-            .Concat(choques.Where(c => !imposibles.Contains(c.Motivo)).Select(c => "⚠ " + c.Motivo)));
+            .Concat(choques.Where(c => !imposibles.Contains(c.Motivo)).Select(c => "⚠ " + c.Motivo))
+            .Concat(_choques.VarillasSinRevisarEnTraslapo > 0
+                ? new[] { ChoquesSeccion.NotaSinRevisar(_choques.VarillasSinRevisarEnTraslapo) }
+                : Array.Empty<string>()));
 
         int grapas = _piezas.Count(p => p.Forma != FormaMenor.Cerrado && !PaqueteEstribos.EstaTapada(p, _piezas));
         int cerrados = _piezas.Count(p => p.Forma == FormaMenor.Cerrado);

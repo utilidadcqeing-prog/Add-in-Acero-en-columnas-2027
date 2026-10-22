@@ -109,6 +109,17 @@ digan **qué pieza choca con cuál** (criterio del issue). Ejemplos:
   puede dejar una pieza unos milímetros distinta (por ejemplo, la barra de
   cara corrida 8,6 mm del #153). Por eso se mantienen los avisos de después
   de generar.
+- **Varillas con más de un traslapo** (columnas de varios pisos con barras
+  de 6 m): su zona de traslapo no se revisa, porque el acomodo de las piezas
+  corridas solo está medido con un traslapo (la misma regla del generador).
+  Se dice con la nota "Zona de traslapo no revisada en N varilla(s)…" en la
+  vista previa, en estribos menores y en el mensaje de Generar (revisión
+  final, 22-oct).
+- **Un aviso por par en la columna:** las longitudinales son las mismas en
+  todos los tramos, pero un tramo sin estribo (el de la zapata) ubica las
+  esquinas unos mm distinto. Generar avisa cada par una sola vez
+  (`ChoquesSeccion.DeLaColumna`), con las medidas del tramo de estribo más
+  grueso (revisión final, 22-oct).
 - El gancho del estribo como obstáculo de las piezas corridas: hoy el
   generador lo mide en Revit. Si no se puede calcular igual sin Revit, ese
   choque queda solo después de generar y se dice en el documento de cierre.

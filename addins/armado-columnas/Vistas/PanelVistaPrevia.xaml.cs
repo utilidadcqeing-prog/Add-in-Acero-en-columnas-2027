@@ -183,6 +183,8 @@ public partial class PanelVistaPrevia : UserControl
                 $"⚠ {cuantos} choque(s) (se puede generar igual): {choques.Normal.Count} en la sección normal, " +
                 $"{choques.Traslapo.Count} en la zona de traslapo. Pasa el mouse por las marcas rojas para ver el motivo.",
                 Paleta.Error, negrita: true);
+        if (choques.VarillasSinRevisarEnTraslapo > 0)
+            AgregarNota(ChoquesSeccion.NotaSinRevisar(choques.VarillasSinRevisarEnTraslapo), ColorAviso);
     }
 
     // ------------------------------------------------------------- planta

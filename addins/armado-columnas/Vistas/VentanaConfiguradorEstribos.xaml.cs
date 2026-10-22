@@ -1960,14 +1960,24 @@ public partial class VentanaConfiguradorEstribos : Window
                 .DefaultIfEmpty(0)
                 .Max();
 
-            var motivos = new HashSet<string>();
-            for (int i = 0; i < columna.Tramos.Count && i < contexto.Tramos.Count; i++)
-            {
-                if (columna.Tramos[i] is not ConfigTramo cfgTramo) continue;
-                foreach (ChoquesSeccion.Choque choque in ChoquesSeccion.DeTramo(
-                             contexto, contexto.Tramos[i], cfgTramo, longitudinal, recubrimiento, BarraPorNombre, estriboMasGrueso).Todos)
-                    if (motivos.Add(choque.Motivo)) choques.Add((contexto.Marca, choque.Motivo));
-            }
+            // Un aviso por par en toda la columna (ChoquesSeccion.DeLaColumna).
+            // Manda el tramo con estribo más grueso, como el generador: un tramo
+            // sin estribo (el de la zapata) ubica las esquinas unos mm distinto.
+            IEnumerable<ChoquesSeccion.Resultado> porTramo = Enumerable
+                .Range(0, Math.Min(columna.Tramos.Count, contexto.Tramos.Count))
+                .Where(i => columna.Tramos[i] is not null)
+                .OrderBy(i => contexto.Tramos[i].Tipo == TipoTramo.ContraZapata ? 1 : 0)
+                .ThenByDescending(i => BarraPorNombre(columna.Tramos[i]!.TipoBarraNombre)?.DiametroMm ?? 0)
+                .Select(i => ChoquesSeccion.DeTramo(
+                    contexto, contexto.Tramos[i], columna.Tramos[i]!, longitudinal, recubrimiento, BarraPorNombre, estriboMasGrueso))
+                .ToList();
+
+            foreach (ChoquesSeccion.Choque choque in ChoquesSeccion.DeLaColumna(porTramo))
+                choques.Add((contexto.Marca, choque.Motivo));
+
+            int sinRevisar = porTramo.Select(r => r.VarillasSinRevisarEnTraslapo).DefaultIfEmpty(0).Max();
+            if (choques.Any(c => c.Columna == contexto.Marca) && sinRevisar > 0)
+                choques.Add((contexto.Marca, ChoquesSeccion.NotaSinRevisar(sinRevisar)));
         }
 
         return choques;

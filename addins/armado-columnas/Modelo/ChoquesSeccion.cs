@@ -41,6 +41,14 @@ public static class ChoquesSeccion
     }
 
     /// <summary>
+    /// Lo que se dice cuando hay varillas con más de un traslapo: su zona de
+    /// traslapo no se revisa (el acomodo de las piezas corridas solo está
+    /// medido con uno). Lo usan la vista previa, estribos menores y Generar.
+    /// </summary>
+    public static string NotaSinRevisar(int varillas) =>
+        $"Zona de traslapo no revisada en {varillas} varilla(s): llevan más de un traslapo.";
+
+    /// <summary>
     /// Distancia libre mínima (borde a borde) entre dos longitudinales: la de
     /// la NSR-10 para columnas, 1,5 diámetros de la más gruesa o 4 cm, la
     /// mayor. Decisión de Luciano (22-oct), A CONFIRMAR CON CARLOS: si la
