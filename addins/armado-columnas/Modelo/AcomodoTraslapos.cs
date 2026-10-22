@@ -245,4 +245,101 @@ public static class AcomodoTraslapos
     /// combinaciones (false: llegó al tope y devolvió la mejor que tenía).
     /// </summary>
     public static bool UltimaFueCompleta { get; private set; } = true;
+
+    /// <summary>
+    /// Una varilla de la sección, como la ve <see cref="PlanearSeccion"/>.
+    /// Mismas unidades en todo (el generador pasa pies; las ventanas, metros).
+    /// </summary>
+    /// <param name="Normal">Versor en planta de la normal de la barra (X, Y o diagonal).</param>
+    /// <param name="Entera">Alturas de la varilla entera, para cuando no lleva traslapo.</param>
+    /// <param name="Abajo">Alturas de la pieza de abajo si lleva UN traslapo (dos piezas); null si no.</param>
+    /// <param name="Arriba">Alturas de la pieza de arriba, con el mismo criterio.</param>
+    public sealed record PedidoSeccion(
+        double X, double Y, double Radio, double Diametro, bool Esquina, bool ConGancho,
+        (double X, double Y) Normal, (double X, double Y) CentroSeccion, (double ZInf, double ZSup) Entera,
+        (double ZInf, double ZSup)? Abajo, (double ZInf, double ZSup)? Arriba,
+        (double XMin, double XMax, double YMin, double YMax) Limites);
+
+    /// <summary>
+    /// Hacia dónde se corre la pieza del traslapo de cada varilla de la
+    /// sección para que no choque con las vecinas ni con
+    /// <paramref name="obstaculos"/> (los ganchos del estribo): las cuatro
+    /// maneras (<see cref="Cuatro"/>) por cada eje que se prueba y la mejor
+    /// combinación (<see cref="Elegir"/>). Antes vivía dentro de
+    /// GeneradorLongitudinal; sale acá para que la ventana muestre lo mismo
+    /// que se genera (#131). <c>Manera</c> = null si la varilla no lleva un
+    /// traslapo (va como siempre); <c>Eje</c> = el eje elegido (la normal si
+    /// no hay manera).
+    /// </summary>
+    public static IReadOnlyList<(Manera? Manera, (double X, double Y) Eje)> PlanearSeccion(
+        IReadOnlyList<PedidoSeccion> pedidos, IReadOnlyList<Pieza>? obstaculos)
+    {
+        var maneras = new List<List<(Manera Manera, (double X, double Y) Eje)>?>();
+        foreach (PedidoSeccion p in pedidos)
+        {
+            if (p.Abajo is not { } abajo || p.Arriba is not { } arriba)
+            {
+                maneras.Add(null);
+                continue;
+            }
+
+            // Una esquina apoya en dos caras, así que su pieza corrida puede ir
+            // a lo largo de cualquiera de las dos: se prueban los dos ejes
+            // (primero el de siempre). Medido el 21-oct en la columna 387983:
+            // con eje X en las dos de arriba, la corrida de la esquina iba a lo
+            // largo de la cara de arriba, contra la vecina (se metían 8,8 y
+            // 12 mm), mientras que abajo, con eje Y, la cara quedaba limpia.
+            //
+            // Además, la diagonal hacia adentro: en la esquina donde cierra el
+            // estribo, las colas de los dos ganchos entran en diagonal, una a
+            // cada lado de la barra, y lo único libre es correrla entre ellas
+            // (Luciano, 21-oct: "que se mueva diagonalmente, pero pegada al
+            // gancho").
+            //
+            // Medido el 21-oct en la columna 387983 con normales diagonales:
+            // Revit corre la pieza como si la normal tuviera siempre la Y
+            // positiva -- con (0,707, 0,707) la corrió hacia (+, +), pero con
+            // (−0,707, −0,707) también hacia (+, +), y con (0,707, −0,707)
+            // hacia (−, +). Si se le pasa al revés, la pieza sale para el otro
+            // lado y Alinear tiene que mover la cadena en diagonal, cosa que
+            // Revit no respeta (en la esquina de arriba a la derecha la corrió
+            // 36 mm en Y en vez de 18 y 18, y la barra quedó atravesando el
+            // estribo). Por eso la diagonal se pasa con la Y positiva: Cuatro
+            // prueba los dos sentidos igual, y así lo que se planea es lo que
+            // Revit hace. Los ejes X e Y ya van positivos.
+            //
+            // Si la barra lleva gancho, no se prueba la diagonal: el gancho
+            // dobla perpendicular a la normal y con la diagonal no miraría al
+            // centro.
+            (double X, double Y) diagonal = Versor(Math.Sign(p.CentroSeccion.X - p.X), Math.Sign(p.CentroSeccion.Y - p.Y));
+            if (diagonal.Y < 0) diagonal = (-diagonal.X, -diagonal.Y);
+            bool normalEnX = Math.Abs(p.Normal.X - 1) < 1e-9 && Math.Abs(p.Normal.Y) < 1e-9;
+            (double X, double Y) otroEje = normalEnX ? (0, 1) : (1, 0);
+            (double X, double Y)[] ejes = !p.Esquina ? new[] { p.Normal }
+                : p.ConGancho ? new[] { p.Normal, otroEje }
+                : new[] { p.Normal, otroEje, diagonal };
+
+            var deEstaVarilla = new List<(Manera, (double X, double Y))>();
+            foreach ((double X, double Y) eje in ejes)
+                foreach (Manera m in Cuatro(p.X, p.Y, p.Radio, eje, p.Diametro, abajo, arriba, p.Limites))
+                    deEstaVarilla.Add((m, eje));
+            maneras.Add(deEstaVarilla);
+        }
+
+        int[] elegidas = Elegir(maneras.Select((m, i) => m is { Count: > 0 }
+            ? new Varilla(m.Select(x => x.Manera.Piezas).ToList())
+            : new Varilla(new[] { new[] { new Pieza(pedidos[i].X, pedidos[i].Y, pedidos[i].Radio, pedidos[i].Entera.ZInf, pedidos[i].Entera.ZSup) } })).ToList(),
+            obstaculos);
+
+        return maneras.Select((m, i) => m is { Count: > 0 }
+                ? ((Manera?)m[elegidas[i]].Manera, m[elegidas[i]].Eje)
+                : (null, pedidos[i].Normal))
+            .ToList();
+    }
+
+    private static (double X, double Y) Versor(double x, double y)
+    {
+        double largo = Math.Sqrt(x * x + y * y);
+        return largo < 1e-12 ? (0, 0) : (x / largo, y / largo);
+    }
 }

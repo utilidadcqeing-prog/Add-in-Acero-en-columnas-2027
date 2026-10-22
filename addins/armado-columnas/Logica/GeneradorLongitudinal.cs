@@ -482,7 +482,7 @@ public static class GeneradorLongitudinal
         // (AcomodoTraslapos.Cuatro). Después, con las piezas ya en el modelo,
         // BarraContinua.Acomodar afina el lado con las posiciones reales.
         var pedidos = new List<BarraContinua.Pedido>();
-        var maneras = new List<IReadOnlyList<(AcomodoTraslapos.Manera Manera, XYZ Normal)>?>();
+        var seccion = new List<AcomodoTraslapos.PedidoSeccion>();
         for (int i = 0; i < anillo.Count; i++)
         {
             (RebarBarType barraDeLaPosicion, double x, double y, XYZ normal, bool esquina) = anillo[i];
@@ -516,75 +516,33 @@ public static class GeneradorLongitudinal
             pedidos.Add(pedido);
 
             // Las cuatro maneras solo están medidas con un traslapo (dos
-            // piezas); con más, la varilla va como siempre. Una esquina apoya
-            // en dos caras, así que su pieza corrida puede ir a lo largo de
-            // cualquiera de las dos: se prueban los dos ejes (primero el de
-            // siempre). Medido el 21-oct en la columna 387983: con eje X en las
-            // dos de arriba, la corrida de la esquina iba a lo largo de la cara
-            // de arriba, contra la vecina (se metían 8,8 y 12 mm), mientras que
-            // abajo, con eje Y, la cara quedaba limpia.
-            //
-            // Además, la diagonal hacia adentro: en la esquina donde cierra el
-            // estribo, las colas de los dos ganchos entran en diagonal, una a
-            // cada lado de la barra, y lo único libre es correrla entre ellas
-            // (Luciano, 21-oct: "que se mueva diagonalmente, pero pegada al
-            // gancho").
-            //
-            // Medido el 21-oct en la columna 387983 con normales diagonales:
-            // Revit corre la pieza como si la normal tuviera siempre la Y
-            // positiva -- con (0,707, 0,707) la corrió hacia (+, +), pero con
-            // (−0,707, −0,707) también hacia (+, +), y con (0,707, −0,707)
-            // hacia (−, +). Si se le pasa al revés, la pieza sale para el otro
-            // lado y Alinear tiene que mover la cadena en diagonal, cosa que
-            // Revit no respeta (en la esquina de arriba a la derecha la corrió
-            // 36 mm en Y en vez de 18 y 18, y la barra quedó atravesando el
-            // estribo). Por eso la diagonal se pasa con la Y positiva: Cuatro
-            // prueba los dos sentidos igual, y así lo que se planea es lo que
-            // Revit hace. Los ejes X e Y ya van positivos.
-            //
-            // Si la barra lleva gancho, no se prueba la diagonal: el gancho
-            // dobla perpendicular a la normal y con la diagonal no miraría al
-            // centro.
-            double radio = barraDeLaPosicion.BarNominalDiameter / 2;
-            if (traslapos.Count == 1 && plan.Piezas.Count == 2)
-            {
-                var deEstaVarilla = new List<(AcomodoTraslapos.Manera, XYZ)>();
-                XYZ diagonal = new XYZ(
-                    Math.Sign((referencia.XMin + referencia.XMax) / 2 - x), Math.Sign((referencia.YMin + referencia.YMax) / 2 - y), 0).Normalize();
-                if (diagonal.Y < 0) diagonal = diagonal.Negate();
-                bool conGancho = pedido.GanchoAbajo is not null || pedido.GanchoArriba is not null;
-                XYZ otroEje = normal.IsAlmostEqualTo(XYZ.BasisX) ? XYZ.BasisY : XYZ.BasisX;
-                XYZ[] ejes = !esquina ? new[] { normal }
-                    : conGancho ? new[] { normal, otroEje }
-                    : new[] { normal, otroEje, diagonal };
-                foreach (XYZ eje in ejes)
-                    foreach (AcomodoTraslapos.Manera m in AcomodoTraslapos.Cuatro(
-                                 x, y, radio, (eje.X, eje.Y), barraDeLaPosicion.BarNominalDiameter,
-                                 (EstandarCQ.APies(plan.Piezas[0].ZDesde), EstandarCQ.APies(plan.Piezas[0].ZHasta)),
-                                 (EstandarCQ.APies(plan.Piezas[1].ZDesde), EstandarCQ.APies(plan.Piezas[1].ZHasta)),
-                                 (limites.XMin, limites.XMax, limites.YMin, limites.YMax)))
-                        deEstaVarilla.Add((m, eje));
-                maneras.Add(deEstaVarilla);
-            }
-            else
-            {
-                maneras.Add(null);
-            }
+            // piezas); con más, la varilla va como siempre. Qué ejes se
+            // prueban y por qué: AcomodoTraslapos.PlanearSeccion (la misma
+            // cuenta que muestra la ventana, #131).
+            bool unTraslapo = traslapos.Count == 1 && plan.Piezas.Count == 2;
+            seccion.Add(new AcomodoTraslapos.PedidoSeccion(
+                x, y, barraDeLaPosicion.BarNominalDiameter / 2, barraDeLaPosicion.BarNominalDiameter, esquina,
+                ConGancho: pedido.GanchoAbajo is not null || pedido.GanchoArriba is not null,
+                Normal: (normal.X, normal.Y),
+                CentroSeccion: ((referencia.XMin + referencia.XMax) / 2, (referencia.YMin + referencia.YMax) / 2),
+                Entera: (pedido.ZInicio, pedido.ZFin),
+                Abajo: unTraslapo ? (EstandarCQ.APies(plan.Piezas[0].ZDesde), EstandarCQ.APies(plan.Piezas[0].ZHasta)) : null,
+                Arriba: unTraslapo ? (EstandarCQ.APies(plan.Piezas[1].ZDesde), EstandarCQ.APies(plan.Piezas[1].ZHasta)) : null,
+                Limites: (limites.XMin, limites.XMax, limites.YMin, limites.YMax)));
         }
 
         // Ninguna pieza corrida puede atravesar los ganchos del estribo
         // principal (Luciano, 21-oct).
-        int[] elegidas = AcomodoTraslapos.Elegir(maneras.Select((m, i) => m is { Count: > 0 }
-            ? new AcomodoTraslapos.Varilla(m.Select(x => x.Manera.Piezas).ToList())
-            : new AcomodoTraslapos.Varilla(new[] { new[] {
-                new AcomodoTraslapos.Pieza(pedidos[i].X, pedidos[i].Y, pedidos[i].Barra.BarNominalDiameter / 2, pedidos[i].ZInicio, pedidos[i].ZFin) } })).ToList(),
-            ganchos);
+        IReadOnlyList<(AcomodoTraslapos.Manera? Manera, (double X, double Y) Eje)> planeadas =
+            AcomodoTraslapos.PlanearSeccion(seccion, ganchos);
         if (!AcomodoTraslapos.UltimaFueCompleta)
             BarraContinua.Traza?.Invoke("ACOMODO: llegó al tope de pasos; quedan las maneras más buenas que encontró hasta ahí.");
 
         for (int i = 0; i < pedidos.Count; i++)
         {
-            (AcomodoTraslapos.Manera Manera, XYZ Normal)? elegida = maneras[i] is { Count: > 0 } m ? m[elegidas[i]] : null;
+            (AcomodoTraslapos.Manera Manera, XYZ Normal)? elegida = planeadas[i].Manera is { } mp
+                ? (mp, new XYZ(planeadas[i].Eje.X, planeadas[i].Eje.Y, 0))
+                : null;
             AcomodoTraslapos.Manera? manera = elegida?.Manera;
             BarraContinua.Pedido pedido = pedidos[i];
             if (elegida is { } e)

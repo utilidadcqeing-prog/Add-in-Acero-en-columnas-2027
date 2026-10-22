@@ -773,5 +773,47 @@ Probar("cuadro_2_cargado", () =>
     Cierto(CuadroVarillas.Cuadro.Single(v => v.Numero == 6).GanchoEstribo135 is null, "#6 sin 135°");
 });
 
+// ---- #131: el acomodo de traslapos de una sección, sin Revit
+
+// Esquina inferior izquierda de una 40×40 (metros), #5, traslapo a 1,5–2,2 m.
+AcomodoTraslapos.PedidoSeccion Esquina40(bool conGancho) =>
+    new(0.06, 0.06, 0.00795, 0.0159, Esquina: true, ConGancho: conGancho, Normal: (1, 0), CentroSeccion: (0.20, 0.20),
+        Entera: (0, 6), Abajo: (0, 2.2), Arriba: (1.5, 6), Limites: (0.06, 0.34, 0.06, 0.34));
+
+Probar("planear_seccion_sin_traslapo", () =>
+{
+    var sola = Esquina40(false) with { Abajo = null, Arriba = null };
+    var r = AcomodoTraslapos.PlanearSeccion(new[] { sola }, null);
+    Cierto(r[0].Manera is null, "sin traslapo no hay manera");
+    Cierto(r[0].Eje == (1, 0), "eje = la normal");
+});
+
+Probar("planear_seccion_igual_que_elegir", () =>
+{
+    // Una sola varilla sin obstáculos: Elegir se queda con la de siempre
+    // (la primera manera del primer eje, el de la normal), como el generador.
+    var p = Esquina40(false);
+    var r = AcomodoTraslapos.PlanearSeccion(new[] { p }, null);
+    AcomodoTraslapos.Manera esperada = AcomodoTraslapos.Cuatro(
+        p.X, p.Y, p.Radio, p.Normal, p.Diametro, p.Abajo!.Value, p.Arriba!.Value,
+        (p.Limites.XMin, p.Limites.XMax, p.Limites.YMin, p.Limites.YMax))[0];
+    Cierto(r[0].Eje == (1, 0), $"eje {r[0].Eje}");
+    Cierto(r[0].Manera!.Piezas.SequenceEqual(esperada.Piezas), "las mismas piezas");
+});
+
+Probar("planear_seccion_con_gancho_no_prueba_diagonal", () =>
+{
+    // Con obstáculos donde iría la corrida en X y en Y, sin gancho la elegida
+    // es la diagonal; con gancho tiene que quedar en X o en Y.
+    var obstaculos = new[]
+    {
+        new AcomodoTraslapos.Pieza(0.0759, 0.06, 0.00795, 0, 6), new AcomodoTraslapos.Pieza(0.06, 0.0759, 0.00795, 0, 6),
+    };
+    var r = AcomodoTraslapos.PlanearSeccion(new[] { Esquina40(true) }, obstaculos);
+    Cierto(r[0].Eje == (1, 0) || r[0].Eje == (0, 1), $"eje {r[0].Eje}");
+    var sinGancho = AcomodoTraslapos.PlanearSeccion(new[] { Esquina40(false) }, obstaculos);
+    Cierto(sinGancho[0].Eje.X != 0 && sinGancho[0].Eje.Y != 0, $"sin gancho, diagonal: {sinGancho[0].Eje}");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;
