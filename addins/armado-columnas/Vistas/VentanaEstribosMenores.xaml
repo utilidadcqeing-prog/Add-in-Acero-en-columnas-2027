@@ -73,7 +73,10 @@
                         <RadioButton x:Name="OpcionSeccionNormal" Content="Sección normal" GroupName="SeccionChoques" IsChecked="True"
                                      Margin="0,0,16,0" Checked="OpcionSeccion_Checked" />
                         <RadioButton x:Name="OpcionZonaTraslapo" Content="Zona de traslapo" GroupName="SeccionChoques"
-                                     Checked="OpcionSeccion_Checked" />
+                                     Checked="OpcionSeccion_Checked" Margin="0,0,24,0" />
+                        <!-- Las esquinas no llevan estribos menores: ocultarlas deja ver mejor las intermedias. -->
+                        <CheckBox x:Name="CheckOcultarEsquinas" Content="Ocultar barras de esquina"
+                                  Checked="CheckOcultarEsquinas_Cambio" Unchecked="CheckOcultarEsquinas_Cambio" />
                     </StackPanel>
                     <!-- Alto máximo con su propio scroll: si hay muchas notas, no le quitan lugar a la sección. -->
                     <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="72" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">

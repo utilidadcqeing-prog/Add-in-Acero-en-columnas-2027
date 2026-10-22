@@ -330,17 +330,21 @@ public partial class VentanaEstribosMenores : Window
         if (_mouse is Point mouse && PiezaPropuesta(mouse) is { } propuesta)
             DibujarPieza(propuesta, ColorDePieza(propuesta), seleccionada: false, opacidad: 0.45);
 
-        // Barras: esquinas e intermedias, con la que está bajo el mouse resaltada.
-        foreach ((double x, double y) in _esquinas)
-            Punto(PX(x), PY(y), Radio(_seccion.DiametroEsquinaMm), Paleta.Superficie);
+        // Barras: esquinas e intermedias con el color de su diámetro, como en
+        // Revit, y la que está bajo el mouse resaltada. Las esquinas no llevan
+        // menores: se pueden ocultar para ver mejor las intermedias.
+        bool ocultarEsquinas = CheckOcultarEsquinas.IsChecked == true;
+        if (!ocultarEsquinas)
+            foreach ((double x, double y) in _esquinas)
+                Punto(PX(x), PY(y), Radio(_seccion.DiametroEsquinaMm), ColorDeDiametro(_seccion.DiametroEsquinaMm));
 
         (EjeCaja Eje, int Indice)? bajoMouse = _mouse is Point m && _herramienta is not null ? BarraEn(m) : null;
         for (int f = 0; f < _filas; f++)
             foreach (double x in new[] { Izquierda, Derecha })
-                PuntoIntermedio(x, Y(f), Radio(_seccion.DiametroCaraYMm), (EjeCaja.Fila, f), bajoMouse);
+                PuntoIntermedio(x, Y(f), _seccion.DiametroCaraYMm, (EjeCaja.Fila, f), bajoMouse);
         for (int c = 0; c < _columnas; c++)
             foreach (double y in new[] { Arriba, Abajo })
-                PuntoIntermedio(X(c), y, Radio(_seccion.DiametroCaraXMm), (EjeCaja.Columna, c), bajoMouse);
+                PuntoIntermedio(X(c), y, _seccion.DiametroCaraXMm, (EjeCaja.Columna, c), bajoMouse);
 
         // Los choques (#131): en la zona de traslapo, además las piezas corridas.
         _choques = _choquesDe?.Invoke(_piezas) ?? ChoquesSeccion.Resultado.Vacio;
@@ -351,10 +355,12 @@ public partial class VentanaEstribosMenores : Window
         bool verTraslapo = OpcionZonaTraslapo.IsChecked == true;
         if (verTraslapo)
             foreach (ChoquesSeccion.PiezaRedonda pieza in _choques.PiezasTraslapo)
-                Punto(PX(pieza.X), PY(pieza.Y), Radio(pieza.DiametroMm), Paleta.Superficie);
+                if (!ocultarEsquinas || !EsDeEsquina(pieza.X, pieza.Y))
+                    Punto(PX(pieza.X), PY(pieza.Y), Radio(pieza.DiametroMm), ColorDeDiametro(pieza.DiametroMm));
         foreach (ChoquesSeccion.Choque choque in verTraslapo ? _choques.Traslapo : _choques.Normal)
             foreach ((double X, double Y, double Radio) marca in choque.Marcas)
-                Lienzo.Children.Add(DibujoArmado.MarcaChoque(AP(marca.X, marca.Y), Math.Max(1.5, marca.Radio * _escala), choque.Motivo));
+                if (!ocultarEsquinas || !EsDeEsquina(marca.X, marca.Y))
+                    Lienzo.Children.Add(DibujoArmado.MarcaChoque(AP(marca.X, marca.Y), Math.Max(1.5, marca.Radio * _escala), choque.Motivo));
 
         // Rótulos de fila y columna, desde 1, por fuera de la sección.
         for (int f = 0; f < _filas; f++) Texto($"F{f + 1}", PX(0) - 30, Y(f) - 8);
@@ -369,13 +375,28 @@ public partial class VentanaEstribosMenores : Window
         ActualizarNotas();
     }
 
-    private void PuntoIntermedio(double x, double y, double radio, (EjeCaja, int) barra, (EjeCaja, int)? bajoMouse)
+    private void PuntoIntermedio(double x, double y, double diametroMm, (EjeCaja, int) barra, (EjeCaja, int)? bajoMouse)
     {
+        double radio = Radio(diametroMm);
         bool primero = _primerClic is { } p && p.Equals(barra);
         double aro = Math.Max(11, radio + 5);
         if (primero || Equals(bajoMouse, barra))
             Agregar(new Ellipse { Width = 2 * aro, Height = 2 * aro, Stroke = ColorDe(_herramienta ?? FormaMenor.Cerrado), StrokeThickness = 2 }, x - aro, y - aro);
-        Punto(x, y, radio, Paleta.ErrorClaro);
+        Punto(x, y, radio, ColorDeDiametro(diametroMm));
+    }
+
+    /// <summary>El color de la barra en Revit (filtros de vista y vista previa): por su diámetro.</summary>
+    private static Brush ColorDeDiametro(double diametroMm)
+    {
+        ColoresVarilla.ColorRgb c = ColoresVarilla.ColorDe(diametroMm);
+        return new SolidColorBrush(Color.FromRgb(c.R, c.G, c.B));
+    }
+
+    /// <summary>Si (x, y) es una barra de esquina, o una pieza de su traslapo (corrida hasta un diámetro y medio).</summary>
+    private bool EsDeEsquina(double x, double y)
+    {
+        double alcance = 1.5 * _seccion.DiametroEsquinaMm / 1000;
+        return _esquinas.Any(e => Math.Abs(e.X - x) <= alcance && Math.Abs(e.Y - y) <= alcance);
     }
 
     /// <summary>
@@ -431,7 +452,7 @@ public partial class VentanaEstribosMenores : Window
     private Brush ColorDePieza(EstriboMenor pieza) =>
         PaqueteEstribos.EstaTapada(pieza, _piezas) ? ColorTapada
         : Imposible(pieza) is not null ? ColorImposible
-        : ColorDe(pieza.Forma);
+        : ColorDeDiametro(_medidas?.Barra(pieza.TipoBarraNombre ?? _medidas.BarraEstribo)?.DiametroMm ?? _seccion.DiametroEstriboMm);
 
     /// <summary>
     /// Por qué un estribo cerrado no se puede doblar con su barra, o null si
@@ -539,6 +560,11 @@ public partial class VentanaEstribosMenores : Window
 
     /// <summary>Mientras Dibujar acomoda el selector: sus cambios no tienen que volver a dibujar.</summary>
     private bool _ajustandoSelector;
+
+    private void CheckOcultarEsquinas_Cambio(object sender, RoutedEventArgs e)
+    {
+        if (IsLoaded) Dibujar();
+    }
 
     private void OpcionSeccion_Checked(object sender, RoutedEventArgs e)
     {
