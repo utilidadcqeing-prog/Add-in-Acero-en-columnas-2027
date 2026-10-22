@@ -57,6 +57,15 @@ public class App : IExternalApplication
             "practicacq.ComandoDiagnosticoBarraContinua",
             "TEMPORAL: prueba si una sola barra puede recorrer varias columnas apiladas y llevar varios empalmes. Deja barras de prueba (Ctrl+Z las saca).",
             "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoLineaPropiedad.cs.
+        // Sacar este botón (y el comando) una vez implementado el #139.
+        panelHerramientas.AddItem(CintaCqeing.CrearBoton(
+            "ComandoDiagnosticoLineaPropiedad",
+            "Diagnóstico\nlínea de propiedad",
+            "practicacq.ComandoDiagnosticoLineaPropiedad",
+            "TEMPORAL: lee las líneas de propiedad del modelo y, para las columnas seleccionadas, qué caras quedan sobre el lindero. No cambia el modelo.",
+            "iconoCQ"));
 #endif
 
         return Result.Succeeded;

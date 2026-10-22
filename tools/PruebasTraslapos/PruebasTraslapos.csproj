@@ -17,6 +17,7 @@
     <Compile Include="..\..\addins\armado-columnas\Modelo\PlanTraslapos.cs" Link="Modelo\PlanTraslapos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\CuadroVarillas.cs" Link="Modelo\CuadroVarillas.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\ColumnaContexto.cs" Link="Modelo\ColumnaContexto.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\Lindero.cs" Link="Modelo\Lindero.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\ConfigLongitudinal.cs" Link="Modelo\ConfigLongitudinal.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\PosicionBarra.cs" Link="Modelo\PosicionBarra.cs" />

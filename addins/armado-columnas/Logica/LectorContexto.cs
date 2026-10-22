@@ -257,8 +257,33 @@ public sealed class LectorContexto : IProveedorContexto
             ZSuperior = AMetros(pila[^1].ZSup),
             Tramos = tramos,
             Niveles = Rotulos(zInferiorGlobal, pila[^1].ZSup),
+            Lindero = LeerLindero(),
             Avisos = avisos
         };
+    }
+
+    /// <summary>
+    /// Las líneas de propiedad del documento, en planta (issue #139). Se usa
+    /// <see cref="PropertyLine.GetBoundary"/>, la API pública; los segmentos
+    /// sueltos de la categoría no son públicos. Las curvas que no son rectas
+    /// se pasan a tramos con <see cref="Curve.Tessellate"/>. La altura a la que
+    /// se dibujó no importa. Medido contra Revit real el 22-oct
+    /// (ComandoDiagnosticoLineaPropiedad).
+    /// </summary>
+    private List<TramoLindero> LeerLindero()
+    {
+        var tramos = new List<TramoLindero>();
+        foreach (PropertyLine linea in new FilteredElementCollector(_doc).OfClass(typeof(PropertyLine)).Cast<PropertyLine>())
+            foreach (CurveLoop lazo in linea.GetBoundary())
+                foreach (Curve curva in lazo)
+                {
+                    IList<XYZ> puntos = curva.Tessellate();
+                    for (int i = 1; i < puntos.Count; i++)
+                        tramos.Add(new TramoLindero(
+                            AMetros(puntos[i - 1].X), AMetros(puntos[i - 1].Y), AMetros(puntos[i].X), AMetros(puntos[i].Y)));
+                }
+
+        return tramos;
     }
 
     // ------------------------------------------------------------ agrupado

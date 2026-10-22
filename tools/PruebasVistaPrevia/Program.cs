@@ -298,5 +298,46 @@ Probar("grapa_en_s_abre_un_gancho_para_cada_lado", () =>
     Cierto(g[0].Y > 0.12 && g[^1].Y < 0.12, "la cola del inicio arriba y la del fin abajo");
 });
 
+// ---- #139: ganchos que cruzarían la línea de propiedad
+
+// El lote del modelo de prueba del 22-oct: X -0,15..7,15 ; Y -0,15..12,15.
+var lote = new List<TramoLindero>
+{
+    new(7.15, 12.15, 7.15, -0.15),
+    new(7.15, -0.15, -0.15, -0.15),
+    new(-0.15, -0.15, -0.15, 12.15),
+    new(-0.15, 12.15, 7.15, 12.15),
+};
+
+Probar("lindero_alcance_gancho_90", () =>
+{
+    Igual(0.222 + 2.5 * 0.0127, Lindero.AlcanceGancho90(12.7), "#4");
+    Igual(0.388 + 2.5 * 0.0222, Lindero.AlcanceGancho90(22.2), "#7");
+    Igual(16 * 0.0358, Lindero.AlcanceGancho90(35.8), "#11, fuera del cuadro");
+});
+
+Probar("lindero_gancho_que_cruza", () =>
+{
+    // Columna 782105, barra #7 812763: en X 6,913 con el gancho hacia +X.
+    double alcance = Lindero.AlcanceGancho90(22.2);
+    Cierto(Lindero.Cruza(lote, 6.913, -0.065, 1, 0, alcance), "hacia +X cruza X = 7,15");
+    Cierto(!Lindero.Cruza(lote, 6.913, -0.065, -1, 0, alcance), "girado hacia -X queda en el lote");
+    // Barra 812858: en Y 0,098 con el gancho hacia -Y.
+    Cierto(Lindero.Cruza(lote, 7.087, 0.098, 0, -1, alcance), "hacia -Y cruza Y = -0,15");
+    Cierto(!Lindero.Cruza(lote, 7.087, 0.098, 0, 1, alcance), "girado hacia +Y queda en el lote");
+});
+
+Probar("lindero_gancho_que_no_llega", () =>
+{
+    // Columna interior (3,5 ; 6): ningún gancho llega al borde.
+    Cierto(!Lindero.Cruza(lote, 3.5, 6.0, 1, 0, 0.45), "hacia +X");
+    Cierto(!Lindero.Cruza(lote, 3.5, 6.0, 0, -1, 0.45), "hacia -Y");
+    // Sin línea de propiedad, nada cruza.
+    Cierto(!Lindero.Cruza(new List<TramoLindero>(), 6.913, -0.065, 1, 0, 1.0), "sin lindero");
+});
+
+Probar("lindero_punta_justo_sobre_la_linea_cuenta", () =>
+    Cierto(Lindero.Cruza(lote, 7.0, 0.0, 1, 0, 0.15), "la punta toca X = 7,15"));
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

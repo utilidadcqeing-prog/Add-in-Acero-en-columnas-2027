@@ -471,6 +471,7 @@ public static class GeneradorLongitudinal
         var avisosDeBarras = new HashSet<string>();
 
         int piezas = 0;
+        int ganchosGirados = 0;
         // Las varillas creadas: se terminan de acomodar todas juntas al final,
         // para que las piezas corridas de los traslapos no choquen entre sí.
         var creadas = new List<(BarraContinua.Pedido Pedido, IReadOnlyList<Rebar> Cadena)>();
@@ -618,6 +619,23 @@ public static class GeneradorLongitudinal
                     $"{GeometriaSeccion.Metros(pedido.Y):0.###}): así se corre su pieza de " +
                     $"{(manera.CorridaLaDeArriba ? "arriba" : "abajo")} y no choca.");
 
+            // En el borde del lote (#139): el gancho que, mirando hacia el
+            // centro, terminaría del lado del vecino se gira al otro lado.
+            switch (LadoLejosDelLindero(contexto.Lindero, pedido))
+            {
+                case { Girado: { } girado }:
+                    pedido = girado;
+                    ganchosGirados++;
+                    BarraContinua.Traza?.Invoke(
+                        $"LINDERO: gancho girado para la varilla «{pedido.Barra.Name}» en ({GeometriaSeccion.Metros(pedido.X):0.###}, " +
+                        $"{GeometriaSeccion.Metros(pedido.Y):0.###}): hacia el centro cruzaba la línea de propiedad.");
+                    break;
+                case { SinSalida: true }:
+                    avisosDeBarras.Add(
+                        "un gancho cruza la línea de propiedad para los dos lados (columna más angosta que el gancho); revisarlo en el modelo.");
+                    break;
+            }
+
             BarraContinua.Resultado creada = BarraContinua.Crear(doc, pedido);
 
             piezas += creada.Piezas;
@@ -671,6 +689,11 @@ public static class GeneradorLongitudinal
 
         foreach (string aviso in avisosDeBarras)
             res.Avisos.Add($"{contexto.Marca}: {aviso}");
+
+        if (ganchosGirados > 0)
+            res.Avisos.Add(
+                $"{contexto.Marca}: está sobre la línea de propiedad; {ganchosGirados} varilla(s) llevan el gancho girado " +
+                "para que no termine del lado del vecino.");
 
         if (piezas > 0)
             res.Detalles.Add(
@@ -1294,6 +1317,34 @@ public static class GeneradorLongitudinal
         return proyeccion > 0
             ? (OrientacionPositiva, OrientacionPositiva)
             : (OrientacionNegativa, OrientacionNegativa);
+    }
+
+    /// <summary>
+    /// Regla del #139 (Luciano, 22-oct): el gancho sigue mirando hacia el
+    /// centro (<see cref="OrientacionesHaciaAdentro"/>) y solo se gira el que
+    /// cruzaría la línea de propiedad. Girarlo lo deja sobre el mismo eje,
+    /// del lado del lote. <c>Girado</c> = el pedido con el gancho del otro
+    /// lado; <c>SinSalida</c> = cruza para los dos lados y se deja como está.
+    /// Medido el 22-oct: docs/planes/2026-10-22-ganchos-zapata-y-lindero-138-139.md.
+    /// </summary>
+    private static (BarraContinua.Pedido? Girado, bool SinSalida) LadoLejosDelLindero(
+        IReadOnlyList<TramoLindero> lindero, BarraContinua.Pedido p)
+    {
+        if (lindero.Count == 0 || (p.GanchoAbajo is null && p.GanchoArriba is null)) return (null, false);
+
+        // Mismo eje que OrientacionesHaciaAdentro: Positiva dobla hacia +haciaDondeDobla.
+        XYZ haciaDondeDobla = XYZ.BasisZ.CrossProduct(p.Normal);
+        double signo = p.OrientacionAbajo == OrientacionPositiva ? 1 : -1;
+        double x = GeometriaSeccion.Metros(p.X), y = GeometriaSeccion.Metros(p.Y);
+        double alcance = Lindero.AlcanceGancho90(EstandarCQ.DiametroMm(p.Barra));
+
+        bool Cruza(double s) => Lindero.Cruza(lindero, x, y, s * haciaDondeDobla.X, s * haciaDondeDobla.Y, alcance);
+
+        if (!Cruza(signo)) return (null, false);
+        if (Cruza(-signo)) return (null, true);
+
+        RebarTerminationOrientation otra = signo > 0 ? OrientacionNegativa : OrientacionPositiva;
+        return (p with { OrientacionAbajo = otra, OrientacionArriba = otra }, false);
     }
 
     /// <summary>

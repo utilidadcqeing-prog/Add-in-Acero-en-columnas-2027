@@ -68,6 +68,13 @@ public sealed class ColumnaContexto
     /// <summary>Rótulos de nivel para dibujar la elevación, ordenados de abajo hacia arriba.</summary>
     public IReadOnlyList<NivelRotulo> Niveles { get; init; } = new List<NivelRotulo>();
 
+    /// <summary>
+    /// La línea de propiedad del documento, en planta (issue #139): los
+    /// ganchos no pueden terminar del otro lado. Vacía si el modelo no tiene
+    /// línea de propiedad (o del lado del proveedor falso).
+    /// </summary>
+    public IReadOnlyList<TramoLindero> Lindero { get; init; } = new List<TramoLindero>();
+
     /// <summary>Lo que no se pudo leer bien de esta columna. Vacío es lo normal.</summary>
     public IReadOnlyList<string> Avisos { get; init; } = new List<string>();
 }
