@@ -281,23 +281,48 @@ public sealed class LectorContexto : IProveedorContexto
     /// sueltos de la categoría no son públicos. Las curvas que no son rectas
     /// se pasan a tramos con <see cref="Curve.Tessellate"/>. La altura a la que
     /// se dibujó no importa. Medido contra Revit real el 22-oct
-    /// (ComandoDiagnosticoLineaPropiedad).
+    /// (con un comando de diagnóstico temporal, ya sacado).
+    ///
+    /// <c>GetBoundary</c> es nuevo de la API 2027. En 2026 se leen las curvas
+    /// de su geometría (<see cref="Element.get_Geometry"/>, pública en los dos
+    /// años): el diagnóstico del 22-oct dio las mismas 4 líneas por los dos
+    /// caminos (en 2027; en Revit 2026 no está medido).
     /// </summary>
     private List<TramoLindero> LeerLindero()
     {
         var tramos = new List<TramoLindero>();
         foreach (PropertyLine linea in new FilteredElementCollector(_doc).OfClass(typeof(PropertyLine)).Cast<PropertyLine>())
-            foreach (CurveLoop lazo in linea.GetBoundary())
-                foreach (Curve curva in lazo)
-                {
-                    IList<XYZ> puntos = curva.Tessellate();
-                    for (int i = 1; i < puntos.Count; i++)
-                        tramos.Add(new TramoLindero(
-                            AMetros(puntos[i - 1].X), AMetros(puntos[i - 1].Y), AMetros(puntos[i].X), AMetros(puntos[i].Y)));
-                }
+            foreach (Curve curva in CurvasDe(linea))
+            {
+                IList<XYZ> puntos = curva.Tessellate();
+                for (int i = 1; i < puntos.Count; i++)
+                    tramos.Add(new TramoLindero(
+                        AMetros(puntos[i - 1].X), AMetros(puntos[i - 1].Y), AMetros(puntos[i].X), AMetros(puntos[i].Y)));
+            }
 
         return tramos;
     }
+
+#if REVIT2026
+    private static IEnumerable<Curve> CurvasDe(PropertyLine linea) =>
+        CurvasDe(linea.get_Geometry(new Options()));
+
+    private static IEnumerable<Curve> CurvasDe(GeometryElement? geometria)
+    {
+        if (geometria is null) yield break;
+        foreach (GeometryObject objeto in geometria)
+        {
+            if (objeto is Curve curva)
+                yield return curva;
+            else if (objeto is GeometryInstance instancia)
+                foreach (Curve deInstancia in CurvasDe(instancia.GetInstanceGeometry()))
+                    yield return deInstancia;
+        }
+    }
+#else
+    private static IEnumerable<Curve> CurvasDe(PropertyLine linea) =>
+        linea.GetBoundary().SelectMany(lazo => lazo);
+#endif
 
     // ------------------------------------------------------------ agrupado
 
