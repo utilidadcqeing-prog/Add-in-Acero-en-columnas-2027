@@ -50,13 +50,30 @@ public static class MotorVigas
     /// <summary>Cómo quedaría el pórtico si la barra <paramref name="id"/> pasa a <paramref name="nuevoLargo"/> (Subir / Bajar).</summary>
     public static Previsualizacion PrevisualizarBarra(EntradaVigas entrada, string id, int nuevoLargo)
     {
-        Barra? barra = Calcular(entrada).Barras.FirstOrDefault(b => b.Id == id);
+        ResultadoVigas actual = Calcular(entrada);
+        Barra? barra = actual.Barras.FirstOrDefault(b => b.Id == id);
         if (barra is null)
             return new Previsualizacion(false, MotivoBloqueo.NoExiste, null);
         if (barra.Largo == nuevoLargo)
             return new Previsualizacion(false, MotivoBloqueo.SinCambio, null);
         var cambios = entrada.Cambios ?? new CambiosManuales();
-        return Probar(entrada with { Cambios = cambios with { Barras = Con(cambios.Barras, id, nuevoLargo) } }, id);
+        return Probar(entrada with
+        {
+            Cambios = cambios with { Barras = Con(cambios.Barras, id, nuevoLargo), Movidos = SinCorridosDe(actual, cambios.Movidos, id) },
+        }, id);
+    }
+
+    /// <summary>
+    /// Los traslapos corridos sin los de la barra <paramref name="id"/>. El corrido es una posición fija y se aplica
+    /// después de los largos: si se quedara, devolvería la barra a otro largo y Subir / Bajar no harían nada. La página
+    /// quita los mismos al aplicar Subir / Bajar y Automático (barraSinCorridos, tablero.js).
+    /// </summary>
+    private static Dictionary<string, TraslapoMovido>? SinCorridosDe(ResultadoVigas r, IReadOnlyDictionary<string, TraslapoMovido>? movidos, string id)
+    {
+        if (movidos is null)
+            return null;
+        HashSet<string> suyos = r.Traslapos.Where(t => t.BarraIzquierda == id || t.BarraDerecha == id).Select(t => t.Id).ToHashSet();
+        return movidos.Where(m => !suyos.Contains(m.Key)).ToDictionary(m => m.Key, m => m.Value);
     }
 
     /// <summary>Cómo quedaría el pórtico si el traslapo <paramref name="id"/> se escribe con <paramref name="largo"/>.</summary>
