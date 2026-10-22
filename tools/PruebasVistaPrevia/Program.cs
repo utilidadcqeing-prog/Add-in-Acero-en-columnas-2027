@@ -414,5 +414,71 @@ Probar("choques_cerrado_imposible_igual_que_antes", () =>
     Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, separadas, "fila 1") is null, "una caja ancha se dobla");
 });
 
+var tiposDePrueba = new Dictionary<string, TipoBarra>
+{
+    ["#3"] = new TipoBarra("#3", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 57 },
+    ["#5"] = new TipoBarra("#5", 15.9) { DobladoEstriboMm = 64, DobladoGanchoMm = 95 },
+    ["#6"] = new TipoBarra("#6", 19.1) { DobladoEstriboMm = 115, DobladoGanchoMm = 115 },
+};
+TipoBarra? TipoDe(string? nombre) => nombre is not null && tiposDePrueba.TryGetValue(nombre, out TipoBarra? t) ? t : null;
+
+ColumnaContexto ColumnaDePrueba(double lado, double alto, TipoTramo tipo = TipoTramo.Libre)
+{
+    var tramo = new Tramo { Indice = 0, ZInferior = 0, ZSuperior = alto, Tipo = tipo };
+    return new ColumnaContexto
+    {
+        Marca = "C-1", BaseX = lado, BaseY = lado, Recubrimiento = 0.04,
+        ZInferior = 0, ZInferiorLongitudinal = 0, ZSuperior = alto, Tramos = new List<Tramo> { tramo },
+    };
+}
+
+ConfigLongitudinal LongDePrueba(string barra, int porCara, double comercial = 12) => new()
+{
+    BarrasPorCaraX = 2 * porCara, BarrasPorCaraY = 2 * porCara,
+    TipoBarraEsquinasNombre = barra, TipoBarraCaraXNombre = barra, TipoBarraCaraYNombre = barra,
+    LongitudComercialBarra = comercial,
+};
+
+ChoquesSeccion.Resultado ChoquesDe(ColumnaContexto c, ConfigLongitudinal l) =>
+    ChoquesSeccion.DeTramo(c, c.Tramos[0], new ConfigTramo { TipoBarraNombre = "#3" }, l, 0.04, TipoDe, 9.5);
+
+Probar("choques_tramo_sin_choques", () =>
+{
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 3), LongDePrueba("#5", 0));
+    Cierto(r.Normal.Count == 0 && r.Traslapo.Count == 0, string.Join(" | ", r.Normal.Concat(r.Traslapo).Select(c => c.Motivo)));
+    // 3 m con barras de 12 m: una sola pieza, sin zona de traslapo que mostrar.
+    Cierto(!r.HayTraslapo && r.PiezasTraslapo.Count == 0, "sin traslapo");
+});
+
+Probar("choques_tramo_muchas_barras", () =>
+{
+    // 30×30 con 3 intermedias de #6 por cara: entre ejes ≈ 4,55 cm, libre ≈ 2,6 cm.
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.30, 3), LongDePrueba("#6", 3));
+    Cierto(r.Normal.Any(c => c.Motivo.Contains("de la cara inferior") && c.Motivo.Contains("se piden 4,0 cm")),
+        string.Join(" | ", r.Normal.Select(c => c.Motivo)));
+});
+
+Probar("choques_tramo_traslapo_mas_apretado", () =>
+{
+    // 40×40 con 3 intermedias de #6: libre ≈ 5,1 cm, pero la pieza corrida del
+    // traslapo se arrima un diámetro a la vecina (≈ 3,2 cm).
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 9), LongDePrueba("#6", 3, comercial: 6));
+    Cierto(r.HayTraslapo, "tiene traslapo");
+    Cierto(r.Normal.Count == 0, "normal: " + string.Join(" | ", r.Normal.Select(c => c.Motivo)));
+    Cierto(r.Traslapo.Count > 0 && r.Traslapo.All(c => c.Motivo.StartsWith("En la zona de traslapo")), "sin choques de traslapo");
+    Cierto(r.PiezasTraslapo.Count > 0, "piezas para dibujar");
+});
+
+Probar("choques_tramo_contra_zapata", () =>
+{
+    // Un cerrado en una sola fila no se puede doblar: se avisa en un tramo
+    // libre, pero el tramo contra la zapata no lleva menores.
+    ConfigLongitudinal l = LongDePrueba("#6", 3);
+    l.EstribosMenores = new List<EstriboMenor> { new() { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 1, Hasta = 1 } };
+    Cierto(ChoquesDe(ColumnaDePrueba(0.40, 3), l).Normal.Any(c => c.Motivo.StartsWith("El estribo cerrado")), "libre: avisa el cerrado");
+    Cierto(!ChoquesDe(ColumnaDePrueba(0.40, 3, TipoTramo.ContraZapata), l).Normal.Any(c => c.Motivo.Contains("estribo cerrado")),
+        "contra zapata: no evalúa menores");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

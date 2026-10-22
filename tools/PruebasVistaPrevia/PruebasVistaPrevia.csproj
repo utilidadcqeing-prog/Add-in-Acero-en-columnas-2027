@@ -24,6 +24,7 @@
     <Compile Include="..\..\addins\armado-columnas\Modelo\ColumnaContexto.cs" Link="Modelo\ColumnaContexto.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\Lindero.cs" Link="Modelo\Lindero.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\ChoquesSeccion.cs" Link="Modelo\ChoquesSeccion.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\AcomodoTraslapos.cs" Link="Modelo\AcomodoTraslapos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\EstriboMenor.cs" Link="Modelo\EstriboMenor.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\GanchoGrapa.cs" Link="Modelo\GanchoGrapa.cs" />
