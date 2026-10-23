@@ -30,6 +30,23 @@ internal sealed class Tubos3D : IDirectContext3DServer
     /// <summary>Vértices por bloque: los búferes de Revit se dibujan por partes para no pasar de su tamaño.</summary>
     private const int VerticesPorBloque = 60000;
 
+    /// <summary>
+    /// El contorno va un poco por fuera del tubo: sobre la superficie misma, las
+    /// líneas y los triángulos se pelean por el mismo píxel y el contorno parpadea
+    /// (mismo valor que vigas).
+    /// </summary>
+    private const double SeparacionContorno = 1.06;
+
+    /// <summary>Dos puntas a menos de esto (pies) son la unión de dos pedazos de una barra: no llevan anillo.</summary>
+    private const double ToleranciaUnion = 1e-4;
+
+    /// <summary>
+    /// Casi negro, como el contorno de vigas (<c>ColoresDiametro.RgbContorno</c>)
+    /// y las líneas de las barras generadas en 3D (#144): con el fondo oscuro,
+    /// Revit pinta de blanco el negro puro.
+    /// </summary>
+    private static readonly ColorWithTransparency ColorContorno = new(30, 30, 30, 0);
+
     /// <summary>Distinto del de vigas, para que los dos dibujos no se pisen.</summary>
     private static readonly Guid Id = new("C3A1F0D2-7B4E-4E59-9F1A-2D6B8E0C4A93");
     private static Tubos3D? servidor;
@@ -40,6 +57,7 @@ internal sealed class Tubos3D : IDirectContext3DServer
     private Document? documento;
     private List<Malla> mallas = new();
     private List<Bloque>? bloques;
+    private List<BloqueLineas>? bloquesContorno;
     private Outline? caja;
 
     private Tubos3D()
@@ -57,10 +75,17 @@ internal sealed class Tubos3D : IDirectContext3DServer
             return;
         }
 
+        // Cada tubo es un pedazo de barra (una curva, o un tramo recto, gancho
+        // o traslapo): solo las puntas que no tocan otro pedazo son puntas de
+        // la barra y llevan anillo (docs/planes/2026-10-23-contorno-vista-previa-3d.md).
+        List<XYZ> puntas = lista.SelectMany(t => new[] { t.Puntos[0], t.Puntos[^1] }).ToList();
+        bool Suelta(XYZ p) => puntas.Count(q => q.IsAlmostEqualTo(p, ToleranciaUnion)) == 1;
+
         s.documento = doc;
-        s.mallas = lista.Select(Malla.De).ToList();
+        s.mallas = lista.Select(t => Malla.De(t, Suelta(t.Puntos[0]), Suelta(t.Puntos[^1]))).ToList();
         s.caja = Caja(lista);
         s.bloques = null; // se arman en el próximo dibujo, en el hilo de dibujo
+        s.bloquesContorno = null;
     }
 
     /// <summary>Quita lo dibujado (al cerrar la ventana o el documento). No registra el servidor si no estaba.</summary>
@@ -72,6 +97,7 @@ internal sealed class Tubos3D : IDirectContext3DServer
         mallas = new List<Malla>();
         caja = null;
         bloques = null;
+        bloquesContorno = null;
     }
 
     private static Tubos3D Registrado()
@@ -99,18 +125,26 @@ internal sealed class Tubos3D : IDirectContext3DServer
     /// <summary>Un vértice del tubo: posición y normal en pies, y su color.</summary>
     private readonly record struct Vertice(XYZ Posicion, XYZ Normal, ColorWithTransparency Color);
 
-    /// <summary>Los vértices y triángulos (índices locales) de un tubo.</summary>
-    private sealed record Malla(List<Vertice> Vertices, List<(int A, int B, int C)> Triangulos)
+    /// <summary>
+    /// Los vértices y triángulos (índices locales) de un tubo, y su contorno:
+    /// pares de puntos en pies, cada par una línea.
+    /// </summary>
+    private sealed record Malla(List<Vertice> Vertices, List<(int A, int B, int C)> Triangulos, List<XYZ> Contorno)
     {
         /// <summary>
         /// Un cilindro de <see cref="Lados"/> lados por cada tramo recto del
         /// eje. Los tramos de los dobleces son cortos: así no hace falta unir
-        /// los cilindros.
+        /// los cilindros. El contorno, como en vigas: cuatro líneas a lo largo
+        /// (cada cuarto de vuelta, así se ve desde cualquier lado) y un anillo
+        /// en las puntas que se piden.
         /// </summary>
-        public static Malla De(Tubo t)
+        public static Malla De(Tubo t, bool anilloInicio, bool anilloFin)
         {
             var vertices = new List<Vertice>();
             var triangulos = new List<(int, int, int)>();
+            var contorno = new List<XYZ>();
+            double radioContorno = t.Radio * SeparacionContorno;
+            (XYZ Centro, XYZ U, XYZ V)? primera = null, ultima = null;
             for (int i = 0; i + 1 < t.Puntos.Count; i++)
             {
                 XYZ a = t.Puntos[i], b = t.Puntos[i + 1];
@@ -120,13 +154,16 @@ internal sealed class Tubos3D : IDirectContext3DServer
                 eje = eje.Normalize();
                 XYZ u = (Math.Abs(eje.Z) < 0.9 ? eje.CrossProduct(XYZ.BasisZ) : eje.CrossProduct(XYZ.BasisX)).Normalize();
                 XYZ v = eje.CrossProduct(u);
+                primera ??= (a, u, v);
+                ultima = (b, u, v);
                 int base0 = vertices.Count;
                 for (int k = 0; k < Lados; k++)
                 {
-                    double angulo = 2 * Math.PI * k / Lados;
-                    XYZ normal = u * Math.Cos(angulo) + v * Math.Sin(angulo);
+                    XYZ normal = Radial(u, v, k);
                     vertices.Add(new Vertice(a + normal * t.Radio, normal, t.Color));
                     vertices.Add(new Vertice(b + normal * t.Radio, normal, t.Color));
+                    if (k % (Lados / 4) == 0)
+                        contorno.AddRange(new[] { a + normal * radioContorno, b + normal * radioContorno });
                 }
 
                 for (int k = 0; k < Lados; k++)
@@ -137,12 +174,68 @@ internal sealed class Tubos3D : IDirectContext3DServer
                 }
             }
 
-            return new Malla(vertices, triangulos);
+            if (anilloInicio && primera is { } inicio) Anillo(contorno, inicio, radioContorno);
+            if (anilloFin && ultima is { } fin) Anillo(contorno, fin, radioContorno);
+            return new Malla(vertices, triangulos, contorno);
+        }
+
+        private static void Anillo(List<XYZ> contorno, (XYZ Centro, XYZ U, XYZ V) punta, double radio)
+        {
+            for (int k = 0; k < Lados; k++)
+                contorno.AddRange(new[] { punta.Centro + Radial(punta.U, punta.V, k) * radio, punta.Centro + Radial(punta.U, punta.V, k + 1) * radio });
+        }
+
+        private static XYZ Radial(XYZ u, XYZ v, int k)
+        {
+            double angulo = 2 * Math.PI * k / Lados;
+            return u * Math.Cos(angulo) + v * Math.Sin(angulo);
         }
     }
 
     /// <summary>Un búfer de Revit listo para dibujar.</summary>
     private sealed record Bloque(VertexBuffer Vertices, int CantidadVertices, IndexBuffer Indices, int CantidadTriangulos);
+
+    /// <summary>Un búfer de líneas (el contorno) listo para dibujar.</summary>
+    private sealed record BloqueLineas(VertexBuffer Vertices, int CantidadVertices, IndexBuffer Indices, int CantidadLineas);
+
+    /// <summary>Junta los contornos en bloques de hasta <see cref="VerticesPorBloque"/> vértices, como <see cref="Armar"/>.</summary>
+    private List<BloqueLineas> ArmarContorno()
+    {
+        var lista = new List<BloqueLineas>();
+        var actual = new List<XYZ>();
+        foreach (Malla m in mallas.Where(m => m.Contorno.Count > 0))
+        {
+            if (actual.Count + m.Contorno.Count > VerticesPorBloque && actual.Count > 0)
+            {
+                lista.Add(ArmarBloqueLineas(actual));
+                actual = new List<XYZ>();
+            }
+
+            actual.AddRange(m.Contorno);
+        }
+
+        if (actual.Count > 0) lista.Add(ArmarBloqueLineas(actual));
+        return lista;
+    }
+
+    private static BloqueLineas ArmarBloqueLineas(List<XYZ> puntos)
+    {
+        int nv = puntos.Count, nl = nv / 2;
+        var vb = new VertexBuffer(nv * VertexPositionColored.GetSizeInFloats());
+        vb.Map(nv * VertexPositionColored.GetSizeInFloats());
+        VertexStreamPositionColored vs = vb.GetVertexStreamPositionColored();
+        foreach (XYZ p in puntos)
+            vs.AddVertex(new VertexPositionColored(p, ColorContorno));
+        vb.Unmap();
+
+        var ib = new IndexBuffer(nl * IndexLine.GetSizeInShortInts());
+        ib.Map(nl * IndexLine.GetSizeInShortInts());
+        IndexStreamLine ls = ib.GetIndexStreamLine();
+        for (int i = 0; i < nl; i++)
+            ls.AddLine(new IndexLine(2 * i, 2 * i + 1));
+        ib.Unmap();
+        return new BloqueLineas(vb, nv, ib, nl);
+    }
 
     /// <summary>Junta las mallas en bloques de hasta <see cref="VerticesPorBloque"/> vértices.</summary>
     private List<Bloque> Armar()
@@ -222,7 +315,14 @@ internal sealed class Tubos3D : IDirectContext3DServer
             foreach (Bloque b in bloques)
                 DrawContext.FlushBuffer(b.Vertices, b.CantidadVertices, b.Indices, b.CantidadTriangulos * 3, formato, efecto,
                     PrimitiveType.TriangleList, 0, b.CantidadTriangulos);
-            if (primera) Bitacora3D.Anotar("dibujar: listo");
+
+            bloquesContorno ??= ArmarContorno();
+            var formatoLineas = new VertexFormat(VertexFormatBits.PositionColored);
+            var efectoLineas = new EffectInstance(VertexFormatBits.PositionColored);
+            foreach (BloqueLineas l in bloquesContorno)
+                DrawContext.FlushBuffer(l.Vertices, l.CantidadVertices, l.Indices, l.CantidadLineas * 2, formatoLineas, efectoLineas,
+                    PrimitiveType.LineList, 0, l.CantidadLineas);
+            if (primera) Bitacora3D.Anotar($"dibujar: listo, contorno en {bloquesContorno.Count} bloques");
         }
         catch (Exception ex)
         {
