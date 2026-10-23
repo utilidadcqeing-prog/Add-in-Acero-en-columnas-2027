@@ -47,6 +47,7 @@ internal static class FiltrosColor
                         vista.AddFilter(filtro);
                     vista.SetFilterOverrides(filtro, color);
                 }
+                AlFinalLosQueTomanTodo(doc, vista);
             }
             catch (Autodesk.Revit.Exceptions.InvalidOperationException)
             {
@@ -72,6 +73,30 @@ internal static class FiltrosColor
             }
         }
         return avisos;
+    }
+
+    /// <summary>
+    /// Un filtro sin regla sobre la armadura (el "CQEING otro" gris de columnas) toma todas las barras, y en Revit manda
+    /// el filtro que está más arriba en la vista: si queda encima de los de diámetro, las vigas salen grises (23-oct). La
+    /// API no reordena filtros: se quita y se vuelve a poner con sus mismos ajustes, y así queda al final.
+    /// </summary>
+    private static void AlFinalLosQueTomanTodo(Document doc, View vista)
+    {
+        var armadura = new ElementId(BuiltInCategory.OST_Rebar);
+        List<ElementId> tomanTodo = vista.GetFilters()
+            .Where(id => doc.GetElement(id) is ParameterFilterElement f && f.GetElementFilter() is null && f.GetCategories().Contains(armadura))
+            .ToList();
+        foreach (ElementId id in tomanTodo)
+        {
+            OverrideGraphicSettings ajustes = vista.GetFilterOverrides(id);
+            bool visible = vista.GetFilterVisibility(id);
+            bool activo = vista.GetIsFilterEnabled(id);
+            vista.RemoveFilter(id);
+            vista.AddFilter(id);
+            vista.SetFilterOverrides(id, ajustes);
+            vista.SetFilterVisibility(id, visible);
+            vista.SetIsFilterEnabled(id, activo);
+        }
     }
 
     /// <summary>

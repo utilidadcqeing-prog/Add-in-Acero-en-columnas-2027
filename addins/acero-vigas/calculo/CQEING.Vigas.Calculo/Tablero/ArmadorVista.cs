@@ -273,7 +273,7 @@ public static class ArmadorVista
         }
         var figuras = re.EnSeccion.Where(f => delTramo.ContainsKey(f.Id)).Select(f => new FiguraSeccion(f.Id, f.Tipo.ToString(),
             Cm(f.Izquierda), Cm(f.Derecha), Cm(alto - f.Arriba), Cm(alto - f.Abajo), delTramo[f.Id].Forma.ToString(),
-            Trazo(f, delTramo[f.Id]), Cm(r.PorDiametro[delTramo[f.Id].Diametro].Diametro))).ToList();
+            Trazo(f, delTramo[f.Id]), Cm(r.PorDiametro[delTramo[f.Id].Diametro].Diametro), ColoresDiametro.De(delTramo[f.Id].Diametro))).ToList();
         var barras = Cara(re.Seccion.Superior, true).Concat(Cara(re.Seccion.Inferior, false)).Concat(bastones).ToList();
         return (new SeccionVista(Cm(Ancho(p)), Cm(alto), barras, figuras), proyeccion, aviso);
     }

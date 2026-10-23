@@ -92,10 +92,11 @@ public sealed record DiametroVista(string Nombre, string Color, string NombrePul
 /// <c>"C"</c> o <c>"S"</c> (solo cuenta en el abierto). <paramref name="Puntos"/> es el trazo de un adicional por su
 /// eje, con sus ganchos según el ángulo y la forma, en cm ([x, y] con la y desde arriba); null en el cerrado de las
 /// esquinas, que la página dibuja como un rectángulo. <paramref name="DiametroCm"/> es el de su barra, para dibujar el
-/// grueso a escala (Juan, 22-oct).
+/// grueso a escala (Juan, 22-oct). <paramref name="Color"/> es el de su diámetro (<see cref="Modelo.ColoresDiametro"/>),
+/// como las barras del corte (23-oct).
 /// </summary>
 public sealed record FiguraSeccion(string Id, string Tipo, double Izquierda, double Derecha, double Arriba, double Abajo, string Forma = "C",
-    IReadOnlyList<double[]>? Puntos = null, double DiametroCm = 0);
+    IReadOnlyList<double[]>? Puntos = null, double DiametroCm = 0, string Color = "");
 
 public sealed record SeccionVista(double AnchoCm, double AltoCm, IReadOnlyList<BarraSeccion> Barras, IReadOnlyList<FiguraSeccion> Figuras);
 
