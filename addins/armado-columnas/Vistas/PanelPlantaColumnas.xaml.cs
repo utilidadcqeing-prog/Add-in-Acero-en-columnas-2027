@@ -238,8 +238,8 @@ public partial class PanelPlantaColumnas : UserControl
             var texto = new TextBlock
             {
                 Text = c.MarcaUbicacion,
-                FontSize = 9,
-                Foreground = Paleta.TextoSecundario,
+                FontSize = 10,
+                Foreground = Paleta.ContornoOscuro,
                 IsHitTestVisible = false,
             };
             texto.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -347,7 +347,7 @@ public partial class PanelPlantaColumnas : UserControl
             Height = alto,
             Fill = elegida ? ColorColumnaMarcada : (activa ? ColorColumnaActiva : ColorColumna),
             Stroke = activa ? ColorBordeActiva : (elegida ? ColorBordeMarcada : ColorBordeColumna),
-            StrokeThickness = activa || elegida ? 2 : 1,
+            StrokeThickness = activa ? 3 : (elegida ? 2 : 1),
             // Los clics los resuelve el lienzo contra _marcadores: si cada
             // columna se los quedara, un arrastre que empieza encima de una
             // no llegaría nunca a ser arrastre. Por lo mismo, el tooltip lo

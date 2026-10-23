@@ -22,7 +22,7 @@ public class App : IExternalApplication
             "Columnetas\ny Viguetas",
             "practicacq.Comando",
             "Genera columnetas y viguetas de confinamiento en los muros seleccionados.",
-            "iconoCQ"));
+            "iconoColumnetas"));
 
 #if DEBUG
         // Herramientas de diagnóstico: solo en las compilaciones de desarrollo

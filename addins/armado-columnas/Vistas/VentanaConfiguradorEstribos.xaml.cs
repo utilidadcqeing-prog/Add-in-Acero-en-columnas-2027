@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using practicacq.Modelo;
@@ -326,6 +327,7 @@ public partial class VentanaConfiguradorEstribos : Window
             EsColumna = true,
             EsColumneta = resumen.EsColumneta,
             ColumnaId = resumen.Id,
+            Marca = resumen.Marca,
             Etiqueta = $"{resumen.Marca}  ({columna.Tramos.Count} tramos)",
         });
 
@@ -482,6 +484,17 @@ public partial class VentanaConfiguradorEstribos : Window
             TextoEstado.Text += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
         if (descartadas > 0)
             TextoEstado.Text += $" Se quitaron {descartadas} estribo(s) menor(es) que apuntaban a barras que esta configuración ya no tiene.";
+    }
+
+    /// <summary>
+    /// Enter en el nombre de la configuración guarda, en vez de disparar
+    /// «Aceptar este tramo» (que es el botón por defecto de la ventana, #120).
+    /// </summary>
+    private void CampoNombreConfiguracion_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        BotonGuardarConfiguracion_Click(sender, e);
     }
 
     private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
@@ -1665,9 +1678,49 @@ public partial class VentanaConfiguradorEstribos : Window
         int columnas = _tramosAceptados.Select(t => t.ColumnaId).Distinct().Count();
         int tramos = _tramosAceptados.Count;
 
-        TextoResumenGeneracion.Text = tramos == 0
-            ? "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar."
-            : $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓.";
+        if (tramos == 0)
+        {
+            TextoResumenGeneracion.Text = "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar.";
+            TextoResumenGeneracion.ToolTip = null;
+            BotonGenerar.ToolTip = "Primero acepta al menos un tramo.";
+            return;
+        }
+
+        // #120: que se vea QUÉ se va a generar, no solo cuánto: "C-12: 1, 2, 3 · C-13: 1".
+        // Los tramos se numeran desde 1, igual que debajo de la elevación ("C-12 · 1/10").
+        Dictionary<string, string> marcas = _nodos
+            .Where(n => n.EsColumna)
+            .GroupBy(n => n.ColumnaId)
+            .ToDictionary(g => g.Key, g => g.First().Marca);
+        List<string> porColumna = _tramosAceptados
+            .GroupBy(t => t.ColumnaId)
+            .Select(g => (Marca: marcas.TryGetValue(g.Key, out string? m) ? m : g.Key, Tramos: g.Select(t => t.Indice + 1).OrderBy(i => i)))
+            .OrderBy(c => c.Marca, StringComparer.CurrentCultureIgnoreCase)
+            .Select(c => $"{c.Marca}: {Rangos(c.Tramos)}")
+            .ToList();
+        const int Visibles = 4;
+        string lista = string.Join(" · ", porColumna.Take(Visibles)) +
+                       (porColumna.Count > Visibles ? $" · y {porColumna.Count - Visibles} columna(s) más" : "");
+        string completa = "Se van a generar estos tramos:\n" + string.Join("\n", porColumna);
+
+        TextoResumenGeneracion.Text = $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓ — {lista}";
+        TextoResumenGeneracion.ToolTip = completa;
+        BotonGenerar.ToolTip = completa;
+    }
+
+    /// <summary>Números ordenados como rangos: 1, 2, 3, 5, 7, 8 → "1–3, 5, 7–8".</summary>
+    private static string Rangos(IEnumerable<int> numeros)
+    {
+        var partes = new List<string>();
+        int? desde = null, hasta = null;
+        foreach (int n in numeros)
+        {
+            if (hasta == n - 1) { hasta = n; continue; }
+            if (desde is not null) partes.Add(desde == hasta ? $"{desde}" : $"{desde}–{hasta}");
+            desde = hasta = n;
+        }
+        if (desde is not null) partes.Add(desde == hasta ? $"{desde}" : $"{desde}–{hasta}");
+        return string.Join(", ", partes);
     }
 
     // -------------------------------------------------------------- dibujo
@@ -2055,6 +2108,7 @@ public sealed class NodoLista : INotifyPropertyChanged
     public bool EsColumneta { get; init; }
 
     public string ColumnaId { get; init; } = "";
+    public string Marca { get; init; } = "";
     public int TramoIndice { get; init; }
     public string Etiqueta { get; init; } = "";
 

@@ -63,13 +63,11 @@
 
                 <TextBlock Text="Tipo de Columneta (Pilar Estructural):" Style="{StaticResource Etiqueta}" />
                 <ComboBox x:Name="ComboColumnetas"
-                          Height="24"
                           DisplayMemberPath="Etiqueta"
                           SelectionChanged="Opciones_Cambiadas" />
 
                 <TextBlock Text="Tipo de Vigueta (Armazón Estructural):" Style="{StaticResource Etiqueta}" />
                 <ComboBox x:Name="ComboViguetas"
-                          Height="24"
                           DisplayMemberPath="Etiqueta"
                           SelectionChanged="Opciones_Cambiadas" />
 
@@ -82,7 +80,7 @@
                           IsChecked="True" Click="Opciones_Cambiadas" />
 
                 <TextBlock Text="Separación máxima entre columnetas (m):" Style="{StaticResource Etiqueta}" />
-                <TextBox x:Name="CampoSeparacion" Text="3.00" Height="22"
+                <TextBox x:Name="CampoSeparacion" Text="3.00"
                          TextChanged="Opciones_Cambiadas" />
 
                 <TextBlock Text="Posición de la Vigueta Superior:" Style="{StaticResource Etiqueta}" />
@@ -102,7 +100,7 @@
                                VerticalAlignment="Center" />
                     <TextBox x:Name="CampoDesfase"
                              Grid.Column="1"
-                             Text="0.00" Height="22"
+                             Text="0.00"
                              IsEnabled="False"
                              VerticalAlignment="Center"
                              TextChanged="Opciones_Cambiadas" />
