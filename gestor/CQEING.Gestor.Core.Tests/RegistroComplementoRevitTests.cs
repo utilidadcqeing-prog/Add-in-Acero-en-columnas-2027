@@ -30,7 +30,7 @@ public class RegistroComplementoRevitTests : IDisposable
             Directory.CreateDirectory(Path.Combine(carpeta, "Resources"));
             File.WriteAllText(Path.Combine(carpeta, Dll), $"dll {anio}");
             File.WriteAllText(Path.Combine(carpeta, "Resources", "icono32.png"), "png");
-            File.WriteAllText(Path.Combine(carpeta, "CQEING.gestor-revit.addin"), Datos.XmlAddin(Dll));
+            File.WriteAllText(Path.Combine(carpeta, RutasGestor.NombreArchivoComplemento), Datos.XmlAddin(Dll));
         }
         return paquete;
     }
@@ -52,7 +52,7 @@ public class RegistroComplementoRevitTests : IDisposable
             Assert.Equal($"dll {anio}", File.ReadAllText(Path.Combine(carpeta, Dll)));
             Assert.True(File.Exists(Path.Combine(carpeta, "Resources", "icono32.png")));
         }
-        Assert.EndsWith(Path.Combine("Addins", "2026", "CQEING.gestor-revit.addin"), _rutas.ArchivoComplemento("2026"));
+        Assert.EndsWith(Path.Combine("Addins", "2026", "CQEING.zz-gestor-revit.addin"), _rutas.ArchivoComplemento("2026"));
     }
 
     [Fact]
@@ -136,13 +136,37 @@ public class RegistroComplementoRevitTests : IDisposable
     public void Un_paquete_danado_se_informa_y_los_otros_anios_siguen()
     {
         string paquete = Paquete("2026", "2027");
-        File.WriteAllText(Path.Combine(paquete, "2027", "CQEING.gestor-revit.addin"), "<<< no es xml");
+        File.WriteAllText(Path.Combine(paquete, "2027", RutasGestor.NombreArchivoComplemento), "<<< no es xml");
 
         ResultadoRegistroComplemento r = _registro.Registrar(paquete, "0.2.0", ["2026", "2027"]);
 
         Assert.Equal(new[] { "2026" }, r.Anios);
         Assert.Contains("Revit 2027", Assert.Single(r.Problemas));
         Assert.False(File.Exists(_rutas.ArchivoComplemento("2027")));
+    }
+
+    /// <summary>
+    /// Revit carga los .addin en orden alfabético y cada add-in agrega su panel al final de la pestaña CQEING. Para que el
+    /// panel «Gestor» quede a la derecha de todos, su archivo tiene que ordenar después del de cada add-in del repositorio.
+    /// </summary>
+    [Fact]
+    public void El_archivo_del_gestor_ordena_despues_del_de_todos_los_addins_del_repositorio()
+    {
+        string? raiz = AppContext.BaseDirectory;
+        while (raiz is not null && !File.Exists(Path.Combine(raiz, "CQEING-Addins.sln")))
+            raiz = Path.GetDirectoryName(raiz);
+        Assert.True(raiz is not null, "No se encontró la raíz del repositorio (CQEING-Addins.sln) desde la carpeta de las pruebas.");
+
+        string[] archivos = Directory.GetFiles(Path.Combine(raiz!, "addins"), "addin.json", SearchOption.AllDirectories)
+            .Select(json => System.Text.Json.JsonDocument.Parse(File.ReadAllText(json)).RootElement.GetProperty("id").GetString()!)
+            .Select(id => $"CQEING.{id}.addin")
+            .Where(nombre => nombre != RutasGestor.NombreArchivoComplemento)
+            .ToArray();
+
+        Assert.NotEmpty(archivos);
+        Assert.All(archivos, nombre => Assert.True(
+            string.Compare(nombre, RutasGestor.NombreArchivoComplemento, StringComparison.OrdinalIgnoreCase) < 0,
+            $"{nombre} ordena después del archivo del gestor: su panel quedaría a la derecha del panel «Gestor»."));
     }
 
     [Fact]

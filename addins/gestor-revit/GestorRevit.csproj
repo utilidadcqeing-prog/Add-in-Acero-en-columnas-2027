@@ -11,7 +11,8 @@
 
   <ItemGroup>
     <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="CQEING.gestor-revit.addin" CopyToOutputDirectory="PreserveNewest" />
+    <!-- «zz-» para que Revit lo cargue el último y el panel «Gestor» quede a la derecha de los de los add-ins. -->
+    <None Include="CQEING.zz-gestor-revit.addin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

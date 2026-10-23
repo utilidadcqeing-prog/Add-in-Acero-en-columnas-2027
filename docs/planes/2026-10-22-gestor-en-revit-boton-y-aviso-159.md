@@ -40,14 +40,20 @@ Copiados de la issue #159:
    estable, fija por el `packId`). Velopack lo documenta como forma de abrir la versión actual
    (`Update.exe --processStart CQEING.Gestor.exe`).
 
+7. (2026-10-22, medido en los journals de Revit 2026 y 2027) **Revit carga los `.addin` en orden alfabético por
+   nombre de archivo, y cada add-in agrega su panel al final de la pestaña CQEING cuando carga.** Orden real de
+   arranque en Revit 2027: `CQEING.acero-vigas` → `CQEING.armado-columnas` (practicacq) → `CQEING.cuadro-cantidades`
+   → `CQEING.gestor-revit` → `CQEING.imagenes`. Por eso el panel «Gestor» quedaba cuarto, entre los de los add-ins
+   (usuario: «se confunde con los add-ins y no es la idea»).
+
 ## Decisiones
 
 1. **Componente aparte, no un add-in más** (2026-10-22, usuario: «que no se confunda con los add-ins»): carpeta
-   `addins/gestor-revit`, panel propio **«Gestor»**, `.addin` propio `CQEING.gestor-revit.addin`, sin tarjeta en el
+   `addins/gestor-revit`, panel propio **«Gestor»**, `.addin` propio `CQEING.zz-gestor-revit.addin`, sin tarjeta en el
    gestor y sin tocar los add-ins existentes.
 2. **Lo instala el gestor, no el usuario** (2026-10-22, Claude): al abrirse, el gestor copia el componente a
    `%LOCALAPPDATA%\CQEING\Gestor\revit\<versión del gestor>\<año>\` y escribe
-   `%APPDATA%\Autodesk\Revit\Addins\<año>\CQEING.gestor-revit.addin` para cada Revit instalado. Una carpeta por
+   `%APPDATA%\Autodesk\Revit\Addins\<año>\CQEING.zz-gestor-revit.addin` para cada Revit instalado. Una carpeta por
    versión del gestor, como los add-ins: con Revit abierto no se pisa una DLL en uso.
 3. **El componente viaja dentro del paquete del gestor** (2026-10-22, Claude): `publicar-gestor.yml` lo compila para
    2026 y 2027 y lo deja en `publish/revit/<año>/` antes de `vpk pack`. Un solo archivo para el cliente.
@@ -58,7 +64,7 @@ Copiados de la issue #159:
 7. **Una sola ventana del gestor** (2026-10-22, Claude): con el botón en Revit es fácil abrirlo dos veces. El gestor
    usa un `Mutex` por usuario: una segunda ejecución trae al frente la ventana que ya está abierta y se cierra.
 8. **Al desinstalar el gestor se quita el componente** (2026-10-22, Claude): hook de Velopack antes de desinstalar;
-   borra `CQEING.gestor-revit.addin` de cada año y la carpeta `Gestor\revit`. Si Revit está abierto y no puede
+   borra `CQEING.zz-gestor-revit.addin` de cada año y la carpeta `Gestor\revit`. Si Revit está abierto y no puede
    borrarla, queda inofensiva (el botón avisa que el gestor no está instalado).
 5. **Dos días** (2026-10-22, Claude, usuario: «no sé si lo dividimos en dos días o todo hoy»): el botón (día 1) da
    valor solo y obliga a publicar `gestor-v0.2.0`, que también prueba la autoactualización real; el aviso (día 2)
@@ -68,13 +74,21 @@ Copiados de la issue #159:
    apertura de Revit; aviso pequeño, sin bloquear el trabajo, que se cierra solo; solo avisa de add-ins que el
    usuario ya tiene instalados en ese Revit; el botón cambia a «Gestor de add-ins (N)».
 
+9. **El panel «Gestor» va al final, a la derecha de todo** (2026-10-22, usuario): el archivo del componente se llama
+   `CQEING.zz-gestor-revit.addin` y su id es `zz-gestor-revit`, para que Revit lo cargue el último (hallazgo 7). Es lo
+   soportado: no usa nada interno de Revit (descartado reordenar paneles con `AdWindows`, que no es API pública).
+   Lo vigila una prueba que compara con el id de cada `addins/*/addin.json`: si algún add-in nuevo ordenara después
+   de «zz-», la prueba falla. `tools/desplegar-local.ps1` ahora escribe `CQEING.<id de addin.json>.addin` (antes usaba el
+   nombre de la carpeta; coinciden en los add-ins). Sustituye el nombre `CQEING.gestor-revit.addin` de la primera
+   versión del día 1, que nunca se publicó.
+
 ## Plan paso a paso (día 1)
 
 1. **Núcleo** — `gestor/CQEING.Gestor.Core/RegistroComplementoRevit.cs`, ajuste en `RutasGestor.cs` e
    `Instalador.cs` (compartir la lectura y activación del `.addin`) — prueba: pruebas nuevas en
    `CQEING.Gestor.Core.Tests` (copia por año, `.addin` con ruta absoluta, versión nueva, limpieza, año sin paquete).
 2. **Componente** — `addins/gestor-revit/` (`GestorRevit.csproj`, `AppGestorRevit.cs`, `ComandoAbrirGestor.cs`,
-   `CQEING.gestor-revit.addin`, `addin.json`, `Resources/`) — prueba: `dotnet build` para 2026 y 2027.
+   `CQEING.zz-gestor-revit.addin`, `addin.json`, `Resources/`) — prueba: `dotnet build` para 2026 y 2027.
 3. **App del gestor** — `Program.cs`/`VistaGestor.cs`: registrar el componente al abrir, en segundo plano, sin
    avisar si falla (se reintenta al abrir otra vez) — prueba: pruebas de la app + ejecución real.
 4. **Publicación** — `publicar-gestor.yml`: compilar el componente para cada año hacia `publish/revit/<año>/` —
@@ -106,10 +120,13 @@ Hecho y probado en este equipo (sin Revit abierto):
 - ✅ Componente `addins/gestor-revit` compila para 2026 y 2027 sin advertencias (dll, deps, 2 iconos y `.addin`).
 - ✅ Una sola ventana del gestor (`Mutex`): abrirlo dos veces deja una sola, probado con el ejecutable real.
 - ✅ Paquete como lo arma el workflow (`dotnet publish` + componente por año en `publish/revit/<año>`): correcto.
-- ✅ Gestor recién compilado abierto en este equipo: registró `CQEING.gestor-revit.addin` en Revit 2026 y 2027
+- ✅ Gestor recién compilado abierto en este equipo: registró `CQEING.zz-gestor-revit.addin` en Revit 2026 y 2027
   apuntando a `%LOCALAPPDATA%\CQEING\Gestor\revit\0.2.0\<año>\`; no apareció `registro-revit.log`; los demás
   `.addin` de CQEING quedaron igual.
-- ⏳ Sin probar todavía: el botón dentro de Revit real, `gestor-v0.2.0` y la autoactualización 0.1.1 → 0.2.0, y el
+- ✅ Probado por el usuario en Revit 2027 y 2026: el panel «Gestor» aparece y el botón abre el gestor (PR #160 unido).
+- ✅ Panel al final (decisión 9): 146/146 en el núcleo, con la prueba nueva del orden. El gestor recién compilado
+  registró `CQEING.zz-gestor-revit.addin` en 2026 y 2027 (borrado antes el registro de prueba con el nombre anterior).
+- ⏳ Sin probar todavía: el panel a la derecha de todo en Revit real (usuario), `gestor-v0.2.0`, `gestor-v0.2.0` y la autoactualización 0.1.1 → 0.2.0, y el
   hook de desinstalación de Velopack (su lógica está probada en el núcleo; el gancho solo se ejerce desinstalando).
 
 ### Día 2: el aviso
