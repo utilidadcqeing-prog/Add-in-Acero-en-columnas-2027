@@ -54,6 +54,23 @@ internal static class FiltrosColor
             }
             ConAristas(vista);
         }
+
+        // Las demás vistas y plantillas que ya tienen alguno de los filtros guardan el color de cuando se puso: se les
+        // pone el de ahora para que el acero generado antes no quede con la paleta vieja (23-oct).
+        var nuevas = vistas.Select(v => v.Id).ToHashSet();
+        foreach (View vista in new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
+                     .Where(v => !nuevas.Contains(v.Id) && v.AreGraphicsOverridesAllowed()))
+        {
+            try
+            {
+                foreach ((ElementId filtro, OverrideGraphicSettings color) in filtros.Where(f => vista.IsFilterApplied(f.Filtro)))
+                    vista.SetFilterOverrides(filtro, color);
+            }
+            catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+            {
+                // su plantilla controla los filtros: la plantilla se pone al día en esta misma vuelta
+            }
+        }
         return avisos;
     }
 

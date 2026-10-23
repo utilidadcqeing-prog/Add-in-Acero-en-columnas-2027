@@ -12,7 +12,7 @@
     { d: '#7', t: '1.35', g: '0.388', g180: '0.333', e: '0.316', k: '3.042' }, { d: '#8', t: '1.70', g: '0.444', g180: '0.381', e: '0.362', k: '3.973' },
   ];
   // un color por diámetro, como ColoresDiametro en C# (#100)
-  const COLOR = { 3: '#B8860B', 4: '#E8710A', 5: '#D32F2F', 6: '#C2185B', 7: '#7B1FA2', 8: '#1565C0', 9: '#00838F', 10: '#2E7D32', 11: '#6D4C41' };
+  const COLOR = { 3: '#FBBC04', 4: '#4285F4', 5: '#EA4335', 6: '#34A853', 7: '#9334E6', 8: '#8B4513', 9: '#E91E63', 10: '#000000', 11: '#FF6D01' };
   const colorDe = (d) => COLOR[d] || '#5E6670';
   const OPCIONES0 = {
     tipo: null, superior: [{ cantidad: 3, diametro: 5 }], inferior: [{ cantidad: 3, diametro: 5 }], recubrimientoCm: 4,
