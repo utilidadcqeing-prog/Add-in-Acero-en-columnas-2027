@@ -60,6 +60,17 @@ public sealed class GestorAddins(FuenteReleases fuente, ConstructorCatalogo cata
     }
 
     /// <summary>
+    /// Novedades para el aviso dentro de Revit, solo del año de ese Revit. Si la lista se consultó hace menos de
+    /// <paramref name="vigencia"/> se usa la guardada: abrir Revit varias veces seguidas no gasta el cupo de GitHub.
+    /// </summary>
+    public async Task<IReadOnlyList<Novedad>> NovedadesAsync(string anio, TimeSpan vigencia, CancellationToken ct = default)
+    {
+        ResultadoReleases releases = await fuente.ObtenerRecienteAsync(vigencia, ct);
+        ResultadoCatalogo resultado = await catalogo.ConstruirAsync(releases.Releases, ct);
+        return NovedadesRevit.De(LeerEstados(resultado.Addins, [anio]), anio);
+    }
+
+    /// <summary>
     /// Vuelve a leer del disco qué está instalado y descargado, con el mismo catálogo y SIN consultar GitHub
     /// (sin token, cada consulta descuenta del cupo de 60 por hora). Es lo que usa la ventana después de instalar.
     /// </summary>

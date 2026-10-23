@@ -15,4 +15,9 @@
     <None Include="CQEING.zz-gestor-revit.addin" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- El aviso de versiones nuevas usa la misma lógica que el gestor (releases, catálogo, qué está instalado). -->
+    <ProjectReference Include="..\..\gestor\CQEING.Gestor.Core\CQEING.Gestor.Core.csproj" />
+  </ItemGroup>
+
 </Project>
