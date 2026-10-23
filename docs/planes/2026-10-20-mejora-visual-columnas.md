@@ -141,4 +141,5 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - [x] #120: tooltips en los controles de configuración; Enter = «Aceptar este tramo» (probado en el visor: con el foco en «Espaciado», Enter aceptó el tramo 1); Enter en el nombre = Guardar; Enter/Esc en Estribos menores; tres ayudas más cortas; resumen con la lista de tramos por columna, en rangos y numerados desde 1 como la elevación.
 - [x] #121: íconos de «Acero en columnas» redibujados nítidos a 16 y 32 px, e ícono propio para «Columnetas y Viguetas».
 - [x] Compila Debug 2027 y Release 2026 sin advertencias; `PruebasTraslapos` y `PruebasVistaPrevia` con 0 fallas.
-- [ ] Prueba final en Revit 2027: armado generado igual que antes, Columnetas y los íconos del ribbon.
+- [x] Prueba final en Revit 2027 hecha por el usuario el 2026-10-22 (sin observaciones sobre la mejora visual).
+- Observación del usuario, fuera de esta mejora: en la planta las columnas ahora se dibujan a escala real y en un modelo grande se ven muy chicas. Ese cambio es de `main` (96d7b38, #133/#134, Luciano), no de esta rama; queda para que Luciano decida si les pone un tamaño mínimo visible.
