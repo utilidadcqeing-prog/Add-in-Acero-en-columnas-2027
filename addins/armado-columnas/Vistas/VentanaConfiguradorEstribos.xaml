@@ -176,7 +176,11 @@
                         <!-- La columna desde arriba, de frente y de costado, con los
                              colores por diámetro (pedido de Luciano, 20-oct). -->
                         <TabItem Header="Vista previa">
-                            <local:PanelVistaPrevia x:Name="PanelDeVistaPrevia" />
+                            <DockPanel>
+                                <!-- La vista 3D en Revit y sus filtros (#123). -->
+                                <local:PanelFiltros3D x:Name="PanelDe3D" DockPanel.Dock="Top" />
+                                <local:PanelVistaPrevia x:Name="PanelDeVistaPrevia" />
+                            </DockPanel>
                         </TabItem>
                     </TabControl>
                 </DockPanel>

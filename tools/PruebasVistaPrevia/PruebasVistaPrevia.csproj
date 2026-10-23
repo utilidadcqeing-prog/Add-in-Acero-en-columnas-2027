@@ -36,6 +36,8 @@
     <Compile Include="..\..\addins\armado-columnas\Modelo\ConfigLongitudinal.cs" Link="Modelo\ConfigLongitudinal.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\PlanTraslapos.cs" Link="Modelo\PlanTraslapos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\NombreEmpalme.cs" Link="Modelo\NombreEmpalme.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\BarraPrevia.cs" Link="Modelo\BarraPrevia.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\FiltroPrevia3D.cs" Link="Modelo\FiltroPrevia3D.cs" />
   </ItemGroup>
 
 </Project>

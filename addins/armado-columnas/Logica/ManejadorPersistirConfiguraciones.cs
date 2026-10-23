@@ -27,11 +27,13 @@ public sealed class ManejadorPersistirConfiguraciones : IExternalEventHandler
         try
         {
             transaccion.Start();
+            Bitacora3D.Anotar("guardar configuraciones: empieza");
 
             string? motivo = Almacen.Persistir();
             if (motivo is null)
             {
                 transaccion.Commit();
+                Bitacora3D.Anotar("guardar configuraciones: listo");
                 return;
             }
 

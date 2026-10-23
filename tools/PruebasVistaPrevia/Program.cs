@@ -599,5 +599,91 @@ Probar("choques_igual_con_la_misma_seccion_en_toda_la_columna", () =>
     Cierto(Motivos(ChoquesDe(sinMedida, l)) == Motivos(ChoquesDe(conMedida, l)), "los mismos choques");
 });
 
+// ---- Vista previa 3D (#123): filtros y recorte por altura
+
+Punto3 P(double x, double y, double z) => new(x, y, z);
+
+// Una longitudinal #6 tipo A de esquina, con un gancho abajo y un traslapo;
+// un estribo #3 confinado y una grapa #3 no confinada.
+var longitudinal = new BarraPrevia(ClasePieza.Longitudinal, 19.1, new[]
+{
+    new PedazoBarra(new[] { P(0.2, 0, 0), P(0, 0, 0) }, ParteBarra.Gancho),
+    new PedazoBarra(new[] { P(0, 0, 0), P(0, 0, 3) }, ParteBarra.Recto),
+    new PedazoBarra(new[] { P(0, 0, 3), P(0, 0, 3.6) }, ParteBarra.Traslapo),
+}, GrupoTraslapo.A, PosicionBarra.Esquina);
+var estribo = new BarraPrevia(ClasePieza.Estribo, 9.5, new[]
+{
+    new PedazoBarra(new[] { P(0, 0, 0.1), P(0.3, 0, 0.1), P(0.3, 0.3, 0.1) }, ParteBarra.Recto),
+    new PedazoBarra(new[] { P(0, 0.3, 0.1), P(0.05, 0.25, 0.1) }, ParteBarra.Gancho),
+}, Zona: ZonaEstribo.Confinada);
+var grapa = new BarraPrevia(ClasePieza.EstriboMenor, 9.5, new[]
+{
+    new PedazoBarra(new[] { P(0, 0.15, 1.5), P(0.3, 0.15, 1.5) }, ParteBarra.Recto),
+}, Zona: ZonaEstribo.NoConfinada);
+BarraPrevia[] armado = { longitudinal, estribo, grapa };
+
+int Pedazos(FiltroPrevia3D f) => f.Aplicar(armado).Count();
+
+Probar("filtro3d_todo_muestra_todo", () => Cierto(Pedazos(FiltroPrevia3D.Todo()) == 6, "6 pedazos"));
+
+Probar("filtro3d_solo_longitudinales", () => Cierto(Pedazos(FiltroPrevia3D.SoloLongitudinales()) == 3, "3 pedazos"));
+
+Probar("filtro3d_estribos_con_menores", () =>
+{
+    List<double> diametros = FiltroPrevia3D.SoloEstribos().Aplicar(armado).Select(p => p.DiametroMm).ToList();
+    Cierto(diametros.Count == 3 && diametros.All(d => d == 9.5), "estribo (2) + grapa (1), todos #3");
+});
+
+Probar("filtro3d_solo_ganchos", () => Cierto(Pedazos(FiltroPrevia3D.SoloGanchos()) == 2, "gancho de la longitudinal y del estribo"));
+
+Probar("filtro3d_solo_traslapos", () => Cierto(Pedazos(FiltroPrevia3D.SoloTraslapos()) == 1, "el traslapo"));
+
+Probar("filtro3d_tipo_b_no_oculta_estribos", () =>
+{
+    var f = new FiltroPrevia3D { Grupos = new() { GrupoTraslapo.B } };
+    Cierto(Pedazos(f) == 3, "se va la longitudinal A; quedan estribo y grapa (A/B no les aplica)");
+});
+
+Probar("filtro3d_grupos_se_cruzan", () =>
+{
+    // #6 y tipo A: la longitudinal sí; longitudinales sin #6: nada.
+    var f = new FiltroPrevia3D { NumerosOcultos = new() { 3 }, Grupos = new() { GrupoTraslapo.A } };
+    Cierto(Pedazos(f) == 3, "solo la #6 tipo A");
+    var g = new FiltroPrevia3D { NumerosOcultos = new() { 6 }, Clases = new() { ClasePieza.Longitudinal } };
+    Cierto(Pedazos(g) == 0, "longitudinal pero sin #6: nada");
+});
+
+Probar("filtro3d_zona_confinada", () =>
+{
+    var f = new FiltroPrevia3D { Zonas = new() { ZonaEstribo.Confinada } };
+    Cierto(Pedazos(f) == 5, "se va la grapa no confinada; la longitudinal queda");
+});
+
+Probar("filtro3d_diametro_desconocido_se_ve", () =>
+{
+    var rara = new BarraPrevia(ClasePieza.Longitudinal, 12.0, new[] { new PedazoBarra(new[] { P(0, 0, 0), P(0, 0, 1) }, ParteBarra.Recto) });
+    Cierto(FiltroPrevia3D.NumeroDe(12.0) == -1, "12 mm no es de la tabla");
+    Cierto(new FiltroPrevia3D { NumerosOcultos = new() { 3, 6 } }.Aplicar(new[] { rara }).Count() == 1, "se ve");
+});
+
+Probar("filtro3d_solo_tramo_recorta", () =>
+{
+    var f = new FiltroPrevia3D { SoloAltura = (1.0, 2.0) };
+    List<(IReadOnlyList<Punto3> Puntos, double DiametroMm)> pedazos = f.Aplicar(armado).ToList();
+    // La recta 0→3 queda de 1 a 2; la grapa (z 1,5) entera; el resto, fuera.
+    Cierto(pedazos.Count == 2, $"2 pedazos, salieron {pedazos.Count}");
+    IReadOnlyList<Punto3> recta = pedazos.First(p => p.DiametroMm == 19.1).Puntos;
+    Igual(1.0, recta.Min(q => q.Z), "desde");
+    Igual(2.0, recta.Max(q => q.Z), "hasta");
+});
+
+Probar("polilinea_partir_por_altura", () =>
+{
+    (List<List<Punto3>> dentro, List<List<Punto3>> fuera) = Polilinea.PartirPorAltura(new[] { P(0, 0, 0), P(0, 0, 4) }, 1, 3);
+    Cierto(dentro.Count == 1 && fuera.Count == 2, $"1 dentro y 2 fuera, salieron {dentro.Count} y {fuera.Count}");
+    Igual(1, dentro[0][0].Z, "corte de abajo");
+    Igual(3, dentro[0][^1].Z, "corte de arriba");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;
