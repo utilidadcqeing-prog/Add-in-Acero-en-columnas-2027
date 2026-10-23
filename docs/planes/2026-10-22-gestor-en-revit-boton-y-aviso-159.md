@@ -177,5 +177,13 @@ Hecho y probado en este equipo (sin Revit abierto):
   el `.addin` y los iconos.
 - ✅ Con los datos reales de GitHub y lo instalado en este equipo, `NovedadesAsync` da: Revit 2026 → «Acero en columnas:
   1.2.0 → 1.3.0»; Revit 2027 → «Acero en vigas: 0.2.10 → 0.3.3». Es lo que debería mostrar el aviso.
-- ⏳ Sin probar todavía: el aviso dentro de Revit 2026 y 2027 (que el núcleo cargue en los dos, la ventana, el texto
-  «(N)» del botón), `gestor-v0.2.1` y la autoactualización 0.2.0 → 0.2.1.
+- ✅ El usuario actualizó el gestor 0.1.1 → 0.2.0 con «Actualizar y reiniciar» (primera autoactualización real) y vio
+  el panel «Gestor». El gestor 0.2.0 registró el componente en 2026 y 2027 (`...\Gestor\revit\0.2.0\<año>\`).
+- ✅ **Probado por el usuario en Revit 2027** (componente de desarrollo con `tools/desplegar-local.ps1 -Addin gestor-revit
+  -Revit 2027 -Configuracion Release`): salió la ventanita con «Acero en vigas: 0.2.10 → 0.3.3», el botón dijo
+  «Gestor de add-ins (1)» y «Abrir el gestor» abrió el gestor. No se creó `aviso-revit.log`. En el journal
+  (`journal.0034.txt`) solo aparece el aviso «Assembly version conflict» para `CQEING.GestorRevit.dll`, el mismo que dan
+  todos los add-ins (también los de Autodesk); el componente y el núcleo cargaron bien en .NET 10.
+- Hallazgo: abrir el gestor (también desde el aviso) vuelve a registrar su propio componente 0.2.0 en cada Revit y
+  reemplaza el `.addin` de desarrollo. Es lo esperado; para repetir la prueba hay que volver a desplegar.
+- ⏳ Sin probar todavía: el aviso en Revit 2026, `gestor-v0.2.1` y la autoactualización 0.2.0 → 0.2.1.
