@@ -10,8 +10,24 @@ public static class Program
     [STAThread]
     public static void Main()
     {
+        RutasGestor rutas = RutasGestor.DelUsuario();
+
         // Debe ir primero: atiende los pasos de instalación y actualización que lanza Velopack (y puede salir aquí mismo).
-        VelopackApp.Build().Run();
+        // Al desinstalar, el botón del gestor se va de Revit con él.
+        VelopackApp.Build()
+            .OnBeforeUninstallFastCallback(_ => new RegistroComplementoRevit(rutas).Quitar())
+            .Run();
+
+        // Con el botón dentro de Revit es fácil abrirlo dos veces: una sola ventana, la segunda trae al frente la abierta.
+        using var unaSolaVentana = new UnaSolaVentana();
+        if (!unaSolaVentana.EsLaPrimera)
+        {
+            UnaSolaVentana.TraerAlFrenteLaAbierta();
+            return;
+        }
+
+        // En segundo plano y sin esperar: si falla no afecta al gestor (queda anotado y se reintenta al abrirlo otra vez).
+        _ = Task.Run(() => ComplementoEnRevit.Registrar(rutas));
 
         Application aplicacion = CrearAplicacion();
         aplicacion.Run(new VentanaPrincipal(new VistaGestor(GestorAddins.Crear(), new ActualizadorVelopack())));

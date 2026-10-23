@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>CQEING Gestor en Revit</Name>
+    <!-- El gestor reescribe esta ruta como absoluta a la carpeta de su versión (RegistroComplementoRevit). -->
+    <Assembly>CQEING.GestorRevit.dll</Assembly>
+    <FullClassName>CQEING.GestorRevit.AppGestorRevit</FullClassName>
+    <ClientId>acba2128-f1fa-4160-bc4d-d4c26503037f</ClientId>
+    <VendorId>CQEING</VendorId>
+    <VendorDescription>CQEING</VendorDescription>
+  </AddIn>
+</RevitAddIns>

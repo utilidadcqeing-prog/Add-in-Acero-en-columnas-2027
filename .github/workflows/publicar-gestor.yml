@@ -42,6 +42,14 @@ jobs:
           $version = '${{ steps.version.outputs.version }}'
           dotnet publish gestor/CQEING.Gestor/CQEING.Gestor.csproj -c Release -r win-x64 --self-contained -o publish -p:Version=$version
           if ($LASTEXITCODE) { exit 1 }
+          # El botón del gestor dentro de Revit (panel «Gestor») viaja en el paquete del gestor: una carpeta por año de Revit.
+          # El gestor lo copia a cada Revit instalado al abrirse (RegistroComplementoRevit).
+          foreach ($anio in '2026', '2027') {
+            dotnet build addins/gestor-revit/GestorRevit.csproj -c Release -p:RevitVersion=$anio -p:Version=$version -o "publish/revit/$anio"
+            if ($LASTEXITCODE) { exit 1 }
+            Remove-Item "publish/revit/$anio/*.pdb", "publish/revit/$anio/framework.txt"
+            if (-not (Test-Path "publish/revit/$anio/CQEING.GestorRevit.dll")) { throw "El componente de Revit $anio no se compiló." }
+          }
           dotnet tool install -g vpk --version 1.2.161
           if ($LASTEXITCODE) { exit 1 }
           vpk pack --packId CQEING.Gestor --packVersion $version --packDir publish --mainExe CQEING.Gestor.exe --packTitle "Gestor de add-ins CQEING" --outputDir Releases
