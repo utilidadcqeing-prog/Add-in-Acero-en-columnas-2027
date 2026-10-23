@@ -15,9 +15,9 @@ public class ColoresDiametroTests
     }
 
     [Fact]
-    public void ElDe5EsRojoYElDe4Naranja_ComoDijoCarlos()
+    public void ElDe5EsRojoYElDe4Azul()
     {
-        Assert.Equal(("#D32F2F", "#E8710A"), (ColoresDiametro.De(5), ColoresDiametro.De(4)));
+        Assert.Equal(("#EA4335", "#4285F4"), (ColoresDiametro.De(5), ColoresDiametro.De(4)));
     }
 
     [Theory]
@@ -31,7 +31,7 @@ public class ColoresDiametroTests
     [Fact]
     public void RgbDaLosTresCanalesDelColor_ParaLosFiltrosDeRevit()
     {
-        Assert.Equal(((byte)0xD3, (byte)0x2F, (byte)0x2F), ColoresDiametro.Rgb(5));
+        Assert.Equal(((byte)0xEA, (byte)0x43, (byte)0x35), ColoresDiametro.Rgb(5));
         Assert.Equal(((byte)0x5E, (byte)0x66, (byte)0x70), ColoresDiametro.Rgb(99));
     }
 
