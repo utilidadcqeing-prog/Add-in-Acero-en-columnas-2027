@@ -212,4 +212,48 @@ public class GestorAddinsTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _gestor.ConsultarAsync(cancelado.Token));
     }
+
+    [Fact]
+    public async Task Novedades_de_Revit_solo_de_lo_instalado_en_ese_anio()
+    {
+        Publicar("1.0.0");
+        Assert.Empty(await _gestor.NovedadesAsync("2026", TimeSpan.Zero)); // publicado pero no instalado: no se avisa
+
+        EstadoAddin armado = (await _gestor.ConsultarAsync()).Addins.Single();
+        await _gestor.InstalarAsync(armado.Addin.Ultima, "2026");
+        Assert.Empty(await _gestor.NovedadesAsync("2026", TimeSpan.Zero)); // al día
+
+        Publicar("1.0.0", "1.1.0");
+        Novedad novedad = Assert.Single(await _gestor.NovedadesAsync("2026", TimeSpan.Zero));
+
+        Assert.Equal(new Novedad("armado-columnas", armado.Addin.Nombre, "1.0.0", "1.1.0"), novedad);
+        Assert.Empty(await _gestor.NovedadesAsync("2027", TimeSpan.Zero)); // en 2027 no está instalado
+    }
+
+    [Fact]
+    public async Task Novedades_con_lista_reciente_no_consultan_GitHub()
+    {
+        Publicar("1.0.0");
+        EstadoAddin armado = (await _gestor.ConsultarAsync()).Addins.Single();
+        await _gestor.InstalarAsync(armado.Addin.Ultima, "2026");
+        Publicar("1.0.0", "1.1.0"); // GitHub ya tiene la 1.1.0, pero la lista guardada es de hace un momento
+
+        _sinRed = true; // si consultara, usaría la guardada con aviso; tampoco debe intentarlo
+        IReadOnlyList<Novedad> novedades = await _gestor.NovedadesAsync("2026", TimeSpan.FromMinutes(30));
+
+        Assert.Empty(novedades);
+    }
+
+    [Fact]
+    public void Sin_paquete_para_ese_Revit_no_hay_novedad()
+    {
+        var manifiesto = Datos.Manifiesto(version: "2.0.0", paquetes: [Datos.Paquete("2027", new string('a', 64), version: "2.0.0")]);
+        var nueva = new VersionPublicada(manifiesto, VersionAddin.Interpretar("2.0.0")!, new Dictionary<string, Uri>());
+        var estado = new EstadoAddin(
+            new EntradaCatalogo("armado-columnas", "Armado de columnas", "", [nueva]),
+            new Dictionary<string, string> { ["2026"] = "1.0.0", ["2027"] = "1.0.0" });
+
+        Assert.Empty(NovedadesRevit.De([estado], "2026"));
+        Assert.Equal("2.0.0", Assert.Single(NovedadesRevit.De([estado], "2027")).Nueva);
+    }
 }

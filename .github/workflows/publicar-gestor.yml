@@ -49,6 +49,8 @@ jobs:
             if ($LASTEXITCODE) { exit 1 }
             Remove-Item "publish/revit/$anio/*.pdb", "publish/revit/$anio/framework.txt"
             if (-not (Test-Path "publish/revit/$anio/CQEING.GestorRevit.dll")) { throw "El componente de Revit $anio no se compiló." }
+            # El aviso de versiones nuevas usa el núcleo del gestor: su DLL tiene que viajar junto al componente.
+            if (-not (Test-Path "publish/revit/$anio/CQEING.Gestor.Core.dll")) { throw "Al componente de Revit $anio le falta CQEING.Gestor.Core.dll." }
           }
           dotnet tool install -g vpk --version 1.2.161
           if ($LASTEXITCODE) { exit 1 }

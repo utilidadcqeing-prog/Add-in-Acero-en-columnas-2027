@@ -37,6 +37,18 @@ public sealed class FuenteReleases(HttpClient http, string carpetaCache, string 
 
     public Task<ResultadoReleases> ObtenerAsync(CancellationToken ct = default) => ObtenerAsync(usarEtag: true, ct);
 
+    /// <summary>
+    /// Como <see cref="ObtenerAsync(CancellationToken)"/>, pero si la lista guardada se consultó hace menos de
+    /// <paramref name="vigencia"/> la usa sin preguntar a GitHub. Es para el aviso dentro de Revit: abrir Revit varias
+    /// veces seguidas no debe gastar el cupo. La fecha de la consulta es la del archivo guardado (un 304 la renueva).
+    /// </summary>
+    public async Task<ResultadoReleases> ObtenerRecienteAsync(TimeSpan vigencia, CancellationToken ct = default)
+    {
+        if (File.Exists(RutaJson) && DateTime.UtcNow - File.GetLastWriteTimeUtc(RutaJson) < vigencia && LeerCache() is { } guardadas)
+            return new ResultadoReleases(guardadas, null);
+        return await ObtenerAsync(ct);
+    }
+
     private async Task<ResultadoReleases> ObtenerAsync(bool usarEtag, CancellationToken ct)
     {
         using var pedido = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repositorio}/releases?per_page=100");
@@ -63,7 +75,11 @@ public sealed class FuenteReleases(HttpClient http, string carpetaCache, string 
         {
             if (respuesta.StatusCode == HttpStatusCode.NotModified)
             {
-                if (LeerCache() is { } guardadas) return new ResultadoReleases(guardadas, null);
+                if (LeerCache() is { } guardadas)
+                {
+                    MarcarConsultada();
+                    return new ResultadoReleases(guardadas, null);
+                }
                 // La lista guardada se dañó o se borró: se vuelve a pedir entera, una sola vez.
                 return usarEtag
                     ? await ObtenerAsync(usarEtag: false, ct)
@@ -97,11 +113,27 @@ public sealed class FuenteReleases(HttpClient http, string carpetaCache, string 
 
     private IReadOnlyList<ReleaseGitHub>? LeerCache() => File.Exists(RutaJson) ? Interpretar(File.ReadAllText(RutaJson)) : null;
 
-    /// <summary>Escribe a un temporal y lo mueve: un corte a mitad nunca deja una lista guardada a medias.</summary>
+    /// <summary>GitHub confirmó que la lista guardada sigue al día: se renueva su fecha para <see cref="ObtenerRecienteAsync"/>.</summary>
+    private void MarcarConsultada()
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(RutaJson, DateTime.UtcNow);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Solo hace que la próxima apertura de Revit vuelva a preguntar.
+        }
+    }
+
+    /// <summary>
+    /// Escribe a un temporal y lo mueve: un corte a mitad nunca deja una lista guardada a medias. El temporal tiene
+    /// nombre único porque el gestor y el aviso dentro de Revit pueden guardar la lista a la vez.
+    /// </summary>
     private void Guardar(string json, string? etag)
     {
         Directory.CreateDirectory(carpetaCache);
-        string temporal = RutaJson + ".tmp";
+        string temporal = $"{RutaJson}.{Guid.NewGuid():N}.tmp";
         File.WriteAllText(temporal, json);
         File.Move(temporal, RutaJson, overwrite: true);
         if (etag is not null) File.WriteAllText(RutaEtag, etag);
