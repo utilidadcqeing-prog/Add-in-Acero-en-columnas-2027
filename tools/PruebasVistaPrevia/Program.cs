@@ -27,14 +27,30 @@ Probar("color_varillas_del_cuadro", () =>
 {
     Color(ColoresVarilla.ColorDe(9.5), 251, 188, 4, "#3");
     Color(ColoresVarilla.ColorDe(15.9), 234, 67, 53, "#5");
-    Color(ColoresVarilla.ColorDe(25.4), 66, 133, 244, "#8");
+    Color(ColoresVarilla.ColorDe(12.7), 66, 133, 244, "#4");
+    Color(ColoresVarilla.ColorDe(25.4), 139, 69, 19, "#8");
 });
 
 Probar("color_varillas_9_a_11_fuera_del_cuadro", () =>
 {
-    Color(ColoresVarilla.ColorDe(28.7), 139, 69, 19, "#9");
+    Color(ColoresVarilla.ColorDe(28.7), 233, 30, 99, "#9");
     Color(ColoresVarilla.ColorDe(32.3), 0, 0, 0, "#10");
-    Color(ColoresVarilla.ColorDe(35.8), 233, 30, 99, "#11");
+    Color(ColoresVarilla.ColorDe(35.8), 255, 109, 1, "#11");
+});
+
+// Carlos (23-oct): #3 a #8 se usan juntos en la misma columna, así que ningún
+// par puede tener colores parecidos (con la tabla anterior, #3/#4 y #4/#5
+// quedaban a menos de 80 de distancia RGB).
+Probar("colores_de_3_a_8_bien_distintos", () =>
+{
+    var usados = ColoresVarilla.Tabla.Where(t => t.Numero <= 8).ToList();
+    foreach (var a in usados)
+        foreach (var b in usados.Where(b => b.Numero > a.Numero))
+        {
+            double distancia = Math.Sqrt(
+                Math.Pow(a.Color.R - b.Color.R, 2) + Math.Pow(a.Color.G - b.Color.G, 2) + Math.Pow(a.Color.B - b.Color.B, 2));
+            Cierto(distancia >= 90, $"#{a.Numero} y #{b.Numero} se parecen (distancia {distancia:F0})");
+        }
 });
 
 Probar("color_gris_para_otro_diametro", () =>
@@ -197,7 +213,7 @@ Probar("color_filtro_empresa", () =>
 {
     // Los filtros "ACERO #N" del proyecto se repintan con la tabla (Luciano, 20-oct).
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3") == new ColoresVarilla.ColorRgb(251, 188, 4), "ACERO #3");
-    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("acero  #8") == new ColoresVarilla.ColorRgb(66, 133, 244), "acero  #8");
+    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("acero  #8") == new ColoresVarilla.ColorRgb(139, 69, 19), "acero  #8");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #2") == ColoresVarilla.Gris, "ACERO #2 en gris");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("Acero_Columnas") is null, "Acero_Columnas no se toca");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("CQEING #3") is null, "los nuestros no cuentan");

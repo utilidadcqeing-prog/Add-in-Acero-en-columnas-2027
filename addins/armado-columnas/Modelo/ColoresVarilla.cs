@@ -32,15 +32,18 @@ public static class ColoresVarilla
 
     private static readonly Dictionary<int, ColorRgb> ColorPorNumero = new()
     {
+        // Desde el 23-oct, repartidos para que dos diámetros vecinos (que se
+        // usan juntos, como #4/#5/#6) nunca tengan tonos parecidos:
+        // docs/planes/2026-10-23-colores-repartidos.md.
         [3] = new(251, 188, 4),   // #FBBC04 amarillo
-        [4] = new(255, 109, 1),   // #FF6D01 naranja
+        [4] = new(66, 133, 244),  // #4285F4 azul
         [5] = new(234, 67, 53),   // #EA4335 rojo
         [6] = new(52, 168, 83),   // #34A853 verde
         [7] = new(147, 52, 230),  // #9334E6 morado (en lugar del celeste)
-        [8] = new(66, 133, 244),  // #4285F4 azul
-        [9] = new(139, 69, 19),   // #8B4513 marrón (fuera de la paleta)
+        [8] = new(139, 69, 19),   // #8B4513 marrón (fuera de la paleta)
+        [9] = new(233, 30, 99),   // #E91E63 rosado fuerte (fuera de la paleta)
         [10] = new(0, 0, 0),      // #000000 negro
-        [11] = new(233, 30, 99),  // #E91E63 rosado fuerte (fuera de la paleta)
+        [11] = new(255, 109, 1),  // #FF6D01 naranja
     };
 
     /// <summary>Número de varilla, de #3 a #11, con su diámetro y su color, en orden.</summary>
