@@ -92,6 +92,19 @@
     <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.VistaPrevia.cs">
       <Link>Vistas\VentanaConfiguradorEstribos.VistaPrevia.cs</Link>
     </Compile>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.Vista3D.cs">
+      <Link>Vistas\VentanaConfiguradorEstribos.Vista3D.cs</Link>
+    </Compile>
+
+    <Page Include="..\..\addins\armado-columnas\Vistas\PanelFiltros3D.xaml">
+      <Link>Vistas\PanelFiltros3D.xaml</Link>
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\PanelFiltros3D.xaml.cs">
+      <Link>Vistas\PanelFiltros3D.xaml.cs</Link>
+      <DependentUpon>PanelFiltros3D.xaml</DependentUpon>
+    </Compile>
 
     <Page Include="..\..\addins\armado-columnas\Vistas\PanelVistaPrevia.xaml">
       <Link>Vistas\PanelVistaPrevia.xaml</Link>

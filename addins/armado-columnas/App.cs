@@ -57,6 +57,15 @@ public class App : IExternalApplication
             "practicacq.ComandoDiagnosticoBarraContinua",
             "TEMPORAL: prueba si una sola barra puede recorrer varias columnas apiladas y llevar varios empalmes. Deja barras de prueba (Ctrl+Z las saca).",
             "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoPrevia3D.cs. Sacar
+        // este botón (y el comando) una vez cerrado el #123.
+        panelHerramientas.AddItem(CintaCqeing.CrearBoton(
+            "ComandoDiagnosticoPrevia3D",
+            "Diagnóstico\nvista 3D",
+            "practicacq.ComandoDiagnosticoPrevia3D",
+            "TEMPORAL: mide cuánto tarda la vista previa 3D en generar de prueba una columna y deshacerlo, y comprueba que no queda nada.",
+            "iconoCQ"));
 #endif
 
         return Result.Succeeded;

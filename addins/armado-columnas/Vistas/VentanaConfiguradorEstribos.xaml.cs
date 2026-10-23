@@ -995,7 +995,7 @@ public partial class VentanaConfiguradorEstribos : Window
         return TipoBarra.PorDefecto(barras, numeroVarilla)?.Nombre ?? barras.FirstOrDefault()?.Nombre;
     }
 
-    private static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
+    internal static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
     {
         // Issue #60: por diámetro contra el cuadro de la empresa. Antes era "el
         // primero alfabéticamente", que no es un criterio -- en el modelo de
@@ -1279,7 +1279,7 @@ public partial class VentanaConfiguradorEstribos : Window
         NotaBarrasEstribo.Visibility = conAviso.Count + fuera.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
+    internal static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
     {
         BarrasPorCaraX = 2,
         BarrasPorCaraY = 2,

@@ -38,6 +38,7 @@ public partial class VentanaConfiguradorEstribos
             DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock))
                 .AddValueChanged(texto, (_, _) => PedirVistaPrevia());
 
+        ConectarVista3D();
         PedirVistaPrevia();
     }
 
@@ -70,6 +71,9 @@ public partial class VentanaConfiguradorEstribos
         PanelDeVistaPrevia.Mostrar(
             _columnaActiva, _columnaActiva.Tramos[_tramoActivoIndice], cfgTramo, LeerLongitudinalConEstribosMenores(),
             recubrimiento, BarraPorNombre, estriboMasGrueso);
+
+        // Los mismos cambios actualizan la vista 3D, si está abierta (#123).
+        PedirVista3D(abrirVista: false);
     }
 
     private TipoBarra? BarraPorNombre(string? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre);

@@ -6,6 +6,7 @@ using System.Windows.Interop;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI.Events;
 using practicacq.Logica;
 using practicacq.Vistas;
@@ -36,6 +37,12 @@ public class ComandoEstribos : IExternalCommand
     // necesita transaccion, mismo patron.
     private static readonly ManejadorPersistirConfiguraciones _manejadorConfiguraciones = new();
     private static readonly ExternalEvent _eventoConfiguraciones = ExternalEvent.Create(_manejadorConfiguraciones);
+
+    // Vista previa 3D (#123): simular el armado y pintarlo necesita contexto
+    // de API, mismo patrón. Un Raise pendiente se atiende una sola vez, con
+    // el último pedido de la ventana.
+    private static readonly ManejadorVistaPrevia3D _manejador3D = new();
+    private static readonly ExternalEvent _evento3D = ExternalEvent.Create(_manejador3D);
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
@@ -95,6 +102,31 @@ public class ComandoEstribos : IExternalCommand
             _eventoGenerar.Raise();
         };
 
+        // Vista previa 3D (#123): mismo criterio que arriba, contra la ventana viva.
+        _manejador3D.Olvidar();
+        _manejador3D.Documento = doc;
+        _manejador3D.AlTerminar = resumen => _ventana?.MostrarResumen3D(resumen);
+        _ventana.VistaPrevia3DSolicitada += (plan, filtro, abrirVista) =>
+        {
+            _manejador3D.Plan = plan;
+            _manejador3D.Filtro = filtro;
+            _manejador3D.AbrirVista |= abrirVista;
+            _evento3D.Raise();
+        };
+
+        // Si se cierra el documento con la ventana abierta, el dibujo se va con él.
+        void AlCerrarDocumento(object? sender, DocumentClosingEventArgs e)
+        {
+            // Lo llama Revit desde su lado nativo: nunca dejar escapar una excepción.
+            try
+            {
+                if (e.Document.Equals(doc)) _manejador3D.Olvidar();
+            }
+            catch { /* ver comentario de AlCambiarSeleccionEnRevit */ }
+        }
+
+        uiapp.Application.DocumentClosing += AlCerrarDocumento;
+
         // Reunión 9-sep: sincronización en el otro sentido -- si el usuario
         // selecciona una columna directamente en el modelo (no en la
         // ventana), la ventana debe reflejarlo también. UIApplication ya
@@ -138,6 +170,15 @@ public class ComandoEstribos : IExternalCommand
             // "-=" puede tirar una excepción que no tiene por dónde
             // desenrollarse limpio del lado de Revit.
             try { uiapp.SelectionChanged -= AlCambiarSeleccionEnRevit; }
+            catch { /* ver comentario de arriba */ }
+
+            // La vista previa 3D vive mientras la ventana esté abierta (#123).
+            try
+            {
+                uiapp.Application.DocumentClosing -= AlCerrarDocumento;
+                _manejador3D.Olvidar();
+                uiapp.ActiveUIDocument?.RefreshActiveView();
+            }
             catch { /* ver comentario de arriba */ }
 
             _ventana = null;
