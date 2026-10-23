@@ -32,5 +32,6 @@ foreach ($assembly in $xml.SelectNodes('//Assembly')) { $assembly.InnerText = Jo
 $destino = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$Revit"
 New-Item -ItemType Directory -Force $destino | Out-Null
 foreach ($heredado in $config.heredados) { Remove-Item (Join-Path $destino $heredado) -ErrorAction SilentlyContinue }
-$xml.Save((Join-Path $destino "CQEING.$Addin.addin"))
+# El nombre sale del id de addin.json (no de la carpeta): coincide en los add-ins y deja que «zz-gestor-revit» cargue el último.
+$xml.Save((Join-Path $destino "CQEING.$($config.id).addin"))
 Write-Host "Listo: Revit $Revit cargará $Addin desde $salida"

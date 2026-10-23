@@ -41,7 +41,12 @@ public sealed class RutasGestor(string localAppData, string appData)
     public string CarpetaComplemento(string versionGestor, string anio) =>
         Path.Combine(CarpetaComplementoRevit, ValidarVersion(versionGestor), ValidarAnio(anio));
 
-    public const string NombreArchivoComplemento = "CQEING.gestor-revit.addin";
+    /// <summary>
+    /// Revit carga los .addin en orden alfabético por nombre de archivo y cada add-in agrega su panel al final de la
+    /// pestaña CQEING al cargar. El prefijo «zz-» hace que el panel «Gestor» se cree el último y quede a la derecha de
+    /// todos los de los add-ins (lo vigila una prueba contra addins/*/addin.json).
+    /// </summary>
+    public const string NombreArchivoComplemento = "CQEING.zz-gestor-revit.addin";
 
     public string ArchivoComplemento(string anio) => Path.Combine(CarpetaAddinsRevit(anio), NombreArchivoComplemento);
 
