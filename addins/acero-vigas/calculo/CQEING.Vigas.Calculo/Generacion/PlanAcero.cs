@@ -81,7 +81,8 @@ public sealed record Rama(double X, double YArriba, double YAbajo, double Diamet
 /// Todo lo que se crea en Revit para un pórtico. <paramref name="Portico"/> es su id en el tablero.
 /// <paramref name="Diametros"/> son los distintos que se usan, también los de los estribos (para buscar los tipos de
 /// barra); <paramref name="BastonesSinLugar"/>, los bastones que no caben en el corte y no se crean (el tablero ya lo
-/// avisa).
+/// avisa); <paramref name="BastonesMontados"/>, los que no tienen un puesto sin meterse en una barra que traslapa al lado
+/// o abajo y se crean igual, montados en ella (el resumen de la generación lo avisa).
 /// </summary>
 public sealed record PlanAcero(
     string Portico,
@@ -89,4 +90,5 @@ public sealed record PlanAcero(
     IReadOnlyList<PiezaLongitudinal> Bastones,
     IReadOnlyList<string> BastonesSinLugar,
     IReadOnlyList<GrupoEstribos> Estribos,
-    IReadOnlyList<int> Diametros);
+    IReadOnlyList<int> Diametros,
+    IReadOnlyList<string>? BastonesMontados = null);

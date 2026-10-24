@@ -18,7 +18,44 @@ public static class UbicadorBastones
     private sealed record Puesto(double X, int Diametro, bool EsBaston);
 
     /// <param name="bastones">Los bastones que pasan por el corte en esa cara (cuáles son lo decide #91).</param>
-    public static UbicacionBastones Ubicar(EntradaSeccion e, Posicion cara, IReadOnlyList<GrupoBarras> bastones)
+    /// <param name="ocupadas">
+    /// Barras que no son del reparto pero pasan por ahí: las que traslapan al lado o abajo de su puesto. Un bastón que se
+    /// metería en una deja ese puesto prohibido y se vuelve a ubicar (Santiago, 24-oct: el bastón quedaba en el mismo
+    /// punto de una barra). Si así ya no caben, quedan donde van sin ellas (mejor montado que sin crear): ver
+    /// <see cref="SeMeten"/>.
+    /// </param>
+    public static UbicacionBastones Ubicar(EntradaSeccion e, Posicion cara, IReadOnlyList<GrupoBarras> bastones,
+        IReadOnlyList<BarraEnSeccion>? ocupadas = null)
+    {
+        var prohibidos = new List<(int Fila, double X)>();
+        UbicacionBastones primera = Ubicar(e, cara, bastones, prohibidos), u = primera;
+        while (true)
+        {
+            if (u.Error != ErrorCara.Ninguno)
+                return primera;
+            List<BastonEnSeccion> metidos = u.Barras.Where(b => SeMeten(e, b.Barra, ocupadas ?? [])).ToList();
+            if (metidos.Count == 0)
+                return u;
+            // Cada vuelta prohíbe al menos un puesto que antes no lo estaba: termina, con lugar o sin él.
+            prohibidos.AddRange(metidos.Select(b => (b.Fila, b.Barra.X)));
+            u = Ubicar(e, cara, bastones, prohibidos);
+        }
+    }
+
+    /// <summary>Si la barra <paramref name="b"/> del corte se mete en alguna de las <paramref name="otras"/>.</summary>
+    public static bool SeMeten(EntradaSeccion e, BarraEnSeccion b, IReadOnlyList<BarraEnSeccion> otras) =>
+        otras.Any(o => Libre(e, b, o) < -Tolerancia);
+
+    private const double Tolerancia = 1e-6;
+
+    /// <summary>Lo que queda libre entre dos barras del corte, en mm (negativo si se meten una en la otra).</summary>
+    private static double Libre(EntradaSeccion e, BarraEnSeccion a, BarraEnSeccion b) =>
+        Math.Sqrt(Math.Pow(a.X - b.X, 2) + Math.Pow(a.Y - b.Y, 2)) - (Diametro(e, a.Diametro) + Diametro(e, b.Diametro)) / 2;
+
+    private static bool Prohibido(List<(int Fila, double X)> prohibidos, int fila, double x) =>
+        prohibidos.Any(p => p.Fila == fila && Math.Abs(p.X - x) < 1e-6);
+
+    private static UbicacionBastones Ubicar(EntradaSeccion e, Posicion cara, IReadOnlyList<GrupoBarras> bastones, List<(int Fila, double X)> prohibidos)
     {
         ResultadoSeccion seccion = RepartidorFilas.Repartir(e);
         CaraSeccion c = cara == Posicion.Superior ? seccion.Superior : seccion.Inferior;
@@ -32,7 +69,7 @@ public static class UbicadorBastones
 
         List<List<Puesto>> filas = c.Filas.Select(f => f.Select(b => new Puesto(b.X, b.Diametro, false)).ToList()).ToList();
         foreach (int numero in bastones.SelectMany(g => Enumerable.Repeat(g.Diametro, g.Cantidad)))
-            if (!EnLaFila1(e, filas[0], numero) && !EnOtraFila(e, filas, puestosLlenos, numero))
+            if (!EnLaFila1(e, filas[0], numero, prohibidos) && !EnOtraFila(e, filas, puestosLlenos, numero, prohibidos))
                 return new UbicacionBastones([], ErrorCara.NoCaben);
 
         List<BastonEnSeccion> ubicados = ConAltura(e, cara, filas);
@@ -55,7 +92,7 @@ public static class UbicadorBastones
         return libre < e.Reglas.DistanciaLibre;
     }
 
-    private static bool EnLaFila1(EntradaSeccion e, List<Puesto> fila, int numero)
+    private static bool EnLaFila1(EntradaSeccion e, List<Puesto> fila, int numero, List<(int Fila, double X)> prohibidos)
     {
         double d = Diametro(e, numero), libre = e.Reglas.DistanciaLibre;
         List<Puesto> orden = fila.OrderBy(p => p.X).ToList();
@@ -63,7 +100,7 @@ public static class UbicadorBastones
         {
             Puesto a = orden[i], b = orden[i + 1];
             double necesario = Diametro(e, a.Diametro) / 2 + libre + d + libre + Diametro(e, b.Diametro) / 2;
-            if (b.X - a.X >= necesario - 1e-9)
+            if (b.X - a.X >= necesario - 1e-9 && !Prohibido(prohibidos, 1, (a.X + b.X) / 2))
             {
                 fila.Add(new Puesto((a.X + b.X) / 2, numero, true));
                 return true;
@@ -72,7 +109,7 @@ public static class UbicadorBastones
         return false;
     }
 
-    private static bool EnOtraFila(EntradaSeccion e, List<List<Puesto>> filas, double[] puestos, int numero)
+    private static bool EnOtraFila(EntradaSeccion e, List<List<Puesto>> filas, double[] puestos, int numero, List<(int Fila, double X)> prohibidos)
     {
         for (int k = 1; k < e.MaximoFilas; k++)
         {
@@ -80,7 +117,7 @@ public static class UbicadorBastones
                 filas.Add([]);
             foreach (int i in DeLosExtremosHaciaAdentro(puestos.Length))
             {
-                if (filas[k].Any(p => Math.Abs(p.X - puestos[i]) < 1e-6))
+                if (filas[k].Any(p => Math.Abs(p.X - puestos[i]) < 1e-6) || Prohibido(prohibidos, k + 1, puestos[i]))
                     continue;
                 filas[k].Add(new Puesto(puestos[i], numero, true));
                 return true;

@@ -45,6 +45,8 @@ internal static class GeneradorAcero
         t.Start();
         foreach (PorticoAGenerar p in porticos)
         {
+            fallas.AddRange((p.Plan.BastonesMontados ?? []).Select(b =>
+                $"{b} ({p.Id}): no hay un puesto que no toque la barra que traslapa; el bastón quedó montado en ella."));
             MarcaAcero.BorrarAnteriores(doc, p.Id, p.Vigas);
             // Con qué se generó, en cada viga y en esta misma transacción: un deshacer quita las dos cosas.
             foreach (string id in p.Vigas)
