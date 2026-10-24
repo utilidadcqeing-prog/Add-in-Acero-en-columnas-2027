@@ -74,7 +74,7 @@ public static class ArmadorVista
 
         OpcionesCorte oc = o.Corte ?? new OpcionesCorte();
         CorteEnPunto corte = CalculadoraCorte.En(portico, rv, re, oc);
-        (SeccionVista enCorte, IReadOnlyList<BarraSeccion> proyeccion, string? avisoBastones) = SeccionDe(p, r, re, seccion, corte);
+        (SeccionVista enCorte, IReadOnlyList<BarraSeccion> proyeccion, string? avisoBastones) = SeccionDe(p, r, rv, re, seccion, corte);
         return new VistaPortico(p.Nombre, NombreTipo(tipo), inicio, fin, apoyos, barras, traslapos, bastones,
             Zonas(portico, o, porTramo, r, re), Cara(re.Seccion.Superior), Cara(re.Seccion.Inferior),
             Opcion(rv.CaraInicio), Opcion(rv.CaraFinal), Lado(rv.CaraUsada), Lado(rv.CaraMasEconomica),
@@ -211,7 +211,7 @@ public static class ArmadorVista
     /// docs/planes/2026-10-17-corte-vigas-91.md).
     /// </summary>
     private static (SeccionVista Seccion, IReadOnlyList<BarraSeccion> Proyeccion, string? Aviso) SeccionDe(PorticoLeido p, Reglas r,
-        ResultadoEstribos re, EntradaSeccion e, CorteEnPunto corte)
+        ResultadoVigas rv, ResultadoEstribos re, EntradaSeccion e, CorteEnPunto corte)
     {
         double alto = Alto(p);
         BarraSeccion Barra(string id, string nombre, bool arriba, int fila, BarraEnSeccion b, bool esquina, bool baston) =>
@@ -246,7 +246,10 @@ public static class ArmadorVista
                 continue;
             bool arriba = cara == Posicion.Superior;
             string letra = arriba ? "bs" : "bi", nombre = arriba ? "bastón arriba" : "bastón abajo";
-            UbicacionBastones enElCorte = UbicadorBastones.Ubicar(e, cara, cortados);
+            // Como en Revit (PlanificadorAcero): el bastón no se mete en la barra que traslapa al lado o abajo de su puesto.
+            List<BarraEnSeccion> Ocupadas(IEnumerable<Baston> de) => de.Where(b => b.Capa == cara)
+                .SelectMany(b => PlanificadorAcero.OcupadasPorTraslapo(rv, re.Seccion, e, r, cara, b.Desde, b.Hasta)).Distinct().ToList();
+            UbicacionBastones enElCorte = UbicadorBastones.Ubicar(e, cara, cortados, Ocupadas(corte.Cortados));
             if (enElCorte.Error != ErrorCara.Ninguno)
             {
                 aviso ??= TextoBastones(arriba, enElCorte.Error);
@@ -254,7 +257,7 @@ public static class ArmadorVista
             }
             bastones.AddRange(enElCorte.Barras.Select((b, i) => Barra($"{letra}{i + 1}", $"{nombre} {i + 1}", arriba, b.Fila - 1, b.Barra, false, true)));
             // Ubicar es determinista: con los proyectados al final, los cortados quedan donde estaban (hallazgo 5).
-            UbicacionBastones conProyeccion = UbicadorBastones.Ubicar(e, cara, [.. cortados, .. proyectados]);
+            UbicacionBastones conProyeccion = UbicadorBastones.Ubicar(e, cara, [.. cortados, .. proyectados], Ocupadas(corte.Cortados));
             if (conProyeccion.Error == ErrorCara.Ninguno)
                 proyeccion.AddRange(conProyeccion.Barras.Where(b => !enElCorte.Barras.Contains(b))
                     .Select((b, i) => Barra($"p{letra}{i + 1}", $"{nombre} {i + 1} (detrás)", arriba, b.Fila - 1, b.Barra, false, true)));

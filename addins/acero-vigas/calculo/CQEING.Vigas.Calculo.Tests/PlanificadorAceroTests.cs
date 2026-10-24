@@ -55,6 +55,144 @@ public class PlanificadorAceroTests
     }
 
     [Fact]
+    public void VariasFilas_CadaPiezaSabeSuFila()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(7, 5)] };
+        CaraSeccion cara = Calcular(o).Estribos.Seccion.Superior;
+
+        List<PiezaLongitudinal> s1 = Planificar(o).Barras.Where(b => b.Pieza == "S1").ToList();
+
+        Assert.Equal(2, cara.Filas.Count);
+        Assert.Equal([1, 2], s1.Select(p => p.Fila).Distinct().Order());
+        Assert.All(s1, p => Assert.Contains(p.YCorte, cara.Filas[p.Fila - 1].Select(b => b.Y)));
+        // la que traslapa al lado va en la fila de la barra que acompaña, aunque se corra
+        Assert.Equal(s1.Select(p => p.Fila), Planificar(o).Barras.Where(b => b.Pieza == "S2").Select(p => p.Fila));
+    }
+
+    [Fact]
+    public void Bastones_CadaPiezaSabeSuFila()
+    {
+        // 5 #6 de bastón arriba sobre 3 #5 corridas: 2 caben en la fila 1 y 3 van a la fila 2
+        var o = OpcionesTablero.PorDefecto with { Bastones = new ArmadoBastones(new GrupoBarras(5, 6)) };
+
+        PlanAcero plan = Planificar(o);
+
+        List<PiezaLongitudinal> arriba = plan.Bastones.Where(p => p.Capa == Posicion.Superior).ToList();
+        Assert.NotEmpty(arriba);
+        Assert.All(arriba.GroupBy(p => p.Pieza), b =>
+        {
+            Assert.Equal(2, b.Count(p => p.Fila == 1));
+            Assert.Equal(3, b.Count(p => p.Fila == 2));
+        });
+    }
+
+    /// <summary>
+    /// Ningún bastón se mete en una barra en lo que comparten de largo (Santiago, 24-oct: el bastón quedaba en el mismo
+    /// punto de una barra): toma otro puesto. Si no hay ninguno, se crea igual y el plan lo marca como montado; nunca se
+    /// queda sin crear. Recorre secciones con traslapo al lado o abajo y bastones en la fila 1 y en otras.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Secciones))]
+    public void NingunBastonSeMeteEnUnaBarra(string caso, OpcionesTablero o, bool angosto)
+    {
+        PlanAcero plan = Planificar(o, angosto ? Angosto() : null);
+        Assert.True(plan.BastonesSinLugar.Count == 0, caso + ": sin lugar " + string.Join(", ", plan.BastonesSinLugar));
+
+        var metidos = (from b in plan.Bastones.Where(x => !(plan.BastonesMontados ?? []).Contains(x.Pieza))
+                       from c in plan.Barras.Concat(plan.Bastones).Where(x => x != b)
+                       where b.Capa == c.Capa && Math.Min(b.Hasta, c.Hasta) > Math.Max(b.Desde, c.Desde)
+                       let libre = Math.Sqrt(Math.Pow(b.XCorte - c.XCorte, 2) + Math.Pow(b.YCorte - c.YCorte, 2))
+                           - (Reglas.Generales.PorDiametro[b.Diametro].Diametro + Reglas.Generales.PorDiametro[c.Diametro].Diametro) / 2
+                       where libre < -0.01
+                       select $"{b.Pieza} ({b.XCorte:F1}, {b.YCorte:F1}) en {c.Pieza} ({c.XCorte:F1}, {c.YCorte:F1}): {libre:F1} mm").ToList();
+
+        Assert.True(metidos.Count == 0, caso + ": " + string.Join("; ", metidos));
+    }
+
+    /// <summary>
+    /// Dos barras que se meten una en otra nunca quedan calladas: el tablero las marca como choque. Pasa solo cuando no
+    /// hay sitio (24-oct: en 25 con 5 #5 + 2 #4 las dos del medio de S2 se meten 2.7 mm al traslapar, porque abajo están
+    /// las #4 y a los lados las otras que traslapan; ninguno de sus tres puestos queda libre).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Secciones))]
+    public void SiDosBarrasSeMeten_ElTableroLoMarcaComoChoque(string caso, OpcionesTablero o, bool angosto)
+    {
+        PorticoLeido p = angosto ? Angosto() : Portico();
+        PlanAcero plan = Planificar(o, p);
+        List<(string, string)> choques = DetectorChoques.Detectar(PreviaAcero.Trazos(plan, p.Ubicacion!, Reglas.Generales))
+            .Where(c => c.Tipo == TipoChoque.EntreBarras).Select(c => (c.A.Pieza, c.B.Pieza)).ToList();
+
+        var metidas = (from i in Enumerable.Range(0, plan.Barras.Count)
+                       from j in Enumerable.Range(i + 1, plan.Barras.Count - i - 1)
+                       let b = plan.Barras[i]
+                       let c = plan.Barras[j]
+                       where b.Capa == c.Capa && Math.Min(b.Hasta, c.Hasta) > Math.Max(b.Desde, c.Desde)
+                       let libre = Math.Sqrt(Math.Pow(b.XCorte - c.XCorte, 2) + Math.Pow(b.YCorte - c.YCorte, 2))
+                           - (Reglas.Generales.PorDiametro[b.Diametro].Diametro + Reglas.Generales.PorDiametro[c.Diametro].Diametro) / 2
+                       where libre < -0.5 && !choques.Contains((b.Pieza, c.Pieza)) && !choques.Contains((c.Pieza, b.Pieza))
+                       select $"{b.Pieza} ({b.XCorte:F1}, {b.YCorte:F1}) en {c.Pieza} ({c.XCorte:F1}, {c.YCorte:F1}): {libre:F1} mm").ToList();
+
+        Assert.True(metidas.Count == 0, caso + ": sin choque en el tablero " + string.Join("; ", metidas));
+    }
+
+    [Fact]
+    public void SinPuestoLibre_ElBastonSeCreaIgualYQuedaMarcadoComoMontado()
+    {
+        // 25 cm con 5 #5 + 2 #4 y 5 #6 de bastón: las que traslapan llenan los puestos que quedaban
+        List<GrupoBarras> caras = [new(5, 5), new(2, 4)];
+        var o = OpcionesTablero.PorDefecto with
+        {
+            Superior = caras,
+            Inferior = caras,
+            Bastones = new ArmadoBastones(new GrupoBarras(5, 6), new GrupoBarras(5, 6)),
+        };
+
+        PlanAcero plan = Planificar(o, Angosto());
+
+        Assert.NotEmpty(plan.BastonesMontados!);
+        Assert.Empty(plan.BastonesSinLugar);
+        Assert.All(plan.BastonesMontados!, id => Assert.Equal(5, plan.Bastones.Count(b => b.Pieza == id)));
+    }
+
+    [Fact]
+    public void ConPuestoLibre_NingunBastonQuedaMontado()
+    {
+        // el caso de Revit del 24-oct: 4 #5 + 2 #4 arriba en 25 cm, bastón 1 #5
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5), new GrupoBarras(2, 4)] };
+
+        PlanAcero plan = Planificar(o, Angosto());
+
+        Assert.Empty(plan.BastonesMontados!);
+    }
+
+    public static TheoryData<string, OpcionesTablero, bool> Secciones()
+    {
+        var datos = new TheoryData<string, OpcionesTablero, bool>();
+        OpcionesTablero d = OpcionesTablero.PorDefecto;
+        var adicional = new EstriboAdicional(TipoEstribo.Abierto, [new(Posicion.Superior, 1, 2), new(Posicion.Inferior, 1, 2)]);
+        foreach (bool angosto in new[] { false, true })
+            foreach (int n in new[] { 2, 3, 4, 5 })
+                foreach ((int bn, int bd) in new[] { (1, 5), (2, 5), (3, 5), (5, 6) })
+                    foreach (bool conCuatro in new[] { false, true })
+                        foreach (bool conAdicional in new[] { false, true })
+                        {
+                            List<GrupoBarras> sup = [new(n, 5)];
+                            if (conCuatro)
+                                sup.Add(new(2, 4));
+                            var o = d with
+                            {
+                                Superior = sup,
+                                Inferior = sup,
+                                Bastones = new ArmadoBastones(new GrupoBarras(bn, bd), new GrupoBarras(bn, bd)),
+                                Estribos = conAdicional ? d.Estribos with { Adicionales = [adicional] } : d.Estribos,
+                            };
+                            datos.Add($"{(angosto ? "angosta" : "300")} {n}#5{(conCuatro ? "+2#4" : "")} bastón {bn}#{bd}{(conAdicional ? " +adicional" : "")}", o, angosto);
+                        }
+        return datos;
+    }
+
+    [Fact]
     public void DosDiametros_CadaPiezaConElDeSuBarra()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };

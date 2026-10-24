@@ -111,7 +111,10 @@
       const v = (this.state.z == null || this.state.rk !== rk) ? fit : this.state;
       // Carlos (1:11:23): líneas y textos del mismo tamaño a cualquier zoom. Los trazos van con non-scaling-stroke; los
       // textos, radios y márgenes que dependen del tamaño en pantalla se multiplican por k (en el ajuste, k = 1).
-      const k = fitZ / v.z;
+      // Con la ventana más grande que 1440 × 900 el ajuste crece, pero los textos no pasan del tamaño que tienen en el
+      // alzado de 788 × 300 de esa página (Carlos, 24-oct, min 9:08: en pantalla completa "los textos se van a empachar").
+      const fitRef = Math.min((788 - 24) / dx, (300 - 60) / CH);
+      const k = Math.min(fitZ, fitRef) / v.z;
       const capas = this.state.capas, pulg = capas.pulgadas;
       const sel = this.props.sel ?? this.state.selLocal;
       const selLap = this.props.selLap ?? this.state.selLapLocal;

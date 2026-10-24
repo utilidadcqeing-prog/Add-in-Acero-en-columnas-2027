@@ -117,8 +117,19 @@ public static class MotorEstribos
     {
         GanchoEstribo.De135 => r.Estribo135.B,
         GanchoEstribo.De180 => r.Gancho180.B,
-        _ => r.Gancho90.B,
+        _ => Gancho90(r),
     };
+
+    /// <summary>
+    /// El cuadro no trae estribo de 90°: Revit lo dibuja con cola de 6 d (<c>GanchoPropio.DeEstribo</c>), así que su
+    /// largo es esa cola más el arco de 90° por el eje, con el doblado de estribo (el del 135°; 4 d si el cuadro no lo
+    /// trae). Antes se usaba el gancho de 90° de las barras, con cola de 12 d, y el largo y los kg salían inflados (24-oct).
+    /// </summary>
+    private static int Gancho90(ReglaDiametro r)
+    {
+        double d = r.Diametro, doblado = r.Estribo135.D ?? 4 * d;
+        return (int)Math.Round(6 * d + Math.PI / 2 * (doblado / 2 + d / 2));
+    }
 
     /// <summary>Decisión 8: el cerrado da la vuelta completa y el abierto es una sola rama; los dos llevan dos ganchos.</summary>
     private static double Largo(TipoEstribo tipo, double ancho, double alto, int gancho) =>

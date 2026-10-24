@@ -146,6 +146,112 @@ public class AgrupadorPorticosTests
         Assert.Equal((3350, 3650), (p.Portico.Apoyos[1].CaraIzquierda, p.Portico.Apoyos[1].CaraDerecha));
     }
 
+    /// <summary>
+    /// Carlos (24-oct, min 03:37): "qué pasa si colocas una viga entre dos vigas". La del eje 1 va de A a 5 y no toca
+    /// columnas: termina en las vigas principales de A y de 5, que van de columna a columna (y −2000 a 2000).
+    /// </summary>
+    private static ModeloLeido VigaEntreDosVigas() => new(Ejes,
+        [
+            Viga("secundaria", 0, 3500, 3500, Piso2),
+            new VigaLeida("principalA", new(0, -2000), new(0, 2000), 3100, 3500, 300, Piso2),
+            new VigaLeida("principal5", new(3500, -2000), new(3500, 2000), 3100, 3500, 300, Piso2),
+        ],
+        [
+            Columna("cA1", 0, -2000, 300, 0, 3500), Columna("cA2", 0, 2000, 300, 0, 3500),
+            Columna("c51", 3500, -2000, 300, 0, 3500), Columna("c52", 3500, 2000, 300, 0, 3500),
+        ]);
+
+    [Fact]
+    public void UnaVigaEntreDosVigas_SeApoyaEnLasDos()
+    {
+        PorticoLeido p = AgrupadorPorticos.Agrupar(VigaEntreDosVigas()).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Viga, TipoApoyo.Viga], p.TiposDeApoyo);
+        // de cara a cara de las principales: sus estribos no entran en ellas (Carlos, min 03:53)
+        Assert.Equal((150, 3350), (p.Portico.Apoyos[0].CaraDerecha, p.Portico.Apoyos[1].CaraIzquierda));
+        Assert.Equal(0, p.Portico.VoladizoInicio + p.Portico.VoladizoFinal);
+    }
+
+    [Fact]
+    public void UnaVigaEntreDosVigas_NoPartenLaPrincipal()
+    {
+        // Carlos (min 03:53): en el cruce mandan los estribos de la principal, que va de columna a columna.
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(VigaEntreDosVigas());
+
+        Assert.All(r.Porticos.Where(x => x.Nombre != "Pórtico 1"),
+            p => Assert.Equal([TipoApoyo.Columna, TipoApoyo.Columna], p.TiposDeApoyo));
+    }
+
+    [Fact]
+    public void UnaVigaQuePasaPorEncimaDeUnaPrincipal_SeApoyaEnElla()
+    {
+        // Como la 389664 del modelo de Carlos (24-oct): sale de una vigueta de borde sin columnas (x −2000), pasa por
+        // encima de la principal de A y termina en la de 5. La de A va de columna a columna: es apoyo aunque la
+        // secundaria siga de largo; antes quedaba todo como un voladizo y sus estribos entraban en la de A.
+        ModeloLeido m = VigaEntreDosVigas() with
+        {
+            Vigas =
+            [
+                Viga("secundaria", -2000, 3500, 3500, Piso2),
+                new VigaLeida("principalA", new(0, -2000), new(0, 2000), 3100, 3500, 300, Piso2),
+                new VigaLeida("principal5", new(3500, -2000), new(3500, 2000), 3100, 3500, 300, Piso2),
+                new VigaLeida("vigueta", new(-2000, -2000), new(-2000, 2000), 3150, 3500, 100, Piso2),
+            ],
+        };
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(m).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Viga, TipoApoyo.Viga], p.TiposDeApoyo);
+        Assert.Equal((-150, 150), (p.Portico.Apoyos[0].CaraIzquierda, p.Portico.Apoyos[0].CaraDerecha));
+        Assert.Equal(1850, p.Portico.VoladizoInicio);
+    }
+
+    [Fact]
+    public void DosPrincipalesQueSeCruzanEntreColumnas_NoSeParten()
+    {
+        // La del eje 1 va de columna (A) a columna (6); en 5 la cruza otra que también va de columna a columna.
+        var modelo = new ModeloLeido(Ejes,
+            [Viga("v1", 0, 7000, 3500, Piso2), new VigaLeida("cruza", new(3500, -2000), new(3500, 2000), 3100, 3500, 300, Piso2)],
+            [Columna("c1", 0, 0, 300, 0, 3500), Columna("c3", 7000, 0, 300, 0, 3500),
+             Columna("c51", 3500, -2000, 300, 0, 3500), Columna("c52", 3500, 2000, 300, 0, 3500)]);
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(modelo).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal([TipoApoyo.Columna, TipoApoyo.Columna], p.TiposDeApoyo);
+    }
+
+    [Fact]
+    public void LaVigaDeApoyoConSuLineaEnUnaCara_SeMideDondeEstaDeVerdad()
+    {
+        // Como la 388561 (24-oct): la línea de ubicación de Revit va por una cara (x 3500) y la viga ocupa 3250–3500.
+        // Con eje ± medio ancho quedaba en 3375–3625 y el último estribo de la secundaria entraba 70 mm en ella.
+        ModeloLeido m = VigaEntreDosVigas() with
+        {
+            Vigas =
+            [
+                Viga("secundaria", 0, 3500, 3500, Piso2),
+                new VigaLeida("principalA", new(0, -2000), new(0, 2000), 3100, 3500, 300, Piso2),
+                new VigaLeida("principal5", new(3500, -2000), new(3500, 2000), 3150, 3500, 250, Piso2, Centro: new(3375, 0)),
+            ],
+        };
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(m).Porticos.Single(x => x.Eje == "1");
+
+        Assert.Equal((3250, 3500), (p.Portico.Apoyos[1].CaraIzquierda, p.Portico.Apoyos[1].CaraDerecha));
+    }
+
+    [Fact]
+    public void UnaVigaEntreDosVigasQueNoLleganAColumnas_NoArmaPortico()
+    {
+        // Carlos (min 15:03): una viga que no se conecta a columnas no es apoyo.
+        ModeloLeido m = VigaEntreDosVigas() with { Apoyos = [] };
+
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(m);
+
+        Assert.DoesNotContain(r.Porticos, p => p.Eje == "1");
+        Assert.Contains(r.Avisos, a => a.Tipo == TipoAvisoLectura.SinApoyos && a.Elemento.Contains("secundaria"));
+    }
+
     [Fact]
     public void CadaApoyoTraeSuFondo_LoQueMideDeLadoALado()
     {

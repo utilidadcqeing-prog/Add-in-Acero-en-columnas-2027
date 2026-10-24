@@ -38,11 +38,13 @@ public class MotorEstribosTests
     }
 
     [Fact]
-    public void ConGanchoDe90_UsaElGancho90DeLasReglas()
+    public void ConGanchoDe90_UsaLaColaDe6DiametrosQueDibujaRevit()
     {
         ResultadoEstribos r = Calcular(General with { Gancho = GanchoEstribo.De90 });
 
-        Assert.Equal(1242 + 2 * 166, Cerrado(r, "A-B").Largo, 6);
+        // #3: cola de 6 d (57) + arco de 90° por el eje con el doblado de estribo de 38 (π/2 × 23.75 = 37), no el
+        // gancho de 90° de las barras (166, con cola de 12 d)
+        Assert.Equal(1242 + 2 * 94, Cerrado(r, "A-B").Largo, 6);
     }
 
     [Fact]

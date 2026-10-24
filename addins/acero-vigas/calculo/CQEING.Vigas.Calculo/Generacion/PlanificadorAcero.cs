@@ -29,6 +29,7 @@ public static class PlanificadorAcero
         {
             CaraSeccion cara = capa.Capa == Posicion.Superior ? c.Estribos.Seccion.Superior : c.Estribos.Seccion.Inferior;
             List<BarraEnSeccion> corte = cara.Filas.SelectMany(f => f).ToList();
+            List<int> filas = cara.Filas.SelectMany((f, k) => f.Select(_ => k + 1)).ToList();
             List<BarraEnSeccion> alLado = AlLado(corte, c.Seccion, r);
             List<Barra> enOrden = capa.Barras.OrderBy(b => b.Desde).ToList();
             for (int i = 0; i < enOrden.Count; i++)
@@ -37,24 +38,29 @@ public static class PlanificadorAcero
                 List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
                 // El largo de la barra del tablero lleva los ganchos del diámetro de la capa; una pieza de otro diámetro
                 // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
-                barras.AddRange(puestos.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
+                barras.AddRange(puestos.Select((s, k) => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
                     s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
-                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin))));
+                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin),
+                    filas[k])));
             }
         }
 
         var bastones = new List<PiezaLongitudinal>();
         var sinLugar = new List<string>();
+        var montados = new List<string>();
         foreach (Baston b in c.Vigas.Bastones)
         {
-            UbicacionBastones enCorte = UbicadorBastones.Ubicar(c.Seccion, b.Capa, [b.Grupo]);
+            List<BarraEnSeccion> ocupadas = OcupadasPorTraslapo(c.Vigas, c.Estribos.Seccion, c.Seccion, r, b.Capa, b.Desde, b.Hasta);
+            UbicacionBastones enCorte = UbicadorBastones.Ubicar(c.Seccion, b.Capa, [b.Grupo], ocupadas);
             if (enCorte.Error != ErrorCara.Ninguno || enCorte.Barras.Count == 0)
             {
                 sinLugar.Add(b.Id);
                 continue;
             }
+            if (enCorte.Barras.Any(s => UbicadorBastones.SeMeten(c.Seccion, s.Barra, ocupadas)))
+                montados.Add(b.Id);
             bastones.AddRange(enCorte.Barras.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Barra.Diametro, s.Barra.X, s.Barra.Y,
-                b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
+                b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo, s.Fila)));
         }
 
         List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r);
@@ -63,7 +69,25 @@ public static class PlanificadorAcero
 
         List<GrupoEstribos> estribos = Estribos(c, p.Portico, o.Estribos, r, u);
         List<int> diametros = barras.Concat(bastones).Select(x => x.Diametro).Concat(estribos.Select(e => e.Diametro)).Distinct().Order().ToList();
-        return new PlanAcero(idPortico, barras, bastones, sinLugar, estribos, diametros);
+        return new PlanAcero(idPortico, barras, bastones, sinLugar, estribos, diametros, montados);
+    }
+
+    /// <summary>
+    /// Las barras de la <paramref name="capa"/> que traslapan al lado o abajo de su puesto (la segunda, cuarta… de la capa,
+    /// en todo su largo) y comparten largo con <paramref name="desde"/>–<paramref name="hasta"/>, en el corte. El reparto
+    /// del corte no sabe de ellas: un bastón no se mete en ellas (Santiago, 24-oct: el bastón quedaba en el mismo punto de
+    /// una barra). Lo usan el plan y el corte del tablero, para que los dos pongan el bastón en el mismo puesto.
+    /// </summary>
+    internal static List<BarraEnSeccion> OcupadasPorTraslapo(ResultadoVigas v, ResultadoSeccion s, EntradaSeccion e, Reglas r,
+        Posicion capa, int desde, int hasta)
+    {
+        SolucionCapa? solucion = capa == Posicion.Superior ? v.Superior : v.Inferior;
+        CaraSeccion cara = capa == Posicion.Superior ? s.Superior : s.Inferior;
+        if (solucion is null || cara.Error != ErrorCara.Ninguno)
+            return [];
+        bool comparten = solucion.Barras.OrderBy(b => b.Desde).Where((_, i) => i % 2 == 1)
+            .Any(b => Math.Min(b.Hasta, hasta) > Math.Max(b.Desde, desde));
+        return comparten ? AlLado(cara.Filas.SelectMany(f => f).ToList(), e, r) : [];
     }
 
     /// <summary>

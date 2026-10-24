@@ -29,8 +29,32 @@ internal static class CreadorBarras
     /// <summary>La horizontal perpendicular al pórtico: el plano de la barra queda vertical y el gancho dobla arriba o abajo.</summary>
     public static XYZ Lateral(UbicacionPortico u) => new(-u.Uy, u.Ux, 0);
 
-    /// <summary>Null si Revit no pudo crearla. Los ganchos pueden quedar al revés: ver <see cref="CorregirGanchos"/>.</summary>
-    public static Rebar? Crear(Document doc, UbicacionPortico u, PiezaLongitudinal p, RebarBarType barra, TiposAcero tipos)
+    /// <summary>
+    /// Las barras del conjunto como un solo conjunto de Revit: la primera, y las demás repartidas a lo ancho hasta la
+    /// última, a la misma separación (después <see cref="AcomodarConjunto"/> deja cada una en su punto). Null si Revit no
+    /// pudo crearlo. Los ganchos pueden quedar al revés: ver <see cref="CorregirGanchos"/>.
+    /// </summary>
+    public static Rebar? Crear(Document doc, UbicacionPortico u, ConjuntoBarras c, RebarBarType barra, TiposAcero tipos)
+    {
+        Rebar? r = Crear(doc, u, c.Primera, barra, tipos);
+        if (r is null || c.Piezas.Count == 1)
+            return r;
+        PiezaLongitudinal p = c.Primera, ultima = c.Piezas[^1];
+        double reparto = (Punto(u, p.Desde, ultima.XCorte, p.YCorte) - Punto(u, p.Desde, p.XCorte, p.YCorte)).DotProduct(Lateral(u));
+        try
+        {
+            r.GetShapeDrivenAccessor().SetLayoutAsFixedNumber(c.Piezas.Count, Math.Abs(reparto), reparto > 0, true, true);
+        }
+        catch
+        {
+            // Sin esto quedaría una barra suelta, sin marca, que la próxima generación no borra.
+            doc.Delete(r.Id);
+            throw;
+        }
+        return r;
+    }
+
+    private static Rebar? Crear(Document doc, UbicacionPortico u, PiezaLongitudinal p, RebarBarType barra, TiposAcero tipos)
     {
         if (doc.GetElement(new ElementId(long.Parse(p.Host))) is not Element host)
             return null;
@@ -109,6 +133,54 @@ internal static class CreadorBarras
             return false;
         ElementTransformUtils.MoveElement(r.Document, r.Id, diferencia);
         return true;
+    }
+
+    /// <summary>
+    /// Deja cada barra del conjunto en su punto del corte: Revit las reparte a la misma separación y a la altura de la
+    /// primera, pero la de esquina se apoya en la curva del estribo y la que traslapa puede ir abajo o al lado de su
+    /// puesto. Se miden con <c>GetTransformedCenterlineCurves</c> (<c>GetCenterlineCurves</c> da siempre la primera) y se
+    /// corren con <c>MoveBarInSet</c>, que suma al movimiento que ya tenían (medido en Revit el 24-oct). Las barras se
+    /// emparejan con las piezas por su orden a lo ancho. Llamar después de regenerar, con la primera ya en su punto
+    /// (<see cref="FijarEnSuPunto"/>).
+    /// </summary>
+    public static Acomodo AcomodarConjunto(Rebar r, UbicacionPortico u, ConjuntoBarras c)
+    {
+        if (c.Piezas.Count < 2)
+            return Acomodo.Igual;
+        if (r.NumberOfBarPositions != c.Piezas.Count)
+            return Acomodo.NoSePudo;
+        PiezaLongitudinal p = c.Primera;
+        XYZ eje = (Punto(u, p.Hasta, p.XCorte, p.YCorte) - Punto(u, p.Desde, p.XCorte, p.YCorte)).Normalize();
+        XYZ ancho = Punto(u, p.Desde, c.Piezas[^1].XCorte, p.YCorte) - Punto(u, p.Desde, p.XCorte, p.YCorte);
+        var enRevit = new List<(int Indice, XYZ Punto)>();
+        for (int i = 0; i < r.NumberOfBarPositions; i++)
+        {
+            if (r.GetTransformedCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, i)
+                    .OfType<Line>().MaxBy(l => l.Length) is not { } recta)
+                return Acomodo.NoSePudo;
+            enRevit.Add((i, recta.GetEndPoint(0)));
+        }
+        Acomodo resultado = Acomodo.Igual;
+        foreach (((int indice, XYZ actual), PiezaLongitudinal pieza) in enRevit.OrderBy(b => b.Punto.DotProduct(ancho)).Zip(c.Piezas))
+        {
+            XYZ diferencia = Punto(u, pieza.Desde, pieza.XCorte, pieza.YCorte) - actual;
+            diferencia -= eje * diferencia.DotProduct(eje); // solo en el plano del corte, no a lo largo
+            if (diferencia.GetLength() < Pies(0.1))
+                continue;
+            r.MoveBarInSet(indice, Transform.CreateTranslation(diferencia));
+            resultado = Acomodo.Movido;
+        }
+        return resultado;
+    }
+
+    /// <summary>Lo que hizo <see cref="AcomodarConjunto"/>.</summary>
+    public enum Acomodo
+    {
+        /// <summary>Todas ya estaban en su punto (o es una sola barra).</summary>
+        Igual,
+        Movido,
+        /// <summary>Revit no dio las barras que se esperaban: quedan repartidas a la misma separación.</summary>
+        NoSePudo,
     }
 
     /// <summary>El largo de una barra en Revit (con los ganchos), en mm.</summary>

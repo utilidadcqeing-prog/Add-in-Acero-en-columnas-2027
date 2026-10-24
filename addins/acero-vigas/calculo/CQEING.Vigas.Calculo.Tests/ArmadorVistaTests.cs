@@ -1,4 +1,5 @@
 using CQEING.Vigas.Calculo.Estribos;
+using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
 using CQEING.Vigas.Calculo.Seccion;
@@ -555,6 +556,37 @@ public class ArmadorVistaTests
 
         Assert.True(v.Corte!.Ajustado);
         Assert.All(v.ZonasTraslapo, r => Assert.True(v.Corte.X < r.Desde || v.Corte.X > r.Hasta));
+    }
+
+    /// <summary>
+    /// El corte pone cada bastón donde lo pone Revit: si en su puesto se metería en la barra que traslapa al lado o abajo,
+    /// los dos lo cambian de puesto igual (24-oct, viga de 25 con 4 #5 + 2 #4 y bastón 5 #6).
+    /// </summary>
+    [Fact]
+    public void ElCorteUbicaLosBastonesComoElPlanDeRevit()
+    {
+        PorticoLeido p = PlanificadorAceroTests.Portico() is var q ? q with { Tramos = q.Tramos.Select(t => t with { Ancho = 250 }).ToList() } : null!;
+        var o = OpcionesTablero.PorDefecto with
+        {
+            Superior = [new GrupoBarras(4, 5), new GrupoBarras(2, 4)],
+            Bastones = new ArmadoBastones(new GrupoBarras(5, 6)),
+        };
+        PlanAcero plan = PlanificadorAcero.Planificar("P", p, o, Reglas.Generales)!;
+        ResultadoVigas rv = MotorVigas.Calcular(new EntradaVigas(p.Portico, p.Tipo, o.Superior, o.Inferior, Reglas.Generales, o.Cara,
+            Cambios: o.Cambios, Bastones: o.Bastones));
+        double alto = p.Tramos[0].Alto;
+
+        foreach (Baston b in rv.Bastones.Where(x => x.Capa == Posicion.Superior))
+        {
+            Intervalo i = CalculadoraCorte.Permitidos(p.Portico, rv).First(i => i.Hasta > b.Desde && i.Desde < b.Hasta);
+            int x = (int)Math.Round((Math.Max(i.Desde, b.Desde) + Math.Min(i.Hasta, b.Hasta)) / 2);
+
+            VistaPortico v = Armar(o with { Corte = new OpcionesCorte(X: x) }, p);
+
+            var enElCorte = v.Seccion.Barras.Where(s => s.Baston && s.Arriba).Select(s => (Math.Round(s.X, 2), Math.Round(s.Y, 2))).Order();
+            var enRevit = plan.Bastones.Where(s => s.Pieza == b.Id).Select(s => (Math.Round(s.XCorte / 10, 2), Math.Round((alto - s.YCorte) / 10, 2))).Order();
+            Assert.Equal(enRevit, enElCorte);
+        }
     }
 
     [Fact]

@@ -39,8 +39,9 @@ public static class AgrupadorPorticos
             {
                 List<Tramo> cadena = cadenas[i];
                 double desde = cadena.Min(t => t.Desde), hasta = cadena.Max(t => t.Hasta);
-                List<Soporte> propios = SinArmazonDeVoladizos(Unir(soportes.Where(s => s.Hasta >= desde - ToleranciaContacto && s.Desde <= hasta + ToleranciaContacto)
-                    .Where(s => s.Tipo != TipoApoyo.Viga || TerminaSobre(cadena, s, soportes))), modelo);
+                List<Soporte> enLaCadena = soportes.Where(s => s.Hasta >= desde - ToleranciaContacto && s.Desde <= hasta + ToleranciaContacto).ToList();
+                List<Soporte> propios = SinArmazonDeVoladizos(Unir(enLaCadena
+                    .Where(s => s.Tipo != TipoApoyo.Viga || TerminaSobre(cadena, s, soportes) || PrincipalQueLaCarga(s, enLaCadena, modelo))), modelo);
                 if (propios.Count == 0)
                 {
                     avisos.Add(new AvisoLectura(TipoAvisoLectura.SinApoyos, string.Join(", ", cadena.Select(t => t.Viga.Id))));
@@ -283,20 +284,36 @@ public static class AgrupadorPorticos
         return soportes;
     }
 
-    /// <summary>Contorno en planta de una viga, a partir de su eje y su ancho.</summary>
+    /// <summary>
+    /// Contorno en planta de una viga, a partir de su eje y su ancho, centrado en su geometría: la línea de Revit puede
+    /// ir por una cara (24-oct: la 388561 quedaba medio ancho corrida y un estribo de la que llega entraba 70 mm en ella).
+    /// </summary>
     private static IReadOnlyList<Punto> Huella(VigaLeida v)
     {
         double dx = v.Hasta.X - v.Desde.X, dy = v.Hasta.Y - v.Desde.Y;
-        double largo = Math.Sqrt(dx * dx + dy * dy);
-        double nx = -dy / largo * v.Ancho / 2, ny = dx / largo * v.Ancho / 2;
-        return [new(v.Desde.X + nx, v.Desde.Y + ny), new(v.Hasta.X + nx, v.Hasta.Y + ny),
-                new(v.Hasta.X - nx, v.Hasta.Y - ny), new(v.Desde.X - nx, v.Desde.Y - ny)];
+        double largo = Math.Sqrt(dx * dx + dy * dy), ux = dx / largo, uy = dy / largo;
+        // de la línea al centro, de lado a lado (a lo largo no se mueve)
+        double corrida = v.Centro is { } c ? -(c.X - v.Desde.X) * uy + (c.Y - v.Desde.Y) * ux : 0;
+        double nx = -uy, ny = ux, cerca = corrida - v.Ancho / 2, lejos = corrida + v.Ancho / 2;
+        return [new(v.Desde.X + nx * lejos, v.Desde.Y + ny * lejos), new(v.Hasta.X + nx * lejos, v.Hasta.Y + ny * lejos),
+                new(v.Hasta.X + nx * cerca, v.Hasta.Y + ny * cerca), new(v.Desde.X + nx * cerca, v.Desde.Y + ny * cerca)];
     }
 
     /// <summary>Una viga que cruza es apoyo solo donde una viga del pórtico termina sobre ella sin columna ni muro.</summary>
     private static bool TerminaSobre(List<Tramo> cadena, Soporte viga, List<Soporte> soportes) =>
         cadena.SelectMany(t => new[] { t.Desde, t.Hasta })
             .Any(punta => Contiene(viga, punta) && !soportes.Any(s => s.Tipo != TipoApoyo.Viga && Contiene(s, punta)));
+
+    /// <summary>
+    /// Una viga que la cadena cruza sin terminar en ella es apoyo si descansa en columnas o muros (es principal) y la
+    /// cadena no tiene columnas a los dos lados de ella. Carlos (24-oct, min 03:53): la que no llega a columnas se apoya en
+    /// las principales y en el cruce mandan los estribos de la principal; antes, una secundaria que pasaba por encima de
+    /// una principal quedaba como voladizo y sus estribos entraban en ella. Dos principales que se cruzan entre columnas
+    /// siguen sin partirse.
+    /// </summary>
+    private static bool PrincipalQueLaCarga(Soporte viga, List<Soporte> enLaCadena, ModeloLeido modelo) =>
+        modelo.Vigas.FirstOrDefault(v => v.Id == viga.Id) is VigaLeida v && modelo.Apoyos.Any(a => Descansa(v, a))
+        && !(enLaCadena.Any(s => s.Tipo != TipoApoyo.Viga && s.Hasta < viga.Desde) && enLaCadena.Any(s => s.Tipo != TipoApoyo.Viga && s.Desde > viga.Hasta));
 
     /// <summary>
     /// Lo que pasa de la primera / última columna o muro es voladizo: una viga que cruza ahí es armazón, no apoyo,
@@ -319,8 +336,10 @@ public static class AgrupadorPorticos
         double largo = Math.Sqrt(dx * dx + dy * dy), ux = dx / largo, uy = dy / largo;
         double A(Punto p) => (p.X - v.Desde.X) * ux + (p.Y - v.Desde.Y) * uy;
         double N(Punto p) => -(p.X - v.Desde.X) * uy + (p.Y - v.Desde.Y) * ux;
+        // centrada en su geometría, como en Huella: la línea de Revit puede ir por una cara
+        double corrida = v.Centro is { } c ? N(c) : 0;
         return a.Huella.Max(A) >= -ToleranciaContacto && a.Huella.Min(A) <= largo + ToleranciaContacto
-            && a.Huella.Max(N) >= -v.Ancho / 2 - ToleranciaContacto && a.Huella.Min(N) <= v.Ancho / 2 + ToleranciaContacto;
+            && a.Huella.Max(N) >= corrida - v.Ancho / 2 - ToleranciaContacto && a.Huella.Min(N) <= corrida + v.Ancho / 2 + ToleranciaContacto;
     }
 
     private static bool Contiene(Soporte s, double t) => t >= s.Desde - ToleranciaContacto && t <= s.Hasta + ToleranciaContacto;
