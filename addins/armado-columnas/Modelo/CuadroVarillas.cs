@@ -54,6 +54,13 @@ public static class CuadroVarillas
 
         /// <summary>Gancho de 180° del cuadro 2 (el de las grapas).</summary>
         public required Gancho Gancho180Cuadro { get; init; }
+
+        /// <summary>
+        /// Peso por metro, en kg/m. No viene del cuadro de ganchos y traslapos:
+        /// son los mismos valores de las reglas del add-in de vigas, para que el
+        /// cuadro de varillas de la ventana (#142) los muestre igual en los dos.
+        /// </summary>
+        public required double KgPorMetro { get; init; }
     }
 
     /// <summary>
@@ -74,19 +81,19 @@ public static class CuadroVarillas
     {
         // Cuadro 2 (#65), E / D en metros.
         new Varilla(2,  6.4, 0.076, 0.112, 0.096, null)
-            { GanchoEstribo135 = new(0.038, 0.026), Gancho90Cuadro = new(0.077, 0.038), Gancho180Cuadro = new(0.065, 0.038) },
+            { GanchoEstribo135 = new(0.038, 0.026), Gancho90Cuadro = new(0.077, 0.038), Gancho180Cuadro = new(0.065, 0.038), KgPorMetro = 0.250 },
         new Varilla(3,  9.5, 0.113, 0.166, 0.142, 0.55)
-            { GanchoEstribo135 = new(0.057, 0.038), Gancho90Cuadro = new(0.114, 0.057), Gancho180Cuadro = new(0.065, 0.057) },
+            { GanchoEstribo135 = new(0.057, 0.038), Gancho90Cuadro = new(0.114, 0.057), Gancho180Cuadro = new(0.065, 0.057), KgPorMetro = 0.560 },
         new Varilla(4, 12.7, 0.151, 0.222, 0.190, 0.75)
-            { GanchoEstribo135 = new(0.076, 0.051), Gancho90Cuadro = new(0.152, 0.076), Gancho180Cuadro = new(0.065, 0.076) },
+            { GanchoEstribo135 = new(0.076, 0.051), Gancho90Cuadro = new(0.152, 0.076), Gancho180Cuadro = new(0.065, 0.076), KgPorMetro = 0.994 },
         new Varilla(5, 15.9, 0.189, 0.278, 0.238, 0.90)
-            { GanchoEstribo135 = new(0.095, 0.064), Gancho90Cuadro = new(0.191, 0.095), Gancho180Cuadro = new(0.065, 0.095) },
+            { GanchoEstribo135 = new(0.095, 0.064), Gancho90Cuadro = new(0.191, 0.095), Gancho180Cuadro = new(0.065, 0.095), KgPorMetro = 1.552 },
         new Varilla(6, 19.1, 0.272, 0.334, 0.286, 1.10)
-            { Gancho90Cuadro = new(0.229, 0.115), Gancho180Cuadro = new(0.076, 0.115) },
+            { Gancho90Cuadro = new(0.229, 0.115), Gancho180Cuadro = new(0.076, 0.115), KgPorMetro = 2.235 },
         new Varilla(7, 22.2, 0.316, 0.388, 0.333, 1.35)
-            { Gancho90Cuadro = new(0.266, 0.133), Gancho180Cuadro = new(0.089, 0.133) },
+            { Gancho90Cuadro = new(0.266, 0.133), Gancho180Cuadro = new(0.089, 0.133), KgPorMetro = 3.042 },
         new Varilla(8, 25.4, 0.362, 0.444, 0.381, 1.70)
-            { Gancho90Cuadro = new(0.305, 0.152), Gancho180Cuadro = new(0.102, 0.152) },
+            { Gancho90Cuadro = new(0.305, 0.152), Gancho180Cuadro = new(0.102, 0.152), KgPorMetro = 3.973 },
     };
 
     /// <summary>La varilla del cuadro con ese diámetro, o null si no es ninguno de los normalizados.</summary>
@@ -110,6 +117,29 @@ public static class CuadroVarillas
     public static Varilla? PorNombrePropio(string nombre) =>
         Cuadro.FirstOrDefault(v => NombrePropio(v.Numero) == nombre);
 
+    /// <summary>La varilla del cuadro que corresponde a ese tipo de barra: por nombre propio y, si no, por diámetro.</summary>
+    public static Varilla? De(TipoBarra barra) => PorNombrePropio(barra.Nombre) ?? PorDiametro(barra.DiametroMm);
+
+    /// <summary>
+    /// Para el cuadro de varillas de la ventana (#142): en qué se usa cada
+    /// varilla del cuadro, por número ("#4" → "caras", "esquinas"). Cada uso
+    /// sale una sola vez y en el orden en que llega. Las barras sin elegir
+    /// (null) y las que no están en el cuadro no marcan nada.
+    /// </summary>
+    public static IReadOnlyDictionary<int, IReadOnlyList<string>> UsosPorNumero(
+        IEnumerable<(string Uso, TipoBarra? Barra)> usos)
+    {
+        var porNumero = new Dictionary<int, List<string>>();
+        foreach ((string uso, TipoBarra? barra) in usos)
+        {
+            if (barra is null || De(barra) is not { } varilla) continue;
+            if (!porNumero.TryGetValue(varilla.Numero, out List<string>? lista))
+                porNumero[varilla.Numero] = lista = new List<string>();
+            if (!lista.Contains(uso)) lista.Add(uso);
+        }
+        return porNumero.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value);
+    }
+
     /// <summary>
     /// Si una barra sirve para estribos (y para cajas y grapas, que usan la
     /// misma barra) según el cuadro -- #64, "Filtro de la barra de estribo":
@@ -120,7 +150,7 @@ public static class CuadroVarillas
     /// </summary>
     public static (AptitudEstribo Aptitud, string? Motivo) EvaluarParaEstribo(TipoBarra barra)
     {
-        Varilla? varilla = PorNombrePropio(barra.Nombre) ?? PorDiametro(barra.DiametroMm);
+        Varilla? varilla = De(barra);
         if (varilla is null)
             return (AptitudEstribo.NoApta, $"«{barra.Nombre}» no está en el cuadro de la empresa.");
         if (varilla.GanchoEstribo135 is not { } estribo)

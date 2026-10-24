@@ -10,9 +10,9 @@ public class App : IExternalApplication
 
         panelEstructural.AddItem(CintaCqeing.CrearBoton(
             "ComandoEstribos",
-            "Estribos\nde Columna",
+            "Acero en\ncolumnas",
             "practicacq.ComandoEstribos",
-            "Genera el acero de estribos con espaciado uniforme en las columnas seleccionadas.",
+            "Genera el acero de las columnas seleccionadas: barras longitudinales con sus traslapos, estribos y estribos menores.",
             "icono"));
 
         RibbonPanel panelHerramientas = CintaCqeing.ObtenerPanel(app, "Herramientas");
@@ -22,7 +22,7 @@ public class App : IExternalApplication
             "Columnetas\ny Viguetas",
             "practicacq.Comando",
             "Genera columnetas y viguetas de confinamiento en los muros seleccionados.",
-            "iconoCQ"));
+            "iconoColumnetas"));
 
 #if DEBUG
         // Herramientas de diagnóstico: solo en las compilaciones de desarrollo
@@ -56,6 +56,15 @@ public class App : IExternalApplication
             "Diagnóstico\nbarra continua",
             "practicacq.ComandoDiagnosticoBarraContinua",
             "TEMPORAL: prueba si una sola barra puede recorrer varias columnas apiladas y llevar varios empalmes. Deja barras de prueba (Ctrl+Z las saca).",
+            "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoPrevia3D.cs. Sacar
+        // este botón (y el comando) una vez cerrado el #123.
+        panelHerramientas.AddItem(CintaCqeing.CrearBoton(
+            "ComandoDiagnosticoPrevia3D",
+            "Diagnóstico\nvista 3D",
+            "practicacq.ComandoDiagnosticoPrevia3D",
+            "TEMPORAL: mide cuánto tarda la vista previa 3D en generar de prueba una columna y deshacerlo, y comprueba que no queda nada.",
             "iconoCQ"));
 #endif
 

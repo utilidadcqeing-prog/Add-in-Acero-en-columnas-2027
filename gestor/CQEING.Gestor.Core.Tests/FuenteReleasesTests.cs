@@ -245,4 +245,72 @@ public class FuenteReleasesTests : IDisposable
         Assert.False(File.Exists(Path.Combine(_tmp.Ruta, "releases.etag")));
         Assert.Empty(handler.Pedidos[2].Headers.IfNoneMatch);
     }
+
+    private void EnvejecerListaGuardada(TimeSpan edad) =>
+        File.SetLastWriteTimeUtc(Path.Combine(_tmp.Ruta, "releases.json"), DateTime.UtcNow - edad);
+
+    [Fact]
+    public async Task Lista_reciente_se_usa_sin_preguntar_a_GitHub()
+    {
+        var handler = PrimeroBienDespues(() => throw new HttpRequestException("no debía consultar"));
+        FuenteReleases fuente = Fuente(handler);
+        await fuente.ObtenerAsync();
+        EnvejecerListaGuardada(TimeSpan.FromMinutes(10));
+
+        ResultadoReleases r = await fuente.ObtenerRecienteAsync(TimeSpan.FromMinutes(30));
+
+        Assert.Single(handler.Pedidos);
+        Assert.False(r.DesdeCache);
+        Assert.Equal("armado-columnas-v1.0.0", Assert.Single(r.Releases).Etiqueta);
+    }
+
+    [Fact]
+    public async Task Lista_vieja_se_vuelve_a_consultar()
+    {
+        var handler = new HandlerFalso(_ => Respuestas.Texto(Json, "\"v1\""));
+        FuenteReleases fuente = Fuente(handler);
+        await fuente.ObtenerAsync();
+        EnvejecerListaGuardada(TimeSpan.FromMinutes(40));
+
+        await fuente.ObtenerRecienteAsync(TimeSpan.FromMinutes(30));
+
+        Assert.Equal(2, handler.Pedidos.Count);
+    }
+
+    [Fact]
+    public async Task Sin_lista_guardada_se_consulta()
+    {
+        var handler = new HandlerFalso(_ => Respuestas.Texto(Json, "\"v1\""));
+
+        ResultadoReleases r = await Fuente(handler).ObtenerRecienteAsync(TimeSpan.FromMinutes(30));
+
+        Assert.Single(handler.Pedidos);
+        Assert.Single(r.Releases);
+    }
+
+    [Fact]
+    public async Task Un_304_renueva_la_fecha_y_la_siguiente_apertura_no_consulta()
+    {
+        var handler = PrimeroBienDespues(() => Respuestas.Estado(HttpStatusCode.NotModified));
+        FuenteReleases fuente = Fuente(handler);
+        await fuente.ObtenerAsync();
+        EnvejecerListaGuardada(TimeSpan.FromHours(2));
+
+        await fuente.ObtenerRecienteAsync(TimeSpan.FromMinutes(30)); // 304
+        await fuente.ObtenerRecienteAsync(TimeSpan.FromMinutes(30)); // reciente: no consulta
+
+        Assert.Equal(2, handler.Pedidos.Count);
+    }
+
+    [Fact]
+    public async Task Guardar_no_deja_temporales()
+    {
+        var handler = new HandlerFalso(_ => Respuestas.Texto(Json, "\"v1\""));
+        FuenteReleases fuente = Fuente(handler);
+
+        await fuente.ObtenerAsync();
+        await fuente.ObtenerAsync();
+
+        Assert.Empty(Directory.GetFiles(_tmp.Ruta, "*.tmp"));
+    }
 }

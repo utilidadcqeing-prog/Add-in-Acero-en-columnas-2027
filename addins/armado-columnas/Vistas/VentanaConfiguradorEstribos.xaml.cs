@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using practicacq.Modelo;
@@ -284,6 +285,10 @@ public partial class VentanaConfiguradorEstribos : Window
                  })
             combo.SelectionChanged += (_, _) => { if (!_mostrandoLongitudinal) RecalcularTraslapos(); };
 
+        // El cuadro de varillas (#142), si está abierto, sigue a las barras elegidas.
+        foreach (ComboBox combo in new[] { ComboTipoBarra, ComboBarraEsquinas, ComboBarraCaraX, ComboBarraCaraY })
+            combo.SelectionChanged += (_, _) => MarcarUsosEnCuadroVarillas();
+
         // Pestaña «Vista previa» (VentanaConfiguradorEstribos.VistaPrevia.cs).
         ConectarVistaPrevia();
 
@@ -322,6 +327,7 @@ public partial class VentanaConfiguradorEstribos : Window
             EsColumna = true,
             EsColumneta = resumen.EsColumneta,
             ColumnaId = resumen.Id,
+            Marca = resumen.Marca,
             Etiqueta = $"{resumen.Marca}  ({columna.Tramos.Count} tramos)",
         });
 
@@ -478,6 +484,17 @@ public partial class VentanaConfiguradorEstribos : Window
             TextoEstado.Text += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
         if (descartadas > 0)
             TextoEstado.Text += $" Se quitaron {descartadas} estribo(s) menor(es) que apuntaban a barras que esta configuración ya no tiene.";
+    }
+
+    /// <summary>
+    /// Enter en el nombre de la configuración guarda, en vez de disparar
+    /// «Aceptar este tramo» (que es el botón por defecto de la ventana, #120).
+    /// </summary>
+    private void CampoNombreConfiguracion_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        BotonGuardarConfiguracion_Click(sender, e);
     }
 
     private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
@@ -991,7 +1008,7 @@ public partial class VentanaConfiguradorEstribos : Window
         return TipoBarra.PorDefecto(barras, numeroVarilla)?.Nombre ?? barras.FirstOrDefault()?.Nombre;
     }
 
-    private static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
+    internal static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
     {
         // Issue #60: por diámetro contra el cuadro de la empresa. Antes era "el
         // primero alfabéticamente", que no es un criterio -- en el modelo de
@@ -1139,6 +1156,9 @@ public partial class VentanaConfiguradorEstribos : Window
         }
 
         RecalcularTraslapos();
+        // Otra columna puede traer las mismas barras en los combos (no salta su
+        // SelectionChanged) pero otros estribos menores.
+        MarcarUsosEnCuadroVarillas();
     }
 
     /// <summary>
@@ -1188,33 +1208,43 @@ public partial class VentanaConfiguradorEstribos : Window
 
     /// <summary>
     /// Lo que el panel de estribos menores necesita para marcar en rojo un
-    /// estribo cerrado que no se puede doblar: la distancia real entre barras
-    /// intermedias vecinas, con la misma cuenta que el generador (las
-    /// intermedias se reparten entre las esquinas, corridas el recubrimiento,
-    /// el estribo y media barra longitudinal -- SeccionPlanta). null si todavía
-    /// falta elegir alguna barra.
+    /// estribo cerrado que no se puede doblar: el diámetro y el doblado de cada
+    /// barra. Las medidas del cerrado salen de la sección real del panel
+    /// (#132). null si todavía falta elegir alguna barra.
     /// </summary>
-    private VentanaEstribosMenores.MedidasSeccion? MedidasParaEstribosMenores(string idColumna, int barrasX, int barrasY)
+    private VentanaEstribosMenores.MedidasSeccion? MedidasParaEstribosMenores()
     {
         if (_columnaActiva is null) return null;
 
         TipoBarra? Barra(string? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre);
         string? estribo = ComboTipoBarra.SelectedItem as string;
-        double? dEstribo = Barra(estribo)?.DiametroMm;
-        double?[] longitudinales = { Barra(ComboBarraEsquinas.SelectedItem as string)?.DiametroMm,
-                                     Barra(ComboBarraCaraX.SelectedItem as string)?.DiametroMm,
-                                     Barra(ComboBarraCaraY.SelectedItem as string)?.DiametroMm };
-        if (dEstribo is null || longitudinales.Any(d => d is null)) return null;
+        string?[] nombres = { estribo, ComboBarraEsquinas.SelectedItem as string,
+                              ComboBarraCaraX.SelectedItem as string, ComboBarraCaraY.SelectedItem as string };
+        if (nombres.Any(n => Barra(n) is null)) return null;
 
-        double recubrimiento = _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : _columnaActiva.Recubrimiento;
-        double inset = SeccionPlanta.Inset(recubrimiento, dEstribo.Value / 1000, longitudinales.Max()!.Value / 1000);
-        double Paso(double lado, int intermedias) => (lado - 2 * inset) / (intermedias + 1);
+        return new VentanaEstribosMenores.MedidasSeccion(Barra, estribo);
+    }
 
-        return new VentanaEstribosMenores.MedidasSeccion(
-            Paso(_columnaActiva.BaseX, Math.Max(1, barrasX / 2)),
-            Paso(_columnaActiva.BaseY, Math.Max(1, barrasY / 2)),
-            Barra,
-            estribo);
+    /// <summary>
+    /// La sección de la columna activa para dibujarla a escala en el panel de
+    /// estribos menores (#133, #134). Si falta elegir alguna barra se usa un
+    /// diámetro de reserva (#4 las longitudinales, #3 el estribo) y el panel lo
+    /// avisa: la forma de la sección ya se puede ver.
+    /// </summary>
+    private VentanaEstribosMenores.SeccionReal SeccionParaEstribosMenores(string idColumna, ColumnaContexto columna)
+    {
+        const double reservaLongitudinalMm = 12.7, reservaEstriboMm = 9.5;
+
+        double? Diametro(object? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre as string)?.DiametroMm;
+        double? esquina = Diametro(ComboBarraEsquinas.SelectedItem), caraX = Diametro(ComboBarraCaraX.SelectedItem),
+            caraY = Diametro(ComboBarraCaraY.SelectedItem), estribo = Diametro(ComboTipoBarra.SelectedItem);
+
+        return new VentanaEstribosMenores.SeccionReal(
+            columna.BaseX, columna.BaseY,
+            _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : columna.Recubrimiento,
+            esquina ?? reservaLongitudinalMm, caraX ?? reservaLongitudinalMm, caraY ?? reservaLongitudinalMm, estribo ?? reservaEstriboMm,
+            DiametrosDeReserva: esquina is null || caraX is null || caraY is null || estribo is null,
+            DobladoEstriboMm: _barras.FirstOrDefault(b => b.Nombre == ComboTipoBarra.SelectedItem as string)?.DobladoEstriboMm ?? 0);
     }
 
     /// <summary>Las barras que se ofrecen para los estribos menores: las mismas aptas que para el estribo (#64).</summary>
@@ -1262,7 +1292,7 @@ public partial class VentanaConfiguradorEstribos : Window
         NotaBarrasEstribo.Visibility = conAviso.Count + fuera.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
+    internal static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
     {
         BarrasPorCaraX = 2,
         BarrasPorCaraY = 2,
@@ -1373,6 +1403,47 @@ public partial class VentanaConfiguradorEstribos : Window
         MostrarLongitudinalEnPanel(cfg);
     }
 
+    // ---------------------------------------------------- cuadro de varillas
+
+    /// <summary>La ventana del cuadro de varillas (#142) mientras está abierta; una sola a la vez.</summary>
+    private VentanaCuadroVarillas? _cuadroVarillas;
+
+    private void BotonCuadroVarillas_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cuadroVarillas is not null)
+        {
+            _cuadroVarillas.Activate();
+            return;
+        }
+
+        _cuadroVarillas = new VentanaCuadroVarillas { Owner = this };
+        _cuadroVarillas.Closed += (_, _) => _cuadroVarillas = null;
+        MarcarUsosEnCuadroVarillas();
+        _cuadroVarillas.Show();
+    }
+
+    /// <summary>Pinta en el cuadro de varillas las que usa la columna activa: las del panel y las propias de los estribos menores.</summary>
+    private void MarcarUsosEnCuadroVarillas()
+    {
+        if (_cuadroVarillas is null) return;
+
+        TipoBarra? Barra(object? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre as string);
+
+        var usos = new List<(string, TipoBarra?)>
+        {
+            ("estribos", Barra(ComboTipoBarra.SelectedItem)),
+            ("esquinas", Barra(ComboBarraEsquinas.SelectedItem)),
+            ("cara X", Barra(ComboBarraCaraX.SelectedItem)),
+            ("cara Y", Barra(ComboBarraCaraY.SelectedItem)),
+        };
+        if (_columnaIdActiva is string id && _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? cfg))
+            usos.AddRange(cfg.EstribosMenores
+                .Where(p => p.TipoBarraNombre is not null)
+                .Select(p => ("estribos menores", Barra(p.TipoBarraNombre))));
+
+        _cuadroVarillas.MarcarUsos(CuadroVarillas.UsosPorNumero(usos));
+    }
+
     private void BotonEstribosMenores_Click(object sender, RoutedEventArgs e)
     {
         if (_columnaActiva is null || _columnaIdActiva is not string idColumna) return;
@@ -1394,7 +1465,9 @@ public partial class VentanaConfiguradorEstribos : Window
             barrasX, barrasY,
             actual?.EstribosMenores ?? new List<EstriboMenor>(),
             BarrasAptasParaEstribo(),
-            MedidasParaEstribosMenores(idColumna, barrasX, barrasY))
+            SeccionParaEstribosMenores(idColumna, _columnaActiva),
+            MedidasParaEstribosMenores(),
+            ChoquesParaEstribosMenores())
         { Owner = this };
 
         if (dialogo.ShowDialog() != true) return;
@@ -1404,6 +1477,7 @@ public partial class VentanaConfiguradorEstribos : Window
         cfg.EstribosMenores = dialogo.Piezas;
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
+        MarcarUsosEnCuadroVarillas();
     }
 
     // ------------------------------------------------------------- aceptar
@@ -1604,9 +1678,49 @@ public partial class VentanaConfiguradorEstribos : Window
         int columnas = _tramosAceptados.Select(t => t.ColumnaId).Distinct().Count();
         int tramos = _tramosAceptados.Count;
 
-        TextoResumenGeneracion.Text = tramos == 0
-            ? "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar."
-            : $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓.";
+        if (tramos == 0)
+        {
+            TextoResumenGeneracion.Text = "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar.";
+            TextoResumenGeneracion.ToolTip = null;
+            BotonGenerar.ToolTip = "Primero acepta al menos un tramo.";
+            return;
+        }
+
+        // #120: que se vea QUÉ se va a generar, no solo cuánto: "C-12: 1, 2, 3 · C-13: 1".
+        // Los tramos se numeran desde 1, igual que debajo de la elevación ("C-12 · 1/10").
+        Dictionary<string, string> marcas = _nodos
+            .Where(n => n.EsColumna)
+            .GroupBy(n => n.ColumnaId)
+            .ToDictionary(g => g.Key, g => g.First().Marca);
+        List<string> porColumna = _tramosAceptados
+            .GroupBy(t => t.ColumnaId)
+            .Select(g => (Marca: marcas.TryGetValue(g.Key, out string? m) ? m : g.Key, Tramos: g.Select(t => t.Indice + 1).OrderBy(i => i)))
+            .OrderBy(c => c.Marca, StringComparer.CurrentCultureIgnoreCase)
+            .Select(c => $"{c.Marca}: {Rangos(c.Tramos)}")
+            .ToList();
+        const int Visibles = 4;
+        string lista = string.Join(" · ", porColumna.Take(Visibles)) +
+                       (porColumna.Count > Visibles ? $" · y {porColumna.Count - Visibles} columna(s) más" : "");
+        string completa = "Se van a generar estos tramos:\n" + string.Join("\n", porColumna);
+
+        TextoResumenGeneracion.Text = $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓ — {lista}";
+        TextoResumenGeneracion.ToolTip = completa;
+        BotonGenerar.ToolTip = completa;
+    }
+
+    /// <summary>Números ordenados como rangos: 1, 2, 3, 5, 7, 8 → "1–3, 5, 7–8".</summary>
+    private static string Rangos(IEnumerable<int> numeros)
+    {
+        var partes = new List<string>();
+        int? desde = null, hasta = null;
+        foreach (int n in numeros)
+        {
+            if (hasta == n - 1) { hasta = n; continue; }
+            if (desde is not null) partes.Add(desde == hasta ? $"{desde}" : $"{desde}–{hasta}");
+            desde = hasta = n;
+        }
+        if (desde is not null) partes.Add(desde == hasta ? $"{desde}" : $"{desde}–{hasta}");
+        return string.Join(", ", partes);
     }
 
     // -------------------------------------------------------------- dibujo
@@ -1629,12 +1743,14 @@ public partial class VentanaConfiguradorEstribos : Window
 
         const double margenSuperior = 24;
         const double margenInferior = 24;
-        const double anchoColumna = 46;
         const double xColumna = 172;
         const double sobresaleNudo = 16;
         const double anchoEtiqueta = 130;
         const double xLeaderIni = 138;
         double xLeaderFin = xColumna - 4;
+        // La columna crece hacia la derecha: a la izquierda están los rótulos
+        // de nivel y los chulitos.
+        double anchoMaximo = CanvasElevacion.Width - xColumna - sobresaleNudo - 6;
 
         double zMin = _columnaActiva.ZInferior;
         double zMax = _columnaActiva.ZSuperior;
@@ -1646,7 +1762,10 @@ public partial class VentanaConfiguradorEstribos : Window
 
         double alturaDisponible = Math.Max(1, CanvasElevacion.Height - margenSuperior - margenInferior);
         double rango = Math.Max(0.01, zMax - zMin);
-        double escala = alturaDisponible / rango;
+        // El ancho a la misma escala que el alto (#133): la columna se ve con
+        // su ancho real (el lado X, como "de frente" en la vista previa).
+        double escala = EscalaDibujo.Ajustar(_columnaActiva.BaseX, rango, anchoMaximo, alturaDisponible);
+        double anchoColumna = Math.Max(2, _columnaActiva.BaseX * escala);
         double Y(double cota) => margenSuperior + (zMax - cota) * escala;
 
         // 1) Contorno continuo de la columna, de punta a punta.
@@ -1661,6 +1780,8 @@ public partial class VentanaConfiguradorEstribos : Window
         Canvas.SetLeft(contorno, xColumna);
         Canvas.SetTop(contorno, Y(_columnaActiva.ZSuperior));
         CanvasElevacion.Children.Add(contorno);
+        Cotas.Horizontal(CanvasElevacion, xColumna, xColumna + anchoColumna, Y(_columnaActiva.ZInferior) + 6,
+            EscalaDibujo.Cm(_columnaActiva.BaseX));
 
         // 2) Rótulos de nivel con línea guía punteada hasta la columna.
         foreach (NivelRotulo nivel in _columnaActiva.Niveles)
@@ -1852,16 +1973,77 @@ public partial class VentanaConfiguradorEstribos : Window
             return;
         }
 
+        // #131: si algo choca, se avisa y se deja seguir. Un error al revisar
+        // nunca impide generar: se genera como si no hubiera choques.
+        IReadOnlyList<(string Columna, string Motivo)> choques;
+        try
+        {
+            choques = ChoquesDelPlan(plan);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[#131] No se pudieron revisar los choques antes de generar: {ex}");
+            choques = Array.Empty<(string, string)>();
+        }
+        if (choques.Count > 0 && new VentanaChoques(choques) { Owner = this }.ShowDialog() != true)
+        {
+            TextoEstado.Text = "Generación cancelada: revisa los choques marcados en rojo.";
+            return;
+        }
+
         var opciones = new OpcionesArmado
         {
             Plan = plan,
-            BorrarAnteriores = CheckBorrarAnteriores.IsChecked == true,
+            BorrarArmadoAjeno = CheckBorrarAjeno.IsChecked == true,
         };
 
         TextoEstado.Text = "Generando armado en Revit…";
         BotonGenerar.IsEnabled = false;
 
         GenerarSolicitado?.Invoke(opciones);
+    }
+
+    /// <summary>
+    /// Los choques de todas las columnas que se van a generar (#131): de cada
+    /// tramo aceptado, la sección normal y la zona de traslapo
+    /// (<see cref="ChoquesSeccion.DeTramo"/>), sin repetir motivos dentro de
+    /// una columna. Mismas entradas que la vista previa, con lo guardado de
+    /// cada columna aunque no se haya abierto.
+    /// </summary>
+    private IReadOnlyList<(string Columna, string Motivo)> ChoquesDelPlan(PlanArmado plan)
+    {
+        var choques = new List<(string Columna, string Motivo)>();
+        foreach (ColumnaPlan columna in plan.Columnas)
+        {
+            if (columna.Contexto is not ColumnaContexto contexto || columna.Longitudinal is not ConfigLongitudinal longitudinal) continue;
+
+            double recubrimiento = columna.Recubrimiento ?? contexto.Recubrimiento;
+            double estriboMasGrueso = columna.Tramos
+                .Select(t => BarraPorNombre(t?.TipoBarraNombre)?.DiametroMm ?? 0)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            // Un aviso por par en toda la columna (ChoquesSeccion.DeLaColumna).
+            // Manda el tramo con estribo más grueso, como el generador: un tramo
+            // sin estribo (el de la zapata) ubica las esquinas unos mm distinto.
+            IEnumerable<ChoquesSeccion.Resultado> porTramo = Enumerable
+                .Range(0, Math.Min(columna.Tramos.Count, contexto.Tramos.Count))
+                .Where(i => columna.Tramos[i] is not null)
+                .OrderBy(i => contexto.Tramos[i].Tipo == TipoTramo.ContraZapata ? 1 : 0)
+                .ThenByDescending(i => BarraPorNombre(columna.Tramos[i]!.TipoBarraNombre)?.DiametroMm ?? 0)
+                .Select(i => ChoquesSeccion.DeTramo(
+                    contexto, contexto.Tramos[i], columna.Tramos[i]!, longitudinal, recubrimiento, BarraPorNombre, estriboMasGrueso))
+                .ToList();
+
+            foreach (ChoquesSeccion.Choque choque in ChoquesSeccion.DeLaColumna(porTramo))
+                choques.Add((contexto.Marca, choque.Motivo));
+
+            int sinRevisar = porTramo.Select(r => r.VarillasSinRevisarEnTraslapo).DefaultIfEmpty(0).Max();
+            if (choques.Any(c => c.Columna == contexto.Marca) && sinRevisar > 0)
+                choques.Add((contexto.Marca, ChoquesSeccion.NotaSinRevisar(sinRevisar)));
+        }
+
+        return choques;
     }
 
     /// <summary>
@@ -1883,7 +2065,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstado.Text =
             $"Generado: {resultado.GruposCreados} estribo(s) creado(s)" +
-            (resultado.Eliminados > 0 ? $", {resultado.Eliminados} anterior(es) borrado(s)" : "") +
+            (resultado.Eliminados > 0 ? $", {resultado.Eliminados} elemento(s) de acero anterior(es) reemplazado(s)" : "") +
             (resultado.TramosOmitidos > 0 ? $", {resultado.TramosOmitidos} tramo(s) omitido(s)" : "") +
             ".";
 
@@ -1926,6 +2108,7 @@ public sealed class NodoLista : INotifyPropertyChanged
     public bool EsColumneta { get; init; }
 
     public string ColumnaId { get; init; } = "";
+    public string Marca { get; init; } = "";
     public int TramoIndice { get; init; }
     public string Etiqueta { get; init; } = "";
 

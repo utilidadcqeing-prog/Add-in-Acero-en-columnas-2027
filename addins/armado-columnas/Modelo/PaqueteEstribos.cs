@@ -79,23 +79,37 @@ public static class PaqueteEstribos
             .ThenBy(n => n.Piezas.Min(p => p.Desde))
             .ToList();
 
+        // Solo el principal: un piso, centrado (así estaba, y el reparto de
+        // los estribos sin menores no cambia).
+        if (niveles.Count == 0)
+            return new Paquete(0, diametroPrincipalMm / 2000, diametroPrincipalMm / 2000, new List<NivelPieza>());
+
         // En milímetros, con el eje del principal en 0. Abajo y arriba se van
         // turnando: el nivel 1 debajo, el 2 encima, el 3 debajo del 1...
+        //
+        // Cada pieza ocupa DOS pisos, el suyo y uno más abajo: Revit baja un
+        // diámetro el gancho de cierre de los lazos (principal y cajas) y la
+        // punta de las grapas, para que no se pisen (medido el 21-oct en la
+        // columna 387983, como se ve en las vistas finas). Con un solo piso
+        // la grapa quedaba a la altura del gancho de cierre del principal
+        // (#130; Luciano eligió contar el piso extra).
+        static double Techo((double Eje, double Diametro) p) => p.Eje + p.Diametro / 2;
+        static double Piso((double Eje, double Diametro) p) => p.Eje - 1.5 * p.Diametro;
+
         var ejes = new List<(EstriboMenor Pieza, int Nivel, double Eje)>();
         (double Eje, double Diametro) abajo = (0, diametroPrincipalMm), arriba = (0, diametroPrincipalMm);
         for (int i = 0; i < niveles.Count; i++)
         {
             double d = niveles[i].Piezas.Max(diametroMm);
             bool debajo = i % 2 == 0;
-            (double Eje, double Diametro) vecino = debajo ? abajo : arriba;
-            double eje = debajo ? vecino.Eje - (vecino.Diametro + d) / 2 : vecino.Eje + (vecino.Diametro + d) / 2;
+            double eje = debajo ? Piso(abajo) - d / 2 : Techo(arriba) + 1.5 * d;
             if (debajo) abajo = (eje, d); else arriba = (eje, d);
 
             ejes.AddRange(niveles[i].Piezas.Select(p => (p, i + 1, eje)));
         }
 
-        double caraAbajo = abajo.Eje - abajo.Diametro / 2;
-        double caraArriba = arriba.Eje + arriba.Diametro / 2;
+        double caraAbajo = Piso(abajo);
+        double caraArriba = Techo(arriba);
         double medio = (caraAbajo + caraArriba) / 2;
 
         return new Paquete(

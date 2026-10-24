@@ -31,6 +31,14 @@ Los de cada sub-issue; se evalúan en «Estado».
 8. **Cuatro clases de botón** (2026-10-21): `BotonPrincipal` (verde, aceptar lo configurado), `BotonAccionFinal` (naranja, escribe en el modelo de Revit), `BotonSecundario` (blanco con borde, todo lo demás) y `BotonPeligro` (texto rojo, borra algo). Más `BotonFlecha` para ▲▼. Todos con esquinas de 4 px, color al pasar el mouse y al apretar, y gris cuando están deshabilitados.
 9. **Columnetas sigue el mismo significado** (2026-10-21, a aprobar por Luciano): «Generar Columnetas y Viguetas» escribe en el modelo, así que pasa de verde a naranja (`BotonAccionFinal`), igual que «Generar armado en Revit». «Seleccionar Muros» pasa de azul a `BotonSecundario`: el azul queda solo para selección dentro de los dibujos.
 10. **Tipografía común** (2026-10-21): estilos `TituloVentana` (14, seminegrita) y `TextoAyuda` (11, gris, con ajuste de línea). En Estribos menores, los encabezados «FORMAS» y «PIEZA SELECCIONADA» pasan a «Formas» y «Pieza seleccionada» con el estilo `Etiqueta` de la ventana principal. Columnetas deja su propio estilo `Etiqueta` y usa el común.
+11. **Una sola rama y un solo PR en borrador** (2026-10-21, pedido de Luciano; reemplaza la 1 y la 6): desde ahora todo se trabaja en la rama `mejora-visual` y va en un único PR en borrador (draft) contra `main`, que se marca listo cuando se termine. Los PR #127 y #128 ya estaban unidos a `main` (cierran #115, #116, #117 y #119). El #146 (#118) se unió a la rama `mejora-visual-botones` y no a `main`, así que su commit se pasó a `mejora-visual` y entra a `main` con el PR único.
+12. **Pulido visual extra** (2026-10-21, propuesto por el equipo y aceptado por el usuario; a aprobar por Luciano en el PR #148): estilos sin `x:Key` en `Estilos.xaml`, así se aplican solos a las tres ventanas.
+    - Paneles como tarjetas: esquinas de 6 px y margen interior de 10 a 12 px; separación entre paneles y margen de la ventana de 10 a 12 px.
+    - Pestañas planas con una línea azul debajo de la activa (antes, las grises de Windows).
+    - Listas desplegables y campos de texto con esquinas de 4 px, 26 px de alto, borde gris al pasar el mouse y azul al usarlos. Se quitaron las alturas fijas (22/24 px) de cada lista y campo para que mande el estilo.
+    - Barra de desplazamiento delgada (10 px) y redondeada.
+    - Planta: la columna activa con borde de 3 px (antes 2) y las marcas de ubicación de 9 a 10 px, más oscuras.
+    - Sin sombra en los paneles: un `DropShadowEffect` sobre un panel con texto lo vuelve borroso en WPF.
 
 ## Plan paso a paso
 
@@ -44,9 +52,29 @@ Los de cada sub-issue; se evalúan en «Estado».
 3. **#117 Estilos de botón** — archivos: `Vistas/Paleta.cs` (colores de hover, apretado y deshabilitado), `Vistas/Estilos.xaml` (los cinco estilos), `Vistas/VentanaConfiguradorEstribos.xaml` (los 9 botones; flechas de 26x17 a 34x24 px con tooltip «Tramo de arriba» / «Tramo de abajo»). Prueba: build + visor + muestrario de estilos.
 4. **#119 Ventanas secundarias** — archivos: `Vistas/VentanaEstribosMenores.xaml` y `Vistas/VentanaColumnetas.xaml` (botones, `Panel`, `Etiqueta`, `TituloVentana`, `TextoAyuda`). Prueba: build + render de Estribos menores; Columnetas se revisa en Revit.
 
-### Días 3 y 4
+### Día 3 (rama `mejora-visual-orden`, sale de `mejora-visual-botones` porque toca la misma ventana; PR contra esa rama)
 
-Ver la issue madre: #118 (día 3), #120 + prueba final (día 4), #121 opcional (día 5).
+5. **#118 Orden y jerarquía de la ventana principal** — archivos: `Vistas/Estilos.xaml` (estilos nuevos) y `Vistas/VentanaConfiguradorEstribos.xaml`. Sin mover ni quitar ningún control: solo estilos y títulos.
+   - Títulos de sección con una barrita azul a la izquierda (`EncabezadoSeccion` + `TituloSeccion`) en los tres paneles y en los cuatro grupos del panel derecho: configuración guardada / tramo activo / recubrimiento / acero longitudinal.
+   - Separadores entre grupos con el mismo espacio (`SeparadorSeccion`).
+   - Leyenda de la elevación de 10 a 11 px y cuadritos de 12 a 14 px (`TextoLeyenda`).
+   - Un estilo único para avisos (`CajaAviso` + `TextoAviso`), validación (`TextoError`) y ayudas (`TextoAyuda`).
+   - «Borrar TODO el armado existente…» dentro de una caja roja suave (`CajaPeligro` + `CasillaPeligro`); al marcarla, el texto pasa a negrita.
+   - Textos de título que cambian: «Configuración guardada:» → «Configuración guardada», «Configuración del tramo activo» → «Tramo activo», «Recubrimiento (toda la columna):» → sin los dos puntos.
+   Prueba: build + visor (captura antes/después) + Revit.
+
+### Día 4 (rama `mejora-visual`, PR único en borrador; 2026-10-22)
+
+0. **Traer `main`** (Luciano cambió los colores por diámetro a la paleta Estándar de Google Sheets, #143, y sumó las ventanas de choques #131 y cuadro de varillas #142): merge de `origin/main` en `mejora-visual`. Conflictos en `PanelPlantaColumnas.xaml.cs` (se queda el código de `main` con el borde de 3 px de la activa) y `VentanaConfiguradorEstribos.xaml` (se quedan «Barra de estribos:», el botón «Ver cuadro de varillas…» y la casilla nueva `CheckBorrarAjeno` de #145, dentro de la caja roja de #118). Las ventanas nuevas de Luciano ya usan `Estilos.xaml`.
+6. **#120 Revisión de flujos (sin cambiar resultados)** — archivos: `Vistas/VentanaConfiguradorEstribos.xaml(.cs)`, `Vistas/VentanaEstribosMenores.xaml`.
+   - Instrucción de arriba en tres pasos numerados.
+   - Tooltips en todos los controles de configuración (qué es y en qué unidad).
+   - **Enter = «Aceptar este tramo»** (`IsDefault`); en el campo del nombre de configuración, Enter = Guardar.
+   - Estribos menores: Enter = Aceptar, Esc = Cancelar.
+   - Ayudas más cortas (tres textos).
+   - El resumen de abajo dice **qué** tramos se van a generar por columna (por ejemplo «C-12: 1, 2, 3 · C-13: 1»), y el botón Generar repite la lista en su tooltip.
+   - Propuesta que no se hace (cambia el comportamiento): mover el foco solo al primer campo al elegir columna, porque roba el foco de la planta mientras se eligen varias con Ctrl.
+7. **#121 Íconos del ribbon** — archivos: `Resources/icono16|32.png` (redibujados nítidos, sin reescalar), `Resources/iconoColumnetas16|32.png` (nuevo: muro con columnetas y vigueta, para que «Columnetas y Viguetas» deje de usar el genérico) y `App.cs`. `iconoCQ` queda para los botones de diagnóstico (solo en Debug).
 
 ## Cómo probarlo
 
@@ -85,3 +113,33 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - [x] #119: Estribos menores y Columnetas usan los mismos colores, botones y tipografía que la principal.
 - [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` y render de Estribos menores sin errores.
 - [ ] Probado en Revit 2027: botones, flechas con tooltip, y la ventana Columnetas y Viguetas.
+
+## Evidencia (día 3)
+
+- Ventana principal con títulos de sección, avisos y la casilla de borrar destacada: `imagenes/2026-10-21-ventana-principal-orden.png` (antes: `imagenes/2026-10-21-ventana-principal-botones.png`).
+- La casilla «Borrar TODO…» marcada (negrita roja): `imagenes/2026-10-21-borrar-todo-marcada.png`.
+
+## Estado (día 3)
+
+- [x] #118: los tres paneles y los cuatro grupos del panel derecho tienen título de sección; separadores con el mismo espacio; leyenda de 11 px; avisos, validación y ayudas con un estilo cada uno; «Borrar TODO…» destacada.
+- [x] No se movió ni se quitó ningún control: el diff solo cambia estilos, los cuatro textos de título y el `Border` alrededor de la casilla (mismo `x:Name`, misma columna del pie).
+- [x] Compila (Revit 2027) sin advertencias; visor `PreviewUI` sin errores.
+- [ ] Probado en Revit 2027.
+- [x] PR #128 unido a `main` el 2026-10-21 (cierra #117 y #119). El #146 quedó en la rama `mejora-visual-botones`: el #118 entra con el PR único de `mejora-visual`.
+
+## Evidencia y estado (pulido, 2026-10-21)
+
+- Ventana principal: `imagenes/2026-10-21-ventana-principal-pulida.png` (antes: `imagenes/2026-10-21-ventana-principal-orden.png`). Estribos menores: `imagenes/2026-10-21-estribos-menores-pulida.png`.
+- [x] Compila (Revit 2027) sin advertencias; visor sin errores; lista desplegable abierta y probada en el visor.
+- [ ] Probado en Revit 2027 (incluida la ventana Columnetas, que no se ve en el visor).
+
+## Evidencia y estado (día 4, 2026-10-22)
+
+- Ventana con la instrucción en pasos y el resumen de qué se genera: `imagenes/2026-10-22-ventana-principal-flujos.png`; detalle del resumen («C-12: 1–10»): `imagenes/2026-10-22-resumen-generacion.png`.
+- Íconos antes y después (32 y 16 px): `imagenes/2026-10-22-iconos-ribbon.png`.
+- [x] `main` traída a la rama (colores #143, choques #131, cuadro de varillas #142, casilla #145); conflictos resueltos.
+- [x] #120: tooltips en los controles de configuración; Enter = «Aceptar este tramo» (probado en el visor: con el foco en «Espaciado», Enter aceptó el tramo 1); Enter en el nombre = Guardar; Enter/Esc en Estribos menores; tres ayudas más cortas; resumen con la lista de tramos por columna, en rangos y numerados desde 1 como la elevación.
+- [x] #121: íconos de «Acero en columnas» redibujados nítidos a 16 y 32 px, e ícono propio para «Columnetas y Viguetas».
+- [x] Compila Debug 2027 y Release 2026 sin advertencias; `PruebasTraslapos` y `PruebasVistaPrevia` con 0 fallas.
+- [x] Prueba final en Revit 2027 hecha por el usuario el 2026-10-22 (sin observaciones sobre la mejora visual).
+- Observación del usuario, fuera de esta mejora: en la planta las columnas ahora se dibujan a escala real y en un modelo grande se ven muy chicas. Ese cambio es de `main` (96d7b38, #133/#134, Luciano), no de esta rama; queda para que Luciano decida si les pone un tamaño mínimo visible.

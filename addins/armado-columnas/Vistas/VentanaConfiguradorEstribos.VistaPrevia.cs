@@ -38,6 +38,7 @@ public partial class VentanaConfiguradorEstribos
             DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock))
                 .AddValueChanged(texto, (_, _) => PedirVistaPrevia());
 
+        ConectarVista3D();
         PedirVistaPrevia();
     }
 
@@ -65,23 +66,67 @@ public partial class VentanaConfiguradorEstribos
             return;
         }
 
-        double? Diametro(string? nombre) =>
-            string.IsNullOrEmpty(nombre) ? null : _barras.FirstOrDefault(b => b.Nombre == nombre)?.DiametroMm;
+        (ConfigTramo cfgTramo, double recubrimiento, double estriboMasGrueso) = EntradasDeLaSeccion(idColumna, _columnaActiva);
+
+        PanelDeVistaPrevia.Mostrar(
+            _columnaActiva, _columnaActiva.Tramos[_tramoActivoIndice], cfgTramo, LeerLongitudinalConEstribosMenores(),
+            recubrimiento, BarraPorNombre, estriboMasGrueso);
+
+        // Los mismos cambios actualizan la vista 3D, si está abierta (#123).
+        PedirVista3D(abrirVista: false);
+    }
+
+    private TipoBarra? BarraPorNombre(string? nombre) => _barras.FirstOrDefault(b => b.Nombre == nombre);
+
+    /// <summary>
+    /// Lo que la sección de la columna activa necesita además de la columna y
+    /// el tramo: la configuración del panel, el recubrimiento y el estribo más
+    /// grueso de la columna (las longitudinales se corren con ese, como en
+    /// GeneradorLongitudinal). Lo usan la vista previa y los choques de
+    /// "Editar estribos menores" (#131).
+    /// </summary>
+    private (ConfigTramo CfgTramo, double Recubrimiento, double EstriboMasGrueso) EntradasDeLaSeccion(
+        string idColumna, ColumnaContexto columna)
+    {
+        double? Diametro(string? nombre) => string.IsNullOrEmpty(nombre) ? null : BarraPorNombre(nombre)?.DiametroMm;
 
         ConfigTramo cfgTramo = LeerConfigDelPanel();
-
-        // Las longitudinales se corren con el estribo más grueso de la columna,
-        // como en GeneradorLongitudinal.
         double estriboMasGrueso = _configPorTramo
             .Where(p => p.Key.ColumnaId == idColumna)
             .Select(p => Diametro(p.Value.TipoBarraNombre) ?? 0)
             .Append(Diametro(cfgTramo.TipoBarraNombre) ?? 0)
             .Max();
+        double recubrimiento = _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : columna.Recubrimiento;
+        return (cfgTramo, recubrimiento, estriboMasGrueso);
+    }
 
-        double recubrimiento = _recubrimientoPorColumna.TryGetValue(idColumna, out double r) ? r : _columnaActiva.Recubrimiento;
+    /// <summary>
+    /// Cómo calcula sus choques "Editar estribos menores" (#131): la sección
+    /// de la columna activa con las piezas que se están editando. Si el tramo
+    /// activo es un nudo o el de la zapata (sin menores), se usa el primer
+    /// tramo libre de la columna. null si no hay ninguno.
+    /// </summary>
+    private Func<IReadOnlyList<EstriboMenor>, ChoquesSeccion.Resultado>? ChoquesParaEstribosMenores()
+    {
+        if (_columnaActiva is not ColumnaContexto columna || _columnaIdActiva is not string idColumna) return null;
 
-        PanelDeVistaPrevia.Mostrar(
-            _columnaActiva, _columnaActiva.Tramos[_tramoActivoIndice], cfgTramo, LeerLongitudinalConEstribosMenores(),
-            recubrimiento, Diametro, estriboMasGrueso);
+        Tramo? activo = _tramoActivoIndice >= 0 && _tramoActivoIndice < columna.Tramos.Count ? columna.Tramos[_tramoActivoIndice] : null;
+        Tramo? tramo = activo is { Tipo: TipoTramo.Libre } ? activo : columna.Tramos.FirstOrDefault(t => t.Tipo == TipoTramo.Libre);
+        if (tramo is null) return null;
+
+        (ConfigTramo cfgTramo, double recubrimiento, double estriboMasGrueso) = EntradasDeLaSeccion(idColumna, columna);
+        // Si se usa otro tramo, con SU estribo (lo guardado), no con el del panel.
+        if (tramo != activo && _configPorTramo.TryGetValue((idColumna, tramo.Indice), out ConfigTramo? guardada))
+            cfgTramo = guardada;
+        ConfigLongitudinal longitudinal = LeerLongitudinalConEstribosMenores();
+        return piezas =>
+        {
+            ConfigLongitudinal conEstas = longitudinal.Copiar();
+            conEstas.GrapasFila = new List<int>();
+            conEstas.GrapasColumna = new List<int>();
+            conEstas.Cajas = new List<CajaMenor>();
+            conEstas.EstribosMenores = piezas.ToList();
+            return ChoquesSeccion.DeTramo(columna, tramo, cfgTramo, conEstas, recubrimiento, BarraPorNombre, estriboMasGrueso);
+        };
     }
 }

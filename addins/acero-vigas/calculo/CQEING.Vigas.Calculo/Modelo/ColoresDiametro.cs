@@ -1,8 +1,8 @@
 namespace CQEING.Vigas.Calculo.Modelo;
 
 /// <summary>
-/// Un color por diámetro, el mismo para el tablero y para Revit (#85). Carlos pidió el #5 rojo y el #4 naranja; el
-/// resto lo propusimos y Juan lo aprobó "por ahora" (decisión 9 del plan docs/planes/2026-10-19-ajustes-tablero-vigas-100.md).
+/// Un color por diámetro, el mismo para el tablero y para Revit (#85). Son los mismos colores que usan las columnas
+/// (23-oct); el #5 sigue rojo (Carlos). Decisión 9 del plan docs/planes/2026-10-19-ajustes-tablero-vigas-100.md.
 /// </summary>
 public static class ColoresDiametro
 {
@@ -11,18 +11,18 @@ public static class ColoresDiametro
 
     private static readonly Dictionary<int, string> Tabla = new()
     {
-        [3] = "#B8860B", // amarillo
-        [4] = "#E8710A", // naranja
-        [5] = "#D32F2F", // rojo
-        [6] = "#C2185B", // magenta
-        [7] = "#7B1FA2", // morado
-        [8] = "#1565C0", // azul
-        [9] = "#00838F", // cian
-        [10] = "#2E7D32", // verde
-        [11] = "#6D4C41", // café
+        [3] = "#FBBC04", // amarillo
+        [4] = "#4285F4", // azul
+        [5] = "#EA4335", // rojo
+        [6] = "#34A853", // verde
+        [7] = "#9334E6", // morado
+        [8] = "#8B4513", // marrón
+        [9] = "#E91E63", // rosado fuerte
+        [10] = "#000000", // negro
+        [11] = "#FF6D01", // naranja
     };
 
-    /// <summary>El color de <paramref name="diametro"/> (en octavos de pulgada), como <c>"#D32F2F"</c>.</summary>
+    /// <summary>El color de <paramref name="diametro"/> (en octavos de pulgada), como <c>"#EA4335"</c>.</summary>
     public static string De(int diametro) => Tabla.GetValueOrDefault(diametro, SinColor);
 
     /// <summary>El mismo color en sus tres canales, para los filtros de vista de Revit.</summary>

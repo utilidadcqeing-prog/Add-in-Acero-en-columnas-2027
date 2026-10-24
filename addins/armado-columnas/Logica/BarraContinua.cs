@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
+using practicacq.Modelo;
 
 /// <summary>
 /// Una posición longitudinal de la columna como UNA sola varilla de punta a
@@ -46,7 +47,7 @@ public static class BarraContinua
         IReadOnlyList<TraslapoPedido> Traslapos, IReadOnlyList<ColumnaDePila> Pila,
         RebarHookType? GanchoAbajo, RebarHookType? GanchoArriba,
         RebarTerminationOrientation OrientacionAbajo, RebarTerminationOrientation OrientacionArriba,
-        Limites Limites);
+        Limites Limites, bool DeArribaAAbajo = false, XYZ? Desfase = null);
 
     /// <summary>
     /// El rectángulo en planta donde puede quedar el eje de una pieza de esta
@@ -55,8 +56,19 @@ public static class BarraContinua
     /// </summary>
     public readonly record struct Limites(double XMin, double XMax, double YMin, double YMax);
 
-    /// <summary><c>Piezas</c> = cuántos Rebar quedaron en el modelo (0 si no se pudo crear la varilla).</summary>
-    public readonly record struct Resultado(int Piezas, string? Aviso);
+    /// <summary>
+    /// <c>Piezas</c> = cuántos Rebar quedaron en el modelo (0 si no se pudo crear la varilla).
+    /// <c>Cadena</c> = las piezas creadas, para terminar de acomodarlas con <see cref="Acomodar"/> (null si no se creó nada).
+    /// </summary>
+    public readonly record struct Resultado(int Piezas, string? Aviso, IReadOnlyList<Rebar>? Cadena = null);
+
+    /// <summary>
+    /// Una pieza ya creada: su eje en planta y las alturas que cubre (sin
+    /// ganchos), en pies. Revit corre las varillas unos milímetros respecto de
+    /// lo pedido (medido el 21-oct en la columna 387983: hasta 5 mm), así que
+    /// lo que tenga que tocarlas -- grapas y cerrados (#130) -- se ubica con esto.
+    /// </summary>
+    public readonly record struct PiezaReal(double X, double Y, double ZInf, double ZSup);
 
     /// <summary>
     /// TEMPORAL -- traza de diagnóstico (8-oct): la primera corrida real dejó
@@ -177,7 +189,7 @@ public static class BarraContinua
         if (p.Traslapos.Count == 0)
         {
             Alinear(doc, new List<Rebar> { entera }, p);
-            return new Resultado(1, null);
+            return new Resultado(1, null, new[] { entera });
         }
 
         List<Rebar> piezas;
@@ -192,7 +204,8 @@ public static class BarraContinua
             try { doc.Regenerate(); } catch { /* best-effort */ }
             return new Resultado(1,
                 $"Revit no pudo aplicar los traslapos de una varilla «{p.Barra.Name}» ({GeometriaSeccion.Explicar(ex)}); " +
-                "quedó entera, sin traslapos.");
+                "quedó entera, sin traslapos.",
+                entera.IsValidObject ? new[] { entera } : null);
         }
 
         // Un traslapo que Revit rechaza de antemano (típico: cae en un tramo
@@ -207,7 +220,8 @@ public static class BarraContinua
         {
             if (entera.IsValidObject) Alinear(doc, new List<Rebar> { entera }, p);
             return new Resultado(1, avisoRechazados
-                ?? $"Revit no partió una varilla «{p.Barra.Name}» en sus traslapos; quedó entera, sin traslapos.");
+                ?? $"Revit no partió una varilla «{p.Barra.Name}» en sus traslapos; quedó entera, sin traslapos.",
+                entera.IsValidObject ? new[] { entera } : null);
         }
 
         // SpliceRebar puede reemplazar la barra por elementos nuevos o
@@ -222,8 +236,10 @@ public static class BarraContinua
 
         Alinear(doc, piezas, p);
 
-        ReponerGancho(piezas[0], 0, p.GanchoAbajo, p.OrientacionAbajo);
-        ReponerGancho(piezas[^1], 1, p.GanchoArriba, p.OrientacionArriba);
+        // Con la varilla dibujada al revés, en cada pieza el extremo 0 es el de
+        // arriba.
+        ReponerGancho(piezas[0], p.DeArribaAAbajo ? 1 : 0, p.GanchoAbajo, Orientacion(p, p.OrientacionAbajo));
+        ReponerGancho(piezas[^1], p.DeArribaAAbajo ? 0 : 1, p.GanchoArriba, Orientacion(p, p.OrientacionArriba));
 
         if (Traza is not null)
         {
@@ -239,7 +255,302 @@ public static class BarraContinua
         return new Resultado(piezas.Count, piezas.Count == esperadas
             ? avisoRechazados
             : $"una varilla «{p.Barra.Name}» quedó en {piezas.Count} pieza(s) y se esperaban {esperadas}: " +
-              "Revit no aplicó todos los traslapos pedidos.");
+              "Revit no aplicó todos los traslapos pedidos.",
+            piezas);
+    }
+
+    /// <summary>
+    /// Termina de acomodar las varillas de una columna, todas juntas, una vez
+    /// creadas: elige hacia qué lado queda la pieza corrida de cada traslapo
+    /// para que no choque con las vecinas (<see cref="AcomodoTraslapos"/>),
+    /// corre las que hagan falta, les fija las ataduras y devuelve dónde quedó
+    /// cada pieza de cada varilla, en el mismo orden.
+    ///
+    /// Revit decide para dónde se corre la pieza; lo que se puede elegir es
+    /// qué grupo de piezas queda en la posición pedida (como en
+    /// <see cref="Alinear"/>), y eso se hace moviendo la cadena entera. La
+    /// otra manera solo vale si las piezas quedan entre las esquinas
+    /// (<see cref="Limites"/>). Se parte de dónde quedaron de verdad.
+    /// Las piezas tampoco pueden tocar <paramref name="obstaculos"/> (los
+    /// ganchos del estribo).
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<PiezaReal>> Acomodar(
+        Document doc, IReadOnlyList<(Pedido Pedido, IReadOnlyList<Rebar> Cadena)> varillas,
+        IReadOnlyList<AcomodoTraslapos.Pieza>? obstaculos = null)
+    {
+        const double holgura = 1e-3;
+        try { doc.Regenerate(); } catch { /* best-effort */ }
+
+        var opciones = new List<AcomodoTraslapos.Varilla>();
+        var traslados = new List<XYZ?>();
+        foreach ((Pedido p, IReadOnlyList<Rebar> cadena) in varillas)
+        {
+            double radio = p.Barra.BarNominalDiameter / 2;
+            var comun = new List<AcomodoTraslapos.Pieza>();
+            var desvios = new List<XYZ>();
+            foreach (Rebar r in cadena.Where(r => r.IsValidObject))
+            {
+                try
+                {
+                    (XYZ abajo, XYZ arriba) = Extremos(r);
+                    comun.Add(new AcomodoTraslapos.Pieza(abajo.X, abajo.Y, radio, abajo.Z, arriba.Z));
+                    desvios.Add(new XYZ(abajo.X - p.X, abajo.Y - p.Y, 0));
+                }
+                catch { /* best-effort: esa pieza no se mira */ }
+            }
+
+            // Los dos grupos: el que está en la posición pedida (el más cerca)
+            // y el corrido. Voltear es llevar el corrido a la posición pedida.
+            XYZ? traslado = null;
+            XYZ? enSuLugar = desvios.OrderBy(d => d.GetLength()).FirstOrDefault();
+            XYZ? corrido = enSuLugar is null ? null : desvios.FirstOrDefault(d => d.DistanceTo(enSuLugar) > holgura);
+            if (enSuLugar is not null && corrido is not null)
+            {
+                XYZ t = enSuLugar - corrido;
+                bool dentro = desvios.All(d =>
+                    p.X + d.X + t.X >= p.Limites.XMin - holgura && p.X + d.X + t.X <= p.Limites.XMax + holgura &&
+                    p.Y + d.Y + t.Y >= p.Limites.YMin - holgura && p.Y + d.Y + t.Y <= p.Limites.YMax + holgura);
+                if (dentro) traslado = t;
+            }
+
+            traslados.Add(traslado);
+            opciones.Add(new AcomodoTraslapos.Varilla(comun, traslado is null
+                ? null
+                : comun.Select(q => q with { X = q.X + traslado.X, Y = q.Y + traslado.Y }).ToList()));
+        }
+
+        int[] elegidas = AcomodoTraslapos.Elegir(opciones, obstaculos);
+
+        if (obstaculos is { Count: > 0 })
+            for (int i = 0; i < opciones.Count; i++)
+            {
+                double metida = AcomodoTraslapos.Choque(opciones[i].Opciones[elegidas[i]], obstaculos);
+                if (metida > 0)
+                    Traza?.Invoke(
+                        $"TOCA EL GANCHO del estribo la varilla «{varillas[i].Pedido.Barra.Name}» en ({GeometriaSeccion.Metros(varillas[i].Pedido.X):0.###}, " +
+                        $"{GeometriaSeccion.Metros(varillas[i].Pedido.Y):0.###}): no hay manera de dejarla sin tocarlo.");
+            }
+
+        var resultado = new List<IReadOnlyList<PiezaReal>>();
+        for (int i = 0; i < varillas.Count; i++)
+        {
+            IReadOnlyList<Rebar> cadena = varillas[i].Cadena;
+            if (elegidas[i] == 1 && traslados[i] is { } t)
+            {
+                Traza?.Invoke(
+                    $"VOLTEAR la varilla «{varillas[i].Pedido.Barra.Name}» en ({GeometriaSeccion.Metros(varillas[i].Pedido.X):0.###}, " +
+                    $"{GeometriaSeccion.Metros(varillas[i].Pedido.Y):0.###}): correrla ({GeometriaSeccion.Metros(t.X) * 1000:0.0}, " +
+                    $"{GeometriaSeccion.Metros(t.Y) * 1000:0.0}) mm para que la pieza corrida no choque.");
+                if (!Desplazar(doc, cadena, t))
+                    Traza?.Invoke("  NO QUEDÓ donde se pidió; se deja donde la dejó Revit.");
+            }
+
+            FijarAtaduras(doc, cadena);
+            resultado.Add(LeerPosiciones(doc, cadena));
+        }
+
+        return resultado;
+    }
+
+    /// <summary>
+    /// Corre una varilla ya partida (la cadena entera) <paramref name="traslado"/>
+    /// en planta, y comprueba que haya quedado ahí. Medido el 21-oct en la
+    /// columna 387983: <c>MoveElement</c> no alcanza -- Revit vuelve a resolver
+    /// las ataduras, y de dos varillas que se pidió correr 22,2 y 19,1 mm, una
+    /// quedó corrida −11,1 y la otra no se movió. Por eso primero se corre la
+    /// atadura que la ubica: el asa del plano de la barra (su normal es el eje
+    /// en que se corre) a una distancia fija de una cara de la columna
+    /// (<see cref="RebarConstraint.SetDistanceToTargetHostFace"/>, como atadura
+    /// preferida). El signo de esa distancia depende de la cara, así que se
+    /// prueba y se mide; si ninguna cara la deja en su lugar, se intenta con
+    /// <c>MoveElement</c>. Devuelve si quedó a menos de medio milímetro.
+    /// </summary>
+    private static bool Desplazar(Document doc, IReadOnlyList<Rebar> cadena, XYZ traslado)
+    {
+        const double tolerancia = 0.0005 / 0.3048; // 0,5 mm
+        var deLaCadena = new HashSet<ElementId>(cadena.Where(r => r.IsValidObject).Select(r => r.Id));
+        Rebar? referencia = cadena.FirstOrDefault(r => r.IsValidObject);
+        if (referencia is null) return false;
+
+        XYZ Donde()
+        {
+            doc.Regenerate();
+            XYZ a = Extremos(referencia).Abajo;
+            return new XYZ(a.X, a.Y, 0);
+        }
+
+        static string Mm(XYZ v) => $"({GeometriaSeccion.Metros(v.X) * 1000:0.0}, {GeometriaSeccion.Metros(v.Y) * 1000:0.0})";
+
+        XYZ inicio = Donde();
+        XYZ objetivo = inicio + new XYZ(traslado.X, traslado.Y, 0);
+        bool Llego(string como)
+        {
+            XYZ ahora = Donde();
+            bool llego = ahora.DistanceTo(objetivo) < tolerancia;
+            Traza?.Invoke($"  {como}: de {Mm(inicio)} a {Mm(ahora)}, se pedía {Mm(objetivo)} -> {(llego ? "OK" : "no")}");
+            return llego;
+        }
+
+        // La pieza que sostiene a la cadena: la que no tiene el plano atado a
+        // otra pieza de la misma varilla (las demás la siguen por el empalme).
+        foreach (Rebar pieza in cadena.Where(r => r.IsValidObject))
+        {
+            RebarConstraintsManager gestor;
+            RebarConstrainedHandle? plano;
+            try
+            {
+                gestor = pieza.GetRebarConstraintsManager();
+                plano = gestor.GetAllHandles().FirstOrDefault(h => h.GetHandleType() == RebarHandleType.RebarPlane);
+                if (plano is null) continue;
+                RebarConstraint? actual = gestor.GetCurrentConstraintOnHandle(plano);
+                if (actual is not null && actual.IsToOtherRebar() && actual.GetTargetElement() is Element destino &&
+                    deLaCadena.Contains(destino.Id))
+                    continue;
+                Traza?.Invoke($"  pieza {pieza.Id.Value}: plano atado a {Describir(actual)}");
+            }
+            catch (Exception ex)
+            {
+                Traza?.Invoke($"  pieza {pieza.Id.Value}: no se pudo leer su atadura ({ex.GetType().Name}: {ex.Message})");
+                continue;
+            }
+
+            IList<RebarConstraint> candidatas;
+            try { candidatas = gestor.GetConstraintCandidatesForHandle(plano, pieza.GetHostId()); }
+            catch (Exception ex)
+            {
+                Traza?.Invoke($"  pieza {pieza.Id.Value}: sin ataduras posibles ({ex.GetType().Name}: {ex.Message})");
+                continue;
+            }
+
+            foreach (RebarConstraint candidata in candidatas.Where(c => c.IsFixedDistanceToHostFace()))
+            {
+                double distancia;
+                try { distancia = candidata.GetDistanceToTargetHostFace(); }
+                catch { continue; }
+
+                foreach (int signo in new[] { 1, -1 })
+                {
+                    try
+                    {
+                        candidata.SetDistanceToTargetHostFace(distancia + signo * traslado.GetLength());
+                        gestor.SetPreferredConstraint(candidata);
+                        if (Llego($"atadura a la cara de la columna, {GeometriaSeccion.Metros(distancia) * 1000:0.0} " +
+                                  $"{(signo > 0 ? "+" : "-")} {GeometriaSeccion.Metros(traslado.GetLength()) * 1000:0.0} mm"))
+                            return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        Traza?.Invoke($"  la atadura no se pudo usar ({ex.GetType().Name}: {ex.Message})");
+                    }
+                }
+
+                // Se deja esa cara como estaba antes de probar la siguiente.
+                try
+                {
+                    candidata.SetDistanceToTargetHostFace(distancia);
+                    gestor.SetPreferredConstraint(candidata);
+                    doc.Regenerate();
+                }
+                catch { /* best-effort */ }
+            }
+        }
+
+        // Último recurso: mover la cadena (se corre una pieza y las demás la siguen).
+        try
+        {
+            ElementTransformUtils.MoveElement(doc, referencia.Id, objetivo - Donde());
+            return Llego("MoveElement");
+        }
+        catch (Exception ex)
+        {
+            Traza?.Invoke($"  MoveElement tiró {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static string Describir(RebarConstraint? c)
+    {
+        if (c is null) return "nada";
+        try
+        {
+            string destino = c.GetTargetElement()?.Id.Value.ToString() ?? "?";
+            if (c.IsFixedDistanceToHostFace())
+                return $"la cara del host {destino}, a {GeometriaSeccion.Metros(c.GetDistanceToTargetHostFace()) * 1000:0.0} mm";
+            if (c.IsToOtherRebar()) return $"la armadura {destino}";
+            return $"{c.GetConstraintType()} ({destino})";
+        }
+        catch (Exception ex) { return $"{c.GetConstraintType()} ({ex.GetType().Name})"; }
+    }
+
+    /// <summary>
+    /// Deja cada pieza atada a lo que la ubica AHORA (el estribo, la cara de la
+    /// columna o la otra pieza del traslapo), como atadura preferida. Sin esto,
+    /// al crear después una grapa, Revit cambiaba la atadura de la varilla a la
+    /// grapa nueva y la corría hasta tocarla: medido el 21-oct en la columna
+    /// 387983, 12,4 mm, y la grapa ya no la abrazaba (#130). Con una atadura
+    /// preferida, la pieza sigue a ese destino aunque aparezcan otros más cerca
+    /// (documentación de <see cref="RebarConstraintsManager.SetPreferredConstraint"/>).
+    ///
+    /// Las ataduras de una pieza a OTRA PIEZA de la misma varilla no se tocan:
+    /// son el empalme, y fijarlas lo rompe ("The rebar splice connection cannot
+    /// be maintained", 12 avisos en la columna 387983, 21-oct). Esa pieza sigue
+    /// a su compañera, que sí queda fija.
+    /// Best-effort: si Revit no lo acepta, la pieza queda como estaba.
+    /// </summary>
+    private static void FijarAtaduras(Document doc, IReadOnlyCollection<Rebar> piezas)
+    {
+        try { doc.Regenerate(); } catch { /* best-effort */ }
+
+        var deLaVarilla = new HashSet<ElementId>(piezas.Where(r => r.IsValidObject).Select(r => r.Id));
+        bool EsDelEmpalme(RebarConstraint c)
+        {
+            try { return c.IsToOtherRebar() && c.GetTargetElement() is Element e && deLaVarilla.Contains(e.Id); }
+            catch { return true; } // ante la duda, no se toca
+        }
+
+        foreach (Rebar pieza in piezas)
+        {
+            try
+            {
+                if (!pieza.IsValidObject) continue;
+                RebarConstraintsManager gestor = pieza.GetRebarConstraintsManager();
+                List<RebarConstrainedHandle> atadas = gestor.GetAllHandles()
+                    .Where(asa => gestor.GetCurrentConstraintOnHandle(asa) is RebarConstraint c && !EsDelEmpalme(c))
+                    .ToList();
+                if (atadas.Count > 0) gestor.SetPreferredConstraintsToSurfaceForHandles(atadas);
+            }
+            catch (Exception ex)
+            {
+                Traza?.Invoke($"  no se pudieron fijar las ataduras de la pieza {pieza.Id.Value}: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Dónde quedó cada pieza, después de alinearla y de reponerle los ganchos
+    /// (que también pueden moverla). Best-effort: una pieza que no se pueda
+    /// leer no se informa, y quien use esto cae a la posición teórica.
+    /// </summary>
+    private static IReadOnlyList<PiezaReal> LeerPosiciones(Document doc, IEnumerable<Rebar> piezas)
+    {
+        try { doc.Regenerate(); } catch { /* best-effort */ }
+
+        var posiciones = new List<PiezaReal>();
+        foreach (Rebar pieza in piezas)
+        {
+            try
+            {
+                if (!pieza.IsValidObject) continue;
+                (XYZ abajo, XYZ arriba) = Extremos(pieza);
+                posiciones.Add(new PiezaReal(abajo.X, abajo.Y, abajo.Z, arriba.Z));
+            }
+            catch
+            {
+                // best-effort
+            }
+        }
+
+        return posiciones;
     }
 
     /// <summary>
@@ -249,6 +560,16 @@ public static class BarraContinua
     /// distintos Revit la corre unos milímetros (medido el 8-oct: 5 a 8 mm al
     /// pasar del dado de 40x40 a la columna de 30x30).
     /// </summary>
+    /// <summary>
+    /// Left/Right de Revit son relativos al sentido de la barra (ver
+    /// GeneradorLongitudinal.OrientacionesHaciaAdentro): dibujada al revés, para
+    /// que el gancho mire al mismo lado hay que pedir el opuesto.
+    /// </summary>
+    private static RebarTerminationOrientation Orientacion(Pedido p, RebarTerminationOrientation haciaArriba) =>
+        !p.DeArribaAAbajo ? haciaArriba
+        : haciaArriba == RebarTerminationOrientation.Left ? RebarTerminationOrientation.Right
+        : RebarTerminationOrientation.Left;
+
     private static FamilyInstance HostInicial(Pedido p) =>
         p.Pila
             .OrderByDescending(c => Math.Min(c.ZSup, p.ZFin) - Math.Max(c.ZInf, p.ZInicio))
@@ -256,21 +577,43 @@ public static class BarraContinua
 
     private static Rebar? CrearEntera(Document doc, Pedido p, FamilyInstance host)
     {
-        // ZInicio < ZFin siempre -- Start del Line es el extremo INFERIOR, así
-        // que el extremo 0 de la barra es el de abajo.
-        Line linea = Line.CreateBound(new XYZ(p.X, p.Y, p.ZInicio), new XYZ(p.X, p.Y, p.ZFin));
+        // ZInicio < ZFin siempre. Dibujada de abajo hacia arriba (lo de
+        // siempre), el extremo 0 es el de abajo; al revés, el de arriba. El
+        // sentido decide qué pieza corre Revit en cada traslapo (medido el
+        // 21-oct, ver AcomodoTraslapos.Cuatro).
+        // Con Desfase se dibuja corrida en planta (ver GeneradorLongitudinal,
+        // la normal diagonal): la posición pedida sigue siendo X, Y.
+        double x = p.X + (p.Desfase?.X ?? 0), y = p.Y + (p.Desfase?.Y ?? 0);
+        XYZ abajo = new(x, y, p.ZInicio), arriba = new(x, y, p.ZFin);
+        Line linea = p.DeArribaAAbajo ? Line.CreateBound(arriba, abajo) : Line.CreateBound(abajo, arriba);
 
         using var terminaciones = new BarTerminationsData(doc);
         if (p.GanchoAbajo is not null)
         {
-            terminaciones.HookTypeIdAtStart = p.GanchoAbajo.Id;
-            terminaciones.TerminationOrientationAtStart = p.OrientacionAbajo;
+            if (p.DeArribaAAbajo)
+            {
+                terminaciones.HookTypeIdAtEnd = p.GanchoAbajo.Id;
+                terminaciones.TerminationOrientationAtEnd = Orientacion(p, p.OrientacionAbajo);
+            }
+            else
+            {
+                terminaciones.HookTypeIdAtStart = p.GanchoAbajo.Id;
+                terminaciones.TerminationOrientationAtStart = p.OrientacionAbajo;
+            }
         }
 
         if (p.GanchoArriba is not null)
         {
-            terminaciones.HookTypeIdAtEnd = p.GanchoArriba.Id;
-            terminaciones.TerminationOrientationAtEnd = p.OrientacionArriba;
+            if (p.DeArribaAAbajo)
+            {
+                terminaciones.HookTypeIdAtStart = p.GanchoArriba.Id;
+                terminaciones.TerminationOrientationAtStart = Orientacion(p, p.OrientacionArriba);
+            }
+            else
+            {
+                terminaciones.HookTypeIdAtEnd = p.GanchoArriba.Id;
+                terminaciones.TerminationOrientationAtEnd = p.OrientacionArriba;
+            }
         }
 
         // La varilla excede a su host por las dos puntas (medido: Revit no la

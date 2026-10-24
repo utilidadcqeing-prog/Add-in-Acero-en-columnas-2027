@@ -76,8 +76,10 @@ public interface IProveedorContexto
 /// y en los avisos del generador. Puede venir vacía: un modelo sin rejillas no
 /// tiene coordenada, y entonces no se dibuja etiqueta.
 /// </summary>
+/// <param name="LadoX">Lado de la sección en X, en metros, para dibujarla a escala en la planta (#133). 0 si no se conoce.</param>
+/// <param name="LadoY">Lado de la sección en Y, en metros. 0 si no se conoce.</param>
 public sealed record ColumnaResumen(
-    string Id, string Marca, bool EsColumneta, double X, double Y, string MarcaUbicacion = "")
+    string Id, string Marca, bool EsColumneta, double X, double Y, string MarcaUbicacion = "", double LadoX = 0, double LadoY = 0)
 {
     /// <summary>
     /// Umbral de "columneta", en metros -- issue #33: confirmado por William

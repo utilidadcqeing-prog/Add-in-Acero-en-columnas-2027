@@ -245,7 +245,7 @@ public class ArmadorVistaTests
         Assert.Equal([true, false, false, false, true], arriba.Select(b => b.Esquina));
         Assert.Equal(("arriba 1", 6.0686, 1.59), (arriba[0].Nombre, Math.Round(arriba[0].Y, 4), arriba[0].D));
         Assert.Equal((30, 50), (v.Seccion.AnchoCm, v.Seccion.AltoCm));
-        Assert.Equal(new FiguraSeccion("E", "Cerrado", 4, 26, 4, 46, DiametroCm: 0.95), v.Seccion.Figuras[0]);
+        Assert.Equal(new FiguraSeccion("E", "Cerrado", 4, 26, 4, 46, DiametroCm: 0.95, Color: ColoresDiametro.De(3)), v.Seccion.Figuras[0]);
     }
 
     [Fact]

@@ -32,9 +32,9 @@ public partial class App : Application
                 {
                     "Vista previa: acá el add-in real generaría el armado en Revit.",
                     $"Se habrían armado {columnas} columna(s) y {tramos} tramo(s) aceptado(s).",
-                    opciones.BorrarAnteriores
-                        ? "Con borrado previo de TODO el armado existente en esas columnas."
-                        : "Sin borrar el armado existente.",
+                    opciones.BorrarArmadoAjeno
+                        ? "Reemplazando el acero del add-in y borrando también el que no generó el add-in en esas columnas."
+                        : "Reemplazando el acero que el add-in había generado antes en esas columnas.",
                 },
             });
         };

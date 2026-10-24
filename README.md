@@ -7,6 +7,7 @@ por add-in.
 |---|---|
 | `addins/armado-columnas/` | Armado de columnas: estribos, columnetas y viguetas de confinamiento. |
 | `addins/imagenes/` | Imágenes por actividad del presupuesto. |
+| `addins/gestor-revit/` | **No es un add-in:** el botón «Gestor de add-ins» (panel «Gestor») que el gestor instala solo dentro de Revit. Viaja en el paquete del gestor y no se publica con etiqueta propia. |
 | `addins/compartido/` | Código común: la pestaña CQEING del ribbon (se compila dentro de cada add-in). |
 | `gestor/` | App de escritorio que instala, actualiza y revierte los add-ins (en construcción). |
 | `tools/` | Despliegue local, vista previa de la interfaz del armado y utilidades. |

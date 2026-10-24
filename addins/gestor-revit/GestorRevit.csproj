@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
+  <PropertyGroup>
+    <AssemblyName>CQEING.GestorRevit</AssemblyName>
+    <RootNamespace>CQEING.GestorRevit</RootNamespace>
+    <Company>CQEING</Company>
+    <Product>CQEING - Gestor en Revit</Product>
+    <Copyright>© CQEING</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <!-- «zz-» para que Revit lo cargue el último y el panel «Gestor» quede a la derecha de los de los add-ins. -->
+    <None Include="CQEING.zz-gestor-revit.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- El aviso de versiones nuevas usa la misma lógica que el gestor (releases, catálogo, qué está instalado). -->
+    <ProjectReference Include="..\..\gestor\CQEING.Gestor.Core\CQEING.Gestor.Core.csproj" />
+  </ItemGroup>
+
+</Project>

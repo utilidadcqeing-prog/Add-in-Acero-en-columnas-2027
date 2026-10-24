@@ -47,6 +47,7 @@ internal static class FiltrosColor
                         vista.AddFilter(filtro);
                     vista.SetFilterOverrides(filtro, color);
                 }
+                AlFinalLosQueTomanTodo(doc, vista);
             }
             catch (Autodesk.Revit.Exceptions.InvalidOperationException)
             {
@@ -54,7 +55,48 @@ internal static class FiltrosColor
             }
             ConAristas(vista);
         }
+
+        // Las demás vistas y plantillas que ya tienen alguno de los filtros guardan el color de cuando se puso: se les
+        // pone el de ahora para que el acero generado antes no quede con la paleta vieja (23-oct).
+        var nuevas = vistas.Select(v => v.Id).ToHashSet();
+        foreach (View vista in new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
+                     .Where(v => !nuevas.Contains(v.Id) && v.AreGraphicsOverridesAllowed()))
+        {
+            try
+            {
+                foreach ((ElementId filtro, OverrideGraphicSettings color) in filtros.Where(f => vista.IsFilterApplied(f.Filtro)))
+                    vista.SetFilterOverrides(filtro, color);
+            }
+            catch (Autodesk.Revit.Exceptions.InvalidOperationException)
+            {
+                // su plantilla controla los filtros: la plantilla se pone al día en esta misma vuelta
+            }
+        }
         return avisos;
+    }
+
+    /// <summary>
+    /// Un filtro sin regla sobre la armadura (el "CQEING otro" gris de columnas) toma todas las barras, y en Revit manda
+    /// el filtro que está más arriba en la vista: si queda encima de los de diámetro, las vigas salen grises (23-oct). La
+    /// API no reordena filtros: se quita y se vuelve a poner con sus mismos ajustes, y así queda al final.
+    /// </summary>
+    private static void AlFinalLosQueTomanTodo(Document doc, View vista)
+    {
+        var armadura = new ElementId(BuiltInCategory.OST_Rebar);
+        List<ElementId> tomanTodo = vista.GetFilters()
+            .Where(id => doc.GetElement(id) is ParameterFilterElement f && f.GetElementFilter() is null && f.GetCategories().Contains(armadura))
+            .ToList();
+        foreach (ElementId id in tomanTodo)
+        {
+            OverrideGraphicSettings ajustes = vista.GetFilterOverrides(id);
+            bool visible = vista.GetFilterVisibility(id);
+            bool activo = vista.GetIsFilterEnabled(id);
+            vista.RemoveFilter(id);
+            vista.AddFilter(id);
+            vista.SetFilterOverrides(id, ajustes);
+            vista.SetFilterVisibility(id, visible);
+            vista.SetIsFilterEnabled(id, activo);
+        }
     }
 
     /// <summary>

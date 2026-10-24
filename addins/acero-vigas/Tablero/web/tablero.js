@@ -114,12 +114,12 @@
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid #8A939D; border-radius: ${sec.stRadio}"></div>
+      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid ${sec.stC}; border-radius: ${sec.stRadio}"></div>
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
       ${sec.trazos.length ? html`
         <svg aria-hidden="true" width=${sec.wpx} height=${sec.hpx} style="position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none">
-          ${sec.trazos.map((t) => html`<polyline points=${t.pts} fill="none" stroke="#0F7B6C" stroke-width=${t.w} stroke-linejoin="round" stroke-linecap="butt" />`)}
+          ${sec.trazos.map((t) => html`<polyline points=${t.pts} fill="none" stroke=${t.c} stroke-width=${t.w} stroke-linejoin="round" stroke-linecap="butt" />`)}
         </svg>` : null}
       ${sec.proy.map((d) => html`
         <div role="img" aria-label=${d.label} style="position: absolute; left: ${d.x}; top: ${d.y}; width: ${d.s}; height: ${d.s}; border: 1.5px dashed #5E6670; border-radius: 50%; box-sizing: border-box"></div>`)}
@@ -618,6 +618,8 @@
       };
       // El grueso de un estribo en px: su diámetro a escala, nunca menos de 1 px para que se vea en el corte chico.
       const grueso = (f, K) => Math.max(1, f && f.diametroCm ? f.diametroCm * K : 2);
+      // El color de un estribo es el de su diámetro, como las barras (23-oct); gris si C# no lo manda.
+      const colorEstribo = (f) => (f && f.color) || '#5E6670';
       const seccionA = (K) => ({
         wpx: secc.anchoCm * K + 'px', hpx: secc.altoCm * K + 'px',
         dots: secBars.map((b) => {
@@ -633,15 +635,15 @@
         // salen en Revit (Juan, 22-oct). Sin trazo (no debería pasar), la figura simple de antes.
         // El grueso es el diámetro de la barra a escala (Juan, 22-oct), por el eje del trazo.
         trazos: secc.figuras.filter((f) => f.id !== 'E' && f.puntos).map((f) => ({
-          pts: f.puntos.map((p) => p[0] * K + ',' + p[1] * K).join(' '), w: grueso(f, K) })),
+          pts: f.puntos.map((p) => p[0] * K + ',' + p[1] * K).join(' '), w: grueso(f, K), c: colorEstribo(f) })),
         adds: secc.figuras.filter((f) => f.id !== 'E' && !f.puntos).map((f) => (f.tipo === 'Cerrado'
-          ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid #0F7B6C', r: '3px', bg: 'transparent' }
-          : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: '#0F7B6C' })),
+          ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid ' + colorEstribo(f), r: '3px', bg: 'transparent' }
+          : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: colorEstribo(f) })),
         stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
         stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px',
         // El cerrado de las esquinas, con el grueso de su barra hacia adentro desde las caras exteriores y la esquina
         // redondeada por fuera como el doblado de estribo (4 d de diámetro interior: radio exterior 3 d).
-        stW: grueso(cerrado, K) + 'px', stRadio: (cerrado && cerrado.diametroCm ? 3 * cerrado.diametroCm * K : 4) + 'px' });
+        stW: grueso(cerrado, K) + 'px', stC: colorEstribo(cerrado), stRadio: (cerrado && cerrado.diametroCm ? 3 * cerrado.diametroCm * K : 4) + 'px' });
       // La pestaña usa todo el alto del área de dibujo y el ancho que deja el texto (320 + 48 de separación + márgenes):
       // a 5 px por cm una viga de 25 × 35 quedaba de 125 × 175 px.
       const md = this.medidas();

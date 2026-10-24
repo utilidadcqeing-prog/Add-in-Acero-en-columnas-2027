@@ -25,16 +25,32 @@ void Color(ColoresVarilla.ColorRgb real, byte r, byte g, byte b, string que) =>
 
 Probar("color_varillas_del_cuadro", () =>
 {
-    Color(ColoresVarilla.ColorDe(9.5), 184, 134, 11, "#3");
-    Color(ColoresVarilla.ColorDe(15.9), 211, 47, 47, "#5");
-    Color(ColoresVarilla.ColorDe(25.4), 21, 101, 192, "#8");
+    Color(ColoresVarilla.ColorDe(9.5), 251, 188, 4, "#3");
+    Color(ColoresVarilla.ColorDe(15.9), 234, 67, 53, "#5");
+    Color(ColoresVarilla.ColorDe(12.7), 66, 133, 244, "#4");
+    Color(ColoresVarilla.ColorDe(25.4), 139, 69, 19, "#8");
 });
 
 Probar("color_varillas_9_a_11_fuera_del_cuadro", () =>
 {
-    Color(ColoresVarilla.ColorDe(28.7), 0, 131, 143, "#9");
-    Color(ColoresVarilla.ColorDe(32.3), 46, 125, 50, "#10");
-    Color(ColoresVarilla.ColorDe(35.8), 109, 76, 65, "#11");
+    Color(ColoresVarilla.ColorDe(28.7), 233, 30, 99, "#9");
+    Color(ColoresVarilla.ColorDe(32.3), 0, 0, 0, "#10");
+    Color(ColoresVarilla.ColorDe(35.8), 255, 109, 1, "#11");
+});
+
+// Carlos (23-oct): #3 a #8 se usan juntos en la misma columna, así que ningún
+// par puede tener colores parecidos (con la tabla anterior, #3/#4 y #4/#5
+// quedaban a menos de 80 de distancia RGB).
+Probar("colores_de_3_a_8_bien_distintos", () =>
+{
+    var usados = ColoresVarilla.Tabla.Where(t => t.Numero <= 8).ToList();
+    foreach (var a in usados)
+        foreach (var b in usados.Where(b => b.Numero > a.Numero))
+        {
+            double distancia = Math.Sqrt(
+                Math.Pow(a.Color.R - b.Color.R, 2) + Math.Pow(a.Color.G - b.Color.G, 2) + Math.Pow(a.Color.B - b.Color.B, 2));
+            Cierto(distancia >= 90, $"#{a.Numero} y #{b.Numero} se parecen (distancia {distancia:F0})");
+        }
 });
 
 Probar("color_gris_para_otro_diametro", () =>
@@ -47,7 +63,7 @@ Probar("color_gris_para_otro_diametro", () =>
 
 // Una métrica de 16 mm cae dentro de la tolerancia del #5: mismo criterio
 // que el resto del add-in (CuadroVarillas.PorDiametro).
-Probar("color_metrica_16_sale_como_5", () => Color(ColoresVarilla.ColorDe(16.0), 211, 47, 47, "16 mm"));
+Probar("color_metrica_16_sale_como_5", () => Color(ColoresVarilla.ColorDe(16.0), 234, 67, 53, "16 mm"));
 
 Probar("numero_de_varilla_por_diametro", () =>
 {
@@ -196,12 +212,477 @@ Probar("posicion_intermedia", () => Igual(1, SeccionPlanta.PosicionIntermedia(0,
 Probar("color_filtro_empresa", () =>
 {
     // Los filtros "ACERO #N" del proyecto se repintan con la tabla (Luciano, 20-oct).
-    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3") == new ColoresVarilla.ColorRgb(184, 134, 11), "ACERO #3");
-    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("acero  #8") == new ColoresVarilla.ColorRgb(21, 101, 192), "acero  #8");
+    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3") == new ColoresVarilla.ColorRgb(251, 188, 4), "ACERO #3");
+    Cierto(ColoresVarilla.ColorDeFiltroEmpresa("acero  #8") == new ColoresVarilla.ColorRgb(139, 69, 19), "acero  #8");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #2") == ColoresVarilla.Gris, "ACERO #2 en gris");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("Acero_Columnas") is null, "Acero_Columnas no se toca");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("CQEING #3") is null, "los nuestros no cuentan");
     Cierto(ColoresVarilla.ColorDeFiltroEmpresa("ACERO #3 vigas") is null, "solo el nombre exacto");
+});
+
+// ---- #133: la columna a escala real en todos los dibujos
+
+Probar("escala_25x30_no_queda_cuadrada", () =>
+{
+    double e = EscalaDibujo.Ajustar(0.25, 0.30, 300, 300);
+    Igual(1000, e, "manda el lado de 30 cm");
+    Igual(250, 0.25 * e, "ancho");
+    Igual(300, 0.30 * e, "alto");
+});
+
+Probar("escala_120x50_entra_sin_deformarse", () =>
+{
+    double e = EscalaDibujo.Ajustar(1.20, 0.50, 300, 300);
+    Igual(250, e, "manda el lado de 120 cm");
+    Igual(1.20 / 0.50, (1.20 * e) / (0.50 * e), "misma proporción que la columna");
+    Cierto(0.50 * e <= 300, "el alto también entra");
+});
+
+Probar("escala_cuadrada_queda_cuadrada", () =>
+    Igual(130 / 0.40, EscalaDibujo.Ajustar(0.40, 0.40, 230, 130), "manda el alto disponible"));
+
+Probar("texto_cotas", () =>
+{
+    Cierto(EscalaDibujo.Cm(0.25) == "25 cm", EscalaDibujo.Cm(0.25));
+    Cierto(EscalaDibujo.Cm(0.225) == "22,5 cm", EscalaDibujo.Cm(0.225));
+    Cierto(EscalaDibujo.M(3) == "3,00 m", EscalaDibujo.M(3));
+});
+
+// ---- La sección como queda en Revit (2026-10-21-seccion-como-en-revit.md).
+// Columna 387983: 25×30, recubrimiento 4 cm, estribo #3 (doblez 38 mm),
+// esquinas #8, cara X #7, cara Y #6.
+
+void Cerca(double esperado, double real, double tolerancia, string que)
+{
+    if (Math.Abs(esperado - real) > tolerancia) throw new Exception($"{que}: esperado {esperado}, real {real}");
+}
+
+Probar("esquina_dentro_del_doblez_del_estribo", () =>
+{
+    var cfg = new ConfigLongitudinal { BarrasPorCaraX = 4, BarrasPorCaraY = 4 };
+    double D(PosicionBarra p) => p switch { PosicionBarra.Esquina => 25.4, PosicionBarra.CaraX => 22.2, _ => 19.1 };
+    IReadOnlyList<SeccionPlanta.BarraEnPlanta> b = SeccionPlanta.Calcular(0.25, 0.30, 0.04, 9.5, cfg, D, doblezEstriboMm: 38);
+    // Centro del doblez a 4 + 0,95 + 1,9 = 6,85 cm de cada cara; la #8 (r 12,7) toca
+    // la cara interior (r 19): a 6,3 mm del centro, sobre la diagonal.
+    double esperado = 0.0685 - (0.019 - 0.0127) * Math.Sqrt(2) / 2;
+    Igual(esperado, b[0].X, "esquina X");
+    Igual(esperado, b[0].Y, "esquina Y");
+    // Las de las caras quedan pegadas al estribo: 4 + 0,95 + 0,955 = 5,905 cm
+    // (medido antes del arreglo: 6,38 = esto + los 4,75 mm de más del estribo).
+    Igual(0.04 + 0.0095 + 0.00955, b.Where(x => x.Posicion == PosicionBarra.CaraY).Min(x => x.X), "cara Y pegada al estribo");
+});
+
+Probar("estribo_principal_esquinas_y_ganchos", () =>
+{
+    // Cara exterior al recubrimiento: de 4 a 21 cm en X y de 4 a 26 en Y.
+    IReadOnlyList<(double X, double Y)> e = PlantaArmado.EstriboCerrado(0.04, 0.21, 0.04, 0.26, 0.0095, 0.038, PlantaArmado.Cola135(9.5));
+    Cerca(0.04475, e.Min(p => p.X), 1e-9, "eje del lado izquierdo a 4 cm + medio diámetro");
+    Cerca(0.26 - 0.00475, e.Max(p => p.Y), 1e-9, "eje del lado de arriba");
+    // Los dos ganchos en la esquina de abajo a la izquierda; las colas, a un
+    // radio al eje (19 + 4,75 = 23,75 mm) de cada lado de la diagonal (medido: ~23,7).
+    double cx = 0.04475 + 0.02375, cy = cx;
+    double ADiagonal((double X, double Y) p) => ((p.X - cx) - (p.Y - cy)) / Math.Sqrt(2);
+    Cerca(0.02375, Math.Abs(ADiagonal(e[0])), 1e-9, "cola del arranque");
+    Cerca(0.02375, Math.Abs(ADiagonal(e[^1])), 1e-9, "cola del cierre");
+    Cierto(ADiagonal(e[0]) * ADiagonal(e[^1]) < 0, "una cola a cada lado de la diagonal");
+    // Las colas miden la E del cuadro (5,7 cm con #3) y entran hacia el centro.
+    Cierto(e[0].X > cx && e[0].Y > cy && e[^1].X > cx && e[^1].Y > cy, "las colas van hacia adentro");
+});
+
+Probar("grapa_abraza_la_barra", () =>
+{
+    // Grapa en C #3 en la fila 0 (y = 12 cm), entre las #6 de las caras Y.
+    double xi = 0.04 + 0.0095 + 0.00955, xd = 0.25 - xi, y = 0.12;
+    (double X, double Y) ci = PlantaArmado.CentroDelGancho(xi, y, 0.00955, 0.038, (1, 0));
+    (double X, double Y) cf = PlantaArmado.CentroDelGancho(xd, y, 0.00955, 0.038, (-1, 0));
+    // La barra toca la cara interior del doblez en la punta: centro corrido 19 − 9,55 mm hacia adentro.
+    Cerca(xi + 0.00945, ci.X, 1e-9, "centro del gancho del inicio");
+    Cerca(y, ci.Y, 1e-9, "a la altura de la barra");
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(ci, cf, 1, 1, 0.0095, 0.038, PlantaArmado.Cola180(9.5));
+    // Abre hacia +Y (el centro de la sección): el tramo recto queda un radio al eje por debajo.
+    Cerca(y - 0.02375, g.Min(p => p.Y), 1e-9, "tramo recto");
+    // Por fuera, el doblez llega a centro − radio al eje − medio diámetro.
+    Cerca(ci.X - 0.02375, g.Min(p => p.X), 1e-9, "punta del gancho");
+    // Colas de 6,5 cm (cuadro, #3), hacia adentro, del lado que abre.
+    Cerca(ci.X + 0.065, g[0].X, 1e-9, "cola del inicio");
+    Cerca(y + 0.02375, g[0].Y, 1e-9, "cola del lado de arriba");
+});
+
+Probar("grapa_en_s_abre_un_gancho_para_cada_lado", () =>
+{
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa((0.07, 0.12), (0.18, 0.12), 1, -1, 0.0095, 0.038, 0.065);
+    Cierto(g[0].Y > 0.12 && g[^1].Y < 0.12, "la cola del inicio arriba y la del fin abajo");
+});
+
+// ---- #139: ganchos que cruzarían la línea de propiedad
+
+// El lote del modelo de prueba del 22-oct: X -0,15..7,15 ; Y -0,15..12,15.
+var lote = new List<TramoLindero>
+{
+    new(7.15, 12.15, 7.15, -0.15),
+    new(7.15, -0.15, -0.15, -0.15),
+    new(-0.15, -0.15, -0.15, 12.15),
+    new(-0.15, 12.15, 7.15, 12.15),
+};
+
+Probar("lindero_alcance_gancho_90", () =>
+{
+    Igual(0.222 + 2.5 * 0.0127, Lindero.AlcanceGancho90(12.7), "#4");
+    Igual(0.388 + 2.5 * 0.0222, Lindero.AlcanceGancho90(22.2), "#7");
+    Igual(16 * 0.0358, Lindero.AlcanceGancho90(35.8), "#11, fuera del cuadro");
+});
+
+Probar("lindero_gancho_que_cruza", () =>
+{
+    // Columna 782105, barra #7 812763: en X 6,913 con el gancho hacia +X.
+    double alcance = Lindero.AlcanceGancho90(22.2);
+    Cierto(Lindero.Cruza(lote, 6.913, -0.065, 1, 0, alcance), "hacia +X cruza X = 7,15");
+    Cierto(!Lindero.Cruza(lote, 6.913, -0.065, -1, 0, alcance), "girado hacia -X queda en el lote");
+    // Barra 812858: en Y 0,098 con el gancho hacia -Y.
+    Cierto(Lindero.Cruza(lote, 7.087, 0.098, 0, -1, alcance), "hacia -Y cruza Y = -0,15");
+    Cierto(!Lindero.Cruza(lote, 7.087, 0.098, 0, 1, alcance), "girado hacia +Y queda en el lote");
+});
+
+Probar("lindero_gancho_que_no_llega", () =>
+{
+    // Columna interior (3,5 ; 6): ningún gancho llega al borde.
+    Cierto(!Lindero.Cruza(lote, 3.5, 6.0, 1, 0, 0.45), "hacia +X");
+    Cierto(!Lindero.Cruza(lote, 3.5, 6.0, 0, -1, 0.45), "hacia -Y");
+    // Sin línea de propiedad, nada cruza.
+    Cierto(!Lindero.Cruza(new List<TramoLindero>(), 6.913, -0.065, 1, 0, 1.0), "sin lindero");
+});
+
+Probar("lindero_punta_justo_sobre_la_linea_cuenta", () =>
+    Cierto(Lindero.Cruza(lote, 7.0, 0.0, 1, 0, 0.15), "la punta toca X = 7,15"));
+
+// ---- #131: choques entre piezas de la sección
+
+string Barra(int i) => $"la barra {i}";
+
+Probar("choques_separacion_minima", () =>
+{
+    Igual(40, ChoquesSeccion.SeparacionMinimaMm(15.9, 15.9), "dos #5: manda 4 cm");
+    Igual(40, ChoquesSeccion.SeparacionMinimaMm(25.4, 19.1), "1,5 × 25,4 = 38,1 < 40");
+    Igual(48.45, ChoquesSeccion.SeparacionMinimaMm(32.3, 12.7), "1,5 × la más gruesa");
+});
+
+Probar("choques_barras_juntas", () =>
+{
+    var juntas = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 0), new(0.15, 0.10, 15.9, 1) };
+    IReadOnlyList<ChoquesSeccion.Choque> choques = ChoquesSeccion.BarrasJuntas(juntas, Barra);
+    Cierto(choques.Count == 1, $"{choques.Count} choques");
+    Cierto(choques[0].Motivo.Contains("3,4 cm") && choques[0].Motivo.Contains("4,0 cm"), choques[0].Motivo);
+    Cierto(choques[0].Marcas.Count == 2, "marca las dos barras");
+
+    var separadas = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 0), new(0.16, 0.10, 15.9, 1) };
+    Cierto(ChoquesSeccion.BarrasJuntas(separadas, Barra).Count == 0, "a 6 cm entre ejes no chocan");
+});
+
+Probar("choques_misma_varilla_no_cuenta", () =>
+{
+    var traslapo = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 3), new(0.1159, 0.10, 15.9, 3) };
+    Cierto(ChoquesSeccion.BarrasJuntas(traslapo, Barra).Count == 0, "las dos piezas de un traslapo van pegadas");
+});
+
+Probar("choques_alturas_que_no_se_cruzan", () =>
+{
+    var piezas = new List<ChoquesSeccion.PiezaRedonda> { new(0.10, 0.10, 15.9, 0, 0, 1), new(0.12, 0.10, 15.9, 1, 2, 3) };
+    Cierto(ChoquesSeccion.BarrasJuntas(piezas, Barra).Count == 0, "a distinta altura no chocan");
+});
+
+Probar("choques_nombre_barra", () =>
+{
+    var cfg = new ConfigLongitudinal { BarrasPorCaraX = 2, BarrasPorCaraY = 0 };
+    IReadOnlyList<SeccionPlanta.BarraEnPlanta> barras = SeccionPlanta.Calcular(0.40, 0.40, 0.04, 9.5, cfg, _ => 15.9);
+    Cierto(ChoquesSeccion.NombreBarra(barras, 0) == "la esquina inferior izquierda", ChoquesSeccion.NombreBarra(barras, 0));
+    Cierto(ChoquesSeccion.NombreBarra(barras, 1) == "la barra 1 de la cara inferior", ChoquesSeccion.NombreBarra(barras, 1));
+});
+
+Probar("choques_grapa_sobre_barra_que_no_abraza", () =>
+{
+    var trazo = new List<(double X, double Y)> { (0.05, 0.10), (0.35, 0.10) };
+    var encima = new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.11, 15.9, 4) };
+    ChoquesSeccion.Choque? c = ChoquesSeccion.MenorSobreBarra(trazo, 9.5, encima, new HashSet<int>(), "la grapa de la fila 1", Barra);
+    Cierto(c is not null && c.Motivo.Contains("pasa encima") && c.Marcas.Count == 1, c?.Motivo ?? "sin choque");
+
+    var alLado = new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.125, 15.9, 4) };
+    Cierto(ChoquesSeccion.MenorSobreBarra(trazo, 9.5, alLado, new HashSet<int>(), "la grapa", Barra) is null, "a 2,5 cm del eje no la toca");
+});
+
+Probar("choques_grapa_no_choca_con_las_que_abraza", () =>
+{
+    var trazo = new List<(double X, double Y)> { (0.05, 0.10), (0.35, 0.10) };
+    var abrazada = new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.11, 15.9, 4) };
+    Cierto(ChoquesSeccion.MenorSobreBarra(trazo, 9.5, abrazada, new HashSet<int> { 4 }, "la grapa", Barra) is null, "la abraza");
+});
+
+Probar("choques_cerrado_imposible_igual_que_antes", () =>
+{
+    var barra3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38 };
+    var cerrado = new EstriboMenor { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 0, Hasta = 0 };
+    // Dos barras #4 pegadas: la caja que las abraza es angosta para doblar #3.
+    var juntas = new[] { new GanchoGrapa.Pieza(0.10, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.10, 0.20, 0.00635, 1) };
+    string? texto = ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "fila 1");
+    Cierto(texto is not null && texto.StartsWith("El estribo cerrado de la fila 1 mide") &&
+           texto.Contains("con «#3 CQEING» necesita al menos 4,8 cm para doblarse"), texto ?? "null");
+
+    var separadas = new[] { new GanchoGrapa.Pieza(0.05, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.25, 0.20, 0.00635, 1) };
+    Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, separadas, "fila 1") is null, "una caja ancha se dobla");
+});
+
+var tiposDePrueba = new Dictionary<string, TipoBarra>
+{
+    ["#3"] = new TipoBarra("#3", 9.5) { DobladoEstriboMm = 38, DobladoGanchoMm = 57 },
+    ["#5"] = new TipoBarra("#5", 15.9) { DobladoEstriboMm = 64, DobladoGanchoMm = 95 },
+    ["#6"] = new TipoBarra("#6", 19.1) { DobladoEstriboMm = 115, DobladoGanchoMm = 115 },
+};
+TipoBarra? TipoDe(string? nombre) => nombre is not null && tiposDePrueba.TryGetValue(nombre, out TipoBarra? t) ? t : null;
+
+ColumnaContexto ColumnaDePrueba(double lado, double alto, TipoTramo tipo = TipoTramo.Libre)
+{
+    var tramo = new Tramo { Indice = 0, ZInferior = 0, ZSuperior = alto, Tipo = tipo };
+    return new ColumnaContexto
+    {
+        Marca = "C-1", BaseX = lado, BaseY = lado, Recubrimiento = 0.04,
+        ZInferior = 0, ZInferiorLongitudinal = 0, ZSuperior = alto, Tramos = new List<Tramo> { tramo },
+    };
+}
+
+ConfigLongitudinal LongDePrueba(string barra, int porCara, double comercial = 12) => new()
+{
+    BarrasPorCaraX = 2 * porCara, BarrasPorCaraY = 2 * porCara,
+    TipoBarraEsquinasNombre = barra, TipoBarraCaraXNombre = barra, TipoBarraCaraYNombre = barra,
+    LongitudComercialBarra = comercial,
+};
+
+ChoquesSeccion.Resultado ChoquesDe(ColumnaContexto c, ConfigLongitudinal l) =>
+    ChoquesSeccion.DeTramo(c, c.Tramos[0], new ConfigTramo { TipoBarraNombre = "#3" }, l, 0.04, TipoDe, 9.5);
+
+Probar("choques_tramo_sin_choques", () =>
+{
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 3), LongDePrueba("#5", 0));
+    Cierto(r.Normal.Count == 0 && r.Traslapo.Count == 0, string.Join(" | ", r.Normal.Concat(r.Traslapo).Select(c => c.Motivo)));
+    // 3 m con barras de 12 m: una sola pieza, sin zona de traslapo que mostrar.
+    Cierto(!r.HayTraslapo && r.PiezasTraslapo.Count == 0, "sin traslapo");
+});
+
+Probar("choques_tramo_muchas_barras", () =>
+{
+    // 30×30 con 3 intermedias de #6 por cara: entre ejes ≈ 4,55 cm, libre ≈ 2,6 cm.
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.30, 3), LongDePrueba("#6", 3));
+    Cierto(r.Normal.Any(c => c.Motivo.Contains("de la cara inferior") && c.Motivo.Contains("se piden 4,0 cm")),
+        string.Join(" | ", r.Normal.Select(c => c.Motivo)));
+});
+
+Probar("choques_tramo_traslapo_mas_apretado", () =>
+{
+    // 40×40 con 3 intermedias de #6: libre ≈ 5,1 cm, pero la pieza corrida del
+    // traslapo se arrima un diámetro a la vecina (≈ 3,2 cm).
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 9), LongDePrueba("#6", 3, comercial: 6));
+    Cierto(r.HayTraslapo, "tiene traslapo");
+    Cierto(r.Normal.Count == 0, "normal: " + string.Join(" | ", r.Normal.Select(c => c.Motivo)));
+    Cierto(r.Traslapo.Count > 0 && r.Traslapo.All(c => c.Motivo.StartsWith("En la zona de traslapo")), "sin choques de traslapo");
+    Cierto(r.PiezasTraslapo.Count > 0, "piezas para dibujar");
+});
+
+Probar("choques_tramo_contra_zapata", () =>
+{
+    // Un cerrado en una sola fila no se puede doblar: se avisa en un tramo
+    // libre, pero el tramo contra la zapata no lleva menores.
+    ConfigLongitudinal l = LongDePrueba("#6", 3);
+    l.EstribosMenores = new List<EstriboMenor> { new() { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 1, Hasta = 1 } };
+    Cierto(ChoquesDe(ColumnaDePrueba(0.40, 3), l).Normal.Any(c => c.Motivo.StartsWith("El estribo cerrado")), "libre: avisa el cerrado");
+    Cierto(!ChoquesDe(ColumnaDePrueba(0.40, 3, TipoTramo.ContraZapata), l).Normal.Any(c => c.Motivo.Contains("estribo cerrado")),
+        "contra zapata: no evalúa menores");
+});
+
+Probar("choques_un_aviso_por_par_en_la_columna", () =>
+{
+    // El tramo de la zapata no lleva estribo y corre las esquinas distinto: el
+    // mismo par sale con otra distancia. En la columna se avisa una vez.
+    ConfigLongitudinal l = LongDePrueba("#6", 3, comercial: 6);
+    ChoquesSeccion.Resultado libre = ChoquesDe(ColumnaDePrueba(0.40, 9), l);
+    ChoquesSeccion.Resultado zapata = ChoquesDe(ColumnaDePrueba(0.40, 9, TipoTramo.ContraZapata), l);
+    IReadOnlyList<ChoquesSeccion.Choque> juntos = ChoquesSeccion.DeLaColumna(new[] { libre, zapata });
+    Cierto(juntos.Count == juntos.Select(c => c.Clave).Distinct().Count(), "un aviso por clave");
+    Cierto(juntos.Count == libre.Todos.Select(c => c.Clave).Union(zapata.Todos.Select(c => c.Clave)).Count(),
+        $"{juntos.Count} avisos");
+    Cierto(juntos.Take(libre.Todos.Count()).SequenceEqual(libre.Todos), "manda el primer tramo");
+});
+
+Probar("choques_varios_traslapos_se_avisan", () =>
+{
+    // 15 m con barras de 6 m: cada varilla lleva más de un traslapo y esa zona
+    // no se revisa; tiene que decirse.
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 15), LongDePrueba("#6", 3, comercial: 6));
+    Cierto(r.VarillasSinRevisarEnTraslapo > 0, $"{r.VarillasSinRevisarEnTraslapo} varillas sin revisar");
+});
+
+// ---- #131: detalles de la revisión final
+
+Probar("choques_grapa_a_ras_de_una_barra", () =>
+{
+    // Grapa #3 (r 4,75 mm) y barra #5 (r 7,95 mm): se tocan a 12,7 mm entre ejes.
+    var trazo = new List<(double X, double Y)> { (0.05, 0.10), (0.35, 0.10) };
+    ChoquesSeccion.Choque? Con(double dy) => ChoquesSeccion.MenorSobreBarra(
+        trazo, 9.5, new List<ChoquesSeccion.PiezaRedonda> { new(0.20, 0.10 + dy, 15.9, 4) }, new HashSet<int>(), "la grapa", Barra);
+    Cierto(Con(0.0120) is null, "se meten 0,7 mm: dentro de la tolerancia de 1 mm");
+    Cierto(Con(0.0115) is not null, "se meten 1,2 mm: choque");
+});
+
+Probar("choques_tramo_dentro_de_viga", () =>
+{
+    ConfigLongitudinal l = LongDePrueba("#6", 3);
+    l.EstribosMenores = new List<EstriboMenor> { new() { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 1, Hasta = 1 } };
+    Cierto(!ChoquesDe(ColumnaDePrueba(0.40, 3, TipoTramo.DentroDeViga), l).Normal.Any(c => c.Motivo.Contains("estribo cerrado")),
+        "en el nudo no van menores");
+});
+
+Probar("choques_columna_normal_con_grapas_sin_avisos", () =>
+{
+    ConfigLongitudinal l = LongDePrueba("#5", 1);
+    l.EstribosMenores = new List<EstriboMenor>
+    {
+        new() { Forma = FormaMenor.GrapaC, Eje = EjeCaja.Fila, Desde = 0, Hasta = 0 },
+        new() { Forma = FormaMenor.GrapaS, Eje = EjeCaja.Columna, Desde = 0, Hasta = 0 },
+    };
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 3), l);
+    Cierto(!r.Todos.Any(), string.Join(" | ", r.Todos.Select(c => c.Motivo)));
+});
+
+Probar("choques_texto_de_la_fila", () =>
+{
+    var barra3 = new TipoBarra("#3 CQEING", 9.5) { DobladoEstriboMm = 38 };
+    var cerrado = new EstriboMenor { Forma = FormaMenor.Cerrado, Eje = EjeCaja.Fila, Desde = 0, Hasta = 0 };
+    var juntas = new[] { new GanchoGrapa.Pieza(0.10, 0.10, 0.00635, 1), new GanchoGrapa.Pieza(0.10, 0.20, 0.00635, 1) };
+    Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "fila 1")!.StartsWith("El estribo cerrado de la fila 1 mide"), "singular");
+    Cierto(ChoquesSeccion.CerradoImposible(cerrado, barra3, juntas, "filas 1 a 2")!.StartsWith("El estribo cerrado de las filas 1 a 2 mide"), "plural");
+});
+
+Probar("choques_traslapo_nombra_la_pieza_corrida", () =>
+{
+    ChoquesSeccion.Resultado r = ChoquesDe(ColumnaDePrueba(0.40, 9), LongDePrueba("#6", 3, comercial: 6));
+    Cierto(r.Traslapo.Any(c => c.Motivo.Contains("la pieza corrida de")), string.Join(" | ", r.Traslapo.Select(c => c.Motivo)));
+});
+
+// ---- Sección propia de cada tramo (dado de 40×40 debajo de una columna de 30×30, 22-oct)
+
+Probar("tramo_sin_medida_usa_la_de_la_columna", () =>
+{
+    ColumnaContexto c = ColumnaDePrueba(0.30, 3);
+    (double x, double y, double dx, double dy) = c.Tramos[0].Seccion(c);
+    Igual(0.30, x, "lado X"); Igual(0.30, y, "lado Y"); Igual(0, dx, "dx"); Igual(0, dy, "dy");
+});
+
+Probar("tramo_con_medida_propia", () =>
+{
+    ColumnaContexto c = ColumnaDePrueba(0.30, 3);
+    var dado = new Tramo { LadoX = 0.40, LadoY = 0.40, ComunDesdeX = 0.05, ComunDesdeY = 0.05 };
+    (double x, double y, double dx, double dy) = dado.Seccion(c);
+    Igual(0.40, x, "lado X"); Igual(0.40, y, "lado Y"); Igual(0.05, dx, "dx"); Igual(0.05, dy, "dy");
+});
+
+Probar("choques_igual_con_la_misma_seccion_en_toda_la_columna", () =>
+{
+    // Con medida propia igual a la de la columna, nada se corre: los mismos
+    // choques que sin ella (el caso de siempre no cambia).
+    ColumnaContexto sinMedida = ColumnaDePrueba(0.40, 9);
+    Tramo t = sinMedida.Tramos[0];
+    var conMedida = new ColumnaContexto
+    {
+        Marca = sinMedida.Marca, BaseX = 0.40, BaseY = 0.40, Recubrimiento = 0.04,
+        ZInferior = 0, ZInferiorLongitudinal = 0, ZSuperior = 9,
+        Tramos = new List<Tramo> { new() { Indice = 0, ZInferior = 0, ZSuperior = 9, Tipo = t.Tipo, LadoX = 0.40, LadoY = 0.40 } },
+    };
+    ConfigLongitudinal l = LongDePrueba("#6", 3, comercial: 6);
+    string Motivos(ChoquesSeccion.Resultado r) => string.Join(" | ", r.Normal.Concat(r.Traslapo).Select(c => c.Motivo));
+    Cierto(Motivos(ChoquesDe(sinMedida, l)) == Motivos(ChoquesDe(conMedida, l)), "los mismos choques");
+});
+
+// ---- Vista previa 3D (#123): filtros y recorte por altura
+
+Punto3 P(double x, double y, double z) => new(x, y, z);
+
+// Una longitudinal #6 tipo A de esquina, con un gancho abajo y un traslapo;
+// un estribo #3 confinado y una grapa #3 no confinada.
+var longitudinal = new BarraPrevia(ClasePieza.Longitudinal, 19.1, new[]
+{
+    new PedazoBarra(new[] { P(0.2, 0, 0), P(0, 0, 0) }, ParteBarra.Gancho),
+    new PedazoBarra(new[] { P(0, 0, 0), P(0, 0, 3) }, ParteBarra.Recto),
+    new PedazoBarra(new[] { P(0, 0, 3), P(0, 0, 3.6) }, ParteBarra.Traslapo),
+}, GrupoTraslapo.A, PosicionBarra.Esquina);
+var estribo = new BarraPrevia(ClasePieza.Estribo, 9.5, new[]
+{
+    new PedazoBarra(new[] { P(0, 0, 0.1), P(0.3, 0, 0.1), P(0.3, 0.3, 0.1) }, ParteBarra.Recto),
+    new PedazoBarra(new[] { P(0, 0.3, 0.1), P(0.05, 0.25, 0.1) }, ParteBarra.Gancho),
+}, Zona: ZonaEstribo.Confinada);
+var grapa = new BarraPrevia(ClasePieza.EstriboMenor, 9.5, new[]
+{
+    new PedazoBarra(new[] { P(0, 0.15, 1.5), P(0.3, 0.15, 1.5) }, ParteBarra.Recto),
+}, Zona: ZonaEstribo.NoConfinada);
+BarraPrevia[] armado = { longitudinal, estribo, grapa };
+
+int Pedazos(FiltroPrevia3D f) => f.Aplicar(armado).Count();
+
+Probar("filtro3d_todo_muestra_todo", () => Cierto(Pedazos(FiltroPrevia3D.Todo()) == 6, "6 pedazos"));
+
+Probar("filtro3d_solo_longitudinales", () => Cierto(Pedazos(FiltroPrevia3D.SoloLongitudinales()) == 3, "3 pedazos"));
+
+Probar("filtro3d_estribos_con_menores", () =>
+{
+    List<double> diametros = FiltroPrevia3D.SoloEstribos().Aplicar(armado).Select(p => p.DiametroMm).ToList();
+    Cierto(diametros.Count == 3 && diametros.All(d => d == 9.5), "estribo (2) + grapa (1), todos #3");
+});
+
+Probar("filtro3d_solo_ganchos", () => Cierto(Pedazos(FiltroPrevia3D.SoloGanchos()) == 2, "gancho de la longitudinal y del estribo"));
+
+Probar("filtro3d_solo_traslapos", () => Cierto(Pedazos(FiltroPrevia3D.SoloTraslapos()) == 1, "el traslapo"));
+
+Probar("filtro3d_tipo_b_no_oculta_estribos", () =>
+{
+    var f = new FiltroPrevia3D { Grupos = new() { GrupoTraslapo.B } };
+    Cierto(Pedazos(f) == 3, "se va la longitudinal A; quedan estribo y grapa (A/B no les aplica)");
+});
+
+Probar("filtro3d_grupos_se_cruzan", () =>
+{
+    // #6 y tipo A: la longitudinal sí; longitudinales sin #6: nada.
+    var f = new FiltroPrevia3D { NumerosOcultos = new() { 3 }, Grupos = new() { GrupoTraslapo.A } };
+    Cierto(Pedazos(f) == 3, "solo la #6 tipo A");
+    var g = new FiltroPrevia3D { NumerosOcultos = new() { 6 }, Clases = new() { ClasePieza.Longitudinal } };
+    Cierto(Pedazos(g) == 0, "longitudinal pero sin #6: nada");
+});
+
+Probar("filtro3d_zona_confinada", () =>
+{
+    var f = new FiltroPrevia3D { Zonas = new() { ZonaEstribo.Confinada } };
+    Cierto(Pedazos(f) == 5, "se va la grapa no confinada; la longitudinal queda");
+});
+
+Probar("filtro3d_diametro_desconocido_se_ve", () =>
+{
+    var rara = new BarraPrevia(ClasePieza.Longitudinal, 12.0, new[] { new PedazoBarra(new[] { P(0, 0, 0), P(0, 0, 1) }, ParteBarra.Recto) });
+    Cierto(FiltroPrevia3D.NumeroDe(12.0) == -1, "12 mm no es de la tabla");
+    Cierto(new FiltroPrevia3D { NumerosOcultos = new() { 3, 6 } }.Aplicar(new[] { rara }).Count() == 1, "se ve");
+});
+
+Probar("filtro3d_solo_tramo_recorta", () =>
+{
+    var f = new FiltroPrevia3D { SoloAltura = (1.0, 2.0) };
+    List<(IReadOnlyList<Punto3> Puntos, double DiametroMm)> pedazos = f.Aplicar(armado).ToList();
+    // La recta 0→3 queda de 1 a 2; la grapa (z 1,5) entera; el resto, fuera.
+    Cierto(pedazos.Count == 2, $"2 pedazos, salieron {pedazos.Count}");
+    IReadOnlyList<Punto3> recta = pedazos.First(p => p.DiametroMm == 19.1).Puntos;
+    Igual(1.0, recta.Min(q => q.Z), "desde");
+    Igual(2.0, recta.Max(q => q.Z), "hasta");
+});
+
+Probar("polilinea_partir_por_altura", () =>
+{
+    (List<List<Punto3>> dentro, List<List<Punto3>> fuera) = Polilinea.PartirPorAltura(new[] { P(0, 0, 0), P(0, 0, 4) }, 1, 3);
+    Cierto(dentro.Count == 1 && fuera.Count == 2, $"1 dentro y 2 fuera, salieron {dentro.Count} y {fuera.Count}");
+    Igual(1, dentro[0][0].Z, "corte de abajo");
+    Igual(3, dentro[0][^1].Z, "corte de arriba");
 });
 
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");

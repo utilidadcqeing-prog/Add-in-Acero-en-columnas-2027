@@ -63,7 +63,8 @@
         <Setter Property="Background" Value="{StaticResource Superficie}" />
         <Setter Property="BorderBrush" Value="{StaticResource Borde}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="10" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="12" />
     </Style>
 
     <!-- Botones (issue #117). Cuatro clases, cada una con un solo significado:
@@ -173,6 +174,288 @@
         <Setter Property="MinHeight" Value="24" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <!-- Orden y jerarquía de la ventana principal (issue #118) -->
+
+    <!-- Título de sección: una barrita azul a la izquierda y letra un poco más
+         grande que las etiquetas, para que cada grupo se lea de un vistazo. -->
+    <Style TargetType="Border" x:Key="EncabezadoSeccion">
+        <Setter Property="BorderBrush" Value="{StaticResource Primario}" />
+        <Setter Property="BorderThickness" Value="3,0,0,0" />
+        <Setter Property="Padding" Value="7,1,0,1" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="TituloSeccion">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style TargetType="Border" x:Key="SeparadorSeccion">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{StaticResource Separador}" />
+        <Setter Property="Margin" Value="0,14,0,12" />
+    </Style>
+
+    <!-- Avisos (amarillo), validación (rojo) y leyenda: un estilo para cada uno. -->
+    <Style TargetType="Border" x:Key="CajaAviso">
+        <Setter Property="Background" Value="{StaticResource AvisoFondo}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AvisoBorde}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="8,5" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="TextoAviso">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource AvisoTexto}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="TextoError">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource Error}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style TargetType="TextBlock" x:Key="TextoLeyenda">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{StaticResource TextoSecundario}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+
+    <!-- Opción que borra cosas del modelo: caja roja suave, y negrita al marcarla. -->
+    <Style TargetType="Border" x:Key="CajaPeligro">
+        <Setter Property="Background" Value="{StaticResource ErrorFondo}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Error}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+    <Style TargetType="CheckBox" x:Key="CasillaPeligro">
+        <Setter Property="Foreground" Value="{StaticResource Error}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter Property="FontWeight" Value="Bold" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Pulido visual (recomendaciones 1 a 6, 21-oct). Estilos SIN x:Key: se
+         aplican solos a todas las pestañas, listas, campos y barras de
+         desplazamiento de las ventanas que cargan este diccionario. Solo
+         cambia el aspecto; el comportamiento es el de WPF. -->
+
+    <!-- Pestañas: texto plano y una línea azul debajo de la activa. -->
+    <Style TargetType="TabItem">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Marco" Background="Transparent" BorderBrush="Transparent"
+                            BorderThickness="0,0,0,2" Padding="10,5" Margin="0,0,2,4" CornerRadius="3,3,0,0">
+                        <ContentPresenter x:Name="Encabezado" ContentSource="Header" RecognizesAccessKey="True"
+                                          TextElement.Foreground="{StaticResource TextoSecundario}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Marco" Property="Background" Value="{StaticResource SuperficieHover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Marco" Property="BorderBrush" Value="{StaticResource Primario}" />
+                            <Setter TargetName="Marco" Property="Background" Value="Transparent" />
+                            <Setter TargetName="Encabezado" Property="TextElement.Foreground" Value="{StaticResource Primario}" />
+                            <Setter TargetName="Encabezado" Property="TextElement.FontWeight" Value="SemiBold" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Encabezado" Property="TextElement.Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Campos de texto: esquinas suaves, 26 px de alto y borde azul al escribir. -->
+    <Style TargetType="TextBox">
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="Background" Value="{StaticResource Superficie}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Borde}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" SnapsToDevicePixels="True">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" Focusable="False"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource Contorno}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource Primario}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+                <Setter Property="BorderBrush" Value="{StaticResource DeshabilitadoFondo}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Listas desplegables (no editables, como todas las del add-in): mismo
+         aspecto que los campos de texto, con una flechita fina a la derecha. -->
+    <Style TargetType="ComboBox">
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Padding" Value="8,0,26,0" />
+        <Setter Property="Background" Value="{StaticResource Superficie}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Borde}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid SnapsToDevicePixels="True">
+                        <ToggleButton Focusable="False" ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                            BorderThickness="1" CornerRadius="4">
+                                        <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"
+                                              Data="M0,0 L4,4 L8,0" Stroke="{StaticResource TextoSecundario}" StrokeThickness="1.5" />
+                                    </Border>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter IsHitTestVisible="False" Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Left" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
+                        <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                               PopupAnimation="Slide" IsOpen="{TemplateBinding IsDropDownOpen}">
+                            <Border Margin="0,2,0,0" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}" Background="{StaticResource Superficie}"
+                                    BorderBrush="{StaticResource Borde}" BorderThickness="1" CornerRadius="4">
+                                <ScrollViewer Margin="0,3">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource Contorno}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource Primario}" />
+            </Trigger>
+            <Trigger Property="IsDropDownOpen" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource Primario}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Background" Value="{StaticResource DeshabilitadoFondo}" />
+                <Setter Property="Foreground" Value="{StaticResource DeshabilitadoTexto}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Padding" Value="8,4" />
+    </Style>
+
+    <!-- Barra de desplazamiento delgada (8 px) y redondeada, en lugar de la de Windows. -->
+    <Style x:Key="ZonaBarraInvisible" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="PulgarBarra" TargetType="Thumb">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <Border x:Name="Pulgar" Background="{StaticResource Contorno}" CornerRadius="4" Margin="1" Opacity="0.7" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Pulgar" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Pulgar" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="ScrollBar">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="MinWidth" Value="10" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Background="Transparent">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource ZonaBarraInvisible}" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource ZonaBarraInvisible}" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource PulgarBarra}" />
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Height" Value="10" />
+                <Setter Property="MinHeight" Value="10" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ScrollBar">
+                            <Grid Background="Transparent">
+                                <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                    <Track.DecreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource ZonaBarraInvisible}" />
+                                    </Track.DecreaseRepeatButton>
+                                    <Track.IncreaseRepeatButton>
+                                        <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource ZonaBarraInvisible}" />
+                                    </Track.IncreaseRepeatButton>
+                                    <Track.Thumb>
+                                        <Thumb Style="{StaticResource PulgarBarra}" />
+                                    </Track.Thumb>
+                                </Track>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
 </ResourceDictionary>

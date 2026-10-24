@@ -1,0 +1,8 @@
+{
+  "id": "zz-gestor-revit",
+  "nombre": "Gestor en Revit",
+  "descripcion": "Panel «Gestor» de la pestaña CQEING: abre el gestor de add-ins y avisa de versiones nuevas.",
+  "proyecto": "GestorRevit.csproj",
+  "revit": ["2026", "2027"],
+  "heredados": []
+}
