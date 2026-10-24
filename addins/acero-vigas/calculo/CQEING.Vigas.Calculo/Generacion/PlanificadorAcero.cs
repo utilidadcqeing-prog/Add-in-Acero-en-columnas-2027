@@ -29,6 +29,7 @@ public static class PlanificadorAcero
         {
             CaraSeccion cara = capa.Capa == Posicion.Superior ? c.Estribos.Seccion.Superior : c.Estribos.Seccion.Inferior;
             List<BarraEnSeccion> corte = cara.Filas.SelectMany(f => f).ToList();
+            List<int> filas = cara.Filas.SelectMany((f, k) => f.Select(_ => k + 1)).ToList();
             List<BarraEnSeccion> alLado = AlLado(corte, c.Seccion, r);
             List<Barra> enOrden = capa.Barras.OrderBy(b => b.Desde).ToList();
             for (int i = 0; i < enOrden.Count; i++)
@@ -37,9 +38,10 @@ public static class PlanificadorAcero
                 List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
                 // El largo de la barra del tablero lleva los ganchos del diámetro de la capa; una pieza de otro diámetro
                 // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
-                barras.AddRange(puestos.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
+                barras.AddRange(puestos.Select((s, k) => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
                     s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
-                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin))));
+                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin),
+                    filas[k])));
             }
         }
 
@@ -54,7 +56,7 @@ public static class PlanificadorAcero
                 continue;
             }
             bastones.AddRange(enCorte.Barras.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Barra.Diametro, s.Barra.X, s.Barra.Y,
-                b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo)));
+                b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo, s.Fila)));
         }
 
         List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r);

@@ -9,6 +9,8 @@ namespace CQEING.Vigas.Calculo.Generacion;
 /// tablero (<c>S1</c>, <c>BI2</c>) y se repite en todas sus barras físicas. Los ganchos doblan siempre hacia adentro de
 /// la viga: hacia abajo en la capa superior y hacia arriba en la inferior. <paramref name="Host"/> es el id de la viga.
 /// <paramref name="Largo"/> es el del tablero, con los ganchos, para compararlo con el de Revit (decisión 8).
+/// <paramref name="Fila"/> empieza en 1, junto a la cara, y cuenta las filas que tienen barras (si el usuario deja la 2
+/// vacía, su fila 3 es la 2); la que traslapa al lado va en la fila de la barra que acompaña.
 /// </summary>
 public sealed record PiezaLongitudinal(
     string Pieza,
@@ -21,7 +23,19 @@ public sealed record PiezaLongitudinal(
     TipoGancho GanchoInicio,
     TipoGancho GanchoFin,
     string Host,
-    int Largo);
+    int Largo,
+    int Fila = 1);
+
+/// <summary>
+/// Las barras iguales de una fila, que se crean en Revit como un solo conjunto (Santiago, 24-oct: "3 #7" y no "1 #7"
+/// tres veces). <paramref name="Piezas"/> va de izquierda a derecha en el corte; todas tienen el mismo largo y ganchos, y
+/// cada una conserva su punto (la de esquina se apoya en la curva del estribo y queda unos mm más adentro).
+/// </summary>
+public sealed record ConjuntoBarras(IReadOnlyList<PiezaLongitudinal> Piezas)
+{
+    /// <summary>La de más a la izquierda: la que Revit crea, y de la que reparte las demás.</summary>
+    public PiezaLongitudinal Primera => Piezas[0];
+}
 
 /// <summary>
 /// Una corrida de estribos iguales de un tramo, para crear como un conjunto de Revit (#85). <paramref name="Pieza"/> es el

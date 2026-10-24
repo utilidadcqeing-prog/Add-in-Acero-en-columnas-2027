@@ -19,7 +19,11 @@ internal static class GeneradorAcero
     /// <summary>Diferencia de largo con el tablero a partir de la cual se avisa, en mm (decisión 8).</summary>
     private const int ToleranciaLargo = 10;
 
-    private sealed record Creada(Rebar Barra, PiezaLongitudinal Pieza, PorticoAGenerar Portico, bool EsBaston);
+    /// <summary>Un conjunto de Revit con las barras iguales de una fila (<see cref="AgrupadorBarras"/>).</summary>
+    private sealed record Creada(Rebar Barra, ConjuntoBarras Conjunto, PorticoAGenerar Portico, bool EsBaston)
+    {
+        public PiezaLongitudinal Pieza => Conjunto.Primera;
+    }
 
     /// <param name="saltados">Los pórticos que la sesión no deja generar, con su motivo: van primero en las fallas.</param>
     public static ResumenGeneracion Generar(Document doc, IReadOnlyList<PorticoAGenerar> porticos, IReadOnlyList<string> saltados, Reglas r)
@@ -46,15 +50,29 @@ internal static class GeneradorAcero
             foreach (string id in p.Vigas)
                 if (long.TryParse(id, out long n) && doc.GetElement(new ElementId(n)) is { } viga)
                     ConfiguracionPortico.Guardar(viga, p.Configuracion);
-            foreach ((PiezaLongitudinal pieza, bool esBaston) in p.Plan.Barras.Select(b => (b, false)).Concat(p.Plan.Bastones.Select(b => (b, true))))
+            foreach ((ConjuntoBarras conjunto, bool esBaston) in AgrupadorBarras.Agrupar(p.Plan.Barras).Select(c => (c, false))
+                         .Concat(AgrupadorBarras.Agrupar(p.Plan.Bastones).Select(c => (c, true))))
             {
-                if (Crear(doc, p, pieza, tipos) is { } barra)
+                if (Crear(doc, p, conjunto, tipos) is { } juntas)
                 {
-                    MarcaAcero.Marcar(barra, p.Id, pieza.Pieza);
-                    creadas.Add(new Creada(barra, pieza, p, esBaston));
+                    Anotar(juntas, conjunto);
+                    continue;
                 }
-                else
-                    fallas.Add($"{pieza.Pieza} ({p.Id}): Revit no pudo crear la barra #{pieza.Diametro}.");
+                // Si Revit no acepta el conjunto, cada barra va suelta, como antes: así se pierde a lo más una.
+                foreach (PiezaLongitudinal pieza in conjunto.Piezas)
+                {
+                    var suelta = new ConjuntoBarras([pieza]);
+                    if (conjunto.Piezas.Count > 1 && Crear(doc, p, suelta, tipos) is { } barra)
+                        Anotar(barra, suelta);
+                    else
+                        fallas.Add($"{pieza.Pieza} ({p.Id}): Revit no pudo crear la barra #{pieza.Diametro}.");
+                }
+
+                void Anotar(Rebar barra, ConjuntoBarras c)
+                {
+                    MarcaAcero.Marcar(barra, p.Id, c.Primera.Pieza);
+                    creadas.Add(new Creada(barra, c, p, esBaston));
+                }
             }
             foreach (GrupoEstribos g in p.Plan.Estribos)
             {
@@ -79,7 +97,26 @@ internal static class GeneradorAcero
         }
         foreach ((Rebar conjunto, PorticoAGenerar p, GrupoEstribos g) in estribos)
             volteados |= CreadorEstribos.CorregirAbierto(conjunto, p.Ubicacion, g);
-        if (volteados)
+        // Siempre: FijarEnSuPunto cambia restricciones aunque no mueva nada, y las barras se miden ya resueltas.
+        doc.Regenerate();
+        // Con la primera barra de cada conjunto ya en su punto, las demás van al suyo.
+        bool acomodadas = false;
+        foreach (Creada c in creadas)
+        {
+            CreadorBarras.Acomodo a;
+            try
+            {
+                a = CreadorBarras.AcomodarConjunto(c.Barra, c.Portico.Ubicacion, c.Conjunto);
+            }
+            catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException)
+            {
+                a = CreadorBarras.Acomodo.NoSePudo;
+            }
+            acomodadas |= a == CreadorBarras.Acomodo.Movido;
+            if (a == CreadorBarras.Acomodo.NoSePudo)
+                fallas.Add($"{Nombre(c)}: Revit no dejó cada barra en su punto; quedaron repartidas a la misma separación.");
+        }
+        if (acomodadas)
             doc.Regenerate();
 
         // Colores por diámetro (decisión 9) en la vista activa y en la 3D del tablero, dentro de la misma transacción.
@@ -90,7 +127,7 @@ internal static class GeneradorAcero
         fallas.AddRange(FiltrosColor.Aplicar(doc, vistas, diametros, tipos));
 
         // Lo que Revit rechace al confirmar se quita y se anota (ver ManejoDeFallas), sin cuadros de error.
-        manejo.Nuestras = creadas.ToDictionary(c => c.Barra.Id, c => $"{c.Pieza.Pieza} ({c.Portico.Id})")
+        manejo.Nuestras = creadas.ToDictionary(c => c.Barra.Id, Nombre)
             .Concat(estribos.ToDictionary(e => e.Conjunto.Id, e => $"{e.Grupo.Pieza} de {e.Grupo.Tramo} ({e.Portico.Id})"))
             .ToDictionary(par => par.Key, par => par.Value);
         t.Commit();
@@ -103,9 +140,15 @@ internal static class GeneradorAcero
             .Where(d => Math.Abs(d.LargoRevit - d.LargoTablero) > ToleranciaLargo)
             .ToList();
         int cantidadEstribos = estribos.Where(e => e.Conjunto.IsValidObject).Sum(e => e.Conjunto.NumberOfBarPositions);
-        return new ResumenGeneracion(porticos.Count, quedaron.Count(c => !c.EsBaston), quedaron.Count(c => c.EsBaston), cantidadEstribos,
+        return new ResumenGeneracion(porticos.Count, quedaron.Where(c => !c.EsBaston).Sum(c => c.Barra.NumberOfBarPositions),
+            quedaron.Where(c => c.EsBaston).Sum(c => c.Barra.NumberOfBarPositions), cantidadEstribos,
             fallas.Distinct().ToList(), diferencias);
     }
+
+    /// <summary>Para el resumen: <c>"S1 (Pórtico 1)"</c>, o con las barras y la fila si es un conjunto de varias.</summary>
+    private static string Nombre(Creada c) => c.Conjunto.Piezas.Count == 1
+        ? $"{c.Pieza.Pieza} ({c.Portico.Id})"
+        : $"{c.Pieza.Pieza} ({c.Portico.Id}, {c.Conjunto.Piezas.Count} barras #{c.Pieza.Diametro} de la fila {c.Pieza.Fila})";
 
     private static Rebar? CrearEstribos(Document doc, PorticoAGenerar p, GrupoEstribos g, TiposAcero tipos, RebarShape? forma, HashSet<ElementId> formasMalas)
     {
@@ -121,13 +164,13 @@ internal static class GeneradorAcero
         }
     }
 
-    private static Rebar? Crear(Document doc, PorticoAGenerar p, PiezaLongitudinal pieza, TiposAcero tipos)
+    private static Rebar? Crear(Document doc, PorticoAGenerar p, ConjuntoBarras conjunto, TiposAcero tipos)
     {
-        if (tipos.Barra(pieza.Diametro) is not { } barra)
+        if (tipos.Barra(conjunto.Primera.Diametro) is not { } barra)
             return null;
         try
         {
-            return CreadorBarras.Crear(doc, p.Ubicacion, pieza, barra, tipos);
+            return CreadorBarras.Crear(doc, p.Ubicacion, conjunto, barra, tipos);
         }
         catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException)
         {

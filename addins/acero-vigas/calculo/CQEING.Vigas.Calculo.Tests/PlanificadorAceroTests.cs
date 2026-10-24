@@ -55,6 +55,38 @@ public class PlanificadorAceroTests
     }
 
     [Fact]
+    public void VariasFilas_CadaPiezaSabeSuFila()
+    {
+        var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(7, 5)] };
+        CaraSeccion cara = Calcular(o).Estribos.Seccion.Superior;
+
+        List<PiezaLongitudinal> s1 = Planificar(o).Barras.Where(b => b.Pieza == "S1").ToList();
+
+        Assert.Equal(2, cara.Filas.Count);
+        Assert.Equal([1, 2], s1.Select(p => p.Fila).Distinct().Order());
+        Assert.All(s1, p => Assert.Contains(p.YCorte, cara.Filas[p.Fila - 1].Select(b => b.Y)));
+        // la que traslapa al lado va en la fila de la barra que acompaña, aunque se corra
+        Assert.Equal(s1.Select(p => p.Fila), Planificar(o).Barras.Where(b => b.Pieza == "S2").Select(p => p.Fila));
+    }
+
+    [Fact]
+    public void Bastones_CadaPiezaSabeSuFila()
+    {
+        // 5 #6 de bastón arriba sobre 3 #5 corridas: 2 caben en la fila 1 y 3 van a la fila 2
+        var o = OpcionesTablero.PorDefecto with { Bastones = new ArmadoBastones(new GrupoBarras(5, 6)) };
+
+        PlanAcero plan = Planificar(o);
+
+        List<PiezaLongitudinal> arriba = plan.Bastones.Where(p => p.Capa == Posicion.Superior).ToList();
+        Assert.NotEmpty(arriba);
+        Assert.All(arriba.GroupBy(p => p.Pieza), b =>
+        {
+            Assert.Equal(2, b.Count(p => p.Fila == 1));
+            Assert.Equal(3, b.Count(p => p.Fila == 2));
+        });
+    }
+
+    [Fact]
     public void DosDiametros_CadaPiezaConElDeSuBarra()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };
