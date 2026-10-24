@@ -25,7 +25,6 @@ public static class PlanificadorAcero
             return null;
 
         var barras = new List<PiezaLongitudinal>();
-        var alLadoDeSuPuesto = new List<PiezaLongitudinal>();
         foreach (SolucionCapa capa in new[] { c.Vigas.Superior!, c.Vigas.Inferior! })
         {
             CaraSeccion cara = capa.Capa == Posicion.Superior ? c.Estribos.Seccion.Superior : c.Estribos.Seccion.Inferior;
@@ -39,13 +38,10 @@ public static class PlanificadorAcero
                 List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
                 // El largo de la barra del tablero lleva los ganchos del diámetro de la capa; una pieza de otro diámetro
                 // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
-                List<PiezaLongitudinal> piezas = puestos.Select((s, k) => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
+                barras.AddRange(puestos.Select((s, k) => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
                     s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
                     b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin),
-                    filas[k])).ToList();
-                barras.AddRange(piezas);
-                if (puestos == alLado)
-                    alLadoDeSuPuesto.AddRange(piezas);
+                    filas[k])));
             }
         }
 
@@ -54,11 +50,7 @@ public static class PlanificadorAcero
         var montados = new List<string>();
         foreach (Baston b in c.Vigas.Bastones)
         {
-            // El reparto del corte no sabe de las que traslapan al lado o abajo: el bastón no se mete en las que lo
-            // acompañan en parte de su largo (Santiago, 24-oct).
-            List<BarraEnSeccion> ocupadas = alLadoDeSuPuesto
-                .Where(x => x.Capa == b.Capa && Math.Min(x.Hasta, b.Hasta) > Math.Max(x.Desde, b.Desde))
-                .Select(x => new BarraEnSeccion(x.Diametro, x.XCorte, x.YCorte)).ToList();
+            List<BarraEnSeccion> ocupadas = OcupadasPorTraslapo(c.Vigas, c.Estribos.Seccion, c.Seccion, r, b.Capa, b.Desde, b.Hasta);
             UbicacionBastones enCorte = UbicadorBastones.Ubicar(c.Seccion, b.Capa, [b.Grupo], ocupadas);
             if (enCorte.Error != ErrorCara.Ninguno || enCorte.Barras.Count == 0)
             {
@@ -78,6 +70,24 @@ public static class PlanificadorAcero
         List<GrupoEstribos> estribos = Estribos(c, p.Portico, o.Estribos, r, u);
         List<int> diametros = barras.Concat(bastones).Select(x => x.Diametro).Concat(estribos.Select(e => e.Diametro)).Distinct().Order().ToList();
         return new PlanAcero(idPortico, barras, bastones, sinLugar, estribos, diametros, montados);
+    }
+
+    /// <summary>
+    /// Las barras de la <paramref name="capa"/> que traslapan al lado o abajo de su puesto (la segunda, cuarta… de la capa,
+    /// en todo su largo) y comparten largo con <paramref name="desde"/>–<paramref name="hasta"/>, en el corte. El reparto
+    /// del corte no sabe de ellas: un bastón no se mete en ellas (Santiago, 24-oct: el bastón quedaba en el mismo punto de
+    /// una barra). Lo usan el plan y el corte del tablero, para que los dos pongan el bastón en el mismo puesto.
+    /// </summary>
+    internal static List<BarraEnSeccion> OcupadasPorTraslapo(ResultadoVigas v, ResultadoSeccion s, EntradaSeccion e, Reglas r,
+        Posicion capa, int desde, int hasta)
+    {
+        SolucionCapa? solucion = capa == Posicion.Superior ? v.Superior : v.Inferior;
+        CaraSeccion cara = capa == Posicion.Superior ? s.Superior : s.Inferior;
+        if (solucion is null || cara.Error != ErrorCara.Ninguno)
+            return [];
+        bool comparten = solucion.Barras.OrderBy(b => b.Desde).Where((_, i) => i % 2 == 1)
+            .Any(b => Math.Min(b.Hasta, hasta) > Math.Max(b.Desde, desde));
+        return comparten ? AlLado(cara.Filas.SelectMany(f => f).ToList(), e, r) : [];
     }
 
     /// <summary>

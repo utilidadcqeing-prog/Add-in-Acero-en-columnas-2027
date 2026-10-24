@@ -109,6 +109,33 @@ public class PlanificadorAceroTests
         Assert.True(metidos.Count == 0, caso + ": " + string.Join("; ", metidos));
     }
 
+    /// <summary>
+    /// Dos barras que se meten una en otra nunca quedan calladas: el tablero las marca como choque. Pasa solo cuando no
+    /// hay sitio (24-oct: en 25 con 5 #5 + 2 #4 las dos del medio de S2 se meten 2.7 mm al traslapar, porque abajo están
+    /// las #4 y a los lados las otras que traslapan; ninguno de sus tres puestos queda libre).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Secciones))]
+    public void SiDosBarrasSeMeten_ElTableroLoMarcaComoChoque(string caso, OpcionesTablero o, bool angosto)
+    {
+        PorticoLeido p = angosto ? Angosto() : Portico();
+        PlanAcero plan = Planificar(o, p);
+        List<(string, string)> choques = DetectorChoques.Detectar(PreviaAcero.Trazos(plan, p.Ubicacion!, Reglas.Generales))
+            .Where(c => c.Tipo == TipoChoque.EntreBarras).Select(c => (c.A.Pieza, c.B.Pieza)).ToList();
+
+        var metidas = (from i in Enumerable.Range(0, plan.Barras.Count)
+                       from j in Enumerable.Range(i + 1, plan.Barras.Count - i - 1)
+                       let b = plan.Barras[i]
+                       let c = plan.Barras[j]
+                       where b.Capa == c.Capa && Math.Min(b.Hasta, c.Hasta) > Math.Max(b.Desde, c.Desde)
+                       let libre = Math.Sqrt(Math.Pow(b.XCorte - c.XCorte, 2) + Math.Pow(b.YCorte - c.YCorte, 2))
+                           - (Reglas.Generales.PorDiametro[b.Diametro].Diametro + Reglas.Generales.PorDiametro[c.Diametro].Diametro) / 2
+                       where libre < -0.5 && !choques.Contains((b.Pieza, c.Pieza)) && !choques.Contains((c.Pieza, b.Pieza))
+                       select $"{b.Pieza} ({b.XCorte:F1}, {b.YCorte:F1}) en {c.Pieza} ({c.XCorte:F1}, {c.YCorte:F1}): {libre:F1} mm").ToList();
+
+        Assert.True(metidas.Count == 0, caso + ": sin choque en el tablero " + string.Join("; ", metidas));
+    }
+
     [Fact]
     public void SinPuestoLibre_ElBastonSeCreaIgualYQuedaMarcadoComoMontado()
     {
