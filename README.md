@@ -7,12 +7,13 @@ por add-in.
 |---|---|
 | `addins/armado-columnas/` | Armado de columnas: estribos, columnetas y viguetas de confinamiento. |
 | `addins/imagenes/` | Imágenes por actividad del presupuesto. |
+| `addins/acero-vigas/` | Acero en vigas: barras con traslapos a múltiplos de corte, bastones y estribos, por pórtico. |
 | `addins/gestor-revit/` | **No es un add-in:** el botón «Gestor de add-ins» (panel «Gestor») que el gestor instala solo dentro de Revit. Viaja en el paquete del gestor y no se publica con etiqueta propia. |
 | `addins/compartido/` | Código común: la pestaña CQEING del ribbon (se compila dentro de cada add-in). |
 | `gestor/` | App de escritorio que instala, actualiza y revierte los add-ins (en construcción). |
 | `tools/` | Despliegue local, vista previa de la interfaz del armado y utilidades. |
 
-Los dos add-ins se compilan para **Revit 2026** (.NET 8) y **Revit 2027** (.NET 10). Ambos aparecen
+Los tres add-ins se compilan para **Revit 2026** (.NET 8) y **Revit 2027** (.NET 10). Todos aparecen
 en la pestaña **CQEING** del ribbon.
 
 ## Instalar
