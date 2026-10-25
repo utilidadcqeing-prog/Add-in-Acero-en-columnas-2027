@@ -35,10 +35,11 @@ public sealed class ActualizadorVelopack : IActualizadorGestor
         return _nueva?.TargetFullRelease.Version.ToString();
     }
 
-    public async Task AplicarAsync(IProgress<int> progreso)
+    public async Task AplicarAsync(IProgress<int> progreso, Func<Task> antesDeReiniciar)
     {
         if (_velopack is null || _nueva is null) return;
         await _velopack.DownloadUpdatesAsync(_nueva, progreso.Report);
+        await antesDeReiniciar();
         _velopack.ApplyUpdatesAndRestart(_nueva.TargetFullRelease);
     }
 }

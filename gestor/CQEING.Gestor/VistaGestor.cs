@@ -21,6 +21,7 @@ public sealed class VistaGestor : Observable
 {
     private readonly GestorAddins _gestor;
     private readonly IActualizadorGestor _actualizador;
+    private readonly ReinicioRevit _reinicio;
     private readonly Func<DateTime> _ahora;
     private ResumenGestor? _resumen;
     private OpcionAnio? _anioElegido;
@@ -33,10 +34,12 @@ public sealed class VistaGestor : Observable
     private bool _avisoGestorCerrado;
     private string? _progresoGestor;
 
-    public VistaGestor(GestorAddins gestor, IActualizadorGestor actualizador, Func<DateTime>? ahora = null)
+    /// <param name="reinicio">Cierra y reabre Revit después de instalar, para que cargue la versión nueva.</param>
+    public VistaGestor(GestorAddins gestor, IActualizadorGestor actualizador, ReinicioRevit reinicio, Func<DateTime>? ahora = null)
     {
         _gestor = gestor;
         _actualizador = actualizador;
+        _reinicio = reinicio;
         _ahora = ahora ?? (() => DateTime.Now);
         BuscarNovedades = new ComandoAsync(BuscarNovedadesAsync, () => !Ocupado);
         ActualizarTodas = new ComandoAsync(ActualizarTodasAsync, () => !Ocupado && PuedeActualizarTodas);
@@ -157,7 +160,14 @@ public sealed class VistaGestor : Observable
         });
     }
 
+    /// <summary>Instala (o actualiza, o vuelve a) esa versión y, si ese Revit está abierto, lo reinicia para que la cargue.</summary>
     private Task InstalarAsync(TarjetaAddin tarjeta, VersionPublicada version) => OcuparAsync(async () =>
+    {
+        if (await InstalarSinReiniciarAsync(tarjeta, version))
+            await ReiniciarRevitAsync(tarjeta.Anio);
+    });
+
+    private async Task<bool> InstalarSinReiniciarAsync(TarjetaAddin tarjeta, VersionPublicada version)
     {
         string anio = tarjeta.Anio;
         tarjeta.EmpezarDescarga();
@@ -168,6 +178,7 @@ public sealed class VistaGestor : Observable
             await Task.Run(() => _gestor.InstalarAsync(version, anio, CancellationToken.None, progreso));
             ReleerDisco();
             tarjeta.Terminar($"Listo. Reinicie Revit {anio} para usar la versión {version.Version}.", esError: false);
+            return true;
         }
         catch (GestorException e)
         {
@@ -177,32 +188,75 @@ public sealed class VistaGestor : Observable
         {
             tarjeta.Terminar($"No se pudo escribir en el disco: {e.Message}", esError: true);
         }
-    });
+        return false;
+    }
 
+    /// <summary>Instala todas y reinicia Revit una sola vez, al final.</summary>
     private Task ActualizarTodasAsync() => OcuparAsync(async () =>
     {
+        bool alguna = false;
         foreach (TarjetaAddin tarjeta in Tarjetas.Where(t => t.Estado is { Accion: AccionTarjeta.Actualizar, PuedeActuar: true }).ToList())
-            await InstalarAsync(tarjeta, _resumen!.Addins.Single(a => a.Addin.Id == tarjeta.Id).Addin.Ultima);
+            alguna |= await InstalarSinReiniciarAsync(tarjeta, _resumen!.Addins.Single(a => a.Addin.Id == tarjeta.Id).Addin.Ultima);
+        if (alguna && AnioElegido is not null)
+            await ReiniciarRevitAsync(AnioElegido.Anio);
     });
+
+    /// <summary>
+    /// Si ese Revit está abierto, lo cierra como con la X (Revit pregunta si guardar) y lo vuelve a abrir con su modelo.
+    /// Si el usuario cancela, queda abierto. Plan: docs/planes/2026-10-25-gestor-reinicia-revit.md.
+    /// </summary>
+    private async Task ReiniciarRevitAsync(string anio)
+    {
+        if (!_reinicio.HayAbierto(anio)) return; // cerrado: la versión nueva se carga cuando el usuario lo abra
+
+        MostrarAviso($"Cerrando Revit {anio} para cargar la versión nueva. Si Revit pregunta, elija si guarda los cambios.", esError: false);
+        ResultadoCierre cierre = await _reinicio.CerrarAsync([anio]);
+        if (cierre.SiguenAbiertos.Count > 0)
+        {
+            MostrarAviso($"Revit {anio} sigue abierto. Reinícielo cuando pueda para usar la versión nueva.", esError: false);
+            return;
+        }
+        MostrarAviso(
+            _reinicio.Reabrir(cierre.Cerrados)
+                ? $"Revit {anio} se está abriendo con la versión nueva. Si Revit pregunta por el add-in, elija «Always Load» (cargar siempre)."
+                : $"Revit {anio} se cerró, pero no se pudo volver a abrir. Ábralo usted.",
+            esError: false);
+    }
 
     private Task ActualizarGestorAsync() => OcuparAsync(async () =>
     {
         try
         {
-            await _actualizador.AplicarAsync(new Progress<int>(p =>
-            {
-                _progresoGestor = $"Descargando el gestor nuevo… {p} %";
-                Avisar(nameof(TextoAvisoGestor));
-            }));
+            await _actualizador.AplicarAsync(
+                new Progress<int>(p =>
+                {
+                    _progresoGestor = $"Descargando el gestor nuevo… {p} %";
+                    Avisar(nameof(TextoAvisoGestor));
+                }),
+                CerrarRevitParaActualizarGestorAsync);
         }
         catch (Exception e)
         {
-            // Lo que falle en Velopack (red, disco) se muestra; los add-ins siguen funcionando con este gestor.
+            // Lo que falle en Velopack (red, disco) se muestra; los add-ins siguen funcionando con este gestor. Los Revit
+            // que se cerraron para actualizar se vuelven a abrir ahora.
+            _reinicio.Reabrir(_reinicio.TomarPendientes());
             _progresoGestor = null;
             Avisar(nameof(TextoAvisoGestor));
             MostrarAviso($"No se pudo actualizar el gestor: {e.Message}", esError: true);
         }
     });
+
+    /// <summary>
+    /// El gestor nuevo trae otro componente para Revit: se cierran los Revit abiertos y se anotan para que el gestor nuevo
+    /// los reabra al arrancar (Program.Main), después de registrar su componente.
+    /// </summary>
+    private async Task CerrarRevitParaActualizarGestorAsync()
+    {
+        _progresoGestor = "Cerrando Revit para actualizar. Si Revit pregunta, elija si guarda los cambios.";
+        Avisar(nameof(TextoAvisoGestor));
+        ResultadoCierre cierre = await _reinicio.CerrarAsync(null);
+        _reinicio.GuardarPendientes(cierre.Cerrados);
+    }
 
     /// <summary>Cuenta las operaciones en curso (Actualizar todas encadena varias) y refresca los botones.</summary>
     private async Task OcuparAsync(Func<Task> accion)

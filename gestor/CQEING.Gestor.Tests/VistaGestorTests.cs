@@ -1,3 +1,4 @@
+using CQEING.Gestor.Core;
 using CQEING.Gestor.Tests.Apoyo;
 
 namespace CQEING.Gestor.Tests;
@@ -196,6 +197,104 @@ public class VistaGestorTests : IDisposable
     }
 
     [Fact]
+    public async Task Con_Revit_abierto_instalar_lo_reinicia_con_su_modelo()
+    {
+        _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.0.0");
+        await Buscar();
+        _e.Procesos.Agregar(40, "2026");
+        string modelo = Path.Combine(Path.GetDirectoryName(_e.Rutas.CarpetaCache)!, "Edificio.rvt");
+        Directory.CreateDirectory(Path.GetDirectoryName(modelo)!);
+        File.WriteAllText(modelo, "");
+        SesionRevit.Anotar(_e.Rutas, 40, modelo);
+
+        await _e.Tarjeta("armado-columnas").Principal.EjecutarAsync();
+
+        Assert.Equal(new[] { 40 }, _e.Procesos.CierresPedidos);
+        Assert.Equal((@"C:\Program Files\Autodesk\Revit 2026\Revit.exe", (string?)modelo), Assert.Single(_e.Procesos.Abiertas));
+        Assert.StartsWith("Revit 2026 se está abriendo con la versión nueva.", Vista.Aviso);
+    }
+
+    [Fact]
+    public async Task Con_Revit_cerrado_no_se_abre_nada()
+    {
+        _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.0.0");
+        await Buscar();
+
+        await _e.Tarjeta("armado-columnas").Principal.EjecutarAsync();
+
+        Assert.Empty(_e.Procesos.CierresPedidos);
+        Assert.Empty(_e.Procesos.Abiertas);
+        Assert.False(Vista.HayAviso);
+    }
+
+    [Fact]
+    public async Task Si_el_usuario_cancela_el_cierre_Revit_sigue_abierto_y_se_dice()
+    {
+        _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.0.0");
+        await Buscar();
+        _e.Procesos.Agregar(40, "2026");
+        _e.Procesos.Cancelan.Add(40);
+
+        await _e.Tarjeta("armado-columnas").Principal.EjecutarAsync();
+
+        Assert.Empty(_e.Procesos.Abiertas);
+        Assert.Equal("Revit 2026 sigue abierto. Reinícielo cuando pueda para usar la versión nueva.", Vista.Aviso);
+        Assert.Equal("Instalada 1.0.0", _e.Tarjeta("armado-columnas").Estado.TextoInstalada); // la instalación quedó hecha
+    }
+
+    [Fact]
+    public async Task Actualizar_todas_reinicia_Revit_una_sola_vez()
+    {
+        _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.0.0");
+        _e.GitHub.Publicar("imagenes", "Imágenes por actividad", "1.0.0");
+        await Buscar();
+        await Usar(_e.Tarjeta("armado-columnas"), "1.0.0");
+        await Usar(_e.Tarjeta("imagenes"), "1.0.0");
+        _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.1.0");
+        _e.GitHub.Publicar("imagenes", "Imágenes por actividad", "1.1.0");
+        await Buscar();
+        _e.Procesos.Agregar(40, "2026");
+
+        await Vista.ActualizarTodas.EjecutarAsync();
+
+        Assert.Equal(new[] { 40 }, _e.Procesos.CierresPedidos);
+        Assert.Single(_e.Procesos.Abiertas);
+    }
+
+    [Fact]
+    public async Task Actualizar_el_gestor_cierra_Revit_y_lo_deja_anotado_para_el_gestor_nuevo()
+    {
+        _e.GitHub.PublicarGestor("0.2.0");
+        _e.Actualizador.Nueva = "0.2.0";
+        await Buscar();
+        _e.Procesos.Agregar(40, "2026");
+        _e.Procesos.Agregar(50, "2027");
+
+        await Vista.ActualizarGestor.EjecutarAsync();
+
+        Assert.True(_e.Actualizador.Aplicado);
+        Assert.Equal(new[] { 40, 50 }, _e.Procesos.CierresPedidos);
+        Assert.Empty(_e.Procesos.Abiertas); // los abre el gestor nuevo al arrancar
+        Assert.Equal(2, _e.Reinicio.TomarPendientes().Count);
+    }
+
+    [Fact]
+    public async Task Si_falla_actualizar_el_gestor_reabre_Revit_en_el_acto()
+    {
+        _e.GitHub.PublicarGestor("0.2.0");
+        _e.Actualizador.Nueva = "0.2.0";
+        _e.Actualizador.FallaAlAplicar = true;
+        await Buscar();
+        _e.Procesos.Agregar(50, "2027");
+
+        await Vista.ActualizarGestor.EjecutarAsync();
+
+        Assert.Single(_e.Procesos.Abiertas);
+        Assert.Empty(_e.Reinicio.TomarPendientes());
+        Assert.True(Vista.AvisoEsError);
+    }
+
+    [Fact]
     public async Task Sin_addins_publicados_lo_dice()
     {
         await Buscar();
@@ -244,7 +343,7 @@ public class VistaGestorVariosAniosTests : IDisposable
         await ((ComandoAsync)_e.Tarjeta("armado-columnas").Versiones.Single().Usar).EjecutarAsync();
         _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.1.0", anios: ["2026", "2027"]);
 
-        var otraVentana = new VistaGestor(_e.Gestor, _e.Actualizador);
+        var otraVentana = new VistaGestor(_e.Gestor, _e.Actualizador, _e.Reinicio);
         await otraVentana.BuscarNovedades.EjecutarAsync();
 
         Assert.Equal("2026", otraVentana.AnioElegido!.Anio);

@@ -27,10 +27,22 @@ public static class Program
         }
 
         // En segundo plano y sin esperar: si falla no afecta al gestor (queda anotado y se reintenta al abrirlo otra vez).
-        _ = Task.Run(() => ComplementoEnRevit.Registrar(rutas));
+        // Después de autoactualizarse, reabre los Revit que cerró para eso, ya con el componente nuevo registrado.
+        ReinicioRevit reinicio = ReinicioRevit.Crear();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                ComplementoEnRevit.Registrar(rutas);
+            }
+            finally
+            {
+                reinicio.Reabrir(reinicio.TomarPendientes());
+            }
+        });
 
         Application aplicacion = CrearAplicacion();
-        aplicacion.Run(new VentanaPrincipal(new VistaGestor(GestorAddins.Crear(), new ActualizadorVelopack())));
+        aplicacion.Run(new VentanaPrincipal(new VistaGestor(GestorAddins.Crear(), new ActualizadorVelopack(), reinicio)));
     }
 
     /// <summary>La aplicación WPF con el tema del gestor. Un error no previsto se muestra en vez de cerrar la ventana en silencio.</summary>

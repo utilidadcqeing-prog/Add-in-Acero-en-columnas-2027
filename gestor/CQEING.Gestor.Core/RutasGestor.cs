@@ -50,6 +50,17 @@ public sealed class RutasGestor(string localAppData, string appData)
 
     public string ArchivoComplemento(string anio) => Path.Combine(CarpetaAddinsRevit(anio), NombreArchivoComplemento);
 
+    /// <summary>
+    /// Qué modelo tiene activo cada Revit abierto: un archivo por proceso, lo escribe el componente del gestor dentro de
+    /// Revit. El gestor lo lee para volver a abrir ese modelo después de reiniciar Revit (ReinicioRevit).
+    /// </summary>
+    public string CarpetaSesionesRevit => Path.Combine(localAppData, "CQEING", "Gestor", "sesiones-revit");
+
+    public string ArchivoSesionRevit(int idProceso) => Path.Combine(CarpetaSesionesRevit, $"{idProceso}.txt");
+
+    /// <summary>Revit que se cerraron para actualizar el gestor: el gestor nuevo los vuelve a abrir al arrancar.</summary>
+    public string ArchivoReabrirRevit => Path.Combine(localAppData, "CQEING", "Gestor", "reabrir-revit.json");
+
     public string CarpetaAddinsRevitRaiz => Path.Combine(appData, "Autodesk", "Revit", "Addins");
 
     public string CarpetaAddinsRevit(string anio) => Path.Combine(CarpetaAddinsRevitRaiz, ValidarAnio(anio));

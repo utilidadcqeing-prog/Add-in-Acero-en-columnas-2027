@@ -24,11 +24,14 @@ internal sealed class Entorno : IDisposable
             new Instalador(http, Rutas),
             Rutas,
             programFiles);
-        Vista = new VistaGestor(Gestor, Actualizador, () => new DateTime(2026, 10, 17, 9, 5, 0));
+        Reinicio = new ReinicioRevit(Procesos, Rutas, TimeSpan.FromSeconds(1));
+        Vista = new VistaGestor(Gestor, Actualizador, Reinicio, () => new DateTime(2026, 10, 17, 9, 5, 0));
     }
 
     public GitHubFalso GitHub { get; } = new();
     public ActualizadorFalso Actualizador { get; } = new();
+    public ProcesosFalsos Procesos { get; } = new();
+    public ReinicioRevit Reinicio { get; }
     public RutasGestor Rutas { get; }
     public GestorAddins Gestor { get; }
     public VistaGestor Vista { get; }
@@ -59,9 +62,13 @@ internal sealed class ActualizadorFalso : IActualizadorGestor
         return Task.FromResult(Nueva);
     }
 
-    public Task AplicarAsync(IProgress<int> progreso)
+    /// <summary>Simula un fallo de Velopack después de cerrar Revit (por ejemplo, el disco lleno).</summary>
+    public bool FallaAlAplicar { get; set; }
+
+    public async Task AplicarAsync(IProgress<int> progreso, Func<Task> antesDeReiniciar)
     {
+        await antesDeReiniciar();
+        if (FallaAlAplicar) throw new IOException("disco lleno");
         Aplicado = true;
-        return Task.CompletedTask;
     }
 }
