@@ -8,6 +8,10 @@ public interface IActualizadorGestor
     /// <summary>Devuelve la versión nueva del gestor, o null si no hay (o no se pudo saber: sin red, sin instalar).</summary>
     Task<string?> BuscarAsync(EtiquetaRelease? ultimoPublicado);
 
-    /// <summary>Descarga la versión encontrada por <see cref="BuscarAsync"/>, la aplica y reinicia el gestor.</summary>
-    Task AplicarAsync(IProgress<int> progreso);
+    /// <summary>
+    /// Descarga la versión encontrada por <see cref="BuscarAsync"/>, la aplica y reinicia el gestor. Entre descargar y
+    /// aplicar llama a <paramref name="antesDeReiniciar"/> (ahí se cierran los Revit abiertos, que siguen abiertos
+    /// mientras se descarga).
+    /// </summary>
+    Task AplicarAsync(IProgress<int> progreso, Func<Task> antesDeReiniciar);
 }

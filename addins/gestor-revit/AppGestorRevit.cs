@@ -6,10 +6,13 @@ namespace CQEING.GestorRevit;
 /// <summary>
 /// Registra el panel «Gestor» en la pestaña CQEING. Es un panel propio, aparte de los de los add-ins, para que el
 /// botón del gestor nunca se confunda con una herramienta de trabajo. Al abrir Revit consulta, en segundo plano, si hay
-/// versiones nuevas de los add-ins instalados y avisa (<see cref="AvisoNovedades"/>). Issue #159.
+/// versiones nuevas de los add-ins instalados y avisa (<see cref="AvisoNovedades"/>). Además anota qué modelo está
+/// activo, para que el gestor lo reabra si reinicia Revit (<see cref="ModeloActivo"/>). Issue #159.
 /// </summary>
 public class AppGestorRevit : IExternalApplication
 {
+    private readonly ModeloActivo _modeloActivo = new();
+
     public Result OnStartup(UIControlledApplication app)
     {
         RibbonPanel panel = CintaCqeing.ObtenerPanel(app, "Gestor");
@@ -22,8 +25,13 @@ public class AppGestorRevit : IExternalApplication
             "iconoGestor"));
 
         AvisoNovedades.Empezar(app.ControlledApplication.VersionNumber, boton);
+        _modeloActivo.Empezar(app);
         return Result.Succeeded;
     }
 
-    public Result OnShutdown(UIControlledApplication app) => Result.Succeeded;
+    public Result OnShutdown(UIControlledApplication app)
+    {
+        _modeloActivo.Terminar(app);
+        return Result.Succeeded;
+    }
 }

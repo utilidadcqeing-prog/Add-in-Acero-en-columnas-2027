@@ -8,6 +8,9 @@ el botón que abre el gestor y el aviso de versiones nuevas. Plan: `docs/planes/
   Si hay, el botón pasa a «Gestor de add-ins (N)» y aparece una ventanita en la esquina que no bloquea y se cierra sola
   a los 20 segundos. Si falla (sin red, GitHub limitado), no avisa y lo anota en
   `%LOCALAPPDATA%\CQEING\Gestor\aviso-revit.log`.
+- **El modelo activo:** anota en `%LOCALAPPDATA%\CQEING\Gestor\sesiones-revit\<proceso>.txt` qué modelo está activo,
+  para que el gestor lo vuelva a abrir cuando reinicia Revit después de actualizar
+  (plan `docs/planes/2026-10-25-gestor-reinicia-revit.md`).
 - Usa `CQEING.Gestor.Core.dll`, que viaja en la misma carpeta (lo comprueba `publicar-gestor.yml`).
 
 - **Nunca se publica con etiqueta propia** (`gestor-revit-vX.Y.Z`): no es un add-in del catálogo y no debe aparecer
