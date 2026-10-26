@@ -36,6 +36,14 @@
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
     cambios: { barras: {}, traslapos: {}, movidos: {}, ganchos: {} }, bastPuntas: {},
   };
+  // Con lo que arranca un pórtico que el usuario no tocó, como OpcionesTablero.Para en C# (#942): una vigueta de 10 cm
+  // no admite las barras ni el recubrimiento de una viga.
+  const VIGUETA0 = { sup: [{ n: 1, d: '#4' }], inf: [{ n: 1, d: '#4' }], rec: '3' };
+  const arranqueDe = (vigueta) => (vigueta ? VIGUETA0 : { sup: OPCIONES0.sup, inf: OPCIONES0.inf, rec: OPCIONES0.rec });
+  const sinTocar = (s, vigueta) => {
+    const a = arranqueDe(vigueta);
+    return JSON.stringify([s.sup, s.inf, s.rec]) === JSON.stringify([a.sup, a.inf, a.rec]);
+  };
   // El estado de la página con que se generó el pórtico (VistaPortico.Estado, guardado en sus vigas): solo las claves de
   // OPCIONES0. null si no hay o no se entiende.
   const estadoGuardado = (actual) => {
@@ -357,12 +365,15 @@
       // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas. Sin
       // ninguna en memoria, las que se guardaron en sus vigas al generarlo (plan de 22-oct, recordar el pórtico).
       if (antes !== ahora) {
-        const guardadas = ahora ? this.opcionesPorPortico[ahora] || estadoGuardado(this.props.vista.actual) : null;
+        const actual = this.props.vista && this.props.vista.actual;
+        const guardadas = ahora ? this.opcionesPorPortico[ahora] || estadoGuardado(actual) : null;
+        // sin nada guardado, arranca como C#: con las de vigueta si se detectó vigueta (#942)
+        const arranque = actual && actual.detectadaVigueta ? VIGUETA0 : {};
         if (antes) {
           this.opcionesPorPortico[antes] = this.estadoDeLaPagina();
-          this.setState({ ...OPCIONES0, ...guardadas });
-        } else if (guardadas) {
-          this.setState(guardadas);
+          this.setState({ ...OPCIONES0, ...arranque, ...guardadas });
+        } else if (guardadas || ahora) {
+          this.setState({ ...arranque, ...guardadas });
         }
         // Si el pórtico se abrió desde Revit (En vivo o "Seleccionar en Revit"), la lista baja hasta él (Juan, 16-oct).
         const tarjeta = ahora && document.querySelector('[data-portico="' + CSS.escape(ahora) + '"]');
@@ -381,9 +392,14 @@
     }
 
     // Viga o vigueta (#940): elegir lo que detectó el add-in borra la corrección (undefined), como si nunca se hubiera tocado.
+    // Si las barras y el recubrimiento siguen como arrancaron, pasan a los del otro (#942): una viga corregida a vigueta
+    // no queda con 3 #5 que no caben.
     ponerVigueta(P, vigueta) {
+      const era = !!(P && P.esVigueta);
+      const cambio = { vigueta: P && vigueta === P.detectadaVigueta ? undefined : vigueta };
+      if (vigueta !== era && sinTocar(this.state, era)) Object.assign(cambio, arranqueDe(vigueta));
       this.setState({ sel: NADA });
-      this.cambiar({ vigueta: P && vigueta === P.detectadaVigueta ? undefined : vigueta });
+      this.cambiar(cambio);
     }
 
     // Cambia algo de OpcionesTablero y pide el cálculo; en los campos de texto, con 150 ms de espera.

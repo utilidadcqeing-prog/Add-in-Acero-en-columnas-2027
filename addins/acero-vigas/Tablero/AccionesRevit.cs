@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using CQEING.Vigas.Calculo.Tablero;
@@ -50,8 +51,29 @@ internal sealed class AccionesRevit : IExternalEventHandler, IDisposable
             }
             catch (Exception e)
             {
+                Registrar(e);
                 Fallo?.Invoke(e.Message);
             }
+        }
+    }
+
+    /// <summary><c>%AppData%\CQEING\vigas\errores.log</c>: el error completo, para saber dónde falló.</summary>
+    public static string RutaErrores { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CQEING", "vigas", "errores.log");
+
+    /// <summary>
+    /// El mensaje de la página no dice dónde pasó: "An internal error has occurred" al generar una vigueta (#941) no
+    /// tenía de dónde seguirse. Si no se puede escribir, se sigue igual.
+    /// </summary>
+    private static void Registrar(Exception e)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(RutaErrores)!);
+            File.AppendAllText(RutaErrores, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}{e}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

@@ -193,7 +193,9 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         return new APrevia3d(p, reglas.Reglas);
     }
 
-    private OpcionesTablero Opciones(string id) => opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto;
+    // sin nada elegido, las de arranque de lo que se detectó: viga o vigueta (#942)
+    private OpcionesTablero Opciones(string id) =>
+        opciones.GetValueOrDefault(id) ?? OpcionesTablero.Para(Buscar(id)?.Elemento ?? Elemento.Viga);
 
     private IReadOnlyList<int> Disponibles() =>
         nominalesDelModelo is null ? reglas.Reglas.PorDiametro.Keys.Order().ToList() : DiametrosDisponibles.De(nominalesDelModelo(), reglas.Reglas);

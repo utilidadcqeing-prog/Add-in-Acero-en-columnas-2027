@@ -107,7 +107,17 @@ para otra issue.
    Si no, es Viga. Siempre se puede corregir en el tablero, como pidió Carlos (12:53).
 3. **Las mismas opciones, con otro arranque** (2026-10-26, Claude): no hay pantalla aparte. Una vigueta abre el
    tablero con **1#4 arriba y 1#4 abajo** y todo lo demás igual a `OpcionesTablero.PorDefecto`.
-   *Por confirmar con Carlos*: el diámetro y el recubrimiento habituales.
+   ~~*Por confirmar con Carlos*: el diámetro y el recubrimiento habituales.~~ **Recubrimiento 3 cm** (2026-10-26, Juan),
+   como en el plano de referencia `005-001_PLN_ESTR…`, hoja de la **Vigueta T1 (0.10 × 0.35), N+3.70**:
+   - arriba y abajo 1 #4, con ganchos de 0.22 y traslapo de 0.78;
+   - estribos #3, 7 @ 0.15 junto a los apoyos y 4–5 @ 0.30 al centro;
+   - el corte da 0.03 de la cara a la barra, arriba y abajo.
+8. **En la vigueta, el estribo es una grapa en S** (2026-10-26, Juan, por el corte de la Vigueta T1): no hay cerrado.
+   La grapa sube por el centro de la sección, abraza la barra de arriba y la de abajo con un gancho cada una, uno hacia
+   cada lado (patas de 0.13), y mide 0.29 de alto en 0.35 (0.03 de recubrimiento arriba y abajo). Se reutiliza la
+   grapa abierta en S que ya existe para los adicionales (plan 2026-10-22-estribo-180-y-grapa-s-vigas.md). Siguen las
+   mismas opciones: diámetro, gancho, zonas y separaciones. La transcripción del 24-oct no lo dice (Carlos solo dijo
+   "el estribo exactamente casi lo mismo"); sale del plano.
 4. **Una barra por cara solo en viguetas** (2026-10-26, Claude): en una vigueta, `MenosDeDosBarras` no aplica. En
    una viga sigue igual. El estribo es el mismo cerrado de las vigas. La barra queda al centro y el estribo la
    envuelve. *Por verificar en Revit* que `RebarShape` cerrado con una sola barra por cara se ve bien.
@@ -241,7 +251,38 @@ En Revit, con `PROY_JULIO_BETO`:
     - Corrección: la fila vacía sube como la fila 1, porque la barra que la ocupa es de la corrida.
     - Prueba: `EnUnaVigueta_SiLaFila2LaOcupaUnTraslapo_ElBastonVaEncimaEnLaFila3`. Falló antes del arreglo.
     - Resultado: en la vigueta, el bastón queda en la fila 2, o en la 3 donde la corrida traslapa. Sigue por dentro.
-  - La suite completa pasa (1014 pruebas).
+  - La suite completa pasa (1014 pruebas). Commit `72293a1`.
+  - En Revit (Juan, captura del 26-oct): la Vigueta 6 con 1 #4 y recubrimiento 4 decía "caben 0 por fila". En 10 cm
+    quedan 100 − 80 − 19 ≈ 1 mm libres. Por eso el arranque de vigueta también lleva recubrimiento 2.5.
+- [x] **#942, paso 5** (2026-10-26):
+  - **Hallazgo H9:** el arranque está en dos lados que tienen que coincidir. C# (`SesionTablero.Opciones`) calcula
+    la primera vista y la página (`OPCIONES0` en `tablero.js`) llena el panel.
+  - `Tablero/OpcionesTablero.cs`: `DeVigueta` (1 #4 / 1 #4, recubrimiento 2.5) y `Para(Elemento)`.
+  - `Tablero/SesionTablero.cs`: un pórtico sin opciones usa `Para` con lo detectado.
+  - `Tablero/web/tablero.js`:
+    - `VIGUETA0` y `arranqueDe`. Al abrir un pórtico detectado como vigueta y sin nada guardado, arranca con
+      `VIGUETA0`, también el primero que se abre.
+    - Al cambiar el chip, si las barras y el recubrimiento siguen como arrancaron, pasan a los del otro tipo; lo
+      que el usuario ya cambió se queda.
+  - Pruebas: 2 nuevas en `SesionTableroTests`, que fallaron antes de implementar. La suite completa pasa (1016
+    pruebas) y `node --check` también. Después, el recubrimiento pasó de 2.5 a 3 (decisión 3).
+- **Hallazgo H10** (2026-10-26, al generar la Vigueta 6 en Revit): "No se pudo hacer en Revit: An internal error has
+  occurred."
+  - El mensaje no decía dónde fallaba. Por eso `AccionesRevit` ahora guarda cada error completo en
+    `%AppData%\CQEING\vigas\errores.log`.
+  - El registro mostró `InternalException` en `RebarShapeDrivenAccessor.ScaleToBox`, llamado desde
+    `CreadorEstribos.Cerrado`.
+  - Medido en Revit con subtransacción y deshacer: `ScaleToBox` revienta si la caja por fuera es menor que el doblado
+    del estribo más dos diámetros.
+    - #3 (doblado 38): falla con 55 mm o menos y sale con 60.
+    - 8 mm (doblado 32): falla con 45 y sale con 50.
+    - #4 (doblado 50.8): falla con 70 y sale con 80.
+  - La vigueta de 10 cm con recubrimiento 2.5 deja 50 mm. `GeneradorAcero` no atrapaba `InternalException` y se caía
+    toda la generación.
+  - Arreglo de protección:
+    - `CreadorEstribos.Cerrado` borra el estribo a medio crear y devuelve null.
+    - `GeneradorAcero` también atrapa `InternalException`. Ese grupo se anota en el resumen y lo demás se genera.
+  - El arreglo de fondo es la decisión 8: la vigueta no lleva cerrado.
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

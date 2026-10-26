@@ -185,6 +185,34 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Equal("0.55", v.GetProperty("reglas").GetProperty("porDiametro")[0].GetProperty("t").GetString());
     }
 
+    /// <summary>
+    /// #942: una vigueta de 10 cm con las de fábrica de una viga (3 #5, recubrimiento 4) abría con "no caben"; arranca
+    /// con 1 #4 arriba y abajo y recubrimiento 3, como la Vigueta T1 del plano de referencia.
+    /// </summary>
+    [Fact]
+    public void UnaViguetaArrancaConUnaBarraYRecubrimiento3()
+    {
+        PorticoLeido p = ArmadorVistaTests.Portico1();
+        lectura = new ResultadoLectura([p with { Elemento = Elemento.Vigueta, Tramos = p.Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList() }], []);
+
+        JsonElement actual = VistaDe(Sesion().Manejar(new Listo())).GetProperty("actual");
+
+        Assert.Equal("Ninguno", actual.GetProperty("superior").GetProperty("error").GetString());
+        Assert.Equal([1], actual.GetProperty("superior").GetProperty("porFila").EnumerateArray().Select(x => x.GetInt32()));
+        Assert.Equal([1], actual.GetProperty("inferior").GetProperty("porFila").EnumerateArray().Select(x => x.GetInt32()));
+        Assert.True(actual.GetProperty("sePuedeGenerar").GetBoolean());
+    }
+
+    [Fact]
+    public void LasOpcionesDeArranque_DeVigaSonLasDeSiempre()
+    {
+        Assert.Same(OpcionesTablero.PorDefecto, OpcionesTablero.Para(Elemento.Viga));
+        OpcionesTablero v = OpcionesTablero.Para(Elemento.Vigueta);
+        Assert.Equal([new GrupoBarras(1, 4)], v.Superior);
+        Assert.Equal([new GrupoBarras(1, 4)], v.Inferior);
+        Assert.Equal(3, v.RecubrimientoCm);
+    }
+
     [Fact]
     public void CalcularGuardaLasOpcionesDelPortico()
     {

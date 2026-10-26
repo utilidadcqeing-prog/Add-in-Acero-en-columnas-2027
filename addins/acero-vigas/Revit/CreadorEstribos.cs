@@ -75,7 +75,17 @@ internal static class CreadorEstribos
             Rebar? conForma = Rebar.CreateFromRebarShape(doc, forma, barra, host, origen, n, XYZ.BasisZ);
             if (conForma is not null)
             {
-                conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(g.Derecha - g.Izquierda), XYZ.BasisZ * CreadorBarras.Pies(g.Arriba - g.Abajo));
+                try
+                {
+                    conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(g.Derecha - g.Izquierda), XYZ.BasisZ * CreadorBarras.Pies(g.Arriba - g.Abajo));
+                }
+                catch (Autodesk.Revit.Exceptions.InternalException)
+                {
+                    // Medido el 26-oct: con la caja menor que el doblado más dos diámetros (#3 en 55 mm) Revit no da un error
+                    // claro. Ese estribo no se puede doblar: no se deja a medio crear.
+                    doc.Delete(conForma.Id);
+                    return null;
+                }
                 try
                 {
                     conForma.SetHookTypeId(0, gancho.Id);

@@ -160,7 +160,10 @@ internal static class GeneradorAcero
         {
             return CreadorEstribos.Crear(doc, p.Ubicacion, g, barra, tipos, forma, formasMalas);
         }
-        catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException)
+        // InternalException: ScaleToBox revienta si la caja es menor que el doblado más dos diámetros (#3 en una vigueta
+        // de 10 cm con recubrimiento 2.5, 26-oct). Se pierde ese grupo, no toda la generación.
+        catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException
+                                      or Autodesk.Revit.Exceptions.InternalException)
         {
             return null;
         }
@@ -174,7 +177,8 @@ internal static class GeneradorAcero
         {
             return CreadorBarras.Crear(doc, p.Ubicacion, conjunto, barra, tipos);
         }
-        catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException)
+        catch (Exception e) when (e is Autodesk.Revit.Exceptions.ArgumentException or Autodesk.Revit.Exceptions.InvalidOperationException
+                                      or Autodesk.Revit.Exceptions.InternalException)
         {
             return null;
         }

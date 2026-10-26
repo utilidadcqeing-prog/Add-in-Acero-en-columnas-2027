@@ -37,4 +37,17 @@ public sealed record OpcionesTablero(
     public static OpcionesTablero PorDefecto { get; } = new(
         null, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], 4, null, null, null, null, 3, null,
         new ArmadoBastones(), new ConfigEstribos(), [], null, null);
+
+    /// <summary>
+    /// Una vigueta de 10 cm (#942) arranca con 1 #4 arriba y abajo y recubrimiento 3, como la Vigueta T1 del plano de
+    /// referencia (decisión 3 del plan docs/planes/2026-10-26-acero-viguetas-938.md): con las de una viga no cabe ninguna
+    /// barra.
+    /// </summary>
+    public static OpcionesTablero DeVigueta { get; } = PorDefecto with
+    {
+        Superior = [new GrupoBarras(1, 4)], Inferior = [new GrupoBarras(1, 4)], RecubrimientoCm = 3,
+    };
+
+    /// <summary>Con las que arranca un pórtico que el usuario todavía no tocó.</summary>
+    public static OpcionesTablero Para(Elemento elemento) => elemento == Modelo.Elemento.Vigueta ? DeVigueta : PorDefecto;
 }
