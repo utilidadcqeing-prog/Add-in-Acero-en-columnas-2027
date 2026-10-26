@@ -826,6 +826,32 @@ Probar("polilinea_partir_por_altura", () =>
 
 // ---- Ángulo del gancho por punta en las grapas
 
+bool SePisan((double Left, double Top) a, (double Left, double Top) b, double ancho, double alto) =>
+    a.Left < b.Left + ancho && b.Left < a.Left + ancho && a.Top < b.Top + alto && b.Top < a.Top + alto;
+
+Probar("tiritas_de_una_grapa_de_fila_no_se_pisan", () =>
+{
+    // Revisión final: en una fila las dos iban a la misma altura y, con ~150 px
+    // cada una, la de la derecha tapaba botones de la izquierda.
+    foreach (double separacion in new[] { 218.0, 150.0, 60.0 })
+    {
+        var (inicio, fin) = TiritasAngulo.Ubicar(true, (80, 200), (80 + separacion, 200), 150, 22, 420, 420);
+        Cierto(!SePisan(inicio, fin, 150, 22), $"fila con barras a {separacion} px");
+    }
+});
+
+Probar("tiritas_de_una_grapa_de_columna_no_se_pisan", () =>
+{
+    var (inicio, fin) = TiritasAngulo.Ubicar(false, (150, 300), (150, 100), 150, 22, 420, 420);
+    Cierto(!SePisan(inicio, fin, 150, 22), "columna");
+});
+
+Probar("tiritas_quedan_dentro_del_lienzo", () =>
+{
+    var (inicio, fin) = TiritasAngulo.Ubicar(true, (10, 200), (400, 200), 150, 22, 420, 420);
+    Cierto(inicio.Left >= 2 && fin.Left + 150 <= 418, "dentro a lo ancho");
+});
+
 Probar("grapa_nueva_sale_con_180_en_las_dos_puntas", () =>
 {
     var pieza = new EstriboMenor();

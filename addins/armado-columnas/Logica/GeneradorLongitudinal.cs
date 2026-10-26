@@ -1095,10 +1095,13 @@ public static class GeneradorLongitudinal
                 // docs/planes/2026-10-26-diagnostico-ganchos-grapa.md).
                 RebarHookType ganchoInicio = juego.Gancho, ganchoFin = juego.Gancho;
                 bool conAngulos = pieza.AnguloInicio != AnguloGancho.Grados180 || pieza.AnguloFin != AnguloGancho.Grados180;
+                // Cuál, para encontrarla: si cae a 180° no se ve como en la vista previa.
+                string cual = $"la grapa de la {(pieza.Eje == EjeCaja.Fila ? "fila" : "columna")} {pieza.Desde + 1} " +
+                              $"({(int)pieza.AnguloInicio}° / {(int)pieza.AnguloFin}°)";
                 if (conAngulos && !juego.Estribo)
                 {
-                    Avisar($"{contexto.Marca}: las grapas con ganchos de 135° o 90° van dobladas como el estribo, y Revit no " +
-                           "aceptó ese doblez en esta barra; se generan con 180°.");
+                    Avisar($"{contexto.Marca}: {cual} va doblada como el estribo, y Revit no aceptó ese doblez en esta " +
+                           "barra; se generó con 180° en las dos puntas.");
                     conAngulos = false;
                 }
 
@@ -1131,7 +1134,7 @@ public static class GeneradorLongitudinal
                     else
                     {
                         if (formaAngulos.Aviso is not null) Avisar($"Estribos menores: {formaAngulos.Aviso}");
-                        Avisar($"{contexto.Marca}: no se pudieron preparar los ganchos de 135°/90° de las grapas; se generan con 180°.");
+                        Avisar($"{contexto.Marca}: no se pudieron preparar los ganchos de {cual}; se generó con 180° en las dos puntas.");
                         conAngulos = false;
                     }
                 }

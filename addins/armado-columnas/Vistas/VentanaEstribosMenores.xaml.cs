@@ -526,22 +526,19 @@ public partial class VentanaEstribosMenores : Window
         (GanchoGrapa.Pieza inicio, GanchoGrapa.Pieza fin) = BarrasDe(pieza.Eje, pieza.Desde);
         bool fila = pieza.Eje == EjeCaja.Fila;
 
-        foreach ((GanchoGrapa.Pieza barra, bool esInicio) in new[] { (inicio, true), (fin, false) })
+        FrameworkElement tiritaInicio = Tirita(pieza, esInicio: true, fila), tiritaFin = Tirita(pieza, esInicio: false, fila);
+        tiritaInicio.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        tiritaFin.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double ancho = Math.Max(tiritaInicio.DesiredSize.Width, tiritaFin.DesiredSize.Width);
+        double alto = Math.Max(tiritaInicio.DesiredSize.Height, tiritaFin.DesiredSize.Height);
+        Point pi = AP(inicio.X, inicio.Y), pf = AP(fin.X, fin.Y);
+
+        ((double Left, double Top) donde, (double Left, double Top) dondeFin) =
+            TiritasAngulo.Ubicar(fila, (pi.X, pi.Y), (pf.X, pf.Y), ancho, alto, Lienzo.Width, Lienzo.Height);
+        foreach ((FrameworkElement tirita, (double Left, double Top) lugar) in new[] { (tiritaInicio, donde), (tiritaFin, dondeFin) })
         {
-            FrameworkElement tirita = Tirita(pieza, esInicio, fila);
-            tirita.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            double ancho = tirita.DesiredSize.Width, alto = tirita.DesiredSize.Height;
-            Point p = AP(barra.X, barra.Y);
-
-            // Fila: debajo de la barra, hacia adentro. Columna: a la derecha,
-            // hacia adentro (arriba de la barra de abajo, debajo de la de arriba).
-            double left = fila ? (esInicio ? p.X - 6 : p.X - ancho + 6) : p.X + 14;
-            double top = fila ? p.Y + 16 : (esInicio ? p.Y - alto - 10 : p.Y + 10);
-            left = Math.Max(2, Math.Min(Lienzo.Width - ancho - 2, left));
-            top = Math.Max(2, Math.Min(Lienzo.Height - alto - 2, top));
-
-            Canvas.SetLeft(tirita, left);
-            Canvas.SetTop(tirita, top);
+            Canvas.SetLeft(tirita, lugar.Left);
+            Canvas.SetTop(tirita, lugar.Top);
             Lienzo.Children.Add(tirita);
         }
     }
