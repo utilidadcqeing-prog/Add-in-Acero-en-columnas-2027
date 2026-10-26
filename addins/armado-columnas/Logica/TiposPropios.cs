@@ -66,12 +66,38 @@ public sealed class TiposPropios
     public Pieza<RebarHookType> GanchoGrapaEstribo() =>
         Cacheado(NombreGanchoGrapaEstribo, () => Gancho(NombreGanchoGrapaEstribo, 180, MultiplicadorGrapa, RebarStyle.StirrupTie));
 
-    /// <summary>La grapa de un tramo con estilo StirrupTie (ver <see cref="GanchoGrapaEstribo"/>).</summary>
-    public Pieza<RebarShape> FormaGrapaEstribo(FormaMenor forma)
+    /// <summary>
+    /// El gancho de grapa de ese ángulo, doblado como el estribo (StirrupTie).
+    /// El 180° es el de siempre; el 135° y el 90° son propios, con el
+    /// multiplicador del estribo (6 d): la cola del cuadro la fija después
+    /// <see cref="AjustarExtension"/>.
+    /// </summary>
+    public Pieza<RebarHookType> GanchoGrapaEstribo(AnguloGancho angulo)
+    {
+        if (angulo == AnguloGancho.Grados180) return GanchoGrapaEstribo();
+        int grados = (int)angulo;
+        string nombre = $"CQ Grapa {grados}° estribo";
+        return Cacheado(nombre, () => Gancho(nombre, grados, MultiplicadorEstribo, RebarStyle.StirrupTie));
+    }
+
+    /// <summary>La grapa de un tramo con estilo StirrupTie (ver <see cref="GanchoGrapaEstribo()"/>).</summary>
+    public Pieza<RebarShape> FormaGrapaEstribo(FormaMenor forma) =>
+        FormaGrapaEstribo(forma, AnguloGancho.Grados180, AnguloGancho.Grados180);
+
+    /// <summary>
+    /// La grapa StirrupTie con el gancho de cada punta: con 180/180 es la
+    /// forma de siempre (mismo nombre); con otros ángulos, una forma aparte
+    /// por combinación ("CQ Grapa C 135-90"), porque Revit pide que los
+    /// ganchos de la barra coincidan con los de la forma (RevitAPI.xml 2027,
+    /// CreateFromCurvesAndShape).
+    /// </summary>
+    public Pieza<RebarShape> FormaGrapaEstribo(FormaMenor forma, AnguloGancho inicio, AnguloGancho fin)
     {
         bool s = forma == FormaMenor.GrapaS;
         string nombre = s ? NombreFormaGrapaEstriboS : NombreFormaGrapaEstriboC;
-        return Cacheado(nombre, () => Forma(nombre, RebarStyle.StirrupTie, 1, () => CrearFormaGrapa(nombre, s, RebarStyle.StirrupTie)));
+        if (inicio != AnguloGancho.Grados180 || fin != AnguloGancho.Grados180) nombre += $" {(int)inicio}-{(int)fin}";
+        return Cacheado(nombre, () => Forma(nombre, RebarStyle.StirrupTie, 1,
+            () => CrearFormaGrapa(nombre, s, RebarStyle.StirrupTie, (int)inicio, (int)fin)));
     }
 
     /// <summary>Rectángulo cerrado de cuatro lados antihorario, cotas por fuera del doblez, 135° en las dos puntas: estribo principal y cajas.</summary>
@@ -231,7 +257,7 @@ public sealed class TiposPropios
         return forma;
     }
 
-    private RebarShape CrearFormaGrapa(string nombre, bool s, RebarStyle estilo)
+    private RebarShape CrearFormaGrapa(string nombre, bool s, RebarStyle estilo, int gradosInicio = 180, int gradosFin = 180)
     {
         List<ElementId> p = _parametros!;
         var definicion = new RebarShapeDefinitionBySegments(_doc, 1);
@@ -241,8 +267,8 @@ public sealed class TiposPropios
 
         using var terminaciones = new RebarShapeTerminationsData(_doc)
         {
-            HookAngleAtStart = 180,
-            HookAngleAtEnd = 180,
+            HookAngleAtStart = gradosInicio,
+            HookAngleAtEnd = gradosFin,
             TerminationOrientationAtStart = RebarTerminationOrientation.Left,
             TerminationOrientationAtEnd = s ? RebarTerminationOrientation.Right : RebarTerminationOrientation.Left,
         };
