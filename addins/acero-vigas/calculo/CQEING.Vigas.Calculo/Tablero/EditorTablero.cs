@@ -91,7 +91,9 @@ public static class EditorTablero
             texto = pv.Motivo switch
             {
                 MotivoBloqueo.TraslapoBajoElMinimo => $"No puede ser menor que el mínimo ({F2(t.Minimo)} m).",
-                MotivoBloqueo.SinCambio => $"Escribe un largo mayor que el actual ({F2(t.Largo)} m).",
+                // el campo arranca con el largo actual: eso no es un error, solo se indica (Juan, 26-oct)
+                MotivoBloqueo.SinCambio when F2(largo) == F2(t.Largo) => "Ese es el largo actual. Solo puede crecer: escribe uno mayor para alargarlo.",
+                MotivoBloqueo.SinCambio => $"Solo puede crecer: escribe un largo mayor que el actual ({F2(t.Largo)} m).",
                 MotivoBloqueo.NoSaleDeLaVarilla =>
                     $"{t.BarraDerecha} pasaría a {F2(derecha.Largo + crece)} m y no sale de una varilla de {Varilla(e.Reglas, derecha.Largo)} m.",
                 _ => Texto(pv.Motivo),

@@ -14,10 +14,11 @@ public sealed record NivelLeido(string Nombre, double Elevacion);
 /// <summary>
 /// Una viga del modelo, sin tipos de Revit: su eje en planta, su alto real (de la geometría) y su ancho, en mm.
 /// <paramref name="Centro"/> es el centro en planta de su geometría (#85): la línea de ubicación de Revit depende de la
-/// justificación y puede ir por una cara. Null = se usa la línea.
+/// justificación y puede ir por una cara. Null = se usa la línea. <paramref name="NombreTipo"/> es el nombre del tipo
+/// de Revit (<c>VT_10X35</c>), para reconocer las viguetas (#939).
 /// </summary>
 public sealed record VigaLeida(string Id, Punto Desde, Punto Hasta, double ZAbajo, double ZArriba, double Ancho, NivelLeido? Nivel,
-    Punto? Centro = null)
+    Punto? Centro = null, string? NombreTipo = null)
 {
     public double Alto => ZArriba - ZAbajo;
 }
@@ -57,7 +58,8 @@ public sealed record UbicacionPortico(double Ux, double Uy, double OrigenX, doub
 /// Un pórtico listo para el motor: <see cref="Portico"/> es lo que recibe <c>MotorVigas.Calcular</c>; el resto es
 /// lo que muestra la lista de pórticos del tablero. <paramref name="FondosDeApoyo"/> es lo que mide cada apoyo de lado a
 /// lado de la viga, en mm (el ancho a lo largo ya está en <see cref="Portico"/>), para la sección de columnas (#100).
-/// <paramref name="Ubicacion"/> es para generar el acero en Revit (#85).
+/// <paramref name="Ubicacion"/> es para generar el acero en Revit (#85). <paramref name="Elemento"/> es si se detectó
+/// como viga o vigueta (#939).
 /// </summary>
 public sealed record PorticoLeido(
     string Nombre,
@@ -69,7 +71,8 @@ public sealed record PorticoLeido(
     IReadOnlyList<TramoLeido> Tramos,
     IReadOnlyList<string> Vigas,
     IReadOnlyList<double>? FondosDeApoyo = null,
-    UbicacionPortico? Ubicacion = null);
+    UbicacionPortico? Ubicacion = null,
+    Elemento Elemento = Elemento.Viga);
 
 public enum TipoAvisoLectura
 {

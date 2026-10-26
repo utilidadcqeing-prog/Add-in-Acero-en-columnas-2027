@@ -23,8 +23,9 @@ public class AgrupadorPorticosTests
     private static ApoyoLeido Columna(string id, double x, double y, double lado, double z0, double z1) =>
         new(id, TipoApoyo.Columna, [new(x - lado / 2, y - lado / 2), new(x + lado / 2, y - lado / 2), new(x + lado / 2, y + lado / 2), new(x - lado / 2, y + lado / 2)], z0, z1);
 
-    private static VigaLeida Viga(string id, double x0, double x1, double zArriba, NivelLeido? nivel, double y = 0, double ancho = 250, double alto = 350) =>
-        new(id, new(x0, y), new(x1, y), zArriba - alto, zArriba, ancho, nivel);
+    private static VigaLeida Viga(string id, double x0, double x1, double zArriba, NivelLeido? nivel, double y = 0, double ancho = 250, double alto = 350,
+        string? tipo = null) =>
+        new(id, new(x0, y), new(x1, y), zArriba - alto, zArriba, ancho, nivel, NombreTipo: tipo);
 
     /// <summary>Eje 1 del piso 2: vigas A-5 y 5-6, columnas de 30 × 30 debajo (0–3500) y encima (3500–7000).</summary>
     private static ModeloLeido EjeUnoPiso2() => new(Ejes,
@@ -250,6 +251,100 @@ public class AgrupadorPorticosTests
 
         Assert.DoesNotContain(r.Porticos, p => p.Eje == "1");
         Assert.Contains(r.Avisos, a => a.Tipo == TipoAvisoLectura.SinApoyos && a.Elemento.Contains("secundaria"));
+    }
+
+    /// <summary>
+    /// Viguetas (#938/#939). Carlos (24-oct, min 08:11): se arman igual que las vigas, pero se apoyan en vigas que
+    /// llegan a columnas. El add-in las reconoce solo por el tipo (VT/VB, como en PROY_JULIO_BETO) o porque miden menos
+    /// de 20 cm (min 02:30: el ancho mínimo de una viga).
+    /// </summary>
+    private static ModeloLeido ConSecundaria(VigaLeida secundaria) => VigaEntreDosVigas() with
+    {
+        Vigas = [secundaria, .. VigaEntreDosVigas().Vigas.Skip(1)],
+    };
+
+    [Fact]
+    public void UnaVTEntreDosVigasPrincipales_EsVigueta()
+    {
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(ConSecundaria(Viga("secundaria", 0, 3500, 3500, Piso2, ancho: 100, tipo: "VT_10X35")));
+
+        Assert.Equal(Elemento.Vigueta, r.Porticos.Single(x => x.Eje == "1").Elemento);
+        Assert.All(r.Porticos.Where(x => x.Eje != "1"), p => Assert.Equal(Elemento.Viga, p.Elemento));
+    }
+
+    [Theory]
+    [InlineData("VT_10X35")]
+    [InlineData("VB_10X35")]
+    [InlineData("vt-15x35")]
+    [InlineData("Vigueta 20x35")]
+    [InlineData("VIGUETA DE BORDE")]
+    public void ElNombreDelTipoDiceVigueta_AunqueMidaMasDe20cm(string tipo)
+    {
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(ConSecundaria(Viga("secundaria", 0, 3500, 3500, Piso2, ancho: 250, tipo: tipo)));
+
+        Assert.Equal(Elemento.Vigueta, r.Porticos.Single(x => x.Eje == "1").Elemento);
+    }
+
+    [Fact]
+    public void SinNombreQueLoDiga_MenosDe20cmEsVigueta()
+    {
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(ConSecundaria(Viga("secundaria", 0, 3500, 3500, Piso2, ancho: 150, tipo: "Rectangular")));
+
+        Assert.Equal(Elemento.Vigueta, r.Porticos.Single(x => x.Eje == "1").Elemento);
+    }
+
+    [Fact]
+    public void SinNombreQueLoDiga_De20cmOMasEsViga()
+    {
+        // Como la VIG_20X35 389664 de PROY_JULIO_BETO: no llega a columnas, pero es una viga.
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(ConSecundaria(Viga("secundaria", 0, 3500, 3500, Piso2, ancho: 200, tipo: "VIG_20X35")));
+
+        Assert.Equal(Elemento.Viga, r.Porticos.Single(x => x.Eje == "1").Elemento);
+    }
+
+    [Fact]
+    public void ConColumnas_EsVigaAunqueSeLlameVigueta()
+    {
+        ModeloLeido m = EjeUnoPiso2() with { Vigas = [Viga("v1", 0, 3500, 3500, Piso2, ancho: 100, tipo: "VT_10X35"), Viga("v2", 3500, 7000, 3500, Piso2, ancho: 100, tipo: "VT_10X35")] };
+
+        Assert.Equal(Elemento.Viga, Assert.Single(AgrupadorPorticos.Agrupar(m).Porticos).Elemento);
+    }
+
+    [Fact]
+    public void UnaViguetaFueraDeLosEjes_SeLlamaViguetaYNoAvisaSinEje()
+    {
+        // Las viguetas casi nunca van sobre un eje: en PROY_JULIO_BETO eran "Pórtico sin eje 1…18", con un aviso cada una.
+        ModeloLeido m = ConSecundaria(Viga("secundaria", 0, 3500, 3500, Piso2, y: 1000, ancho: 100, tipo: "VT_10X35"));
+
+        ResultadoLectura r = AgrupadorPorticos.Agrupar(m);
+
+        PorticoLeido p = r.Porticos.Single(x => x.Elemento == Elemento.Vigueta);
+        Assert.Equal(("Vigueta 1", null), (p.Nombre, p.Eje));
+        Assert.DoesNotContain(r.Avisos, a => a.Tipo == TipoAvisoLectura.SinEje);
+    }
+
+    [Fact]
+    public void UnaViguetaQuePasaDeLaUltimaPrincipal_EsVoladizoHastaLaDeBorde()
+    {
+        // Como la VT 389858 de PROY_JULIO_BETO: de VB a VB (sin columnas) cruzando las principales de A y de 5. Carlos
+        // (min 06:33): la de borde no es apoyo, lo que pasa de la última principal es voladizo.
+        ModeloLeido m = VigaEntreDosVigas() with
+        {
+            Vigas =
+            [
+                Viga("vigueta", -1000, 5000, 3500, Piso2, y: 1000, ancho: 100, tipo: "VT_10X35"),
+                new VigaLeida("principalA", new(0, -2000), new(0, 2000), 3100, 3500, 300, Piso2),
+                new VigaLeida("principal5", new(3500, -2000), new(3500, 2000), 3100, 3500, 300, Piso2),
+                new VigaLeida("bordeA", new(-1000, -2000), new(-1000, 2000), 3150, 3500, 100, Piso2, NombreTipo: "VB_10X35"),
+                new VigaLeida("borde5", new(5000, -2000), new(5000, 2000), 3150, 3500, 100, Piso2, NombreTipo: "VB_10X35"),
+            ],
+        };
+
+        PorticoLeido p = AgrupadorPorticos.Agrupar(m).Porticos.Single(x => x.Vigas.Contains("vigueta"));
+
+        Assert.Equal(Elemento.Vigueta, p.Elemento);
+        Assert.Equal([TipoApoyo.Viga, TipoApoyo.Viga], p.TiposDeApoyo);
+        Assert.Equal((850, 1350), (p.Portico.VoladizoInicio, p.Portico.VoladizoFinal));
     }
 
     [Fact]

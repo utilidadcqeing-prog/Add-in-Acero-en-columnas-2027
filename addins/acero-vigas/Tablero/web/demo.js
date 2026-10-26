@@ -15,7 +15,7 @@
   const COLOR = { 3: '#FBBC04', 4: '#4285F4', 5: '#EA4335', 6: '#34A853', 7: '#9334E6', 8: '#8B4513', 9: '#E91E63', 10: '#000000', 11: '#FF6D01' };
   const colorDe = (d) => COLOR[d] || '#5E6670';
   const OPCIONES0 = {
-    tipo: null, superior: [{ cantidad: 3, diametro: 5 }], inferior: [{ cantidad: 3, diametro: 5 }], recubrimientoCm: 4,
+    tipo: null, elemento: null, superior: [{ cantidad: 3, diametro: 5 }], inferior: [{ cantidad: 3, diametro: 5 }], recubrimientoCm: 4,
     recArribaCm: null, recAbajoCm: null, recLadosCm: null, separacionFilasCm: null, maximoFilas: 3, cara: null,
     bastones: { superior: null, inferior: null, largo: 2000, conGancho: false, largos: {} },
     estribos: { diametro: 3, gancho: 'De135', largoZona: 800, separacionZona: 100, separacionCentro: 200 },
@@ -208,9 +208,11 @@
         const per = Math.max(0, Math.floor((30 - 2 * recSide - 2 * dE + gap) / (dmax + gap)));
         const lista = per ? enFilas(rows, per) : [];
         const fijas = rows.some((r) => r.fila != null);
-        const error = total < 2 ? 'MenosDeDosBarras'
+        // en una vigueta (#941) basta una barra por cara, como en RepartidorFilas
+        const minimo = o.elemento === 'Vigueta' ? 1 : 2;
+        const error = total < minimo ? 'MenosDeDosBarras'
           : !per || lista.length > maxCapas || lista.some((x) => x.length > per) || rows.some((r) => r.fila != null && r.fila < 1) ? 'NoCaben'
-          : fijas && lista[0].length < 2 ? 'MenosDeDosBarras' : 'Ninguno';
+          : fijas && lista[0].length < minimo ? 'MenosDeDosBarras' : 'Ninguno';
         const filas = lista.filter((x) => x.length);
         return { cabenPorFila: per, porFila: error === 'Ninguno' ? filas.map((x) => x.length) : [], error, maximo: per * maxCapas, dmax, filas };
       };
@@ -329,7 +331,8 @@
       const diametros = [...new Set(o.superior.concat(o.inferior).map((r) => r.diametro).concat(bastones.map((b) => b.diametro)))]
         .sort((p, q) => q - p).map((d) => ({ nombre: '#' + d, color: colorDe(d), nombrePulgadas: PULG[d] }));
       return {
-        id, tipo, inicio: G.inicio, fin: G.fin,
+        // los pórticos de la demostración son vigas: la casilla "Es vigueta" (#940) solo cambia si se corrige a mano
+        id, tipo, inicio: G.inicio, fin: G.fin, esVigueta: o.elemento === 'Vigueta', detectadaVigueta: false,
         apoyos: G.apoyos.map(([eje, x, caraIzquierda, caraDerecha]) => ({ eje, x, caraIzquierda, caraDerecha,
           seccion: Math.round((caraDerecha - caraIzquierda) * 100) + '×40' })),
         barras, traslapos, bastones: bastones.map(({ n, diametro, ...b }) => b), diametros,

@@ -25,6 +25,9 @@ internal static class CreadorEstribos
     /// <summary>1 mm: un lado que se mueve en las dos direcciones del corte más que esto es una diagonal.</summary>
     private const double ToleranciaDiagonalMm = 1;
 
+    /// <summary>2 mm: un doblez más lejos que esto de donde va quedó al otro lado de la rama (lo separan dos radios).</summary>
+    private const double ToleranciaDoblezMm = 2;
+
     /// <summary>La forma de estribo cerrado del documento (mismo criterio por nombre que columnas); null si no hay.</summary>
     public static RebarShape? FormaEstribo(Document doc) =>
         new FilteredElementCollector(doc).OfClass(typeof(RebarShape)).Cast<RebarShape>()
@@ -75,7 +78,17 @@ internal static class CreadorEstribos
             Rebar? conForma = Rebar.CreateFromRebarShape(doc, forma, barra, host, origen, n, XYZ.BasisZ);
             if (conForma is not null)
             {
-                conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(g.Derecha - g.Izquierda), XYZ.BasisZ * CreadorBarras.Pies(g.Arriba - g.Abajo));
+                try
+                {
+                    conForma.GetShapeDrivenAccessor().ScaleToBox(origen, n * CreadorBarras.Pies(g.Derecha - g.Izquierda), XYZ.BasisZ * CreadorBarras.Pies(g.Arriba - g.Abajo));
+                }
+                catch (Autodesk.Revit.Exceptions.InternalException)
+                {
+                    // Medido el 26-oct: con la caja menor que el doblado más dos diámetros (#3 en 55 mm) Revit no da un error
+                    // claro. Ese estribo no se puede doblar: no se deja a medio crear.
+                    doc.Delete(conForma.Id);
+                    return null;
+                }
                 try
                 {
                     conForma.SetHookTypeId(0, gancho.Id);
@@ -119,12 +132,11 @@ internal static class CreadorEstribos
     }
 
     /// <summary>
-    /// Una rama vertical al lado de las dos barras que abraza, con un gancho en cada punta que da la vuelta a su barra
-    /// (hallazgo E13: antes la rama iba por el eje de las barras y los ganchos se abrían hacia afuera). La rama queda del
-    /// lado del centro de la viga, a un radio de doblado del eje de las barras: así el doblez del gancho queda centrado en
-    /// la barra y la cola entra al núcleo. Los ganchos que doblen hacia el otro lado se voltean después de regenerar
-    /// (<see cref="CorregirAbierto"/>). En S, abajo la rama pasa al otro lado de su barra (<see cref="Rama.Lados"/>): queda
-    /// un poco en diagonal y los ganchos salen uno hacia cada lado (Left/Right, diagnóstico de la grapa en S del 20-oct).
+    /// Una rama al lado de las dos barras que abraza, con un gancho en cada punta que da la vuelta a su barra (hallazgo
+    /// E13: antes la rama iba por el eje de las barras y los ganchos se abrían hacia afuera). Cada doblez se apoya en su
+    /// barra y la rama es la tangente a los dos (<see cref="Rama.Puntas"/>): en C, vertical y del lado del centro de la
+    /// viga; en S, abajo pasa al otro lado de su barra y queda en diagonal, con los ganchos uno hacia cada lado. Los ganchos
+    /// que doblen hacia el otro lado se voltean después de regenerar (<see cref="OrientarAbierto"/>).
     /// Se crea con estilo de estribo, como refuerzo transversal: toma el doblado de estribo del tipo de barra (4 d en el #3)
     /// y no el de gancho (6 d), con el que el gancho de 180° se metía 4.9 mm en las barras vecinas (H8 del plan de 22-oct;
     /// probado en Revit: arco de R 23.8 en vez de 33.3).
@@ -133,16 +145,13 @@ internal static class CreadorEstribos
     {
         if (g.Rama is not { } rama)
             return null;
-        double radio = LectorModelo.Mm(barra.StirrupTieBendDiameter) / 2 + d / 2;
-        (int ladoAbajo, int ladoArriba) = rama.Lados(u.Ancho, g.Forma);
+        double radio = Radio(barra, d);
         double x = g.Corrida.Primero;
         // Revit toma la punta de la línea como la cara exterior del doblez (medido con las barras corridas; sexta prueba: el
-        // gancho daba la vuelta 30 mm por encima de la barra). El doblez abraza la barra, su cara interior la toca: la cara
-        // exterior queda un diámetro de estribo más allá de la cara de la barra. Centrado en la barra (radio + d/2) se
-        // salía 2 cm del cerrado y lo cruzaba (medido el 21-oct en la viga 388501).
-        double alDoblez = rama.Diametro / 2 + d;
-        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, rama.X + ladoAbajo * radio, rama.YAbajo - alDoblez),
-            CreadorBarras.Punto(u, x, rama.X + ladoArriba * radio, rama.YArriba + alDoblez));
+        // gancho daba la vuelta 30 mm por encima de la barra). Centrado en la barra se salía 2 cm del cerrado y lo cruzaba
+        // (medido el 21-oct en la viga 388501): el doblez se apoya en ella.
+        ((double X, double Y) inicio, (double X, double Y) fin) = rama.Puntas(u.Ancho, g.Forma, radio, d);
+        Line linea = Line.CreateBound(CreadorBarras.Punto(u, x, inicio.X, inicio.Y), CreadorBarras.Punto(u, x, fin.X, fin.Y));
         RebarHookType? gancho = tipos.GanchoGrapa(g.Gancho, g.Diametro);
         using var terminaciones = new BarTerminationsData(doc);
         if (gancho is not null)
@@ -157,36 +166,58 @@ internal static class CreadorEstribos
     }
 
     /// <summary>
-    /// Deja los dos ganchos del abierto dando la vuelta a su barra: la punta de cada gancho tiene que quedar del lado de la
-    /// barra, no del lado de la rama. En S cada punta tiene su lado, así que los ganchos quedan hacia lados opuestos.
-    /// Llamar después de regenerar. Devuelve si volteó alguno.
+    /// Deja los dos ganchos del abierto dando la vuelta a su barra: el centro de cada doblez tiene que quedar donde lo pone
+    /// <see cref="Rama.Dobleces"/>; si quedó al otro lado de la rama, ese gancho se voltea. En S los ganchos quedan hacia
+    /// lados opuestos. Llamar después de regenerar. Devuelve si volteó alguno.
     /// </summary>
-    public static bool CorregirAbierto(Rebar r, UbicacionPortico u, GrupoEstribos g)
+    public static bool OrientarAbierto(Rebar r, UbicacionPortico u, GrupoEstribos g)
     {
-        if (g.Tipo != TipoEstribo.Abierto || g.Rama is not { } rama)
+        if (g.Tipo != TipoEstribo.Abierto || g.Rama is not { } rama || r.Document.GetElement(r.GetTypeId()) is not RebarBarType barra)
             return false;
-        IList<Curve> curvas = r.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
-        if (curvas.Count < 2)
+        List<Arc> arcos = r.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0).OfType<Arc>().ToList();
+        if (arcos.Count < 2)
             return false;
-        // −X del corte si la rama está a la derecha de la barra: el inicio de la línea es la punta de abajo
-        (int ladoAbajo, int ladoArriba) = rama.Lados(u.Ancho, g.Forma);
-        XYZ lateral = CreadorBarras.Lateral(u);
-        XYZ inicioRama = curvas.First(c => c.Length > 0).GetEndPoint(0);
+        double d = LectorModelo.Mm(barra.BarNominalDiameter);
+        // la línea va de abajo hacia arriba: el primer doblez es el de la barra de abajo
+        ((double X, double Y) abajo, (double X, double Y) arriba) = rama.Dobleces(Radio(barra, d), d);
         bool volteo = false;
-        volteo |= Voltear(r, 0, curvas[0].GetEndPoint(0), curvas.Count > 2 ? curvas[2].GetEndPoint(0) : inicioRama, lateral * ladoAbajo);
-        volteo |= Voltear(r, 1, curvas[^1].GetEndPoint(1), curvas.Count > 2 ? curvas[^3].GetEndPoint(1) : inicioRama, lateral * ladoArriba);
+        volteo |= Voltear(r, 0, arcos[0], abajo, u);
+        volteo |= Voltear(r, 1, arcos[^1], arriba, u);
         return volteo;
     }
 
-    /// <summary>Voltea el gancho del extremo si su punta no queda del lado de la barra respecto de la rama.</summary>
-    private static bool Voltear(Rebar r, int extremo, XYZ punta, XYZ enLaRama, XYZ haciaLaBarra)
+    /// <summary>
+    /// Amarra las puntas del abierto a una distancia fija de la cara de la viga, en vez de al recubrimiento de Revit: así
+    /// no se mueven al devolverle a la viga su recubrimiento (<see cref="RecubrimientoTemporal"/>) ni después.
+    /// </summary>
+    public static void FijarPuntas(Rebar r)
     {
-        if ((punta - enLaRama).DotProduct(haciaLaBarra) > 0)
+        RebarConstraintsManager m = r.GetRebarConstraintsManager();
+        foreach (RebarConstrainedHandle h in m.GetAllHandles().Where(h => h.GetHandleType() is RebarHandleType.StartOfBar or RebarHandleType.EndOfBar))
+        {
+            if (m.GetCurrentConstraintOnHandle(h) is not { } actual || !actual.IsToCover())
+                continue;
+            string cara = actual.GetTargetHostFaceReference(0).ConvertToStableRepresentation(r.Document);
+            if (m.GetConstraintCandidatesForHandle(h, r.GetHostId()).FirstOrDefault(c => c.IsFixedDistanceToHostFace()
+                    && c.GetTargetHostFaceReference(0).ConvertToStableRepresentation(r.Document) == cara) is { } fija)
+                m.SetPreferredConstraint(fija);
+        }
+    }
+
+    /// <summary>Voltea el gancho del extremo si el centro de su doblez no quedó donde va.</summary>
+    private static bool Voltear(Rebar r, int extremo, Arc doblez, (double X, double Y) centro, UbicacionPortico u)
+    {
+        XYZ c = doblez.Center;
+        (double x, double y) = MarcoPortico.EnCorte(u, new Punto3(LectorModelo.Mm(c.X), LectorModelo.Mm(c.Y), LectorModelo.Mm(c.Z)));
+        if (Math.Abs(x - centro.X) + Math.Abs(y - centro.Y) < ToleranciaDoblezMm)
             return false;
         RebarTerminationOrientation actual = r.GetTerminationOrientation(extremo);
         r.SetTerminationOrientation(extremo, actual == RebarTerminationOrientation.Right ? RebarTerminationOrientation.Left : RebarTerminationOrientation.Right);
         return true;
     }
+
+    /// <summary>Radio de los dobleces del estribo por el eje: el doblado de estribo del tipo de barra más medio diámetro.</summary>
+    private static double Radio(RebarBarType barra, double d) => LectorModelo.Mm(barra.StirrupTieBendDiameter) / 2 + d / 2;
 
     private static XYZ Direccion(UbicacionPortico u) => new(u.Ux, u.Uy, 0);
 

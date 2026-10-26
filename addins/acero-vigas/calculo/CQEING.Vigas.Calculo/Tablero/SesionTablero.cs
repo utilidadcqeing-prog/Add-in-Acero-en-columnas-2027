@@ -193,7 +193,9 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         return new APrevia3d(p, reglas.Reglas);
     }
 
-    private OpcionesTablero Opciones(string id) => opciones.GetValueOrDefault(id) ?? OpcionesTablero.PorDefecto;
+    // sin nada elegido, las de arranque de lo que se detectó: viga o vigueta (#942)
+    private OpcionesTablero Opciones(string id) =>
+        opciones.GetValueOrDefault(id) ?? OpcionesTablero.Para(Buscar(id)?.Elemento ?? Elemento.Viga);
 
     private IReadOnlyList<int> Disponibles() =>
         nominalesDelModelo is null ? reglas.Reglas.PorDiametro.Keys.Order().ToList() : DiametrosDisponibles.De(nominalesDelModelo(), reglas.Reglas);
@@ -288,10 +290,14 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     public AJs Vista()
     {
         PorticoLeido? abierto = actual is null ? null : Buscar(actual);
-        VistaPortico? vista = abierto is null
-            ? null
-            : ConChoques(actual!, abierto, ArmadorVista.Armar(abierto, Opciones(actual!), reglas.Reglas)
+        VistaPortico? vista = null;
+        if (abierto is not null)
+        {
+            // el mismo plan que crea "Generar": los bastones se ven con su largo en Revit y de él salen los choques
+            PlanAcero? plan = abierto.Ubicacion is null ? null : PlanificadorAcero.Planificar(actual!, abierto, Opciones(actual!), reglas.Reglas);
+            vista = ConChoques(abierto, plan, ArmadorVista.Armar(abierto, Opciones(actual!), reglas.Reglas, plan)
                 with { Id = actual!, Estado = estados.GetValueOrDefault(actual!) });
+        }
         var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
             ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
             : l with { Id = p.Id }).ToList();
@@ -303,8 +309,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     /// puntos en el alzado, sin aviso en la lista (Juan, 22-oct). Sin ubicación en el modelo o sin plan (no se puede
     /// generar) no se revisan.
     /// </summary>
-    private VistaPortico ConChoques(string id, PorticoLeido p, VistaPortico v) =>
-        p.Ubicacion is { } u && PlanificadorAcero.Planificar(id, p, Opciones(id), reglas.Reglas) is { } plan
+    private VistaPortico ConChoques(PorticoLeido p, PlanAcero? plan, VistaPortico v) =>
+        p.Ubicacion is { } u && plan is not null
             ? v with { Choques = ArmadorChoques.Armar(plan, u, reglas.Reglas, dobladosDelModelo?.Invoke(reglas.Reglas)) }
             : v;
 }

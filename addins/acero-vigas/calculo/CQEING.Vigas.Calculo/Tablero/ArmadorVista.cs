@@ -19,7 +19,7 @@ public static class ArmadorVista
     public static PorticoEnLista EnLista(PorticoLeido p)
     {
         IReadOnlyList<Apoyo> apoyos = p.Portico.Apoyos;
-        string tipo = NombreTipo(p.Tipo);
+        string tipo = p.Elemento == Elemento.Vigueta ? "Vigueta" : NombreTipo(p.Tipo);
         string sub = p.Tipo == TipoViga.Cimentacion
             ? $"Cimentación · eje {p.Eje ?? "?"}"
             : $"{(p.Eje is null ? "Sin eje" : "Eje " + p.Eje)} · {apoyos[0].Eje} a {apoyos[^1].Eje}{Voladizos(p.Portico)}";
@@ -28,9 +28,14 @@ public static class ArmadorVista
         return new PorticoEnLista(p.Nombre, p.Nombre, sub, tipo, tramos);
     }
 
-    public static VistaPortico Armar(PorticoLeido p, OpcionesTablero o, Reglas r)
+    /// <param name="plan">
+    /// El de "Generar", si se puede generar: los bastones se muestran con el largo que se crea en Revit (un bastón recto
+    /// del borde termina antes del gancho de la corrida, Vigueta 1 del 26-oct).
+    /// </param>
+    public static VistaPortico Armar(PorticoLeido p, OpcionesTablero o, Reglas r, PlanAcero? plan = null)
     {
         TipoViga tipo = o.Tipo ?? p.Tipo;
+        bool esVigueta = (o.Elemento ?? p.Elemento) == Elemento.Vigueta, detectadaVigueta = p.Elemento == Elemento.Vigueta;
         Portico portico = p.Portico;
         var avisos = new List<Aviso>();
         var apoyos = portico.Apoyos.Select((a, i) =>
@@ -51,7 +56,8 @@ public static class ArmadorVista
             var vacia = new CaraVista(0, [], nameof(ErrorCara.Ninguno), 0);
             return new VistaPortico(p.Nombre, NombreTipo(tipo), inicio, fin, apoyos, [], [], [], [], vacia, vacia,
                 new OpcionCaraVista(0, false), new OpcionCaraVista(0, false), "izq", "izq",
-                new SeccionVista(Cm(Ancho(p)), Cm(Alto(p)), [], []), [], Textos(avisos, null), [], 0, 0, false);
+                new SeccionVista(Cm(Ancho(p)), Cm(Alto(p)), [], []), [], Textos(avisos, null), [], 0, 0, false,
+                EsVigueta: esVigueta, DetectadaVigueta: detectadaVigueta);
         }
 
         (ResultadoVigas rv, ResultadoEstribos re, EntradaSeccion seccion, var porTramo) = (c.Vigas, c.Estribos, c.Seccion, c.PorTramo);
@@ -64,11 +70,21 @@ public static class ArmadorVista
             Rotulo.EnPulgadas(b.Grupos, b.LargoRecto, b.Largo))).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
             M(t.Minimo), $"#{t.Diametro}", t.Manual, F(M(t.Hasta - t.Desde), "0.00"))).ToList();
-        var bastones = rv.Bastones.Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
+        var bastones = rv.Bastones.Select(ComoEnRevit).Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Donde(p, b), Cantidad([b.Grupo]), b.Kg,
             b.LargoRecto < CalculadorBastones.LargoDe(o.Bastones, b.Id),
             Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde, ColoresDiametro.De(b.Grupo.Diametro),
             Rotulo.De([b.Grupo], b.LargoRecto, b.Largo), Rotulo.EnPulgadas([b.Grupo], b.LargoRecto, b.Largo))).ToList();
+
+        // el bastón con las puntas del plan; si sus barras quedaron distintas, el más corto
+        Baston ComoEnRevit(Baston b)
+        {
+            List<PiezaLongitudinal> piezas = plan?.Bastones.Where(x => x.Pieza == b.Id).ToList() ?? [];
+            if (piezas.Count == 0 || piezas.Min(x => x.Largo) == b.Largo)
+                return b;
+            int largo = piezas.Min(x => x.Largo);
+            return b with { Desde = piezas.Max(x => x.Desde), Hasta = piezas.Min(x => x.Hasta), Largo = largo, Kg = b.Kg * largo / b.Largo };
+        }
         var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
             .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d), Rotulo.Pulgadas(d))).ToList();
 
@@ -82,7 +98,8 @@ public static class ArmadorVista
             rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, c.SePuedeGenerar,
             CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
             re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList(),
-            diametros, p.Tramos.Select(t => new SeccionEnAlzado(M((t.Desde + t.Hasta) / 2.0), $"{F(t.Ancho / 10, "0.#")}×{F(t.Alto / 10, "0.#")}")).ToList());
+            diametros, p.Tramos.Select(t => new SeccionEnAlzado(M((t.Desde + t.Hasta) / 2.0), $"{F(t.Ancho / 10, "0.#")}×{F(t.Alto / 10, "0.#")}")).ToList(),
+            EsVigueta: esVigueta, DetectadaVigueta: detectadaVigueta);
     }
 
     /// <summary>El gancho como lo escribe la página: "90°", "135°", "180°" o "" (sin gancho).</summary>
@@ -267,7 +284,8 @@ public static class ArmadorVista
         // Los adicionales, con el mismo trazo que la vista previa 3D: sus ganchos según el ángulo y la forma (Juan, 22-oct).
         IReadOnlyList<double[]>? Trazo(EstriboEnSeccion f, EstriboEnPortico x)
         {
-            if (f.Id == MotorEstribos.IdCerrado)
+            // el cerrado de las esquinas lo dibuja la página como rectángulo; la grapa de la vigueta lleva su trazo
+            if (f.Id == MotorEstribos.IdCerrado && f.Tipo == TipoEstribo.Cerrado)
                 return null;
             Rama? rama = f.Tipo == TipoEstribo.Abierto ? PlanificadorAcero.RamaDe(re.Seccion, f.Izquierda, r) : null;
             var unoSolo = new GrupoEstribos(f.Id, x.Tramo, f.Tipo, x.Diametro, x.Gancho, f.Izquierda, f.Derecha, f.Abajo, f.Arriba,
@@ -295,14 +313,15 @@ public static class ArmadorVista
     {
         int tramos = DistribuidorEstribos.Tramos(p.Portico).Count;
         return re.Estribos
-            .GroupBy(e => (e.Id, e.Tipo, e.Diametro, Largo: Math.Round(e.Largo, 3)))
+            .GroupBy(e => (e.Id, e.Tipo, e.Diametro, Largo: Math.Round(e.Largo, 3), e.Forma))
             .Select(g =>
             {
                 bool cerrado = g.Key.Id == MotorEstribos.IdCerrado;
                 string detalle = cerrado
                     ? $"zonas {F(o.Estribos.LargoZona / 1000.0, "0.00")} cada {F(o.Estribos.SeparacionZona / 1000.0, "0.00")} · centro cada {F(o.Estribos.SeparacionCentro / 1000.0, "0.00")}"
                     : g.Count() == tramos ? "todo el pórtico" : string.Join(", ", g.Select(e => e.Tramo.StartsWith("Voladizo") ? e.Tramo : "Viga " + e.Tramo));
-                string tipo = cerrado ? "Estribo cerrado" : g.Key.Tipo == TipoEstribo.Cerrado ? "Adicional cerrado" : "Adicional abierto";
+                string tipo = cerrado ? (g.Key.Tipo == TipoEstribo.Cerrado ? "Estribo cerrado" : $"Grapa en {g.Key.Forma}")
+                    : g.Key.Tipo == TipoEstribo.Cerrado ? "Adicional cerrado" : "Adicional abierto";
                 return new FilaEstribos(g.Key.Id, tipo, g.Sum(e => e.Posiciones.Count), $"#{g.Key.Diametro}", M(g.First().Largo), detalle, g.Sum(e => e.Kg));
             })
             .ToList();

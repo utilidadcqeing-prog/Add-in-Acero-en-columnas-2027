@@ -62,6 +62,41 @@ public class RepartidorFilasTests
         Assert.Equal(ErrorCara.MenosDeDosBarras, Abajo(Maqueta([new GrupoBarras(1, 5)])).Error);
     }
 
+    /// <summary>
+    /// Vigueta de 10 × 35 (VT_10X35 de PROY_JULIO_BETO), recubrimiento 2.5 y estribo #3 (#941). Libre para barras:
+    /// 100 − 2·25 − 2·9.5 = 31 mm → con #4 (12.7) cabe piso((31 + 25) / (12.7 + 25)) = 1 por fila. Carlos (24-oct, min
+    /// 07:20): una barra arriba y una abajo; dos por fila solo si cumplen los 2.5 cm.
+    /// </summary>
+    private static EntradaSeccion Vigueta(IReadOnlyList<GrupoBarras> inferior) =>
+        new(Ancho: 100, Alto: 350, Recubrimientos.Iguales(25), DiametroEstribo: 3,
+            Superior: [new GrupoBarras(1, 4)], Inferior: inferior, Reglas.Generales, PermiteUnaBarra: true);
+
+    [Fact]
+    public void UnaVigueta_LlevaUnaSolaBarraAlCentro()
+    {
+        CaraSeccion c = Abajo(Vigueta([new GrupoBarras(1, 4)]));
+
+        Assert.Equal((ErrorCara.Ninguno, 1), (c.Error, c.CabenPorFila));
+        Assert.Equal(50, Assert.Single(Assert.Single(c.Filas)).X, 6);
+    }
+
+    [Fact]
+    public void UnaVigueta_ConDosBarrasQueNoCabenLadoALado_VanUnaPorFila()
+    {
+        CaraSeccion c = Abajo(Vigueta([new GrupoBarras(2, 3)]));
+
+        Assert.Equal(ErrorCara.Ninguno, c.Error);
+        Assert.Equal([1, 1], c.Filas.Select(f => f.Count));
+    }
+
+    [Fact]
+    public void UnaVigueta_ConLaFila1FijaEnUnaBarra_NoEsError()
+    {
+        CaraSeccion c = Abajo(Vigueta([new GrupoBarras(1, 4, 1), new GrupoBarras(1, 4, 2)]));
+
+        Assert.Equal(ErrorCara.Ninguno, c.Error);
+    }
+
     [Fact]
     public void UnaVigaDondeNoCabeNinguna_ErrorConMaximoCero()
     {

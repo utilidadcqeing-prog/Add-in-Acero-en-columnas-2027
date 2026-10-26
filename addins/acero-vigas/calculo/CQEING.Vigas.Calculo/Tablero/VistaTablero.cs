@@ -141,6 +141,8 @@ public sealed record CorteVista(double X, bool EsTipo, bool Ajustado, double Pro
 /// generar en esta sesión); la página lo usa si no tiene uno propio en memoria. Null si no hay.
 /// <paramref name="Choques"/>: los puntos donde las barras se tocan, de izquierda a derecha; null si no se revisaron
 /// (sin ubicación en el modelo o sin plan).
+/// <paramref name="EsVigueta"/>: si se arma como vigueta, con lo que haya corregido el usuario; <paramref name="DetectadaVigueta"/>,
+/// lo que detectó el add-in (#940: la casilla "Es vigueta" dice si se cambió a mano).
 /// </summary>
 public sealed record VistaPortico(
     string Id,
@@ -170,7 +172,9 @@ public sealed record VistaPortico(
     IReadOnlyList<DiametroVista>? Diametros = null,
     IReadOnlyList<SeccionEnAlzado>? Secciones = null,
     string? Estado = null,
-    IReadOnlyList<ChoqueVista>? Choques = null);
+    IReadOnlyList<ChoqueVista>? Choques = null,
+    bool EsVigueta = false,
+    bool DetectadaVigueta = false);
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).

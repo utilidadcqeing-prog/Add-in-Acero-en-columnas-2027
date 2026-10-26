@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Estribos;
+﻿using CQEING.Vigas.Calculo.Estribos;
 using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
@@ -201,6 +201,81 @@ public class ArmadorVistaTests
             (ArmadorVista.EnLista(Portico1(tipo: TipoViga.Cimentacion)).Sub, ArmadorVista.EnLista(Portico1(tipo: TipoViga.Cimentacion)).Tipo));
     }
 
+    /// <summary>
+    /// La casilla "Es vigueta" (#940): viene como la detectó el add-in (#939) y el usuario solo la toca si se equivocó.
+    /// </summary>
+    [Fact]
+    public void UnaViguetaDetectada_VieneMarcadaYSinCambioAMano()
+    {
+        VistaPortico v = Armar(p: Portico1() with { Elemento = Elemento.Vigueta });
+
+        Assert.Equal((true, true), (v.EsVigueta, v.DetectadaVigueta));
+    }
+
+    [Fact]
+    public void LoQueEligeElUsuario_ManaSobreLoDetectado()
+    {
+        VistaPortico aViga = Armar(OpcionesTablero.PorDefecto with { Elemento = Elemento.Viga }, Portico1() with { Elemento = Elemento.Vigueta });
+        VistaPortico aVigueta = Armar(OpcionesTablero.PorDefecto with { Elemento = Elemento.Vigueta });
+
+        Assert.Equal((false, true), (aViga.EsVigueta, aViga.DetectadaVigueta));
+        Assert.Equal((true, false), (aVigueta.EsVigueta, aVigueta.DetectadaVigueta));
+    }
+
+    [Fact]
+    public void EnUnaVigueta_ElCorteDibujaLaGrapaYLaListaLaNombra()
+    {
+        PorticoLeido p = Portico1();
+        PorticoLeido vigueta = p with { Elemento = Elemento.Vigueta, Tramos = p.Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList() };
+
+        VistaPortico v = Armar(OpcionesTablero.DeVigueta, vigueta);
+
+        FiguraSeccion grapa = v.Seccion.Figuras.Single(f => f.Id == "E");
+        Assert.Equal(("Abierto", "S"), (grapa.Tipo, grapa.Forma));
+        Assert.NotNull(grapa.Puntos);
+        Assert.Equal("Grapa en S", v.ListaEstribos.Single(e => e.Id == "E").Tipo);
+    }
+
+    [Fact]
+    public void ConElPlan_ElBastonSeVeConElLargoQueSeCreaEnRevit()
+    {
+        // el bastón recto del borde termina antes del gancho de la corrida en el plan (Vigueta 1, 26-oct): el alzado lo
+        // muestra igual, para que el tablero diga lo mismo que Revit
+        PorticoLeido p = PlanificadorAceroTests.Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = PlanificadorAceroTests.Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = PlanificadorAceroTests.Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Bastones = new ArmadoBastones(new GrupoBarras(1, 4)) };
+        PlanAcero plan = PlanificadorAcero.Planificar("Vigueta 1", p, o, Reglas.Generales)!;
+        PiezaLongitudinal enRevit = plan.Bastones.Single(b => b.Pieza == "BS1");
+
+        BastonVista b = ArmadorVista.Armar(p, o, Reglas.Generales, plan).Bastones.Single(x => x.Id == "BS1");
+
+        Assert.Equal((enRevit.Desde / 1000.0, enRevit.Hasta / 1000.0, enRevit.Largo / 1000.0), (b.Desde, b.Hasta, b.Largo));
+        Assert.Equal("1#4L= " + (enRevit.Largo / 1000.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), b.Rotulo);
+    }
+
+    [Fact]
+    public void LaGrapaDeLaViguetaEnC_SeDibujaYSeNombraEnC()
+    {
+        PorticoLeido p = Portico1();
+        PorticoLeido vigueta = p with { Elemento = Elemento.Vigueta, Tramos = p.Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList() };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Estribos = OpcionesTablero.DeVigueta.Estribos with { Forma = FormaGrapa.C } };
+
+        VistaPortico v = Armar(o, vigueta);
+
+        Assert.Equal("C", v.Seccion.Figuras.Single(f => f.Id == "E").Forma);
+        Assert.Equal("Grapa en C", v.ListaEstribos.Single(e => e.Id == "E").Tipo);
+    }
+
+    [Fact]
+    public void EnLaLista_LaViguetaSeVeComoVigueta()
+    {
+        Assert.Equal("Vigueta", ArmadorVista.EnLista(Portico1() with { Elemento = Elemento.Vigueta }).Tipo);
+    }
+
     [Fact]
     public void LasBarrasVanEnMetrosConSusGanchos()
     {
@@ -313,7 +388,7 @@ public class ArmadorVistaTests
         FilaEstribos e = Assert.Single(Armar().ListaEstribos);
 
         Assert.Equal(("E", "Estribo cerrado", 94, "#3"), (e.Id, e.Tipo, e.Cantidad, e.Diametro));
-        Assert.Equal(1.468, e.Largo, 6);
+        Assert.Equal(1.390, e.Largo, 3);
         Assert.Equal("zonas 0.80 cada 0.10 · centro cada 0.20", e.Detalle);
         Assert.Equal(r.Kg, e.Kg, 6);
     }

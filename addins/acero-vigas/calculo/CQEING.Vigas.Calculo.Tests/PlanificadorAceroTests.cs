@@ -41,6 +41,62 @@ public class PlanificadorAceroTests
     }
 
     [Fact]
+    public void UnaVigueta_SePlanificaConUnaBarraAlCentroYElBastonPorDentro()
+    {
+        // #941: vigueta de 10 × 35, 1 #4 arriba y abajo, recubrimiento 2.5 y un bastón #4 arriba en los apoyos.
+        PorticoLeido vigueta = Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        var o = OpcionesTablero.PorDefecto with
+        {
+            Superior = [new GrupoBarras(1, 4)], Inferior = [new GrupoBarras(1, 4)], RecubrimientoCm = 2.5,
+            Bastones = new ArmadoBastones(new GrupoBarras(1, 4)),
+        };
+
+        PlanAcero plan = PlanificadorAcero.Planificar("Vigueta 6", vigueta, o, Reglas.Generales)!;
+
+        Assert.NotEmpty(plan.Barras);
+        Assert.All(plan.Barras, b => Assert.Equal(50, b.XCorte, 6));
+        Assert.NotEmpty(plan.Bastones);
+        Assert.Empty(plan.BastonesSinLugar);
+        // por dentro de la corrida: fila 2, o fila 3 donde la barra que traslapa ya ocupa la 2
+        Assert.All(plan.Bastones, b => Assert.InRange(b.Fila, 2, 3));
+        Assert.NotEmpty(plan.Estribos);
+        // la grapa en S (decisión 8 del plan de #938) abraza la barra de arriba y la de abajo, al centro
+        Assert.All(plan.Estribos.Where(g => g.Pieza == "E"), g =>
+        {
+            Assert.Equal((TipoEstribo.Abierto, FormaGrapa.S), (g.Tipo, g.Forma));
+            Assert.Equal(50, Assert.IsType<Rama>(g.Rama).X, 6);
+        });
+    }
+
+    [Fact]
+    public void UnBastonRectoEnElBorde_TerminaAntesDelGanchoDeLaCorrida()
+    {
+        // Vigueta 1 (VB #388864, 26-oct): el bastón de arriba llegaba hasta la cara de afuera de la pata del gancho de 90°
+        // de la corrida y se metía 1.3 cm en ella. Termina donde acaba el doblez: 76/2 + 12.7 = 50.7 más adentro.
+        PorticoLeido vigueta = Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Bastones = new ArmadoBastones(new GrupoBarras(1, 4)) };
+        Baston enElCalculo = CalculoPortico.Calcular(vigueta, o, Reglas.Generales)!.Vigas.Bastones.First(b => b.Id == "BS1");
+
+        PlanAcero plan = PlanificadorAcero.Planificar("Vigueta 1", vigueta, o, Reglas.Generales)!;
+
+        PiezaLongitudinal corrida = plan.Barras.Where(b => b.Capa == Posicion.Superior).MinBy(b => b.Desde)!;
+        PiezaLongitudinal baston = plan.Bastones.Single(b => b.Pieza == "BS1");
+        Assert.Equal(TipoGancho.De90, corrida.GanchoInicio);
+        Assert.Equal(enElCalculo.Desde, corrida.Desde);
+        Assert.Equal((corrida.Desde + 51, enElCalculo.Largo - 51), (baston.Desde, baston.Largo));
+    }
+
+    [Fact]
     public void VariasFilas_CadaPiezaEnSuPuestoDelCorte()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(7, 5)] };

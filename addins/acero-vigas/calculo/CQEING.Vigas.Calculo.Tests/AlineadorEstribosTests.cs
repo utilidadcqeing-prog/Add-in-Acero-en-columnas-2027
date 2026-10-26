@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Estribos;
+﻿using CQEING.Vigas.Calculo.Estribos;
 using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Vigas.Calculo.Tests;
@@ -54,8 +54,8 @@ public class AlineadorEstribosTests
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
         Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Abierto, 103.725, 103.725, 40, 460), Figura(r, "E1"));
         EstriboEnPortico ab = r.Estribos.Single(e => e.Id == "E1" && e.Tramo == "A-B");
-        Assert.Equal((TipoEstribo.Abierto, 28, 636.5), (ab.Tipo, ab.Posiciones.Count, Math.Round(ab.Largo, 6)));
-        Assert.Equal(28 * 0.6365 * 0.560, ab.Kg, 6);
+        Assert.Equal((TipoEstribo.Abierto, 28, 588.92), (ab.Tipo, ab.Posiciones.Count, Math.Round(ab.Largo, 2)));
+        Assert.Equal(28 * 0.588919 * 0.560, ab.Kg, 3);
         Assert.Equal(4, r.Estribos.Count(e => e.Id == "E1"));
         Assert.Empty(r.Avisos);
     }
@@ -68,8 +68,8 @@ public class AlineadorEstribosTests
         Assert.Equal([60.686, 103.725, 196.275, 239.314], Xs(r, Posicion.Inferior));
         Assert.Equal(ArribaSinMover, Xs(r, Posicion.Superior));
         Assert.Equal(new EstriboEnSeccion("E1", TipoEstribo.Cerrado, 86.275, 213.725, 40, 460), Figura(r, "E1"));
-        // 2 × (117.95 + 410.5) + 2 × 113.
-        Assert.Equal(1282.9, r.Estribos.First(e => e.Id == "E1").Largo, 6);
+        // Por el eje 117.95 × 410.5, como lo cuenta Revit: lados menos un radio (23.75) en cada punta, tres esquinas y dos ganchos de 135°.
+        Assert.Equal(1204.74, r.Estribos.First(e => e.Id == "E1").Largo, 2);
     }
 
     [Fact]

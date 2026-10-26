@@ -38,7 +38,9 @@ public static class CalculoPortico
         IReadOnlyDictionary<string, ConfigEstribos>? porTramo = o.EstribosMarcados is null
             ? null
             : o.TramosMarcados.Distinct().ToDictionary(t => t, _ => o.EstribosMarcados);
-        ResultadoEstribos re = MotorEstribos.Calcular(new EntradaEstribos(p.Portico, seccion, o.Estribos, porTramo));
+        // la vigueta lleva grapa en S en vez del cerrado (decisión 8 del plan de #938)
+        TipoEstribo principal = EsVigueta(p, o) ? TipoEstribo.Abierto : TipoEstribo.Cerrado;
+        ResultadoEstribos re = MotorEstribos.Calcular(new EntradaEstribos(p.Portico, seccion, o.Estribos, porTramo, principal));
         List<Aviso> avisos = [.. rv.Avisos, .. re.Avisos];
 
         bool seccionSinError = re.Seccion.Superior.Error == ErrorCara.Ninguno && re.Seccion.Inferior.Error == ErrorCara.Ninguno;
@@ -68,6 +70,9 @@ public static class CalculoPortico
         var rec = new Recubrimientos((o.RecArribaCm ?? o.RecubrimientoCm) * 10, (o.RecAbajoCm ?? o.RecubrimientoCm) * 10,
             (o.RecLadosCm ?? o.RecubrimientoCm) * 10);
         return new EntradaSeccion(p.Tramos[0].Ancho, p.Tramos[0].Alto, rec, o.Estribos.Diametro, o.Superior, o.Inferior, r,
-            (o.SeparacionFilasCm ?? 0) * 10, o.MaximoFilas);
+            (o.SeparacionFilasCm ?? 0) * 10, o.MaximoFilas, PermiteUnaBarra: EsVigueta(p, o));
     }
+
+    /// <summary>Vigueta, con lo que haya corregido el usuario con el chip (#940) por encima de lo detectado (#939).</summary>
+    private static bool EsVigueta(PorticoLeido p, OpcionesTablero o) => (o.Elemento ?? p.Elemento) == Elemento.Vigueta;
 }

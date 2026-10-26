@@ -25,15 +25,24 @@
 
   // Lo que el usuario elige para un pórtico: el `state` de la maqueta que cambia el cálculo (OpcionesTablero).
   const OPCIONES0 = {
-    tipo: undefined, side: undefined, sup: [{ n: 3, d: '#5' }], inf: [{ n: 3, d: '#5' }],
+    // vigueta (#940): undefined = la que detectó el add-in; true / false = corregida a mano con la casilla
+    tipo: undefined, vigueta: undefined, side: undefined, sup: [{ n: 3, d: '#5' }], inf: [{ n: 3, d: '#5' }],
     rec: '4', recUp: '', recDown: '', recSide: '', sepMode: 'pegada', sepCm: '1', maxCapas: '3',
     bastDef: '2.00', bastHook: false, bastLen: {}, bastSupN: '1', bastSupD: '', bastInfN: '1', bastInfD: '',
     // adicionales (#85, hallazgo E8): [{ tipo: 'Cerrado' | 'Abierto', barras: [{ cara, fila, numero, nombre }] }]
-    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20', adicionales: [] }, estMarc: null, tramosSel: [],
+    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20', adicionales: [], forma: 'S' }, estMarc: null, tramosSel: [],
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
     cambios: { barras: {}, traslapos: {}, movidos: {}, ganchos: {} }, bastPuntas: {},
+  };
+  // Con lo que arranca un pórtico que el usuario no tocó, como OpcionesTablero.Para en C# (#942): una vigueta de 10 cm
+  // no admite las barras ni el recubrimiento de una viga.
+  const VIGUETA0 = { sup: [{ n: 1, d: '#4' }], inf: [{ n: 1, d: '#4' }], rec: '3' };
+  const arranqueDe = (vigueta) => (vigueta ? VIGUETA0 : { sup: OPCIONES0.sup, inf: OPCIONES0.inf, rec: OPCIONES0.rec });
+  const sinTocar = (s, vigueta) => {
+    const a = arranqueDe(vigueta);
+    return JSON.stringify([s.sup, s.inf, s.rec]) === JSON.stringify([a.sup, a.inf, a.rec]);
   };
   // El estado de la página con que se generó el pórtico (VistaPortico.Estado, guardado en sus vigas): solo las claves de
   // OPCIONES0. null si no hay o no se entiende.
@@ -60,7 +69,7 @@
     // la fila a mano de cada tipo (#84): '' = Auto
     const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
     const estribos = (e) => ({ diametro: diametro(e.estD), gancho: ({ '135°': 'De135', '180°': 'De180' })[e.estG] || 'De90',
-      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)),
+      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)), forma: e.forma || 'S',
       adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, forma: a.forma || 'C',
         barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
@@ -69,6 +78,7 @@
       Object.keys(s.bastLen).forEach((id) => { largos[id] = mm(n(s.bastLen[id])); });
       return {
         tipo: s.tipo ? (s.tipo === 'Cimentación' ? 'Cimentacion' : 'Aerea') : null,
+        elemento: s.vigueta === undefined ? null : (s.vigueta ? 'Vigueta' : 'Viga'),
         superior: grupos(s.sup), inferior: grupos(s.inf),
         recubrimientoCm: n(s.rec), recArribaCm: opcional(s.recUp), recAbajoCm: opcional(s.recDown), recLadosCm: opcional(s.recSide),
         separacionFilasCm: s.sepMode === 'pegada' ? null : n(s.sepCm), maximoFilas: Math.max(1, Math.round(n(s.maxCapas))),
@@ -114,7 +124,7 @@
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid ${sec.stC}; border-radius: ${sec.stRadio}"></div>
+      ${sec.stOn ? html`<div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid ${sec.stC}; border-radius: ${sec.stRadio}"></div>` : null}
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
       ${sec.trazos.length ? html`
@@ -355,12 +365,15 @@
       // Cada pórtico guarda sus opciones, como SesionTablero en C#: al cambiar de pórtico se recuperan las suyas. Sin
       // ninguna en memoria, las que se guardaron en sus vigas al generarlo (plan de 22-oct, recordar el pórtico).
       if (antes !== ahora) {
-        const guardadas = ahora ? this.opcionesPorPortico[ahora] || estadoGuardado(this.props.vista.actual) : null;
+        const actual = this.props.vista && this.props.vista.actual;
+        const guardadas = ahora ? this.opcionesPorPortico[ahora] || estadoGuardado(actual) : null;
+        // sin nada guardado, arranca como C#: con las de vigueta si se detectó vigueta (#942)
+        const arranque = actual && actual.detectadaVigueta ? VIGUETA0 : {};
         if (antes) {
           this.opcionesPorPortico[antes] = this.estadoDeLaPagina();
-          this.setState({ ...OPCIONES0, ...guardadas });
-        } else if (guardadas) {
-          this.setState(guardadas);
+          this.setState({ ...OPCIONES0, ...arranque, ...guardadas });
+        } else if (guardadas || ahora) {
+          this.setState({ ...arranque, ...guardadas });
         }
         // Si el pórtico se abrió desde Revit (En vivo o "Seleccionar en Revit"), la lista baja hasta él (Juan, 16-oct).
         const tarjeta = ahora && document.querySelector('[data-portico="' + CSS.escape(ahora) + '"]');
@@ -376,6 +389,17 @@
           ...(this.salirDeReglas ? { step: 'barras' } : null) });
         this.salirDeReglas = false;
       }
+    }
+
+    // Viga o vigueta (#940): elegir lo que detectó el add-in borra la corrección (undefined), como si nunca se hubiera tocado.
+    // Si las barras y el recubrimiento siguen como arrancaron, pasan a los del otro (#942): una viga corregida a vigueta
+    // no queda con 3 #5 que no caben.
+    ponerVigueta(P, vigueta) {
+      const era = !!(P && P.esVigueta);
+      const cambio = { vigueta: P && vigueta === P.detectadaVigueta ? undefined : vigueta };
+      if (vigueta !== era && sinTocar(this.state, era)) Object.assign(cambio, arranqueDe(vigueta));
+      this.setState({ sel: NADA });
+      this.cambiar(cambio);
     }
 
     // Cambia algo de OpcionesTablero y pide el cálculo; en los campos de texto, con 150 ms de espera.
@@ -549,7 +573,8 @@
         const o = opcion('aplicar');
         const ok = !!o && o.sePuede;
         // en rojo solo si lo escrito es otro largo y no se puede; con el largo actual es solo la indicación
-        const otro = Math.abs(num(s.draft, lapLen(SL)) - lapLen(SL)) > 1e-9;
+        // (el largo se compara como se muestra: 1.098 se ve 1.10 y escribir 1.10 es el mismo)
+        const otro = f2(num(s.draft, lapLen(SL))) !== f2(lapLen(SL));
         sl = { id: SL.id, min: f2(SL.minimo), diam: SL.diametro, cur: f2(lapLen(SL)),
           eff: o ? o.texto : 'Escribe un largo en metros.', effCol: ok ? '#1E5C38' : (o && otro ? '#B42318' : '#5E6670'),
           off: !ok, applyBg: ok ? '#1F5FAF' : '#9AA3AD', notManual: !SL.manual, resetCol: SL.manual ? '#1F5FAF' : '#9AA3AD',
@@ -598,7 +623,10 @@
       // línea 1-1 en el alzado (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
       const C = P ? P.corte : null;
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
-      const cerrado = secc.figuras.find((f) => f.id === 'E');
+      // el estribo obligatorio: el cerrado de las esquinas, o en una vigueta la grapa en S o en C (decisión 8 del plan de #938)
+      const principal = secc.figuras.find((f) => f.id === 'E');
+      const grapa = !!principal && principal.tipo !== 'Cerrado';
+      const cerrado = grapa ? null : principal;
       const recCm = num(s.rec, 4);
       // Estribos adicionales (#85, hallazgo E8): con "+ Cerrado" o "+ Abierto" el corte queda eligiendo barras. Cada barra
       // es un PuntoBarra del motor: su cara, su fila desde 1 (la de la cara) y su número de izquierda a derecha en la fila.
@@ -634,12 +662,12 @@
         // los adicionales con su trazo de C# (PreviaAcero.EnElCorte): los ganchos según el ángulo y la forma C/S, como
         // salen en Revit (Juan, 22-oct). Sin trazo (no debería pasar), la figura simple de antes.
         // El grueso es el diámetro de la barra a escala (Juan, 22-oct), por el eje del trazo.
-        trazos: secc.figuras.filter((f) => f.id !== 'E' && f.puntos).map((f) => ({
+        trazos: secc.figuras.filter((f) => (f.id !== 'E' || grapa) && f.puntos).map((f) => ({
           pts: f.puntos.map((p) => p[0] * K + ',' + p[1] * K).join(' '), w: grueso(f, K), c: colorEstribo(f) })),
         adds: secc.figuras.filter((f) => f.id !== 'E' && !f.puntos).map((f) => (f.tipo === 'Cerrado'
           ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid ' + colorEstribo(f), r: '3px', bg: 'transparent' }
           : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: colorEstribo(f) })),
-        stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
+        stOn: !grapa, stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
         stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px',
         // El cerrado de las esquinas, con el grueso de su barra hacia adentro desde las caras exteriores y la esquina
         // redondeada por fuera como el doblado de estribo (4 d de diámetro interior: radio exterior 3 d).
@@ -734,6 +762,7 @@
         pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
           + limite + ' abajo. Llevas ' + nArriba + ' arriba y ' + nAbajo + ' abajo.' : '',
         confTxt: est.conf + ' m', s1Txt: 'cada ' + est.s1, s2Txt: 'cada ' + est.s2, bastTxt: s.bastDef + ' m',
+        secEstTexto: grapa ? 'Grapa en ' + (principal.forma || 'S') + ' ' + s.est.estD : 'Estribo cerrado ' + s.est.estD + ' en las esquinas',
         secAddText: adicionales.length ? ' · ' + adicionales.length + (adicionales.length === 1 ? ' adicional' : ' adicionales') : '',
         startCerrado: empezar('Cerrado'), startAbierto: empezar('Abierto'), cancelPick: () => this.setState({ pick: null }),
         addPick: () => { this.setState({ pick: null }); ponerAdicionales(misAdicionales.concat({ tipo: pk.tipo, barras: pk.barras })); },
@@ -746,6 +775,9 @@
         segMiraIzq: s.mira === 'izquierda' ? on : off, segMiraDer: s.mira === 'izquierda' ? off : on,
         secTop: qtyOf(s.sup) + (supI.filas > 1 ? ' en ' + supI.filas + ' filas' : ''), secBot: qtyOf(s.inf) + (infI.filas > 1 ? ' en ' + infI.filas + ' filas' : ''),
         estD: est.estD, estG: est.estG, conf: est.conf, s1: est.s1, s2: est.s2, secEstD: s.est.estD,
+        // la grapa de la vigueta va en S o en C (26-oct), con los mismos botones que la de un adicional abierto
+        esGrapa: grapa, formasGrapa: ['C', 'S'].map((f) => ({ f, pressed: (est.forma || 'S') === f ? 'true' : 'false', label: 'Grapa en ' + f,
+          style: (est.forma || 'S') === f ? on : off, pick: () => setEst('forma')({ target: { value: f } }) })),
         estScope: nSel ? 'Se aplica a ' + nSel + (nSel === 1 ? ' tramo marcado' : ' tramos marcados') + ' en la lista.' : 'Se aplica a todo el pórtico. Marca tramos en la lista para darles otros valores.',
         estScopeBg: nSel ? '#E8F0FA' : '#F4F6F8',
         showSteps: step !== 'reglas' && !!P, panelEmpty: !P && step !== 'reglas',
@@ -761,7 +793,10 @@
         isSep: s.sepMode === 'separada', sepCm: s.sepCm, maxCapas: s.maxCapas,
         segPeg: s.sepMode === 'pegada' ? on : off, segSep: s.sepMode === 'separada' ? on : off,
         segAerea: !isCim ? on : off, segCim: isCim ? on : off,
-        tipoHint: !isCim ? 'Arriba traslapa al centro de la luz; abajo, junto a la columna.' : 'Abajo traslapa al centro de la luz; arriba, junto a la columna.',
+        // el chip "Vigueta" (#940, opción A): gris apagado, azul claro encendido, para no pesar como Aérea / Cimentación
+        esVigueta: !!(P && P.esVigueta),
+        chipVigueta: P && P.esVigueta ? 'border: 1px solid #B9CDEB; background: #EAF1FB; color: #1F5FAF; font-weight: 500'
+          : 'border: 1px solid #C9CFD6; background: #FFFFFF; color: #5E6670',
         segHookNo: s.bastHook ? off : on, segHookYes: s.bastHook ? on : off,
         locked: lockedNow, mult, gap, seg6: bar12 ? off : on, seg12: bar12 ? on : off,
         lockBg: lockedNow ? '#F4F6F8' : '#FDF6EA', lockText: lockedNow ? 'Bloqueadas para evitar cambios por error.' : 'Desbloqueadas: los cambios valen para todos los proyectos.',
@@ -824,6 +859,8 @@
         setSepCm: (e) => this.cambiar({ sepCm: e.target.value }, true), setMaxCapas: (e) => this.cambiar({ maxCapas: e.target.value }, true),
         setAerea: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Aérea' }); },
         setCim: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Cimentación' }); },
+        // volver a lo detectado deja la casilla sin corregir (undefined), como si nunca se hubiera tocado
+        alternarVigueta: () => this.ponerVigueta(P, !(P && P.esVigueta)),
         setBastSupN: (e) => this.cambiar({ bastSupN: e.target.value }, true), setBastInfN: (e) => this.cambiar({ bastInfN: e.target.value }, true),
         setBastSupD: (e) => this.cambiar({ bastSupD: e.target.value }), setBastInfD: (e) => this.cambiar({ bastInfD: e.target.value }),
         setBastDef: (e) => this.cambiar({ bastDef: e.target.value }, true), hookNo: () => this.cambiar({ bastHook: false }), hookYes: () => this.cambiar({ bastHook: true }),
@@ -966,7 +1003,7 @@
               <span>Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
               <span><b>Arriba</b> · ${v.secTop}</span>
               <span><b>Abajo</b> · ${v.secBot}</span>
-              <span>Estribo cerrado ${v.secEstD} en las esquinas${v.secAddText}</span>
+              <span>${v.secEstTexto}${v.secAddText}</span>
               ${v.isPicking ? html`
                 <span style="color: #9A5B00; line-height: 1.45">${v.pickMsg}</span>` : null}
               <span style="color: #5E6670">Recubrimiento ${v.rec} cm · al eje de la barra ${v.alEje} cm</span>
@@ -1086,12 +1123,14 @@
         ${v.isBarras ? html`
           <div style="display: flex; flex-direction: column; gap: 16px">
             <div style="display: flex; flex-direction: column; gap: 6px">
-              <span style="font-weight: 600">Tipo de viga</span>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+                <span style="font-weight: 600">Tipo de viga</span>
+                <button type="button" aria-pressed=${v.esVigueta} onClick=${v.alternarVigueta} style="height: 24px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; ${v.chipVigueta}">Vigueta</button>
+              </div>
               <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
                 <button type="button" onClick=${v.setAerea} style="height: 32px; border: 0; font: inherit; cursor: pointer; ${v.segAerea}">Aérea</button>
                 <button type="button" onClick=${v.setCim} style="height: 32px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segCim}">Cimentación</button>
               </div>
-              <span style="font-size: 12px; color: #5E6670">Detectado por el nivel. ${v.tipoHint}</span>
             </div>
 
             ${v.layers.map((ly) => html`
@@ -1262,13 +1301,18 @@
               <text x="254" y="92" text-anchor="middle" font-size="10" fill="#5E6670" font-family="IBM Plex Mono, monospace">${v.s1Txt}</text>
             </svg>
             <div style="display: flex; align-items: center; gap: 8px">
-              <span style="font-weight: 600; flex: 1">Estribo</span>
+              <span style="font-weight: 600; flex: 1">${v.esGrapa ? 'Grapa' : 'Estribo'}</span>
               <select aria-label="Diámetro del estribo" value=${v.estD} onChange=${v.setEstD} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                 ${opcionesDiametro(v.disponibles, 3, 4, v.estD, true)}
               </select>
               <select aria-label="Gancho del estribo" value=${v.estG} onChange=${v.setEstG} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                 <option value="135°">135°</option><option value="90°">90°</option><option value="180°">180°</option>
               </select>
+              ${v.esGrapa ? html`
+                <div role="group" aria-label="Forma de la grapa" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                  ${v.formasGrapa.map((fo) => html`
+                    <button type="button" aria-label=${fo.label} aria-pressed=${fo.pressed} onClick=${fo.pick} style="height: 30px; width: 30px; padding: 0; border: 0; font: inherit; font-weight: 600; cursor: pointer; ${fo.style}">${fo.f}</button>`)}
+                </div>` : null}
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px">
               <span style="font-weight: 600">Junto a las columnas</span>
