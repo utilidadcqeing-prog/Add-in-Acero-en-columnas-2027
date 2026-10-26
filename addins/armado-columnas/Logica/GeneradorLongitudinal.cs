@@ -1088,6 +1088,54 @@ public static class GeneradorLongitudinal
                     ? propios.FormaGrapaEstribo(pieza.Forma).Tipo
                     : FormaGrapa(pieza.Forma);
 
+                // El gancho de cada punta según su ángulo (elegido en el panel).
+                // El 135° y el 90° van doblados como el estribo, con una forma
+                // por combinación; la medida del centro del doblez es la misma
+                // que la del 180° (diagnóstico del 26-oct,
+                // docs/planes/2026-10-26-diagnostico-ganchos-grapa.md).
+                RebarHookType ganchoInicio = juego.Gancho, ganchoFin = juego.Gancho;
+                bool conAngulos = pieza.AnguloInicio != AnguloGancho.Grados180 || pieza.AnguloFin != AnguloGancho.Grados180;
+                if (conAngulos && !juego.Estribo)
+                {
+                    Avisar($"{contexto.Marca}: las grapas con ganchos de 135° o 90° van dobladas como el estribo, y Revit no " +
+                           "aceptó ese doblez en esta barra; se generan con 180°.");
+                    conAngulos = false;
+                }
+
+                if (conAngulos)
+                {
+                    double diametro = GeometriaSeccion.Metros(barra.BarNominalDiameter);
+                    RebarHookType? Gancho(AnguloGancho angulo)
+                    {
+                        if (angulo == AnguloGancho.Grados180) return juego.Gancho;
+                        TiposPropios.Pieza<RebarHookType> propio = propios.GanchoGrapaEstribo(angulo);
+                        if (propio.Tipo is null)
+                        {
+                            Avisar($"Estribos menores: {propio.Aviso}");
+                            return null;
+                        }
+
+                        // 135°: la E del cuadro; 90°, o sin el dato, 6 diámetros (PlantaArmado.Cola).
+                        CuadroVarillas.Gancho? cuadro = angulo == AnguloGancho.Grados135 ? varilla?.GanchoEstribo135 : null;
+                        if (angulo == AnguloGancho.Grados135 && cuadro is null)
+                            Avisar($"{contexto.Marca}: el cuadro no trae el gancho de 135° de estribo para «{barra.Name}»; " +
+                                   "las grapas con 135° llevan una cola de 6 diámetros.");
+                        if (propios.AjustarExtension(barra, propio.Tipo, cuadro ?? new CuadroVarillas.Gancho(6 * diametro, 0)) is string aviso)
+                            Avisar($"{contexto.Marca}: {aviso}");
+                        return propio.Tipo;
+                    }
+
+                    TiposPropios.Pieza<RebarShape> formaAngulos = propios.FormaGrapaEstribo(pieza.Forma, pieza.AnguloInicio, pieza.AnguloFin);
+                    if (Gancho(pieza.AnguloInicio) is { } gi && Gancho(pieza.AnguloFin) is { } gf && formaAngulos.Tipo is { } fa)
+                        (ganchoInicio, ganchoFin, formaGrapa) = (gi, gf, fa);
+                    else
+                    {
+                        if (formaAngulos.Aviso is not null) Avisar($"Estribos menores: {formaAngulos.Aviso}");
+                        Avisar($"{contexto.Marca}: no se pudieron preparar los ganchos de 135°/90° de las grapas; se generan con 180°.");
+                        conAngulos = false;
+                    }
+                }
+
                 // El juego grande (180° del cuadro) para los traslapos: solo
                 // si el normal es el doblado como el estribo, que es más chico.
                 (RebarHookType Gancho, GanchoMedido Medida)? Grande()
@@ -1118,13 +1166,16 @@ public static class GeneradorLongitudinal
                     var centro = new XYZ((xMin + xMax) / 2, (yMin + yMax) / 2, z + corrimiento);
                     (XYZ desde, XYZ hasta) teoricas = Teoricas(z + corrimiento);
 
-                    RebarHookType gancho = juego.Gancho;
+                    (RebarHookType Inicio, RebarHookType Fin) ganchos = (ganchoInicio, ganchoFin);
                     RebarShape? forma = formaGrapa;
                     GanchoMedido? medido = juego.Medida;
-                    if (medido is not null && !CabenEnElDoblez(teoricas, z + corrimiento, pieza, medido.RadioInterior) &&
+                    // El doblez grande del cuadro solo existe en 180°: una grapa
+                    // con 135°/90° se queda con el del estribo y, si las dos
+                    // piezas no entran, abraza la de arriba (aviso de LineaQueAbraza).
+                    if (!conAngulos && medido is not null && !CabenEnElDoblez(teoricas, z + corrimiento, pieza, medido.RadioInterior) &&
                         Grande() is { } grande)
                     {
-                        (gancho, forma, medido) = (grande.Gancho, FormaGrapa(pieza.Forma), grande.Medida);
+                        (ganchos, forma, medido) = ((grande.Gancho, grande.Gancho), FormaGrapa(pieza.Forma), grande.Medida);
                         Avisar($"{contexto.Marca}: en los traslapos, las grapas van con el doblez del gancho de 180° del cuadro " +
                                $"({GeometriaSeccion.Metros(2 * grande.Medida.RadioInterior) * 1000:0} mm por dentro) para abrazar " +
                                "las dos piezas de la barra.");
@@ -1139,7 +1190,7 @@ public static class GeneradorLongitudinal
                         ? LineaQueAbraza(teoricas, z + corrimiento, medido, pieza, lados)
                         : DeRecubrimientoARecubrimiento(teoricas);
                     int antes = creadas;
-                    CrearGrapa(doc, host, barra, gancho, ganchoTramo, forma, lados,
+                    CrearGrapa(doc, host, barra, ganchos, conAngulos ? null : ganchoTramo, forma, lados,
                         desde, hasta, contexto.Marca, res, ref creadas);
                     if (creadas == antes) break;
                 }
@@ -1326,22 +1377,22 @@ public static class GeneradorLongitudinal
     /// gancho grande de antes (pasó el 10-sep, con un gancho creado de cero).
     /// </summary>
     private static void CrearGrapa(
-        Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho, RebarHookType? ganchoRespaldo,
-        RebarShape? formaGrapa, (int Inicio, int Fin) lados,
+        Document doc, FamilyInstance host, RebarBarType barra, (RebarHookType Inicio, RebarHookType Fin) ganchos,
+        RebarHookType? ganchoRespaldo, RebarShape? formaGrapa, (int Inicio, int Fin) lados,
         XYZ desde, XYZ hasta,
         string marcaColumna, ResultadoArmado res, ref int creadas)
     {
-        if (IntentarGrapa(doc, host, barra, gancho, formaGrapa, lados, desde, hasta, out string motivo) is not null)
+        if (IntentarGrapa(doc, host, barra, ganchos, formaGrapa, lados, desde, hasta, out string motivo) is not null)
         {
             creadas++;
             return;
         }
 
-        if (ganchoRespaldo is not null && ganchoRespaldo.Id != gancho.Id &&
-            IntentarGrapa(doc, host, barra, ganchoRespaldo, formaGrapa, lados, desde, hasta, out _) is not null)
+        if (ganchoRespaldo is not null && ganchoRespaldo.Id != ganchos.Inicio.Id &&
+            IntentarGrapa(doc, host, barra, (ganchoRespaldo, ganchoRespaldo), formaGrapa, lados, desde, hasta, out _) is not null)
         {
             res.Avisos.Add(
-                $"{marcaColumna}: el gancho «{gancho.Name}» no le sirvió a Revit para una grapa ({motivo}); " +
+                $"{marcaColumna}: el gancho «{ganchos.Inicio.Name}» no le sirvió a Revit para una grapa ({motivo}); " +
                 $"esa grapa se generó con «{ganchoRespaldo.Name}», el del estribo.");
             creadas++;
             return;
@@ -1357,7 +1408,7 @@ public static class GeneradorLongitudinal
     /// "Voltear"; acá solo se traduce, sin volver a mirar el centro (#167).
     /// </param>
     private static Rebar? IntentarGrapa(
-        Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho,
+        Document doc, FamilyInstance host, RebarBarType barra, (RebarHookType Inicio, RebarHookType Fin) ganchos,
         RebarShape? formaGrapa, (int Inicio, int Fin) lados,
         XYZ desde, XYZ hasta, out string motivo)
     {
@@ -1394,8 +1445,8 @@ public static class GeneradorLongitudinal
             // nosotros y la geometría la resuelve la definición de la forma.
             using var terminaciones = new BarTerminationsData(doc)
             {
-                HookTypeIdAtStart = gancho.Id,
-                HookTypeIdAtEnd = gancho.Id,
+                HookTypeIdAtStart = ganchos.Inicio.Id,
+                HookTypeIdAtEnd = ganchos.Fin.Id,
                 TerminationOrientationAtStart = orientacionInicio,
                 TerminationOrientationAtEnd = orientacionFin,
             };
@@ -1426,7 +1477,8 @@ public static class GeneradorLongitudinal
             if (grapa is null)
             {
                 motivo =
-                    $"Rebar.CreateFromCurves devolvió null con la barra «{barra.Name}» y el gancho «{gancho.Name}»";
+                    $"Rebar.CreateFromCurves devolvió null con la barra «{barra.Name}» y el gancho «{ganchos.Inicio.Name}»" +
+                    (ganchos.Fin.Id != ganchos.Inicio.Id ? $" / «{ganchos.Fin.Name}»" : "");
                 return null;
             }
 
@@ -1473,7 +1525,7 @@ public static class GeneradorLongitudinal
         // que espera GanchoGrapa.Linea aunque la grapa pase por el centro (#167).
         (int Inicio, int Fin) lados = GanchoGrapa.Lados(
             (desde.X, desde.Y), (hasta.X, hasta.Y), (centroSeccion.X, centroSeccion.Y), FormaMenor.GrapaC, volteado: false);
-        Rebar? prueba = IntentarGrapa(doc, host, barra, gancho, formaGrapa, lados, desde, hasta, out motivo);
+        Rebar? prueba = IntentarGrapa(doc, host, barra, (gancho, gancho), formaGrapa, lados, desde, hasta, out motivo);
         if (prueba is null) return null;
 
         try
