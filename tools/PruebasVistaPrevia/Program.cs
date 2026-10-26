@@ -314,6 +314,56 @@ Probar("grapa_en_s_abre_un_gancho_para_cada_lado", () =>
     Cierto(g[0].Y > 0.12 && g[^1].Y < 0.12, "la cola del inicio arriba y la del fin abajo");
 });
 
+Probar("grapa_en_s_tramo_recto_tangente_como_revit", () =>
+{
+    // #167: Revit deja los dobleces perpendiculares al tramo recto, que en la
+    // S cruza en diagonal (sen θ = 2r / distancia entre centros). Sin quiebre.
+    // El inicio abre hacia arriba: el tramo arranca por debajo de su centro y
+    // llega por encima del centro del fin.
+    (double X, double Y) ci = (0.07, 0.12), cf = (0.21, 0.12);
+    double r = 0.038 / 2 + 0.0095 / 2, cola = 0.065;
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(ci, cf, 1, -1, 0.0095, 0.038, cola);
+    double seno = 2 * r / (cf.X - ci.X), coseno = Math.Sqrt(1 - seno * seno);
+
+    // Los centros no se mueven: cada punto de los dobleces queda a r de su centro.
+    int n = (int)(180 / PlantaArmado.PasoGrados) + 1;
+    for (int i = 1; i <= n; i++)
+    {
+        Cerca(r, Math.Sqrt(Math.Pow(g[i].X - ci.X, 2) + Math.Pow(g[i].Y - ci.Y, 2)), 1e-9, "doblez del inicio a r del centro");
+        Cerca(r, Math.Sqrt(Math.Pow(g[^(i + 1)].X - cf.X, 2) + Math.Pow(g[^(i + 1)].Y - cf.Y, 2)), 1e-9, "doblez del fin a r del centro");
+    }
+
+    // El tramo recto (último punto del doblez del inicio → primero del del fin) sube con la inclinación de la tangente.
+    (double X, double Y) a = g[n], b = g[n + 1];
+    double largo = Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    Cerca(coseno, (b.X - a.X) / largo, 1e-9, "tramo recto inclinado (x)");
+    Cerca(seno, (b.Y - a.Y) / largo, 1e-9, "tramo recto inclinado (y)");
+    // Tangente: perpendicular al radio en las dos puntas.
+    Cerca(0, (a.X - ci.X) * (b.X - a.X) + (a.Y - ci.Y) * (b.Y - a.Y), 1e-12, "tangente al doblez del inicio");
+    Cerca(0, (b.X - cf.X) * (b.X - a.X) + (b.Y - cf.Y) * (b.Y - a.Y), 1e-12, "tangente al doblez del fin");
+    // Las colas, paralelas al tramo recto y del largo del cuadro.
+    Cerca(cola * coseno, g[0].X - g[1].X, 1e-9, "cola del inicio paralela (x)");
+    Cerca(cola * seno, g[0].Y - g[1].Y, 1e-9, "cola del inicio paralela (y)");
+    Cerca(-cola * coseno, g[^1].X - g[^2].X, 1e-9, "cola del fin paralela (x)");
+    Cerca(-cola * seno, g[^1].Y - g[^2].Y, 1e-9, "cola del fin paralela (y)");
+});
+
+Probar("lados_de_grapa_con_el_centro_sobre_la_linea", () =>
+{
+    // #167: la grapa del medio (el centro de la sección sobre la línea entre
+    // barras) tiene que dar siempre lo mismo, con o sin ruido de redondeo.
+    foreach (double ruido in new[] { 0.0, 1e-13, -1e-13 })
+    {
+        Cierto(GanchoGrapa.Lados((0.05, 0.2), (0.35, 0.2), (0.2, 0.2 + ruido), FormaMenor.GrapaS, false) == (1, -1), "S del medio");
+        Cierto(GanchoGrapa.Lados((0.05, 0.2), (0.35, 0.2), (0.2, 0.2 + ruido), FormaMenor.GrapaS, true) == (-1, 1), "S del medio volteada");
+        Cierto(GanchoGrapa.Lados((0.05, 0.2), (0.35, 0.2), (0.2, 0.2 + ruido), FormaMenor.GrapaC, false) == (1, 1), "C del medio");
+    }
+    // Fuera del medio, hacia el centro.
+    Cierto(GanchoGrapa.Lados((0.05, 0.1), (0.35, 0.1), (0.2, 0.2), FormaMenor.GrapaC, false) == (1, 1), "C de abajo abre hacia arriba");
+    Cierto(GanchoGrapa.Lados((0.05, 0.3), (0.35, 0.3), (0.2, 0.2), FormaMenor.GrapaC, false) == (-1, -1), "C de arriba abre hacia abajo");
+    Cierto(GanchoGrapa.Lados((0.05, 0.3), (0.35, 0.3), (0.2, 0.2), FormaMenor.GrapaS, false) == (-1, 1), "S de arriba");
+});
+
 // ---- #139: ganchos que cruzarían la línea de propiedad
 
 // El lote del modelo de prueba del 22-oct: X -0,15..7,15 ; Y -0,15..12,15.

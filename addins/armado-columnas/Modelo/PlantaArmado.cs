@@ -74,9 +74,19 @@ public static class PlantaArmado
         double diametro, double doblez, double cola)
     {
         double r = doblez / 2 + diametro / 2;
-        double largo = Math.Sqrt(Cuadrado(centroFin.X - centroInicio.X) + Cuadrado(centroFin.Y - centroInicio.Y));
+        if (Math.Sqrt(Cuadrado(centroFin.X - centroInicio.X) + Cuadrado(centroFin.Y - centroInicio.Y)) <= 1e-9)
+            return Array.Empty<(double, double)>();
+
+        // Los dobleces y las colas van respecto del TRAMO RECTO, como los deja
+        // Revit. En la C es paralelo a la línea de los centros; en la S cruza
+        // en diagonal, tangente a los dos dobleces (#167): antes se dibujaban
+        // los ganchos derechos y la recta en diagonal, con un quiebre que una
+        // barra real no tiene.
+        ((double X, double Y) a, (double X, double Y) b) =
+            GanchoGrapa.Linea(centroInicio, centroFin, 0, r, ladoInicio, ladoFin);
+        double largo = Math.Sqrt(Cuadrado(b.X - a.X) + Cuadrado(b.Y - a.Y));
         if (largo <= 1e-9) return Array.Empty<(double, double)>();
-        (double X, double Y) u = ((centroFin.X - centroInicio.X) / largo, (centroFin.Y - centroInicio.Y) / largo);
+        (double X, double Y) u = ((b.X - a.X) / largo, (b.Y - a.Y) / largo);
         (double X, double Y) l = (-u.Y, u.X);
 
         // Del lado de la cola (hacia donde abre), por afuera (hacia la cara), al
@@ -133,9 +143,8 @@ public static class PlantaArmado
         if (largo <= 1e-9) return Array.Empty<(double, double)>();
         (double X, double Y) u = ((fin.X - inicio.X) / largo, (fin.Y - inicio.Y) / largo);
 
-        int ladoCentro = -u.Y * (centroSeccion.X - inicio.X) + u.X * (centroSeccion.Y - inicio.Y) >= 0 ? 1 : -1;
-        int ladoInicio = pieza.Volteado ? -ladoCentro : ladoCentro;
-        int ladoFin = (pieza.Forma == FormaMenor.GrapaS) != pieza.Volteado ? -ladoCentro : ladoCentro;
+        (int ladoInicio, int ladoFin) =
+            GanchoGrapa.Lados((inicio.X, inicio.Y), (fin.X, fin.Y), centroSeccion, pieza.Forma, pieza.Volteado);
 
         return Grapa(
             CentroDelGancho(inicio.X, inicio.Y, inicio.Radio, doblez, u),

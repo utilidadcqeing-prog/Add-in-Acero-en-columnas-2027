@@ -842,7 +842,8 @@ public static class GeneradorLongitudinal
                    GanchoGrapa.Entran(PiezasEn(teoricas.hasta, radioTeorico, z), radioInterior);
         }
 
-        (XYZ, XYZ) LineaQueAbraza((XYZ desde, XYZ hasta) teoricas, double z, GanchoMedido medido, EstriboMenor pieza, XYZ centroSeccion)
+        (XYZ, XYZ) LineaQueAbraza((XYZ desde, XYZ hasta) teoricas, double z, GanchoMedido medido, EstriboMenor pieza,
+            (int Inicio, int Fin) lados)
         {
             XYZ u = (teoricas.hasta - teoricas.desde).Normalize();
             double radioTeorico = (pieza.Eje == EjeCaja.Fila ? diametroCaraY : diametroCaraX) / 2;
@@ -861,14 +862,10 @@ public static class GeneradorLongitudinal
             (double X, double Y) centroInicio = Centro(teoricas.desde, (u.X, u.Y));
             (double X, double Y) centroFin = Centro(teoricas.hasta, (-u.X, -u.Y));
 
-            // Hacia qué lado abre cada gancho, igual que en IntentarGrapa: la C
-            // hacia el centro; "Voltear" invierte las dos puntas y la S, la del fin.
-            int ladoCentro = XYZ.BasisZ.CrossProduct(u).DotProduct(centroSeccion - teoricas.desde) >= 0 ? 1 : -1;
-            int ladoInicio = pieza.Volteado ? -ladoCentro : ladoCentro;
-            int ladoFin = (pieza.Forma == FormaMenor.GrapaS) != pieza.Volteado ? -ladoCentro : ladoCentro;
-
+            // Con los MISMOS lados con los que después se orientan los ganchos
+            // en IntentarGrapa (#167).
             ((double X, double Y) d, (double X, double Y) h) =
-                GanchoGrapa.Linea(centroInicio, centroFin, medido.Axial, medido.Lateral, ladoInicio, ladoFin);
+                GanchoGrapa.Linea(centroInicio, centroFin, medido.Axial, medido.Lateral, lados.Inicio, lados.Fin);
             return (new XYZ(d.X, d.Y, z), new XYZ(h.X, h.Y, z));
         }
 
@@ -1132,12 +1129,17 @@ public static class GeneradorLongitudinal
                                "las dos piezas de la barra.");
                     }
 
+                    // Hacia dónde abre cada gancho se decide una sola vez, con
+                    // la línea entre las barras (#167).
+                    (int Inicio, int Fin) lados = GanchoGrapa.Lados(
+                        (teoricas.desde.X, teoricas.desde.Y), (teoricas.hasta.X, teoricas.hasta.Y),
+                        (centro.X, centro.Y), pieza.Forma, pieza.Volteado);
                     (XYZ desde, XYZ hasta) = medido is not null
-                        ? LineaQueAbraza(teoricas, z + corrimiento, medido, pieza, centro)
+                        ? LineaQueAbraza(teoricas, z + corrimiento, medido, pieza, lados)
                         : DeRecubrimientoARecubrimiento(teoricas);
                     int antes = creadas;
-                    CrearGrapa(doc, host, barra, gancho, ganchoTramo, forma, pieza.Forma, pieza.Volteado,
-                        desde, hasta, centro, contexto.Marca, res, ref creadas);
+                    CrearGrapa(doc, host, barra, gancho, ganchoTramo, forma, lados,
+                        desde, hasta, contexto.Marca, res, ref creadas);
                     if (creadas == antes) break;
                 }
 
@@ -1324,18 +1326,18 @@ public static class GeneradorLongitudinal
     /// </summary>
     private static void CrearGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho, RebarHookType? ganchoRespaldo,
-        RebarShape? formaGrapa, FormaMenor forma, bool volteado,
-        XYZ desde, XYZ hasta, XYZ centroSeccion,
+        RebarShape? formaGrapa, (int Inicio, int Fin) lados,
+        XYZ desde, XYZ hasta,
         string marcaColumna, ResultadoArmado res, ref int creadas)
     {
-        if (IntentarGrapa(doc, host, barra, gancho, formaGrapa, forma, volteado, desde, hasta, centroSeccion, out string motivo) is not null)
+        if (IntentarGrapa(doc, host, barra, gancho, formaGrapa, lados, desde, hasta, out string motivo) is not null)
         {
             creadas++;
             return;
         }
 
         if (ganchoRespaldo is not null && ganchoRespaldo.Id != gancho.Id &&
-            IntentarGrapa(doc, host, barra, ganchoRespaldo, formaGrapa, forma, volteado, desde, hasta, centroSeccion, out _) is not null)
+            IntentarGrapa(doc, host, barra, ganchoRespaldo, formaGrapa, lados, desde, hasta, out _) is not null)
         {
             res.Avisos.Add(
                 $"{marcaColumna}: el gancho «{gancho.Name}» no le sirvió a Revit para una grapa ({motivo}); " +
@@ -1348,60 +1350,34 @@ public static class GeneradorLongitudinal
         try { doc.Regenerate(); } catch { /* best-effort */ }
     }
 
-    /// <param name="forma">C: los dos ganchos hacia el mismo lado; S: uno para cada lado.</param>
-    /// <param name="volteado">Invierte los dos ganchos (botón "Voltear" del panel).</param>
+    /// <param name="lados">
+    /// Hacia dónde abre cada gancho, de <see cref="GanchoGrapa.Lados"/>: +1 a
+    /// la izquierda de desde→hasta, −1 a la derecha. Ya trae la C/S y el
+    /// "Voltear"; acá solo se traduce, sin volver a mirar el centro (#167).
+    /// </param>
     private static Rebar? IntentarGrapa(
         Document doc, FamilyInstance host, RebarBarType barra, RebarHookType gancho,
-        RebarShape? formaGrapa, FormaMenor forma, bool volteado,
-        XYZ desde, XYZ hasta, XYZ centroSeccion, out string motivo)
+        RebarShape? formaGrapa, (int Inicio, int Fin) lados,
+        XYZ desde, XYZ hasta, out string motivo)
     {
         motivo = "";
         try
         {
-
-            // Los dos ganchos tienen que mirar hacia el CENTRO de la sección
-            // (pedido del usuario sobre el modelo de referencia, 10-sep).
-            // Left/Right no son direcciones fijas: se interpretan respecto del
-            // sentido de recorrido de la curva (mismo problema que documenta
-            // GeometriaSeccion.Normalizar), así que con una constante para
-            // todas, la grapa de la fila de arriba y la de abajo terminan
-            // apuntando a lados opuestos. Se calcula cuál de las dos cae del
-            // lado del centro en vez de fijarla.
+            // Left/Right no son direcciones fijas: Revit los interpreta respecto
+            // del sentido de recorrido de la curva, y Left es la izquierda de
+            // desde→hasta (con eso abren hacia el centro las C desde el 20-oct,
+            // medido con el MCP en la columna 781265). La orientación de cada
+            // punta la respeta tal cual, sin cambiar la forma (diagnóstico del
+            // 20-oct, docs/planes/2026-10-20-diagnostico-grapa-s.md).
             //
-            // PENDIENTE de confirmar contra Revit real que Left es el giro
-            // antihorario visto desde +Z; si sale al revés, se invierte acá.
-            //
-            // Con un gancho de 180° la regla se DA VUELTA, y no es un detalle:
-            // ese gancho da la vuelta completa alrededor de la longitudinal, así
-            // que el centro del semicírculo es la barra y el tramo recto de la
-            // grapa queda a un radio de ese eje, del lado contrario al que gira
-            // el gancho. Si girara hacia el centro, el tramo recto se iría hacia
-            // AFUERA, contra el recubrimiento. Girando hacia afuera, la grapa
-            // queda dentro del núcleo y el gancho abraza la barra desde el lado
-            // de la cara. Un gancho de 135°, en cambio, apoya su cola en el
-            // núcleo: ese sí mira al centro (criterio del 10-sep).
-            XYZ direccion = (hasta - desde).Normalize();
-            XYZ haciaLaIzquierda = XYZ.BasisZ.CrossProduct(direccion);
-            // Desde el 20-oct TODOS los ganchos se abren hacia el centro: la
-            // línea va sobre las barras (no un radio más adentro) y el 180°
-            // abierto hacia afuera se salía del estribo por el costado
-            // (medido con el MCP en la columna 781265). Lo de arriba sobre el
-            // 180° queda como historia.
-            const bool haciaElCentro = true;
-            bool izquierdaMiraAlCentro = haciaLaIzquierda.DotProduct(centroSeccion - desde) > 0;
-            RebarTerminationOrientation orientacion =
-                izquierdaMiraAlCentro == haciaElCentro
-                    ? RebarTerminationOrientation.Left
-                    : RebarTerminationOrientation.Right;
-
-            // Esa es la C de siempre. La S y el volteo cambian la orientación de
-            // cada punta por separado: Revit la respeta tal cual y no cambia la
-            // forma (diagnóstico del 20-oct, docs/planes/2026-10-20-diagnostico-grapa-s.md).
-            RebarTerminationOrientation otra = orientacion == RebarTerminationOrientation.Left
-                ? RebarTerminationOrientation.Right
-                : RebarTerminationOrientation.Left;
-            RebarTerminationOrientation orientacionInicio = volteado ? otra : orientacion;
-            RebarTerminationOrientation orientacionFin = (forma == FormaMenor.GrapaS) != volteado ? otra : orientacion;
+            // Antes se volvía a decidir acá cuál lado mira al centro, con la
+            // línea ya inclinada: en la S del medio esa línea pasa justo por el
+            // centro y el redondeo daba vuelta los dos ganchos respecto de la
+            // línea calculada (#167, docs/planes/2026-10-26-grapa-s-167.md).
+            static RebarTerminationOrientation Orientacion(int lado) =>
+                lado > 0 ? RebarTerminationOrientation.Left : RebarTerminationOrientation.Right;
+            RebarTerminationOrientation orientacionInicio = Orientacion(lados.Inicio);
+            RebarTerminationOrientation orientacionFin = Orientacion(lados.Fin);
 
             // La línea ya viene calculada para que cada gancho abrace su barra
             // (GanchoGrapa.Linea, con el mismo criterio de lados que acá).
@@ -1468,7 +1444,7 @@ public static class GeneradorLongitudinal
     /// Lo medido en una grapa de prueba, en pies: dónde queda el centro del
     /// gancho del inicio respecto de la punta de la línea pedida -- <c>Axial</c>
     /// a lo largo de la grapa (hacia adentro) y <c>Lateral</c> de costado (hacia
-    /// el centro de la sección, hacia donde abre la C) -- y el radio interior
+    /// donde abre el gancho, el lado de <see cref="GanchoGrapa.Lados"/>) -- y el radio interior
     /// del doblez. Con eso <see cref="GanchoGrapa.Linea"/> calcula la línea que
     /// deja cada gancho donde tiene que ir.
     /// </summary>
@@ -1491,8 +1467,12 @@ public static class GeneradorLongitudinal
         XYZ desde, XYZ hasta, XYZ centroSeccion, string marcaColumna, ResultadoArmado res,
         out string motivo)
     {
-        Rebar? prueba = IntentarGrapa(doc, host, barra, gancho, formaGrapa, FormaMenor.GrapaC, volteado: false,
-            desde, hasta, centroSeccion, out motivo);
+        // Una C hacia el centro, con la misma cuenta de lados que las grapas
+        // de verdad: el Lateral se mide hacia ESE lado, así sale con el signo
+        // que espera GanchoGrapa.Linea aunque la grapa pase por el centro (#167).
+        (int Inicio, int Fin) lados = GanchoGrapa.Lados(
+            (desde.X, desde.Y), (hasta.X, hasta.Y), (centroSeccion.X, centroSeccion.Y), FormaMenor.GrapaC, volteado: false);
+        Rebar? prueba = IntentarGrapa(doc, host, barra, gancho, formaGrapa, lados, desde, hasta, out motivo);
         if (prueba is null) return null;
 
         try
@@ -1513,7 +1493,7 @@ public static class GeneradorLongitudinal
             XYZ direccion = (hasta - desde).Normalize();
             var medido = new GanchoMedido(
                 (arco.Center - desde).DotProduct(direccion),
-                (arco.Center - desde).DotProduct(HaciaElCentro(desde, direccion, centroSeccion)),
+                (arco.Center - desde).DotProduct(XYZ.BasisZ.CrossProduct(direccion) * lados.Inicio),
                 arco.Radius - barra.BarNominalDiameter / 2);
 
             res.Detalles.Add(
@@ -1532,16 +1512,6 @@ public static class GeneradorLongitudinal
         {
             Descartar(doc, prueba);
         }
-    }
-
-    /// <summary>
-    /// Versor perpendicular a la grapa, en planta, que apunta hacia el centro de
-    /// la sección -- el lado hacia el que gira el gancho.
-    /// </summary>
-    private static XYZ HaciaElCentro(XYZ desde, XYZ direccion, XYZ centroSeccion)
-    {
-        XYZ perpendicular = XYZ.BasisZ.CrossProduct(direccion);
-        return perpendicular.DotProduct(centroSeccion - desde) >= 0 ? perpendicular : -perpendicular;
     }
 
     /// <summary>

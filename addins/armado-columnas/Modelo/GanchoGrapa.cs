@@ -71,6 +71,37 @@ public static class GanchoGrapa
     }
 
     /// <summary>
+    /// Hacia qué lado abre cada gancho de una grapa que va de
+    /// <paramref name="desde"/> a <paramref name="hasta"/> (las barras que
+    /// engancha): +1 a la izquierda (girando 90° antihorario desde
+    /// desde→hasta, visto desde arriba), −1 a la derecha. La C abre hacia el
+    /// centro de la sección; "Voltear" invierte las dos puntas y la S, la del
+    /// fin.
+    ///
+    /// Se calcula UNA vez, con la línea entre las barras, y lo usan la vista
+    /// previa, la línea que se le pide a Revit y la orientación de los ganchos
+    /// (#167): antes el generador lo volvía a decidir con la línea ya
+    /// inclinada de la S, que en la grapa del medio pasa justo por el centro,
+    /// y el redondeo daba vuelta los dos ganchos. Si el centro cae sobre la
+    /// línea (grapa del medio) se toma siempre la izquierda.
+    /// </summary>
+    public static (int Inicio, int Fin) Lados(
+        (double X, double Y) desde, (double X, double Y) hasta, (double X, double Y) centroSeccion,
+        FormaMenor forma, bool volteado)
+    {
+        double largo = Math.Sqrt(Cuadrado(hasta.X - desde.X) + Cuadrado(hasta.Y - desde.Y));
+        if (largo <= 1e-12) throw new ArgumentException("los dos ganchos caen en el mismo punto");
+
+        (double ux, double uy) = ((hasta.X - desde.X) / largo, (hasta.Y - desde.Y) / largo);
+        double haciaElCentro = -uy * (centroSeccion.X - desde.X) + ux * (centroSeccion.Y - desde.Y);
+        int ladoCentro = haciaElCentro >= -1e-6 * largo ? 1 : -1;
+
+        int inicio = volteado ? -ladoCentro : ladoCentro;
+        int fin = (forma == FormaMenor.GrapaS) != volteado ? -ladoCentro : ladoCentro;
+        return (inicio, fin);
+    }
+
+    /// <summary>
     /// La línea que hay que pedirle a Revit para que los dos ganchos queden
     /// con su centro donde se quiere. <paramref name="axial"/> y
     /// <paramref name="lateral"/> son lo MEDIDO en una grapa de prueba: dónde
