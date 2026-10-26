@@ -7,6 +7,16 @@ public enum TipoViga
     Cimentacion,
 }
 
+/// <summary>
+/// Viga o vigueta de losa nervada (#939). La vigueta se arma igual, pero se apoya en vigas que llegan a columnas
+/// (Carlos, 24-oct). Va aparte de <see cref="TipoViga"/>: una vigueta también es aérea.
+/// </summary>
+public enum Elemento
+{
+    Viga,
+    Vigueta,
+}
+
 /// <summary>Capa de barras según su posición física en la viga.</summary>
 public enum Posicion
 {

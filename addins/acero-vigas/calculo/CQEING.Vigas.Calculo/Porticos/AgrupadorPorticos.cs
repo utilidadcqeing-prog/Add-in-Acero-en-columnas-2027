@@ -27,7 +27,7 @@ public static class AgrupadorPorticos
     {
         var porticos = new List<PorticoLeido>();
         var avisos = new List<AvisoLectura>();
-        int sinEje = 0;
+        int sinEje = 0, viguetas = 0;
 
         foreach (Linea linea in Lineas(modelo.Vigas))
         {
@@ -49,11 +49,12 @@ public static class AgrupadorPorticos
                 }
 
                 EjeLeido? eje = ejePropio ?? EjeQuePasaPorLosApoyos(linea, modelo.Ejes, propios);
-                string nombre = eje is null
-                    ? $"Pórtico sin eje {++sinEje}"
-                    : $"Pórtico {eje.Nombre}{(cadenas.Count > 1 ? (char)('a' + i) : "")}";
+                Elemento clase = ClaseDe(cadena, propios);
+                string nombre = eje is not null ? $"Pórtico {eje.Nombre}{(cadenas.Count > 1 ? (char)('a' + i) : "")}"
+                    : clase == Elemento.Vigueta ? $"Vigueta {++viguetas}"
+                    : $"Pórtico sin eje {++sinEje}";
 
-                porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, eje?.Nombre, desde, hasta, avisos));
+                porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, eje?.Nombre, desde, hasta, avisos, clase));
             }
         }
         return new ResultadoLectura(porticos, avisos);
@@ -77,7 +78,7 @@ public static class AgrupadorPorticos
     }
 
     private static PorticoLeido Armar(Linea linea, IReadOnlyList<EjeLeido> ejes, List<Tramo> cadena, List<Soporte> soportes,
-        string nombre, string? eje, double desde, double hasta, List<AvisoLectura> avisos)
+        string nombre, string? eje, double desde, double hasta, List<AvisoLectura> avisos, Elemento clase)
     {
         var nombres = new List<string>();
         var posiciones = new List<double>();
@@ -110,7 +111,8 @@ public static class AgrupadorPorticos
         // El mismo eje se repite en cada nivel ("Pórtico A" de Piso 1, Piso 2 y Cubierta): los avisos dicen el nivel.
         NivelLeido? nivel = cadena[0].Viga.Nivel;
         string elemento = nivel is null ? nombre : $"{nombre} · {nivel.Nombre}";
-        if (eje is null)
+        // Las viguetas casi nunca van sobre un eje: el aviso sería ruido (en PROY_JULIO_BETO salían 18).
+        if (eje is null && clase != Elemento.Vigueta)
             avisos.Add(new AvisoLectura(TipoAvisoLectura.SinEje, elemento));
         if (tramos.Select(t => (t.Ancho, t.Alto)).Distinct().Count() > 1)
             avisos.Add(new AvisoLectura(TipoAvisoLectura.CambioDeSeccion, elemento));
@@ -121,7 +123,8 @@ public static class AgrupadorPorticos
             new Portico(apoyos, voladizoInicio, voladizoFinal),
             soportes.Select(s => s.Tipo).ToList(), tramos, cadena.Select(t => t.Viga.Id).ToList(),
             soportes.Select(s => Math.Round(s.NormalHasta - s.NormalDesde)).ToList(),
-            Ubicacion(linea, cadena, origen, tramos[0], cadena.Select(t => new VigaEnPortico(t.Viga.Id, Mm(t.Desde), Mm(t.Hasta))).ToList()));
+            Ubicacion(linea, cadena, origen, tramos[0], cadena.Select(t => new VigaEnPortico(t.Viga.Id, Mm(t.Desde), Mm(t.Hasta))).ToList()),
+            clase);
 
         TramoLeido Tramo(string nombreTramo, double a, double b, bool voladizo)
         {
@@ -145,6 +148,26 @@ public static class AgrupadorPorticos
         double x = origen * linea.Ux - lado * linea.Uy, y = origen * linea.Uy + lado * linea.Ux;
         return new UbicacionPortico(linea.Ux, linea.Uy, x, y, cadena.Min(t => t.Viga.ZAbajo), cadena.Max(t => t.Viga.ZArriba),
             primero.Ancho, primero.Alto, vigas);
+    }
+
+    /// <summary>Ancho mínimo de una viga, en mm (Carlos, 24-oct, min 02:30): lo más angosto es vigueta.</summary>
+    private const double AnchoMinimoViga = 200;
+
+    /// <summary>
+    /// Vigueta si no llega a columnas ni muros (sus apoyos son vigas) y todas sus vigas lo son por el tipo (VT, VB o
+    /// "vigueta", como en PROY_JULIO_BETO) o por medir menos de <see cref="AnchoMinimoViga"/>. Carlos (min 12:15): el
+    /// tamaño solo no alcanza, hay viguetas de 15 y 20 cm; si se equivoca, el usuario lo corrige en el tablero (#940).
+    /// </summary>
+    private static Elemento ClaseDe(List<Tramo> cadena, List<Soporte> apoyos) =>
+        apoyos.All(s => s.Tipo == TipoApoyo.Viga) && cadena.All(t => NombreDeVigueta(t.Viga.NombreTipo) || Math.Round(t.Viga.Ancho) < AnchoMinimoViga)
+            ? Elemento.Vigueta : Elemento.Viga;
+
+    private static bool NombreDeVigueta(string? tipo)
+    {
+        if (tipo is null)
+            return false;
+        string nombre = SinTildes(tipo).ToUpperInvariant();
+        return nombre.StartsWith("VT") || nombre.StartsWith("VB") || nombre.Contains("VIGUETA");
     }
 
     /// <summary>Cimentación si la cota del nivel es ≤ 0 o su nombre dice cimentación o fundación (decisión 4).</summary>
