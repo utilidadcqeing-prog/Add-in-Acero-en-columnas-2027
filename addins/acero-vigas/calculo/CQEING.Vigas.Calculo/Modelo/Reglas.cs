@@ -46,16 +46,37 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
     });
 
     /// <summary>
-    /// Largo (B) del gancho <paramref name="t"/> en mm. El de 135° sale del cuadro de estribos, el único 135° que mandó
-    /// Carlos (decisión 5 del plan de #84; pregunta 1 en #79).
+    /// Lo que el gancho <paramref name="t"/> suma al largo de la barra, en mm. El tramo recto llega a la cara de afuera
+    /// del doblez (como lo dibuja Revit), así que el gancho suma su arco por el eje más la cola E del cuadro, menos el
+    /// radio y medio diámetro que el tramo ya cubre: la pata queda con la cola de Carlos (Juan, 26-oct; antes sumaba la B
+    /// entera y Revit alargaba la cola, 256 en vez de 191 en el #5 a 90°). Sin E en el cuadro (135° del #6 al #8), la B.
+    /// El de 135° sale del cuadro de estribos, el único 135° que mandó Carlos (decisión 5 del plan de #84; pregunta 1 en
+    /// #79), con el doblado de gancho (<see cref="DobladoGancho"/>).
     /// </summary>
-    public static int LargoGancho(ReglaDiametro r, TipoGancho t) => t switch
+    public static int LargoGancho(ReglaDiametro r, TipoGancho t)
     {
-        TipoGancho.De90 => r.Gancho90.B,
-        TipoGancho.De135 => r.Estribo135.B,
-        TipoGancho.De180 => r.Gancho180.B,
-        _ => 0,
-    };
+        (int grados, Gancho g) = t switch
+        {
+            TipoGancho.De90 => (90, r.Gancho90),
+            TipoGancho.De135 => (135, r.Estribo135),
+            TipoGancho.De180 => (180, r.Gancho180),
+            _ => (0, r.Gancho90),
+        };
+        if (grados == 0)
+            return 0;
+        if (g.E is not int cola)
+            return g.B;
+        double radio = DobladoGancho(r, t) / 2 + r.Diametro / 2;
+        return (int)Math.Round(radio * grados * Math.PI / 180 + cola - radio - r.Diametro / 2);
+    }
+
+    /// <summary>
+    /// Diámetro de doblado de un gancho de barra o bastón, en mm: el del cuadro de 90° (o de 180°), que es el de gancho
+    /// del tipo de barra en Revit (6 d); el de 135° también, porque la fila de 135° del cuadro es la de estribos y Revit
+    /// dobla las barras con el de gancho. 6 d si el cuadro no lo trae.
+    /// </summary>
+    public static double DobladoGancho(ReglaDiametro r, TipoGancho t) =>
+        (t == TipoGancho.De180 ? r.Gancho180.D : r.Gancho90.D) ?? 6 * r.Diametro;
 
     /// <summary>Varilla de la que sale una barra de ese largo: la normal o, si no alcanza, la larga.</summary>
     public int VarillaPara(int largo) => largo > Varilla ? VarillaLarga : Varilla;

@@ -356,7 +356,7 @@ public class ArmadorVistaTests
         var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 7900), Datos.Columna("D", 11550)],
             VoladizoFinal: 1500);
 
-        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico));
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico), Datos.ReglasDeLaMaqueta);
 
         AvisoVista a = Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('I'));
         Assert.Equal("El traslapo I3–I4 queda en 1.30, 0.40 por encima del mínimo. I4 termina en el voladizo y solo puede crecer. "
@@ -373,7 +373,7 @@ public class ArmadorVistaTests
         var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 7900), Datos.Columna("D", 11550)],
             VoladizoFinal: 1500);
 
-        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico));
+        VistaPortico v = Armar(OpcionesTablero.PorDefecto with { Cara = Cara.Final }, Portico1(portico), Datos.ReglasDeLaMaqueta);
 
         Assert.True(Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('I')).CambiarCara);
         AvisoVista arriba = Assert.Single(v.Avisos, a => a.Tipo == "TraslapoLargo" && a.Elemento.StartsWith('S'));

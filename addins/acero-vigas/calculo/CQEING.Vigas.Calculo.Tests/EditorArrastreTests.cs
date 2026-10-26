@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Modelo;
+﻿using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Tablero;
 
 namespace CQEING.Vigas.Calculo.Tests;
@@ -10,7 +10,7 @@ namespace CQEING.Vigas.Calculo.Tests;
 public class EditorArrastreTests
 {
     private static EntradaVigas Maqueta(CambiosManuales? cambios = null, ArmadoBastones? bastones = null) =>
-        new(Datos.PorticoMaqueta(), TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Reglas.Generales,
+        new(Datos.PorticoMaqueta(), TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Datos.ReglasDeLaMaqueta,
             Cambios: cambios, Bastones: bastones);
 
     private static IReadOnlyList<Salto> Saltos(EntradaVigas e, string elemento, PuntoArrastre punto) =>

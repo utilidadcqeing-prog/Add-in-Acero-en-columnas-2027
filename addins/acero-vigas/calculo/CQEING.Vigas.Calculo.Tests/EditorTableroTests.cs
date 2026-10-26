@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Modelo;
+﻿using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Tablero;
 
 namespace CQEING.Vigas.Calculo.Tests;
@@ -80,7 +80,9 @@ public class EditorTableroTests
     [Fact]
     public void TraslapoCuyaVecinaNoSaleDeLaVarilla()
     {
-        OpcionEdicion aplicar = Opcion(Previa("I2–I3", AccionEdicion.Traslapo, 1.00), "aplicar");
+        // el escenario de la maqueta, con el gancho de B entera (ver Datos.ReglasDeLaMaqueta)
+        OpcionEdicion aplicar = Opcion(EditorTablero.Previsualizar(ArmadorVistaTests.Portico1(), OpcionesTablero.PorDefecto, Datos.ReglasDeLaMaqueta,
+            new PedidoEdicion(1, "I2–I3", AccionEdicion.Traslapo, 1.00)), "aplicar");
 
         Assert.Equal((false, "I3 pasaría a 6.50 m y no sale de una varilla de 6 m."), (aplicar.SePuede, aplicar.Texto));
     }

@@ -23,6 +23,28 @@ public class ReglasTests
         Assert.Equal(new Gancho(278, 191, 95, 227), Reglas.Generales.PorDiametro[5].Gancho90);
     }
 
+    /// <summary>
+    /// Juan, 26-oct: la pata del gancho respeta la cola E del cuadro. El tramo recto llega a la cara de afuera del doblez,
+    /// así que el gancho suma su arco por el eje más la cola, menos el radio y medio diámetro que el tramo ya cubre. #5:
+    /// radio 95 / 2 + 15.9 / 2 = 55.45. Antes sumaba la B entera (278) y Revit alargaba la cola a 256.
+    /// </summary>
+    [Theory]
+    [InlineData(TipoGancho.De90, 215)]   // 55.45·π/2 + 191 − 63.4
+    [InlineData(TipoGancho.De135, 162)]  // 55.45·3π/4 + 95 − 63.4: el doblado de gancho, el de la barra en Revit
+    [InlineData(TipoGancho.De180, 176)]  // 55.45·π + 65 − 63.4
+    [InlineData(TipoGancho.Sin, 0)]
+    public void ElGanchoSumaSuArcoYLaColaDelCuadro(TipoGancho t, int largo)
+    {
+        Assert.Equal(largo, Reglas.LargoGancho(Reglas.Generales.PorDiametro[5], t));
+    }
+
+    [Fact]
+    public void SinColaEnElCuadro_ElGanchoSumaSuB()
+    {
+        // el cuadro no trae el 135° del #6 al #8
+        Assert.Equal(272, Reglas.LargoGancho(Reglas.Generales.PorDiametro[6], TipoGancho.De135));
+    }
+
     [Fact]
     public void ElGanchoDe180DelNumero8EsElDelCuadroDeDimensiones()
     {

@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Modelo;
+﻿using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Vigas.Calculo.Tests;
 
@@ -24,8 +24,8 @@ public class GanchosTests
     {
         ResultadoVigas r = MotorVigas.Calcular(Entrada());
 
-        Assert.Equal((TipoGancho.De90, 278), (Barra(r, "S1").TipoInicio, Barra(r, "S1").GanchoInicio));
-        Assert.Equal((TipoGancho.De90, 278), (Barra(r, "S4").TipoFin, Barra(r, "S4").GanchoFin));
+        Assert.Equal((TipoGancho.De90, 215), (Barra(r, "S1").TipoInicio, Barra(r, "S1").GanchoInicio));
+        Assert.Equal((TipoGancho.De90, 215), (Barra(r, "S4").TipoFin, Barra(r, "S4").GanchoFin));
         Assert.Equal((TipoGancho.Sin, TipoGancho.Sin), (Barra(r, "S2").TipoInicio, Barra(r, "S2").TipoFin));
     }
 
@@ -50,7 +50,7 @@ public class GanchosTests
 
         Barra s1 = Barra(MotorVigas.Calcular(Entrada(new() { ["S.inicio"] = TipoGancho.De180 })), "S1");
 
-        Assert.Equal((TipoGancho.De180, 238), (s1.TipoInicio, s1.GanchoInicio));
+        Assert.Equal((TipoGancho.De180, 176), (s1.TipoInicio, s1.GanchoInicio));
         Assert.Equal(0, s1.Largo % 500);
         Assert.Equal(antes.Desde, s1.Desde);
     }
@@ -60,7 +60,7 @@ public class GanchosTests
     {
         Barra i3 = Barra(MotorVigas.Calcular(Entrada(new() { ["I.fin"] = TipoGancho.De135 })), "I3");
 
-        Assert.Equal((TipoGancho.De135, 189), (i3.TipoFin, i3.GanchoFin));
+        Assert.Equal((TipoGancho.De135, 162), (i3.TipoFin, i3.GanchoFin));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class GanchosTests
         ResultadoVigas r = MotorVigas.Calcular(Entrada(new() { ["S.inicio"] = TipoGancho.Sin }));
 
         Assert.True(Avisa(r, "S.inicio", MotivoBloqueo.GanchoNoValido));
-        Assert.Equal((TipoGancho.De90, 278), (Barra(r, "S1").TipoInicio, Barra(r, "S1").GanchoInicio));
+        Assert.Equal((TipoGancho.De90, 215), (Barra(r, "S1").TipoInicio, Barra(r, "S1").GanchoInicio));
     }
 
     [Fact]
@@ -101,14 +101,14 @@ public class GanchosTests
     [Fact]
     public void BastonConGanchoElegidoRedondeaHaciaArribaYCreceLaOtraPunta()
     {
-        // BS1 va de −150 a 1000 (1.15); con el gancho de 90° (0.278) da 1.428 y sube a 1.50: la punta de adentro crece 72 mm
+        // BS1 va de −150 a 1000 (1.15); con el gancho de 90° (0.215, con la cola del cuadro) da 1.365 y sube a 1.50: la punta de adentro crece 135 mm
         Baston antes = Baston(MotorVigas.Calcular(Entrada()), "BS1");
 
         Baston bs1 = Baston(MotorVigas.Calcular(Entrada(new() { ["BS1.inicio"] = TipoGancho.De90 })), "BS1");
 
         Assert.Equal((-150, 1000), (antes.Desde, antes.Hasta));
-        Assert.Equal((TipoGancho.De90, 278, 1500), (bs1.TipoInicio, bs1.GanchoInicio, bs1.Largo));
-        Assert.Equal((-150, 1072), (bs1.Desde, bs1.Hasta));
+        Assert.Equal((TipoGancho.De90, 215, 1500), (bs1.TipoInicio, bs1.GanchoInicio, bs1.Largo));
+        Assert.Equal((-150, 1135), (bs1.Desde, bs1.Hasta));
         Assert.True(bs1.PuntaInicioEnBorde);
         Assert.False(bs1.PuntaFinEnBorde);
     }
@@ -116,10 +116,10 @@ public class GanchosTests
     [Fact]
     public void BastonConElGanchoGeneralNoSeRedondea()
     {
-        // "Con gancho" del paso 2 (#89) sigue igual: 1.15 + 0.278, sin redondear
+        // "Con gancho" del paso 2 (#89) sigue igual: 1.15 + 0.215, sin redondear
         Baston bs1 = Baston(MotorVigas.Calcular(Entrada(bastones: new ArmadoBastones(ConGancho: true))), "BS1");
 
-        Assert.Equal((TipoGancho.De90, 1428), (bs1.TipoInicio, bs1.Largo));
+        Assert.Equal((TipoGancho.De90, 1365), (bs1.TipoInicio, bs1.Largo));
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Modelo;
+﻿using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Vigas.Calculo.Tests;
 
@@ -12,7 +12,7 @@ public class AvisosTests
     private static EntradaVigas DEnOnceCincuenta(Cara? cara) => new(
         new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 7900), Datos.Columna("D", 11550)],
             VoladizoFinal: 1500),
-        TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Reglas.Generales, CaraElegida: cara);
+        TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Datos.ReglasDeLaMaqueta, CaraElegida: cara);
 
     [Fact]
     public void TraslapoQuePasaElMinimoEnMasDe30cm_AvisaConCausaYAhorro()
@@ -54,7 +54,7 @@ public class AvisosTests
         // Luz libre de 1.20 m (no le cabe un traslapo #8) con voladizos de 3 m: cada capa es una barra de 8.79 m.
         var entrada = new EntradaVigas(
             new Portico([Datos.Columna("A", 0), Datos.Columna("B", 1600)], VoladizoInicio: 3000, VoladizoFinal: 3000),
-            TipoViga.Aerea, [new GrupoBarras(2, 8)], [new GrupoBarras(2, 8)], Reglas.Generales);
+            TipoViga.Aerea, [new GrupoBarras(2, 8)], [new GrupoBarras(2, 8)], Datos.ReglasDeLaMaqueta);
 
         ResultadoVigas r = MotorVigas.Calcular(entrada);
 
