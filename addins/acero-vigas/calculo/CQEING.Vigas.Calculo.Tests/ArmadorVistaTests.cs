@@ -201,6 +201,33 @@ public class ArmadorVistaTests
             (ArmadorVista.EnLista(Portico1(tipo: TipoViga.Cimentacion)).Sub, ArmadorVista.EnLista(Portico1(tipo: TipoViga.Cimentacion)).Tipo));
     }
 
+    /// <summary>
+    /// La casilla "Es vigueta" (#940): viene como la detectó el add-in (#939) y el usuario solo la toca si se equivocó.
+    /// </summary>
+    [Fact]
+    public void UnaViguetaDetectada_VieneMarcadaYSinCambioAMano()
+    {
+        VistaPortico v = Armar(p: Portico1() with { Elemento = Elemento.Vigueta });
+
+        Assert.Equal((true, true), (v.EsVigueta, v.DetectadaVigueta));
+    }
+
+    [Fact]
+    public void LoQueEligeElUsuario_ManaSobreLoDetectado()
+    {
+        VistaPortico aViga = Armar(OpcionesTablero.PorDefecto with { Elemento = Elemento.Viga }, Portico1() with { Elemento = Elemento.Vigueta });
+        VistaPortico aVigueta = Armar(OpcionesTablero.PorDefecto with { Elemento = Elemento.Vigueta });
+
+        Assert.Equal((false, true), (aViga.EsVigueta, aViga.DetectadaVigueta));
+        Assert.Equal((true, false), (aVigueta.EsVigueta, aVigueta.DetectadaVigueta));
+    }
+
+    [Fact]
+    public void EnLaLista_LaViguetaSeVeComoVigueta()
+    {
+        Assert.Equal("Vigueta", ArmadorVista.EnLista(Portico1() with { Elemento = Elemento.Vigueta }).Tipo);
+    }
+
     [Fact]
     public void LasBarrasVanEnMetrosConSusGanchos()
     {

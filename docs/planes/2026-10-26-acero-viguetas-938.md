@@ -119,7 +119,9 @@ para otra issue.
 7. **El tablero cambia lo mínimo** (2026-10-26, Juan): el add-in **detecta solo** que es vigueta (decisión 2) y con
    eso aplica todo lo demás (decisiones 3 a 6). No hay botones nuevos. Dentro del bloque "Tipo de viga" que ya
    existe se agrega una sola casilla, **"Es vigueta"**, que ya viene marcada o desmarcada según la detección. Solo
-   se usa si el add-in se equivocó. La nota de debajo dice de dónde salió ("Detectado por el tipo VT_10X35").
+   se usa si el add-in se equivocó. La nota de debajo dice "Detectado por el tipo y los apoyos.", o "Cambiado a mano:
+   el add-in la detectó como viga/vigueta." si se corrigió. Al volver a lo detectado, la corrección se borra (queda
+   null) y el pórtico sigue lo que diga la detección.
 
 ## Plan paso a paso
 
@@ -199,6 +201,20 @@ En Revit, con `PROY_JULIO_BETO`:
   - Revit 2026, `PROY_JULIO_BETO`, cargando la DLL nueva en memoria desde el MCP: las 17 VT/VB salen como Vigueta
     ("Vigueta 1…17") y las 15 `VIG_*` como Viga, incluida la `VIG_20X35` #389664. Los avisos `SinEje` bajan de 18
     a 1 (la `VIG_20X35`, que no está sobre un eje).
+  - Commit `dd4a4fe`.
+- [x] **#940, paso 3** (2026-10-26):
+  - `Tablero/OpcionesTablero.cs`: `Elemento? Elemento`.
+  - `Tablero/VistaTablero.cs`: `VistaPortico.EsVigueta` y `DetectadaVigueta`.
+  - `Tablero/ArmadorVista.cs`: lo que eligió el usuario manda sobre lo detectado, y en la lista sale la etiqueta
+    "Vigueta".
+  - `Tablero/web/tablero.js`: la clave `vigueta` en `OPCIONES0`, `elemento` en `opcionesDe`, y la casilla con su
+    nota dentro del bloque "Tipo de viga".
+  - `Tablero/web/demo.js`: `esVigueta` y `detectadaVigueta` (los pórticos de la demostración son vigas).
+  - Pruebas: 3 nuevas en `ArmadorVistaTests`, que fallaron antes de implementar. Hay 2 más en
+    `ConfiguracionGuardadaTests` que pasaron desde el principio porque ya se guardan las opciones completas (H5);
+    se quedan para cuidar que siga así. La suite completa pasa (1005 pruebas), el build de 2027 sale limpio y
+    `node --check` pasa en los dos JS.
+  - Falta verlo en el tablero dentro de Revit, porque hay que desplegar con Revit cerrado. Queda para #943.
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

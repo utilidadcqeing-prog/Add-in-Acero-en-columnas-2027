@@ -37,6 +37,24 @@ public class ConfiguracionGuardadaTests
         Assert.Null(ConfiguracionGuardada.Leer(ConfiguracionGuardada.Escribir(Opciones, null))!.Value.Estado);
     }
 
+    [Fact]
+    public void LaViguetaCorregidaAManoSeGuarda()
+    {
+        // #940: si el usuario corrigió la detección, al volver a abrir el pórtico sigue corregida.
+        string guardado = ConfiguracionGuardada.Escribir(Opciones with { Elemento = Elemento.Viga }, null);
+
+        Assert.Equal(Elemento.Viga, ConfiguracionGuardada.Leer(guardado)!.Value.Opciones.Elemento);
+    }
+
+    [Fact]
+    public void UnaConfiguracionDeAntesDeLasViguetas_UsaLoDetectado()
+    {
+        string sinElemento = ConfiguracionGuardada.Escribir(Opciones, null).Replace("\"elemento\":null,", "").Replace(",\"elemento\":null", "");
+
+        Assert.DoesNotContain("elemento", sinElemento, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(ConfiguracionGuardada.Leer(sinElemento)!.Value.Opciones.Elemento);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("no es json")]

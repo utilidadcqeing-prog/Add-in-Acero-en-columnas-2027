@@ -25,7 +25,8 @@
 
   // Lo que el usuario elige para un pórtico: el `state` de la maqueta que cambia el cálculo (OpcionesTablero).
   const OPCIONES0 = {
-    tipo: undefined, side: undefined, sup: [{ n: 3, d: '#5' }], inf: [{ n: 3, d: '#5' }],
+    // vigueta (#940): undefined = la que detectó el add-in; true / false = corregida a mano con la casilla
+    tipo: undefined, vigueta: undefined, side: undefined, sup: [{ n: 3, d: '#5' }], inf: [{ n: 3, d: '#5' }],
     rec: '4', recUp: '', recDown: '', recSide: '', sepMode: 'pegada', sepCm: '1', maxCapas: '3',
     bastDef: '2.00', bastHook: false, bastLen: {}, bastSupN: '1', bastSupD: '', bastInfN: '1', bastInfD: '',
     // adicionales (#85, hallazgo E8): [{ tipo: 'Cerrado' | 'Abierto', barras: [{ cara, fila, numero, nombre }] }]
@@ -69,6 +70,7 @@
       Object.keys(s.bastLen).forEach((id) => { largos[id] = mm(n(s.bastLen[id])); });
       return {
         tipo: s.tipo ? (s.tipo === 'Cimentación' ? 'Cimentacion' : 'Aerea') : null,
+        elemento: s.vigueta === undefined ? null : (s.vigueta ? 'Vigueta' : 'Viga'),
         superior: grupos(s.sup), inferior: grupos(s.inf),
         recubrimientoCm: n(s.rec), recArribaCm: opcional(s.recUp), recAbajoCm: opcional(s.recDown), recLadosCm: opcional(s.recSide),
         separacionFilasCm: s.sepMode === 'pegada' ? null : n(s.sepCm), maximoFilas: Math.max(1, Math.round(n(s.maxCapas))),
@@ -762,6 +764,9 @@
         segPeg: s.sepMode === 'pegada' ? on : off, segSep: s.sepMode === 'separada' ? on : off,
         segAerea: !isCim ? on : off, segCim: isCim ? on : off,
         tipoHint: !isCim ? 'Arriba traslapa al centro de la luz; abajo, junto a la columna.' : 'Abajo traslapa al centro de la luz; arriba, junto a la columna.',
+        esVigueta: !!(P && P.esVigueta),
+        viguetaHint: !P || P.esVigueta === P.detectadaVigueta ? 'Detectado por el tipo y los apoyos.'
+          : 'Cambiado a mano: el add-in la detectó como ' + (P.detectadaVigueta ? 'vigueta.' : 'viga.'),
         segHookNo: s.bastHook ? off : on, segHookYes: s.bastHook ? on : off,
         locked: lockedNow, mult, gap, seg6: bar12 ? off : on, seg12: bar12 ? on : off,
         lockBg: lockedNow ? '#F4F6F8' : '#FDF6EA', lockText: lockedNow ? 'Bloqueadas para evitar cambios por error.' : 'Desbloqueadas: los cambios valen para todos los proyectos.',
@@ -824,6 +829,8 @@
         setSepCm: (e) => this.cambiar({ sepCm: e.target.value }, true), setMaxCapas: (e) => this.cambiar({ maxCapas: e.target.value }, true),
         setAerea: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Aérea' }); },
         setCim: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Cimentación' }); },
+        // volver a lo detectado deja la casilla sin corregir (undefined), como si nunca se hubiera tocado
+        setVigueta: (e) => { const marcada = e.target.checked; this.setState({ sel: NADA }); this.cambiar({ vigueta: P && marcada === P.detectadaVigueta ? undefined : marcada }); },
         setBastSupN: (e) => this.cambiar({ bastSupN: e.target.value }, true), setBastInfN: (e) => this.cambiar({ bastInfN: e.target.value }, true),
         setBastSupD: (e) => this.cambiar({ bastSupD: e.target.value }), setBastInfD: (e) => this.cambiar({ bastInfD: e.target.value }),
         setBastDef: (e) => this.cambiar({ bastDef: e.target.value }, true), hookNo: () => this.cambiar({ bastHook: false }), hookYes: () => this.cambiar({ bastHook: true }),
@@ -1092,6 +1099,11 @@
                 <button type="button" onClick=${v.setCim} style="height: 32px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segCim}">Cimentación</button>
               </div>
               <span style="font-size: 12px; color: #5E6670">Detectado por el nivel. ${v.tipoHint}</span>
+              <label style="display: flex; align-items: center; gap: 8px; margin-top: 4px; cursor: pointer">
+                <input type="checkbox" checked=${v.esVigueta} onChange=${v.setVigueta} style="width: 16px; height: 16px; margin: 0; accent-color: #1F5FAF; cursor: pointer" />
+                <span>Es vigueta</span>
+              </label>
+              <span style="font-size: 12px; color: #5E6670">${v.viguetaHint}</span>
             </div>
 
             ${v.layers.map((ly) => html`

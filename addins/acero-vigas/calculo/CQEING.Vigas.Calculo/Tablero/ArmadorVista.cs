@@ -19,7 +19,7 @@ public static class ArmadorVista
     public static PorticoEnLista EnLista(PorticoLeido p)
     {
         IReadOnlyList<Apoyo> apoyos = p.Portico.Apoyos;
-        string tipo = NombreTipo(p.Tipo);
+        string tipo = p.Elemento == Elemento.Vigueta ? "Vigueta" : NombreTipo(p.Tipo);
         string sub = p.Tipo == TipoViga.Cimentacion
             ? $"Cimentación · eje {p.Eje ?? "?"}"
             : $"{(p.Eje is null ? "Sin eje" : "Eje " + p.Eje)} · {apoyos[0].Eje} a {apoyos[^1].Eje}{Voladizos(p.Portico)}";
@@ -31,6 +31,7 @@ public static class ArmadorVista
     public static VistaPortico Armar(PorticoLeido p, OpcionesTablero o, Reglas r)
     {
         TipoViga tipo = o.Tipo ?? p.Tipo;
+        bool esVigueta = (o.Elemento ?? p.Elemento) == Elemento.Vigueta, detectadaVigueta = p.Elemento == Elemento.Vigueta;
         Portico portico = p.Portico;
         var avisos = new List<Aviso>();
         var apoyos = portico.Apoyos.Select((a, i) =>
@@ -51,7 +52,8 @@ public static class ArmadorVista
             var vacia = new CaraVista(0, [], nameof(ErrorCara.Ninguno), 0);
             return new VistaPortico(p.Nombre, NombreTipo(tipo), inicio, fin, apoyos, [], [], [], [], vacia, vacia,
                 new OpcionCaraVista(0, false), new OpcionCaraVista(0, false), "izq", "izq",
-                new SeccionVista(Cm(Ancho(p)), Cm(Alto(p)), [], []), [], Textos(avisos, null), [], 0, 0, false);
+                new SeccionVista(Cm(Ancho(p)), Cm(Alto(p)), [], []), [], Textos(avisos, null), [], 0, 0, false,
+                EsVigueta: esVigueta, DetectadaVigueta: detectadaVigueta);
         }
 
         (ResultadoVigas rv, ResultadoEstribos re, EntradaSeccion seccion, var porTramo) = (c.Vigas, c.Estribos, c.Seccion, c.PorTramo);
@@ -82,7 +84,8 @@ public static class ArmadorVista
             rv.ZonasTraslapo.Select(z => new Rango(M(z.Desde), M(z.Hasta))).ToList(), rv.Kg + re.Kg, re.Cantidad, c.SePuedeGenerar,
             CorteDe(corte, oc, proyeccion, corte.SinLugar ? "No hay un punto sin traslapo para el corte." : avisoBastones),
             re.Estribos.Where(e => e.Id == MotorEstribos.IdCerrado).SelectMany(e => e.Posiciones).Order().Select(M).ToList(),
-            diametros, p.Tramos.Select(t => new SeccionEnAlzado(M((t.Desde + t.Hasta) / 2.0), $"{F(t.Ancho / 10, "0.#")}×{F(t.Alto / 10, "0.#")}")).ToList());
+            diametros, p.Tramos.Select(t => new SeccionEnAlzado(M((t.Desde + t.Hasta) / 2.0), $"{F(t.Ancho / 10, "0.#")}×{F(t.Alto / 10, "0.#")}")).ToList(),
+            EsVigueta: esVigueta, DetectadaVigueta: detectadaVigueta);
     }
 
     /// <summary>El gancho como lo escribe la página: "90°", "135°", "180°" o "" (sin gancho).</summary>
