@@ -362,6 +362,10 @@ public partial class VentanaEstribosMenores : Window
                 if (!ocultarEsquinas || !EsDeEsquina(marca.X, marca.Y))
                     Lienzo.Children.Add(DibujoArmado.MarcaChoque(AP(marca.X, marca.Y), Math.Max(1.5, marca.Radio * _escala), choque.Motivo));
 
+        // El ángulo de cada gancho de la grapa elegida, junto a cada punta.
+        if (_seleccionada is { Forma: not FormaMenor.Cerrado } elegida && _herramienta is null)
+            DibujarTiritasDeAngulo(elegida);
+
         // Rótulos de fila y columna, desde 1, por fuera de la sección.
         for (int f = 0; f < _filas; f++) Texto($"F{f + 1}", PX(0) - 30, Y(f) - 8);
         for (int c = 0; c < _columnas; c++) Texto($"C{c + 1}", X(c) - 8, PY(0) + 3);
@@ -499,6 +503,99 @@ public partial class VentanaEstribosMenores : Window
         });
     }
 
+    /// <summary>Ícono y texto de cada ángulo, como los botones de gancho del add-in de vigas (alzado.js).</summary>
+    private static readonly (AnguloGancho Angulo, string Texto, string Icono)[] Angulos =
+    {
+        (AnguloGancho.Grados90, "90°", "M1 3h8v7"),
+        (AnguloGancho.Grados135, "135°", "M1 3h8l-4 6"),
+        (AnguloGancho.Grados180, "180°", "M1 3h7a3 3 0 010 6H5"),
+    };
+
+    // Colores fijos: en el boceto, con los del tema, los números que no
+    // estaban elegidos salían blancos sobre blanco.
+    private static readonly Brush TextoTirita = new SolidColorBrush(Color.FromRgb(0x16, 0x19, 0x1D));
+    private static readonly Brush BordeTirita = new SolidColorBrush(Color.FromRgb(0xC9, 0xCF, 0xD6));
+
+    /// <summary>
+    /// Una tirita chica de 90° · 135° · 180° junto a cada punta de la grapa
+    /// elegida (como en vigas): la del ángulo actual resaltada, y un clic
+    /// cambia el de esa punta (docs/planes/2026-10-26-diseno-grapas-angulo-por-punta.md).
+    /// </summary>
+    private void DibujarTiritasDeAngulo(EstriboMenor pieza)
+    {
+        (GanchoGrapa.Pieza inicio, GanchoGrapa.Pieza fin) = BarrasDe(pieza.Eje, pieza.Desde);
+        bool fila = pieza.Eje == EjeCaja.Fila;
+
+        FrameworkElement tiritaInicio = Tirita(pieza, esInicio: true, fila), tiritaFin = Tirita(pieza, esInicio: false, fila);
+        tiritaInicio.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        tiritaFin.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double ancho = Math.Max(tiritaInicio.DesiredSize.Width, tiritaFin.DesiredSize.Width);
+        double alto = Math.Max(tiritaInicio.DesiredSize.Height, tiritaFin.DesiredSize.Height);
+        Point pi = AP(inicio.X, inicio.Y), pf = AP(fin.X, fin.Y);
+
+        ((double Left, double Top) donde, (double Left, double Top) dondeFin) =
+            TiritasAngulo.Ubicar(fila, (pi.X, pi.Y), (pf.X, pf.Y), ancho, alto, Lienzo.Width, Lienzo.Height);
+        foreach ((FrameworkElement tirita, (double Left, double Top) lugar) in new[] { (tiritaInicio, donde), (tiritaFin, dondeFin) })
+        {
+            Canvas.SetLeft(tirita, lugar.Left);
+            Canvas.SetTop(tirita, lugar.Top);
+            Lienzo.Children.Add(tirita);
+        }
+    }
+
+    private FrameworkElement Tirita(EstriboMenor pieza, bool esInicio, bool fila)
+    {
+        AnguloGancho actual = esInicio ? pieza.AnguloInicio : pieza.AnguloFin;
+        string punta = fila ? (esInicio ? "izquierda" : "derecha") : (esInicio ? "de abajo" : "de arriba");
+        var botones = new StackPanel { Orientation = Orientation.Horizontal };
+
+        for (int i = 0; i < Angulos.Length; i++)
+        {
+            (AnguloGancho angulo, string texto, string icono) = Angulos[i];
+            bool elegido = angulo == actual;
+            Brush frente = elegido ? Brushes.White : TextoTirita;
+
+            var contenido = new StackPanel { Orientation = Orientation.Horizontal };
+            contenido.Children.Add(new Path
+            {
+                Data = Geometry.Parse(icono), Stroke = frente, StrokeThickness = 1.3, Width = 12, Height = 12,
+                Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center,
+            });
+            contenido.Children.Add(new TextBlock { Text = texto, Foreground = frente, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+
+            var boton = new Border
+            {
+                Child = contenido,
+                Padding = new Thickness(6, 3, 6, 3),
+                Background = elegido ? ColorDe(pieza.Forma) : Brushes.White,
+                BorderBrush = BordeTirita,
+                BorderThickness = new Thickness(i == 0 ? 0 : 1, 0, 0, 0),
+                Cursor = Cursors.Hand,
+                ToolTip = $"Gancho de {texto} en la punta {punta}",
+            };
+            boton.MouseLeftButtonDown += (_, e) =>
+            {
+                // Que el clic no llegue al lienzo: deseleccionaría la grapa.
+                e.Handled = true;
+                if (esInicio) pieza.AnguloInicio = angulo;
+                else pieza.AnguloFin = angulo;
+                Dibujar();
+            };
+            botones.Children.Add(boton);
+        }
+
+        return new Border
+        {
+            Child = botones,
+            Background = Brushes.White,
+            BorderBrush = BordeTirita,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            ClipToBounds = true,
+            SnapsToDevicePixels = true,
+        };
+    }
+
     private void Agregar(UIElement el, double left, double top)
     {
         if (el is FrameworkElement fe) fe.IsHitTestVisible = false;
@@ -615,7 +712,10 @@ public partial class VentanaEstribosMenores : Window
         return p.Desde == p.Hasta ? $"{eje} {p.Desde + 1}" : $"{eje}s {p.Desde + 1} a {p.Hasta + 1}";
     }
 
-    private static string Descripcion(EstriboMenor p) => $"{Nombre(p.Forma)}, {Donde(p)}";
+    private static string Descripcion(EstriboMenor p) =>
+        p.Forma != FormaMenor.Cerrado && (p.AnguloInicio != AnguloGancho.Grados180 || p.AnguloFin != AnguloGancho.Grados180)
+            ? $"{Nombre(p.Forma)}, {Donde(p)} — ganchos {(int)p.AnguloInicio}° / {(int)p.AnguloFin}°"
+            : $"{Nombre(p.Forma)}, {Donde(p)}";
 
     // ------------------------------------------------------------------ mouse
 

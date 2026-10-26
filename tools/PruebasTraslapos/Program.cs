@@ -711,13 +711,30 @@ Probar("linea_de_la_grapa", () =>
     (double, double) ci = (73.25, 115.5), cf = (176.75, 120.7);
     foreach ((int li, int lf) in new[] { (1, 1), (1, -1), (-1, -1) })
     {
-        var ((x0, y0), (x1, y1)) = GanchoGrapa.Linea(ci, cf, 5, 23.8, li, lf);
+        var ((x0, y0), (x1, y1)) = GanchoGrapa.Linea(ci, cf, (5, 23.8), (5, 23.8), li, lf);
         double largo = Math.Sqrt(Math.Pow(x1 - x0, 2) + Math.Pow(y1 - y0, 2));
         (double ux, double uy) = ((x1 - x0) / largo, (y1 - y0) / largo);
         Igual(73.25, Math.Round(x0 + ux * 5 - uy * li * 23.8, 6), $"inicio X ({li},{lf})");
         Igual(115.5, Math.Round(y0 + uy * 5 + ux * li * 23.8, 6), $"inicio Y ({li},{lf})");
         Igual(176.75, Math.Round(x1 - ux * 5 - uy * lf * 23.8, 6), $"fin X ({li},{lf})");
         Igual(120.7, Math.Round(y1 - uy * 5 + ux * lf * 23.8, 6), $"fin Y ({li},{lf})");
+    }
+});
+
+Probar("linea_con_medidas_distintas_por_punta", () =>
+{
+    // Cada punta con la medida de SU gancho (ángulo por punta): el fin con
+    // 8 mm hacia adentro en vez de 5 deja su centro donde se quiere igual.
+    (double, double) ci = (73.25, 115.5), cf = (176.75, 120.7);
+    foreach ((int li, int lf) in new[] { (1, 1), (1, -1) })
+    {
+        var ((x0, y0), (x1, y1)) = GanchoGrapa.Linea(ci, cf, (5, 23.8), (8, 20.1), li, lf);
+        double largo = Math.Sqrt(Math.Pow(x1 - x0, 2) + Math.Pow(y1 - y0, 2));
+        (double ux, double uy) = ((x1 - x0) / largo, (y1 - y0) / largo);
+        Igual(73.25, Math.Round(x0 + ux * 5 - uy * li * 23.8, 6), $"inicio X ({li},{lf})");
+        Igual(115.5, Math.Round(y0 + uy * 5 + ux * li * 23.8, 6), $"inicio Y ({li},{lf})");
+        Igual(176.75, Math.Round(x1 - ux * 8 - uy * lf * 20.1, 6), $"fin X ({li},{lf})");
+        Igual(120.7, Math.Round(y1 - uy * 8 + ux * lf * 20.1, 6), $"fin Y ({li},{lf})");
     }
 });
 

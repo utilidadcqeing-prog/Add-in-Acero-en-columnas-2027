@@ -1478,6 +1478,11 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstribosMenores.Text = ResumenEstribosMenores(cfg);
         MarcarUsosEnCuadroVarillas();
+
+        // La vista previa escucha el resumen, pero un cambio que no lo cambia
+        // (el ángulo de un gancho, Voltear, la barra de una pieza) no la
+        // redibujaba: hacía falta borrar la pieza y volver a ponerla (Luciano, 26-oct).
+        PedirVistaPrevia();
     }
 
     // ------------------------------------------------------------- aceptar

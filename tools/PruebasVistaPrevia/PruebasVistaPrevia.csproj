@@ -27,6 +27,8 @@
     <Compile Include="..\..\addins\armado-columnas\Modelo\AcomodoTraslapos.cs" Link="Modelo\AcomodoTraslapos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\CajaMenor.cs" Link="Modelo\CajaMenor.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\EstriboMenor.cs" Link="Modelo\EstriboMenor.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\AnguloGancho.cs" Link="Modelo\AnguloGancho.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\TiritasAngulo.cs" Link="Modelo\TiritasAngulo.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\GanchoGrapa.cs" Link="Modelo\GanchoGrapa.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\PaqueteEstribos.cs" Link="Modelo\PaqueteEstribos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\SeccionPlanta.cs" Link="Modelo\SeccionPlanta.cs" />

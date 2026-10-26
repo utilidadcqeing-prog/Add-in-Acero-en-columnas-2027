@@ -298,7 +298,7 @@ Probar("grapa_abraza_la_barra", () =>
     // La barra toca la cara interior del doblez en la punta: centro corrido 19 − 9,55 mm hacia adentro.
     Cerca(xi + 0.00945, ci.X, 1e-9, "centro del gancho del inicio");
     Cerca(y, ci.Y, 1e-9, "a la altura de la barra");
-    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(ci, cf, 1, 1, 0.0095, 0.038, PlantaArmado.Cola180(9.5));
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(ci, cf, 1, 1, AnguloGancho.Grados180, AnguloGancho.Grados180, 0.0095, 0.038, PlantaArmado.Cola180(9.5), PlantaArmado.Cola180(9.5));
     // Abre hacia +Y (el centro de la sección): el tramo recto queda un radio al eje por debajo.
     Cerca(y - 0.02375, g.Min(p => p.Y), 1e-9, "tramo recto");
     // Por fuera, el doblez llega a centro − radio al eje − medio diámetro.
@@ -310,8 +310,147 @@ Probar("grapa_abraza_la_barra", () =>
 
 Probar("grapa_en_s_abre_un_gancho_para_cada_lado", () =>
 {
-    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa((0.07, 0.12), (0.18, 0.12), 1, -1, 0.0095, 0.038, 0.065);
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa((0.07, 0.12), (0.18, 0.12), 1, -1, AnguloGancho.Grados180, AnguloGancho.Grados180, 0.0095, 0.038, 0.065, 0.065);
     Cierto(g[0].Y > 0.12 && g[^1].Y < 0.12, "la cola del inicio arriba y la del fin abajo");
+});
+
+Probar("grapa_en_s_tramo_recto_tangente_como_revit", () =>
+{
+    // #167: Revit deja los dobleces perpendiculares al tramo recto, que en la
+    // S cruza en diagonal (sen θ = 2r / distancia entre centros). Sin quiebre.
+    // El inicio abre hacia arriba: el tramo arranca por debajo de su centro y
+    // llega por encima del centro del fin.
+    (double X, double Y) ci = (0.07, 0.12), cf = (0.21, 0.12);
+    double r = 0.038 / 2 + 0.0095 / 2, cola = 0.065;
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(ci, cf, 1, -1, AnguloGancho.Grados180, AnguloGancho.Grados180, 0.0095, 0.038, cola, cola);
+    double seno = 2 * r / (cf.X - ci.X), coseno = Math.Sqrt(1 - seno * seno);
+
+    // Los centros no se mueven: cada punto de los dobleces queda a r de su centro.
+    int n = (int)(180 / PlantaArmado.PasoGrados) + 1;
+    for (int i = 1; i <= n; i++)
+    {
+        Cerca(r, Math.Sqrt(Math.Pow(g[i].X - ci.X, 2) + Math.Pow(g[i].Y - ci.Y, 2)), 1e-9, "doblez del inicio a r del centro");
+        Cerca(r, Math.Sqrt(Math.Pow(g[^(i + 1)].X - cf.X, 2) + Math.Pow(g[^(i + 1)].Y - cf.Y, 2)), 1e-9, "doblez del fin a r del centro");
+    }
+
+    // El tramo recto (último punto del doblez del inicio → primero del del fin) sube con la inclinación de la tangente.
+    (double X, double Y) a = g[n], b = g[n + 1];
+    double largo = Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    Cerca(coseno, (b.X - a.X) / largo, 1e-9, "tramo recto inclinado (x)");
+    Cerca(seno, (b.Y - a.Y) / largo, 1e-9, "tramo recto inclinado (y)");
+    // Tangente: perpendicular al radio en las dos puntas.
+    Cerca(0, (a.X - ci.X) * (b.X - a.X) + (a.Y - ci.Y) * (b.Y - a.Y), 1e-12, "tangente al doblez del inicio");
+    Cerca(0, (b.X - cf.X) * (b.X - a.X) + (b.Y - cf.Y) * (b.Y - a.Y), 1e-12, "tangente al doblez del fin");
+    // Las colas, paralelas al tramo recto y del largo del cuadro.
+    Cerca(cola * coseno, g[0].X - g[1].X, 1e-9, "cola del inicio paralela (x)");
+    Cerca(cola * seno, g[0].Y - g[1].Y, 1e-9, "cola del inicio paralela (y)");
+    Cerca(-cola * coseno, g[^1].X - g[^2].X, 1e-9, "cola del fin paralela (x)");
+    Cerca(-cola * seno, g[^1].Y - g[^2].Y, 1e-9, "cola del fin paralela (y)");
+});
+
+// Dirección y largo de la cola de cada punta: del final del doblez a la punta libre.
+((double X, double Y) Dir, double Largo) ColaInicio(IReadOnlyList<(double X, double Y)> g) => Tramo(g[1], g[0]);
+((double X, double Y) Dir, double Largo) ColaFin(IReadOnlyList<(double X, double Y)> g) => Tramo(g[^2], g[^1]);
+((double X, double Y) Dir, double Largo) Tramo((double X, double Y) a, (double X, double Y) b)
+{
+    double largo = Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2));
+    return (((b.X - a.X) / largo, (b.Y - a.Y) / largo), largo);
+}
+
+Probar("gancho_90_cola_perpendicular", () =>
+{
+    (double X, double Y) ci = (0.07, 0.12), cf = (0.21, 0.12);
+    double r = 0.038 / 2 + 0.0095 / 2;
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(
+        ci, cf, 1, 1, AnguloGancho.Grados90, AnguloGancho.Grados90, 0.0095, 0.038, 0.057, 0.057);
+    var (dir, largo) = ColaInicio(g);
+    Cerca(0, dir.X, 1e-9, "cola del inicio perpendicular (x)");
+    Cerca(1, dir.Y, 1e-9, "cola del inicio hacia el lado que abre (y)");
+    Cerca(0.057, largo, 1e-9, "cola de 6 d");
+    Cerca(ci.X - r, g[1].X, 1e-9, "el doblez termina por afuera del centro (x)");
+    Cerca(ci.Y, g[1].Y, 1e-9, "el doblez termina por afuera del centro (y)");
+});
+
+Probar("gancho_135_cola_en_diagonal_hacia_adentro", () =>
+{
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(
+        (0.07, 0.12), (0.21, 0.12), 1, 1, AnguloGancho.Grados135, AnguloGancho.Grados135, 0.0095, 0.038, 0.057, 0.057);
+    double h = Math.Sqrt(2) / 2;
+    var (dirI, largoI) = ColaInicio(g);
+    var (dirF, _) = ColaFin(g);
+    Cerca(h, dirI.X, 1e-9, "cola del inicio hacia adentro (x)");
+    Cerca(h, dirI.Y, 1e-9, "cola del inicio hacia el lado que abre (y)");
+    Cerca(0.057, largoI, 1e-9, "cola del 135° de la #3");
+    Cerca(-h, dirF.X, 1e-9, "cola del fin hacia adentro (x)");
+    Cerca(h, dirF.Y, 1e-9, "cola del fin hacia el lado que abre (y)");
+});
+
+Probar("s_con_angulos_distintos", () =>
+{
+    (double X, double Y) ci = (0.07, 0.12), cf = (0.21, 0.12);
+    double r = 0.038 / 2 + 0.0095 / 2;
+    IReadOnlyList<(double X, double Y)> g = PlantaArmado.Grapa(
+        ci, cf, 1, -1, AnguloGancho.Grados135, AnguloGancho.Grados90, 0.0095, 0.038, 0.057, 0.06);
+    double seno = 2 * r / (cf.X - ci.X), coseno = Math.Sqrt(1 - seno * seno);
+    // Tramo recto: último punto del doblez del inicio (135° → 18 pasos) y primero del del fin.
+    int nI = (int)(135 / PlantaArmado.PasoGrados) + 1;
+    (double X, double Y) a = g[nI], b = g[nI + 1];
+    var (u, _) = Tramo(a, b);
+    Cerca(coseno, u.X, 1e-9, "tramo recto inclinado (x)");
+    Cerca(seno, u.Y, 1e-9, "tramo recto inclinado (y)");
+    Cerca(0, (a.X - ci.X) * u.X + (a.Y - ci.Y) * u.Y, 1e-12, "tangente al doblez del inicio");
+    Cerca(0, (b.X - cf.X) * u.X + (b.Y - cf.Y) * u.Y, 1e-12, "tangente al doblez del fin");
+    // Inicio 135°: la cola entra en diagonal (√2/2 a lo largo del tramo); fin 90°: perpendicular.
+    var (dirI, largoI) = ColaInicio(g);
+    var (dirF, largoF) = ColaFin(g);
+    Cerca(Math.Sqrt(2) / 2, dirI.X * u.X + dirI.Y * u.Y, 1e-9, "inicio a 135°");
+    Cerca(0, dirF.X * u.X + dirF.Y * u.Y, 1e-9, "fin a 90°");
+    Cerca(-1, dirF.X * -u.Y + dirF.Y * u.X, 1e-9, "fin abre hacia la derecha");
+    Cerca(0.057, largoI, 1e-9, "cola del inicio");
+    Cerca(0.06, largoF, 1e-9, "cola del fin");
+});
+
+Probar("voltear_no_cambia_angulos", () =>
+{
+    var barras = (new GanchoGrapa.Pieza(0.0595, 0.12, 0.00955, 0), new GanchoGrapa.Pieza(0.1905, 0.12, 0.00955, 0));
+    foreach (bool volteado in new[] { false, true })
+    {
+        var pieza = new EstriboMenor
+        {
+            Forma = FormaMenor.GrapaC, Eje = EjeCaja.Fila, Volteado = volteado,
+            AnguloInicio = AnguloGancho.Grados135, AnguloFin = AnguloGancho.Grados90,
+        };
+        IReadOnlyList<(double X, double Y)> g = PlantaArmado.Menor(pieza, _ => barras, (0.125, 0.2), 9.5, 0.038);
+        var (dirI, _) = ColaInicio(g);
+        var (dirF, _) = ColaFin(g);
+        Cerca(Math.Sqrt(2) / 2, dirI.X, 1e-9, $"inicio sigue a 135° (volteada {volteado})");
+        Cerca(0, dirF.X, 1e-9, $"fin sigue a 90° (volteada {volteado})");
+        Cerca(volteado ? -1 : 1, dirF.Y, 1e-9, $"el fin abre hacia {(volteado ? "afuera" : "el centro")}");
+    }
+});
+
+Probar("cola_135_sin_dato_del_cuadro", () =>
+{
+    Cerca(6 * 0.0254, PlantaArmado.Cola(AnguloGancho.Grados135, 25.4), 1e-12, "#8 sin 135° de estribo: 6 d");
+    Cerca(0.057, PlantaArmado.Cola(AnguloGancho.Grados135, 9.5), 1e-12, "#3: la E del cuadro");
+    Cerca(6 * 0.0095, PlantaArmado.Cola(AnguloGancho.Grados90, 9.5), 1e-12, "90°: 6 d");
+    Cerca(PlantaArmado.Cola180(9.5), PlantaArmado.Cola(AnguloGancho.Grados180, 9.5), 1e-12, "180°: lo de siempre");
+});
+
+Probar("lados_de_grapa_con_el_centro_sobre_la_linea", () =>
+{
+    // #167: la grapa del medio (el centro de la sección sobre la línea entre
+    // barras) tiene que dar siempre lo mismo, con o sin ruido de redondeo.
+    foreach (double ruido in new[] { 0.0, 1e-13, -1e-13 })
+    {
+        Cierto(GanchoGrapa.Lados((0.05, 0.2), (0.35, 0.2), (0.2, 0.2 + ruido), FormaMenor.GrapaS, false) == (1, -1), "S del medio");
+        Cierto(GanchoGrapa.Lados((0.05, 0.2), (0.35, 0.2), (0.2, 0.2 + ruido), FormaMenor.GrapaS, true) == (-1, 1), "S del medio volteada");
+        Cierto(GanchoGrapa.Lados((0.05, 0.2), (0.35, 0.2), (0.2, 0.2 + ruido), FormaMenor.GrapaC, false) == (1, 1), "C del medio");
+    }
+    // Fuera del medio, hacia el centro.
+    Cierto(GanchoGrapa.Lados((0.05, 0.1), (0.35, 0.1), (0.2, 0.2), FormaMenor.GrapaC, false) == (1, 1), "C de abajo abre hacia arriba");
+    Cierto(GanchoGrapa.Lados((0.05, 0.3), (0.35, 0.3), (0.2, 0.2), FormaMenor.GrapaC, false) == (-1, -1), "C de arriba abre hacia abajo");
+    Cierto(GanchoGrapa.Lados((0.05, 0.3), (0.35, 0.3), (0.2, 0.2), FormaMenor.GrapaS, false) == (-1, 1), "S de arriba");
 });
 
 // ---- #139: ganchos que cruzarían la línea de propiedad
@@ -683,6 +822,62 @@ Probar("polilinea_partir_por_altura", () =>
     Cierto(dentro.Count == 1 && fuera.Count == 2, $"1 dentro y 2 fuera, salieron {dentro.Count} y {fuera.Count}");
     Igual(1, dentro[0][0].Z, "corte de abajo");
     Igual(3, dentro[0][^1].Z, "corte de arriba");
+});
+
+// ---- Ángulo del gancho por punta en las grapas
+
+bool SePisan((double Left, double Top) a, (double Left, double Top) b, double ancho, double alto) =>
+    a.Left < b.Left + ancho && b.Left < a.Left + ancho && a.Top < b.Top + alto && b.Top < a.Top + alto;
+
+Probar("tiritas_de_una_grapa_de_fila_no_se_pisan", () =>
+{
+    // Revisión final: en una fila las dos iban a la misma altura y, con ~150 px
+    // cada una, la de la derecha tapaba botones de la izquierda.
+    foreach (double separacion in new[] { 218.0, 150.0, 60.0 })
+    {
+        var (inicio, fin) = TiritasAngulo.Ubicar(true, (80, 200), (80 + separacion, 200), 150, 22, 420, 420);
+        Cierto(!SePisan(inicio, fin, 150, 22), $"fila con barras a {separacion} px");
+    }
+});
+
+Probar("tiritas_de_una_grapa_de_columna_no_se_pisan", () =>
+{
+    var (inicio, fin) = TiritasAngulo.Ubicar(false, (150, 300), (150, 100), 150, 22, 420, 420);
+    Cierto(!SePisan(inicio, fin, 150, 22), "columna");
+});
+
+Probar("tiritas_quedan_dentro_del_lienzo", () =>
+{
+    var (inicio, fin) = TiritasAngulo.Ubicar(true, (10, 200), (400, 200), 150, 22, 420, 420);
+    Cierto(inicio.Left >= 2 && fin.Left + 150 <= 418, "dentro a lo ancho");
+});
+
+Probar("grapa_nueva_sale_con_180_en_las_dos_puntas", () =>
+{
+    var pieza = new EstriboMenor();
+    Cierto(pieza.AnguloInicio == AnguloGancho.Grados180 && pieza.AnguloFin == AnguloGancho.Grados180, "180/180 por defecto");
+});
+
+Probar("configuracion_vieja_se_lee_con_180", () =>
+{
+    EstriboMenor pieza = System.Text.Json.JsonSerializer.Deserialize<EstriboMenor>(
+        "{\"Forma\":1,\"Eje\":0,\"Desde\":2,\"Hasta\":2,\"Volteado\":true}")!;
+    Cierto(pieza.AnguloInicio == AnguloGancho.Grados180 && pieza.AnguloFin == AnguloGancho.Grados180, "180/180 sin el dato");
+    Cierto(pieza.Forma == FormaMenor.GrapaS && pieza.Volteado, "el resto se lee igual");
+});
+
+Probar("copiar_conserva_los_angulos", () =>
+{
+    var pieza = new EstriboMenor { AnguloInicio = AnguloGancho.Grados135, AnguloFin = AnguloGancho.Grados90 };
+    EstriboMenor copia = pieza.Copiar();
+    Cierto(copia.AnguloInicio == AnguloGancho.Grados135 && copia.AnguloFin == AnguloGancho.Grados90, "135/90 en la copia");
+});
+
+Probar("angulos_sobreviven_a_guardar_y_leer", () =>
+{
+    var pieza = new EstriboMenor { AnguloInicio = AnguloGancho.Grados90, AnguloFin = AnguloGancho.Grados135 };
+    EstriboMenor leida = System.Text.Json.JsonSerializer.Deserialize<EstriboMenor>(System.Text.Json.JsonSerializer.Serialize(pieza))!;
+    Cierto(leida.AnguloInicio == AnguloGancho.Grados90 && leida.AnguloFin == AnguloGancho.Grados135, "90/135 al leer");
 });
 
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");

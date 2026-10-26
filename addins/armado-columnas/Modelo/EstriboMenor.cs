@@ -39,6 +39,16 @@ public sealed class EstriboMenor
     /// <summary>Ganchos hacia el otro lado (botón "Voltear"). No aplica al cerrado.</summary>
     public bool Volteado { get; set; }
 
+    /// <summary>
+    /// Gancho de la punta de <see cref="Desde"/> (izquierda en una fila, abajo
+    /// en una columna). Solo grapas. 180° por defecto, también al leer una
+    /// configuración guardada antes de que existiera.
+    /// </summary>
+    public AnguloGancho AnguloInicio { get; set; } = AnguloGancho.Grados180;
+
+    /// <summary>Gancho de la otra punta (derecha en una fila, arriba en una columna). Ver <see cref="AnguloInicio"/>.</summary>
+    public AnguloGancho AnguloFin { get; set; } = AnguloGancho.Grados180;
+
     /// <summary>Barra de esta pieza; null = "Igual al estribo" del tramo.</summary>
     public string? TipoBarraNombre { get; set; }
 
@@ -106,5 +116,6 @@ public sealed class EstriboMenor
     public EstriboMenor Copiar() => new()
     {
         Forma = Forma, Eje = Eje, Desde = Desde, Hasta = Hasta, Volteado = Volteado, TipoBarraNombre = TipoBarraNombre,
+        AnguloInicio = AnguloInicio, AnguloFin = AnguloFin,
     };
 }
