@@ -13,6 +13,9 @@ public sealed record Recubrimientos(double Arriba, double Abajo, double Lados)
 /// <param name="DiametroEstribo">Número de la barra del estribo (3 = #3).</param>
 /// <param name="SeparacionFilas">Separación libre entre filas: 0 = pegadas (por defecto).</param>
 /// <param name="MaximoFilas">Filas por cara antes de dar error (3 por defecto).</param>
+/// <param name="PermiteUnaBarra">
+/// Vigueta (#941): una sola barra por cara no es error. Carlos (24-oct, min 07:20): lleva una arriba y una abajo.
+/// </param>
 public sealed record EntradaSeccion(
     double Ancho,
     double Alto,
@@ -22,7 +25,8 @@ public sealed record EntradaSeccion(
     IReadOnlyList<GrupoBarras> Inferior,
     Reglas Reglas,
     double SeparacionFilas = 0,
-    int MaximoFilas = 3);
+    int MaximoFilas = 3,
+    bool PermiteUnaBarra = false);
 
 public enum ErrorCara
 {

@@ -41,6 +41,33 @@ public class PlanificadorAceroTests
     }
 
     [Fact]
+    public void UnaVigueta_SePlanificaConUnaBarraAlCentroYElBastonPorDentro()
+    {
+        // #941: vigueta de 10 × 35, 1 #4 arriba y abajo, recubrimiento 2.5 y un bastón #4 arriba en los apoyos.
+        PorticoLeido vigueta = Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        var o = OpcionesTablero.PorDefecto with
+        {
+            Superior = [new GrupoBarras(1, 4)], Inferior = [new GrupoBarras(1, 4)], RecubrimientoCm = 2.5,
+            Bastones = new ArmadoBastones(new GrupoBarras(1, 4)),
+        };
+
+        PlanAcero plan = PlanificadorAcero.Planificar("Vigueta 6", vigueta, o, Reglas.Generales)!;
+
+        Assert.NotEmpty(plan.Barras);
+        Assert.All(plan.Barras, b => Assert.Equal(50, b.XCorte, 6));
+        Assert.NotEmpty(plan.Bastones);
+        Assert.Empty(plan.BastonesSinLugar);
+        // por dentro de la corrida: fila 2, o fila 3 donde la barra que traslapa ya ocupa la 2
+        Assert.All(plan.Bastones, b => Assert.InRange(b.Fila, 2, 3));
+        Assert.NotEmpty(plan.Estribos);
+    }
+
+    [Fact]
     public void VariasFilas_CadaPiezaEnSuPuestoDelCorte()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(7, 5)] };

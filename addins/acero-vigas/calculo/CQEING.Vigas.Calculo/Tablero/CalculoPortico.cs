@@ -68,6 +68,6 @@ public static class CalculoPortico
         var rec = new Recubrimientos((o.RecArribaCm ?? o.RecubrimientoCm) * 10, (o.RecAbajoCm ?? o.RecubrimientoCm) * 10,
             (o.RecLadosCm ?? o.RecubrimientoCm) * 10);
         return new EntradaSeccion(p.Tramos[0].Ancho, p.Tramos[0].Alto, rec, o.Estribos.Diametro, o.Superior, o.Inferior, r,
-            (o.SeparacionFilasCm ?? 0) * 10, o.MaximoFilas);
+            (o.SeparacionFilasCm ?? 0) * 10, o.MaximoFilas, PermiteUnaBarra: (o.Elemento ?? p.Elemento) == Elemento.Vigueta);
     }
 }

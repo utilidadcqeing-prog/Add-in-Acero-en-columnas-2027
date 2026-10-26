@@ -43,6 +43,38 @@ public class UbicadorBastonesTests
     }
 
     [Fact]
+    public void EnUnaVigueta_ElBastonVaPorDentroDeLaCorrida()
+    {
+        // Carlos (24-oct, min 08:11): en la vigueta de 10 cm no cabe al lado; va en la fila 2, encima de la de abajo.
+        var vigueta = new EntradaSeccion(Ancho: 100, Alto: 350, Recubrimientos.Iguales(25), DiametroEstribo: 3,
+            Superior: [new GrupoBarras(1, 4)], Inferior: [new GrupoBarras(1, 4)], Reglas.Generales, PermiteUnaBarra: true);
+
+        UbicacionBastones u = Abajo(vigueta, new GrupoBarras(1, 4));
+
+        BastonEnSeccion b = Assert.Single(u.Barras);
+        Assert.Equal((ErrorCara.Ninguno, 2), (u.Error, b.Fila));
+        Assert.Equal(50, b.Barra.X, Precision);
+    }
+
+    [Fact]
+    public void EnUnaVigueta_SiLaFila2LaOcupaUnTraslapo_ElBastonVaEncimaEnLaFila3()
+    {
+        // Encontrado al planificar una vigueta (#941): con un solo puesto por fila, la barra que traslapa por dentro
+        // ocupa la fila 2; la fila quedaba vacía y su altura reventaba.
+        var vigueta = new EntradaSeccion(Ancho: 100, Alto: 350, Recubrimientos.Iguales(25), DiametroEstribo: 3,
+            Superior: [new GrupoBarras(1, 4)], Inferior: [new GrupoBarras(1, 4)], Reglas.Generales, PermiteUnaBarra: true);
+        // la barra que traslapa queda donde iría una segunda fila de la corrida
+        BarraEnSeccion traslapo = RepartidorFilas.Repartir(vigueta with { Inferior = [new GrupoBarras(1, 4, 1), new GrupoBarras(1, 4, 2)] })
+            .Inferior.Filas[1][0];
+
+        UbicacionBastones u = UbicadorBastones.Ubicar(vigueta, Posicion.Inferior, [new GrupoBarras(1, 4)], [traslapo]);
+
+        BastonEnSeccion b = Assert.Single(u.Barras);
+        Assert.Equal((ErrorCara.Ninguno, 3), (u.Error, b.Fila));
+        Assert.Equal(traslapo.Y + 12.7, b.Barra.Y, Precision);
+    }
+
+    [Fact]
     public void ConLaFila1Llena_VaALaFila2EnElPuestoDelExtremo()
     {
         BastonEnSeccion b = Assert.Single(Abajo(Maqueta([new GrupoBarras(5, 5)]), new GrupoBarras(1, 5)).Barras);

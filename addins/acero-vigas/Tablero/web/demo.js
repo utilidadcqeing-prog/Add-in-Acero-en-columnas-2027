@@ -208,9 +208,11 @@
         const per = Math.max(0, Math.floor((30 - 2 * recSide - 2 * dE + gap) / (dmax + gap)));
         const lista = per ? enFilas(rows, per) : [];
         const fijas = rows.some((r) => r.fila != null);
-        const error = total < 2 ? 'MenosDeDosBarras'
+        // en una vigueta (#941) basta una barra por cara, como en RepartidorFilas
+        const minimo = o.elemento === 'Vigueta' ? 1 : 2;
+        const error = total < minimo ? 'MenosDeDosBarras'
           : !per || lista.length > maxCapas || lista.some((x) => x.length > per) || rows.some((r) => r.fila != null && r.fila < 1) ? 'NoCaben'
-          : fijas && lista[0].length < 2 ? 'MenosDeDosBarras' : 'Ninguno';
+          : fijas && lista[0].length < minimo ? 'MenosDeDosBarras' : 'Ninguno';
         const filas = lista.filter((x) => x.length);
         return { cabenPorFila: per, porFila: error === 'Ninguno' ? filas.map((x) => x.length) : [], error, maximo: per * maxCapas, dmax, filas };
       };

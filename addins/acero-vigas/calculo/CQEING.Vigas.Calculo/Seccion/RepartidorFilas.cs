@@ -30,7 +30,9 @@ public static class RepartidorFilas
         int maximo = caben * e.MaximoFilas;
 
         List<int> numeros = grupos.SelectMany(g => Enumerable.Repeat(g.Diametro, g.Cantidad)).ToList();
-        ErrorCara error = numeros.Count < 2 ? ErrorCara.MenosDeDosBarras
+        // en una vigueta (#941) una sola barra por cara está bien: va al centro
+        int minimo = e.PermiteUnaBarra ? 1 : 2;
+        ErrorCara error = numeros.Count < minimo ? ErrorCara.MenosDeDosBarras
             : caben == 0 || numeros.Count > maximo ? ErrorCara.NoCaben
             : ErrorCara.Ninguno;
         if (caben == 0)
@@ -41,7 +43,7 @@ public static class RepartidorFilas
         {
             error = grupos.Any(g => g.Fila is < 1 || g.Fila > e.MaximoFilas) || porFila.Count > e.MaximoFilas
                 || porFila.Any(f => f.Count > caben) ? ErrorCara.NoCaben
-                : porFila[0].Count < 2 ? ErrorCara.MenosDeDosBarras
+                : porFila[0].Count < minimo ? ErrorCara.MenosDeDosBarras
                 : ErrorCara.Ninguno;
         }
         // una fila que quedó vacía no se dibuja

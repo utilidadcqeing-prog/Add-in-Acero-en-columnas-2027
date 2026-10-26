@@ -219,7 +219,29 @@ En Revit, con `PROY_JULIO_BETO`:
     `ConfiguracionGuardadaTests` que pasaron desde el principio porque ya se guardan las opciones completas (H5);
     se quedan para cuidar que siga así. La suite completa pasa (1005 pruebas), el build de 2027 sale limpio y
     `node --check` pasa en los dos JS.
-  - Falta verlo en el tablero dentro de Revit, porque hay que desplegar con Revit cerrado. Queda para #943.
+  - Commits `3a7849d` (casilla) y `955cb5a` (chip, después de verlo en Revit; ver decisión 7).
+- [x] **#941, paso 4** (2026-10-26):
+  - `Modelo/Seccion.cs`: `EntradaSeccion.PermiteUnaBarra`.
+  - `Tablero/CalculoPortico.cs`: lo pasa si `(o.Elemento ?? p.Elemento) == Vigueta`.
+  - `Seccion/RepartidorFilas.cs`: el mínimo es 1 en viguetas y 2 en vigas, en las dos reglas.
+  - `Tablero/web/demo.js`: la misma regla.
+  - Pruebas nuevas:
+    - `RepartidorFilasTests`, 3: una barra centrada en X = 50; 2#3 van una por fila; fila 1 fija con una barra.
+    - `UbicadorBastonesTests`, 2: el bastón va en la fila 2.
+    - `CalculoPorticoTests`, 3: la vigueta se genera, la viga no, y manda lo que eligió el usuario.
+    - `PlanificadorAceroTests`, 1.
+
+    Antes de implementar fallaron 5. Las de "viga sigue con error" y "2#3 una por fila" ya pasaban: cuidan lo que
+    ya funcionaba.
+  - **Hallazgo H8** (fallo que ya estaba en el código y que la vigueta destapó):
+    - Qué pasaba: el plan de generación reventaba con "Sequence contains no elements" en
+      `UbicadorBastones.ConAltura`. Con un solo puesto por fila, si la barra que traslapa ocupa la fila 2, el
+      bastón sube a la fila 3 y la fila 2 queda vacía. Al calcular su altura se le pedía el diámetro mayor a esa
+      fila vacía.
+    - Corrección: la fila vacía sube como la fila 1, porque la barra que la ocupa es de la corrida.
+    - Prueba: `EnUnaVigueta_SiLaFila2LaOcupaUnTraslapo_ElBastonVaEncimaEnLaFila3`. Falló antes del arreglo.
+    - Resultado: en la vigueta, el bastón queda en la fila 2, o en la 3 donde la corrida traslapa. Sigue por dentro.
+  - La suite completa pasa (1014 pruebas).
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

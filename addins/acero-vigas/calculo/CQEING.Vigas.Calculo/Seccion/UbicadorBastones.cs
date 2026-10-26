@@ -154,7 +154,10 @@ public static class UbicadorBastones
                 double y = cara == Posicion.Inferior ? distancia : e.Alto - distancia;
                 resultado.Add(new BastonEnSeccion(k + 1, new BarraEnSeccion(p.Diametro, p.X, y)));
             }
-            borde += filas[k].Max(p => Diametro(e, p.Diametro)) + e.SeparacionFilas
+            // Una fila vacía es la de un puesto prohibido: la ocupa la barra que traslapa ahí, de la corrida (vigueta de un
+            // solo puesto, #941). Sube como la fila 1.
+            List<Puesto> ocupan = filas[k].Count > 0 ? filas[k] : filas[0];
+            borde += ocupan.Max(p => Diametro(e, p.Diametro)) + e.SeparacionFilas
                 + (k == 0 ? RepartidorFilas.EnLaCurva(e, filas[0].Where(p => !p.EsBaston).MinBy(p => p.X)!.Diametro) : 0);
         }
         return resultado;
