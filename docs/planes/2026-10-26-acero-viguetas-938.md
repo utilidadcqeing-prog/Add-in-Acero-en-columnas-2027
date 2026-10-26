@@ -119,9 +119,14 @@ para otra issue.
 7. **El tablero cambia lo mínimo** (2026-10-26, Juan): el add-in **detecta solo** que es vigueta (decisión 2) y con
    eso aplica todo lo demás (decisiones 3 a 6). No hay botones nuevos. Dentro del bloque "Tipo de viga" que ya
    existe se agrega una sola casilla, **"Es vigueta"**, que ya viene marcada o desmarcada según la detección. Solo
-   se usa si el add-in se equivocó. La nota de debajo dice "Detectado por el tipo y los apoyos.", o "Cambiado a mano:
-   el add-in la detectó como viga/vigueta." si se corrigió. Al volver a lo detectado, la corrección se borra (queda
-   null) y el pórtico sigue lo que diga la detección.
+   se usa si el add-in se equivocó. Al volver a lo detectado, la corrección se borra (queda null) y el pórtico sigue
+   lo que diga la detección.
+   ~~Una casilla "Es vigueta" con una nota debajo.~~ **Cambio** (2026-10-26, Juan, después de verla en Revit): se quita
+   el texto, también la nota "Detectado por el nivel…". ~~Dos botones Viga | Vigueta arriba de "Tipo de viga".~~ Al
+   verlo en Revit pesaba demasiado. De las 5 opciones de la página de muestra (artifact "Botón Vigueta"), Juan eligió
+   la **A**: un **chip "Vigueta"** chico (24 px, redondo) a la derecha del título "Tipo de viga". Apagado es gris
+   (`#C9CFD6` / `#5E6670`) y encendido azul claro (`#EAF1FB` / `#B9CDEB` / `#1F5FAF`). Con un clic se enciende o se
+   apaga.
 
 ## Plan paso a paso
 

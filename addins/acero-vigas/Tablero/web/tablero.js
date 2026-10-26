@@ -380,6 +380,12 @@
       }
     }
 
+    // Viga o vigueta (#940): elegir lo que detectó el add-in borra la corrección (undefined), como si nunca se hubiera tocado.
+    ponerVigueta(P, vigueta) {
+      this.setState({ sel: NADA });
+      this.cambiar({ vigueta: P && vigueta === P.detectadaVigueta ? undefined : vigueta });
+    }
+
     // Cambia algo de OpcionesTablero y pide el cálculo; en los campos de texto, con 150 ms de espera.
     cambiar(cambio, texto) {
       this.setState(cambio, () => {
@@ -763,10 +769,10 @@
         isSep: s.sepMode === 'separada', sepCm: s.sepCm, maxCapas: s.maxCapas,
         segPeg: s.sepMode === 'pegada' ? on : off, segSep: s.sepMode === 'separada' ? on : off,
         segAerea: !isCim ? on : off, segCim: isCim ? on : off,
-        tipoHint: !isCim ? 'Arriba traslapa al centro de la luz; abajo, junto a la columna.' : 'Abajo traslapa al centro de la luz; arriba, junto a la columna.',
+        // el chip "Vigueta" (#940, opción A): gris apagado, azul claro encendido, para no pesar como Aérea / Cimentación
         esVigueta: !!(P && P.esVigueta),
-        viguetaHint: !P || P.esVigueta === P.detectadaVigueta ? 'Detectado por el tipo y los apoyos.'
-          : 'Cambiado a mano: el add-in la detectó como ' + (P.detectadaVigueta ? 'vigueta.' : 'viga.'),
+        chipVigueta: P && P.esVigueta ? 'border: 1px solid #B9CDEB; background: #EAF1FB; color: #1F5FAF; font-weight: 500'
+          : 'border: 1px solid #C9CFD6; background: #FFFFFF; color: #5E6670',
         segHookNo: s.bastHook ? off : on, segHookYes: s.bastHook ? on : off,
         locked: lockedNow, mult, gap, seg6: bar12 ? off : on, seg12: bar12 ? on : off,
         lockBg: lockedNow ? '#F4F6F8' : '#FDF6EA', lockText: lockedNow ? 'Bloqueadas para evitar cambios por error.' : 'Desbloqueadas: los cambios valen para todos los proyectos.',
@@ -830,7 +836,7 @@
         setAerea: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Aérea' }); },
         setCim: () => { this.setState({ sel: NADA }); this.cambiar({ tipo: 'Cimentación' }); },
         // volver a lo detectado deja la casilla sin corregir (undefined), como si nunca se hubiera tocado
-        setVigueta: (e) => { const marcada = e.target.checked; this.setState({ sel: NADA }); this.cambiar({ vigueta: P && marcada === P.detectadaVigueta ? undefined : marcada }); },
+        alternarVigueta: () => this.ponerVigueta(P, !(P && P.esVigueta)),
         setBastSupN: (e) => this.cambiar({ bastSupN: e.target.value }, true), setBastInfN: (e) => this.cambiar({ bastInfN: e.target.value }, true),
         setBastSupD: (e) => this.cambiar({ bastSupD: e.target.value }), setBastInfD: (e) => this.cambiar({ bastInfD: e.target.value }),
         setBastDef: (e) => this.cambiar({ bastDef: e.target.value }, true), hookNo: () => this.cambiar({ bastHook: false }), hookYes: () => this.cambiar({ bastHook: true }),
@@ -1093,17 +1099,14 @@
         ${v.isBarras ? html`
           <div style="display: flex; flex-direction: column; gap: 16px">
             <div style="display: flex; flex-direction: column; gap: 6px">
-              <span style="font-weight: 600">Tipo de viga</span>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+                <span style="font-weight: 600">Tipo de viga</span>
+                <button type="button" aria-pressed=${v.esVigueta} onClick=${v.alternarVigueta} style="height: 24px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; ${v.chipVigueta}">Vigueta</button>
+              </div>
               <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
                 <button type="button" onClick=${v.setAerea} style="height: 32px; border: 0; font: inherit; cursor: pointer; ${v.segAerea}">Aérea</button>
                 <button type="button" onClick=${v.setCim} style="height: 32px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segCim}">Cimentación</button>
               </div>
-              <span style="font-size: 12px; color: #5E6670">Detectado por el nivel. ${v.tipoHint}</span>
-              <label style="display: flex; align-items: center; gap: 8px; margin-top: 4px; cursor: pointer">
-                <input type="checkbox" checked=${v.esVigueta} onChange=${v.setVigueta} style="width: 16px; height: 16px; margin: 0; accent-color: #1F5FAF; cursor: pointer" />
-                <span>Es vigueta</span>
-              </label>
-              <span style="font-size: 12px; color: #5E6670">${v.viguetaHint}</span>
             </div>
 
             ${v.layers.map((ly) => html`
