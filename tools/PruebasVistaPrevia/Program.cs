@@ -735,5 +735,35 @@ Probar("polilinea_partir_por_altura", () =>
     Igual(3, dentro[0][^1].Z, "corte de arriba");
 });
 
+// ---- Ángulo del gancho por punta en las grapas
+
+Probar("grapa_nueva_sale_con_180_en_las_dos_puntas", () =>
+{
+    var pieza = new EstriboMenor();
+    Cierto(pieza.AnguloInicio == AnguloGancho.Grados180 && pieza.AnguloFin == AnguloGancho.Grados180, "180/180 por defecto");
+});
+
+Probar("configuracion_vieja_se_lee_con_180", () =>
+{
+    EstriboMenor pieza = System.Text.Json.JsonSerializer.Deserialize<EstriboMenor>(
+        "{\"Forma\":1,\"Eje\":0,\"Desde\":2,\"Hasta\":2,\"Volteado\":true}")!;
+    Cierto(pieza.AnguloInicio == AnguloGancho.Grados180 && pieza.AnguloFin == AnguloGancho.Grados180, "180/180 sin el dato");
+    Cierto(pieza.Forma == FormaMenor.GrapaS && pieza.Volteado, "el resto se lee igual");
+});
+
+Probar("copiar_conserva_los_angulos", () =>
+{
+    var pieza = new EstriboMenor { AnguloInicio = AnguloGancho.Grados135, AnguloFin = AnguloGancho.Grados90 };
+    EstriboMenor copia = pieza.Copiar();
+    Cierto(copia.AnguloInicio == AnguloGancho.Grados135 && copia.AnguloFin == AnguloGancho.Grados90, "135/90 en la copia");
+});
+
+Probar("angulos_sobreviven_a_guardar_y_leer", () =>
+{
+    var pieza = new EstriboMenor { AnguloInicio = AnguloGancho.Grados90, AnguloFin = AnguloGancho.Grados135 };
+    EstriboMenor leida = System.Text.Json.JsonSerializer.Deserialize<EstriboMenor>(System.Text.Json.JsonSerializer.Serialize(pieza))!;
+    Cierto(leida.AnguloInicio == AnguloGancho.Grados90 && leida.AnguloFin == AnguloGancho.Grados135, "90/135 al leer");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;
