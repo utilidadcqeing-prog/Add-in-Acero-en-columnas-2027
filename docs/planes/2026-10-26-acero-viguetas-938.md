@@ -321,6 +321,16 @@ En Revit, con `PROY_JULIO_BETO`:
     el doblez de afuera (doblado / 2 + diámetro; 50.7 con el #4). Antes solo se corrían las que tenían gancho.
   - `ArmadorVista.Armar` recibe el plan (lo arma `SesionTablero.Vista`, el mismo de los choques): el alzado muestra el
     bastón con el largo que se crea en Revit. En la Vigueta 1, 1.08 pasa a 1.02.
+- **Hallazgo H13** (2026-10-26, Pórtico 2 medido con el MCP): los ganchos de las barras sumaban la B entera del cuadro
+  y Revit alargaba la cola para que la barra midiera eso (#5 a 90°: cola de 256 en vez de 191; a 135°, 121.5 en vez de
+  95 y doblado de 95 en vez de 64). Juan eligió respetar la cola del cuadro.
+  - `Reglas.LargoGancho`: el gancho suma su arco por el eje más la cola E, menos el radio y medio diámetro que el tramo
+    recto ya cubre hasta la cara de afuera del doblez. #5: 215 a 90°, 162 a 135° y 176 a 180°. Sin E (135° del #6 al
+    #8), la B. `Reglas.DobladoGancho`: el doblado de gancho (6 d), el que usa Revit también en el de 135°.
+  - El tablero, el plan, los tipos de gancho de Revit (`TiposAcero.Gancho`, la extensión sale ≈ E) y la vista 3D salen
+    todos de ahí. Las barras con gancho bajan unos 6.3 cm por gancho de 90°.
+  - Las pruebas de escenarios de la maqueta (avisos, cambios manuales, arrastre) siguen con `Datos.ReglasDeLaMaqueta`,
+    sin cola E (gancho de B entera), porque prueban esa lógica y no el gancho.
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

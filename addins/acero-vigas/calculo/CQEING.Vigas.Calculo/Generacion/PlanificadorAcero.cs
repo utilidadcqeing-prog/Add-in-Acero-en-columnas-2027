@@ -141,8 +141,7 @@ public static class PlanificadorAcero
     }
 
     /// <summary>El diámetro de doblado del gancho del cuadro de Reglas; 6 diámetros si el cuadro no lo trae.</summary>
-    private static double DobladoDe(ReglaDiametro regla, TipoGancho t) =>
-        (t switch { TipoGancho.De180 => regla.Gancho180.D, TipoGancho.De135 => regla.Estribo135.D, _ => regla.Gancho90.D }) ?? 6 * regla.Diametro;
+    private static double DobladoDe(ReglaDiametro regla, TipoGancho t) => Reglas.DobladoGancho(regla, t);
 
     /// <summary>
     /// Una corrida por cada zona de cada tramo y estribo (hallazgo E6: como el rótulo del tablero), con las caras del corte

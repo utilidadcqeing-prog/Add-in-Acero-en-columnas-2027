@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Modelo;
+﻿using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Vigas.Calculo.Tests;
 
@@ -10,7 +10,7 @@ namespace CQEING.Vigas.Calculo.Tests;
 public class CambiosManualesTests
 {
     private static EntradaVigas Maqueta(CambiosManuales? cambios = null) => new(Datos.PorticoMaqueta(), TipoViga.Aerea,
-        [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Reglas.Generales, Cambios: cambios);
+        [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], Datos.ReglasDeLaMaqueta, Cambios: cambios);
 
     [Fact]
     public void SubirUnaBarraQueYaMide6_SeBloqueaPorLaVarilla()
@@ -179,7 +179,7 @@ public class CambiosManualesTests
         // en B-C
         var portico = new Portico([Datos.Columna("A", 0), Datos.Columna("B", 4400), Datos.Columna("C", 6800)], VoladizoFinal: 2500);
         EntradaVigas Entrada(bool confirmado) => new(portico, TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)],
-            Reglas.Generales, Cara.Final, Cambios: Movido("I2–I3", 5212 + 2000, confirmado));
+            Datos.ReglasDeLaMaqueta, Cara.Final, Cambios: Movido("I2–I3", 5212 + 2000, confirmado));
 
         ResultadoVigas sinConfirmar = MotorVigas.Calcular(Entrada(false));
         ResultadoVigas confirmado = MotorVigas.Calcular(Entrada(true));
