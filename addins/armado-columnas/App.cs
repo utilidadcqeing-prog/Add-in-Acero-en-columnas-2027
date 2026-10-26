@@ -66,15 +66,6 @@ public class App : IExternalApplication
             "practicacq.ComandoDiagnosticoPrevia3D",
             "TEMPORAL: mide cuánto tarda la vista previa 3D en generar de prueba una columna y deshacerlo, y comprueba que no queda nada.",
             "iconoCQ"));
-
-        // TEMPORAL -- ver comentario de ComandoDiagnosticoGanchosGrapa.cs.
-        // Sacar este botón (y el comando) una vez cerrado el plan de ángulos.
-        panelHerramientas.AddItem(CintaCqeing.CrearBoton(
-            "ComandoDiagnosticoGanchosGrapa",
-            "Diagnóstico\nganchos grapa",
-            "practicacq.ComandoDiagnosticoGanchosGrapa",
-            "TEMPORAL: crea grapas de prueba con ganchos de 180°, 135° y 90° en una columna y mide dónde quedan.",
-            "iconoCQ"));
 #endif
 
         return Result.Succeeded;
