@@ -22,7 +22,10 @@ columna elige el ángulo de cada punta de cada grapa.
   abre cada gancho y **conserva** el ángulo de cada punta.
 - El largo de la cola y el doblez de cada ángulo **salen del cuadro de
   varillas** (`CuadroVarillas`): 180° → `Gancho180Cuadro`, 135° →
-  `GanchoEstribo135`, 90° → `Gancho90Cuadro` (confirmado por Luciano).
+  `GanchoEstribo135` (confirmado por Luciano). El cuadro **no trae un 90° de
+  estribo**: su `Gancho90Cuadro` es el de anclaje de las longitudinales
+  (mucho más largo). Para el 90° de la grapa se usan **6 diámetros**, el
+  mismo criterio del add-in de vigas (`GanchoPropio.DeEstribo`).
 - Vista previa 2D, vista 3D y lo que crea «Generar» muestran **el mismo gancho
   en cada punta** (regla del #167: "no puede haber nada figurativo").
 
@@ -101,8 +104,8 @@ Con lo medido:
   gancho no abraza nada.
 - Si una varilla no tiene el 135° de estribo en el cuadro
   (`GanchoEstribo135` puede faltar), la cola sale de 6 diámetros, el mismo
-  respaldo que ya usa `PlantaArmado.Cola135`, y se avisa. El 90° y el 180°
-  siempre están en el cuadro.
+  respaldo que ya usa `PlantaArmado.Cola135`, y se avisa. El 180° siempre
+  está en el cuadro; el 90° es siempre 6 diámetros (ver arriba).
 - Doblez: el 135° y el 90° se doblan como el estribo, igual que hoy el 180°
   ("dobladas como el estribo", Luciano 20-oct). En los traslapos donde las
   dos piezas no entran, se usa el doblez más grande del cuadro, como hoy.
