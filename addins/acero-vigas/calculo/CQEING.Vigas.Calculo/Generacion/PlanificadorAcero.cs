@@ -93,8 +93,9 @@ public static class PlanificadorAcero
     /// <summary>
     /// Carlos (21-oct, min 01:03:07): "son elementos sólidos que no se pueden traslapar". Una barra que va debajo de otra
     /// (arriba; encima, abajo) y llega a la misma punta que ese gancho lo atraviesa: termina antes, con todo su gancho por
-    /// dentro del arranque del de afuera (un radio de doblado más un diámetro), y su largo baja lo mismo. Se recorren de la
-    /// cara hacia adentro, así una tercera fila se mete dentro de la segunda ya corrida.
+    /// dentro del arranque del de afuera (un radio de doblado más un diámetro), y su largo baja lo mismo. Una recta termina
+    /// donde acaba el doblez de afuera. Se recorren de la cara hacia adentro, así una tercera fila se mete dentro de la
+    /// segunda ya corrida.
     /// </summary>
     private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r)
     {
@@ -123,7 +124,10 @@ public static class PlanificadorAcero
                         double vueltaAfuera = Vuelta(afuera, Gancho(afuera));
                         if (!debajo || vueltaAfuera == 0 || sentido * (punta - Punta(afuera)) >= vueltaAfuera + Vuelta(adentro, Gancho(adentro)))
                             continue;
-                        int minima = Punta(afuera) + sentido * (int)Math.Ceiling(Vuelta(adentro, Gancho(adentro)) - tolerancia);
+                        // Con gancho, el suyo va por dentro del de afuera; recta (un bastón, Vigueta 1 del 26-oct), termina
+                        // donde acaba el doblez de afuera: llegaba a la cara de la pata y se metía en ella.
+                        double vuelta = Gancho(adentro) == TipoGancho.Sin ? vueltaAfuera : Vuelta(adentro, Gancho(adentro));
+                        int minima = Punta(afuera) + sentido * (int)Math.Ceiling(vuelta - tolerancia);
                         if (sentido * (minima - punta) > 0)
                             punta = minima;
                     }

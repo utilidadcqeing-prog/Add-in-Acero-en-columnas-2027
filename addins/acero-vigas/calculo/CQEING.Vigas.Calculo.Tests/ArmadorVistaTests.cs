@@ -237,6 +237,27 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void ConElPlan_ElBastonSeVeConElLargoQueSeCreaEnRevit()
+    {
+        // el bastón recto del borde termina antes del gancho de la corrida en el plan (Vigueta 1, 26-oct): el alzado lo
+        // muestra igual, para que el tablero diga lo mismo que Revit
+        PorticoLeido p = PlanificadorAceroTests.Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = PlanificadorAceroTests.Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = PlanificadorAceroTests.Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Bastones = new ArmadoBastones(new GrupoBarras(1, 4)) };
+        PlanAcero plan = PlanificadorAcero.Planificar("Vigueta 1", p, o, Reglas.Generales)!;
+        PiezaLongitudinal enRevit = plan.Bastones.Single(b => b.Pieza == "BS1");
+
+        BastonVista b = ArmadorVista.Armar(p, o, Reglas.Generales, plan).Bastones.Single(x => x.Id == "BS1");
+
+        Assert.Equal((enRevit.Desde / 1000.0, enRevit.Hasta / 1000.0, enRevit.Largo / 1000.0), (b.Desde, b.Hasta, b.Largo));
+        Assert.Equal("1#4L= " + (enRevit.Largo / 1000.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), b.Rotulo);
+    }
+
+    [Fact]
     public void LaGrapaDeLaViguetaEnC_SeDibujaYSeNombraEnC()
     {
         PorticoLeido p = Portico1();

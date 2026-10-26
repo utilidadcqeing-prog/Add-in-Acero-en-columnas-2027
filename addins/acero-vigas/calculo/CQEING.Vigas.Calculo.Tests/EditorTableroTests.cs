@@ -86,11 +86,23 @@ public class EditorTableroTests
     }
 
     [Fact]
-    public void TraslapoQueNoCrecePideUnLargoMayor()
+    public void TraslapoConElLargoActual_SoloLoIndica()
     {
+        // el campo arranca con el largo actual: no es un error (Juan, 26-oct: "¿por qué me pide que escriba un largo mayor?")
         OpcionEdicion aplicar = Opcion(Previa("S1–S2", AccionEdicion.Traslapo, 0.90), "aplicar");
 
-        Assert.Equal((false, "Escribe un largo mayor que el actual (0.90 m)."), (aplicar.SePuede, aplicar.Texto));
+        Assert.Equal((false, "Ese es el largo actual. Solo puede crecer: escribe uno mayor para alargarlo."), (aplicar.SePuede, aplicar.Texto));
+    }
+
+    [Fact]
+    public void TraslapoMasCortoQueElActual_DiceQueSoloPuedeCrecer()
+    {
+        // S1–S2 en 1.40 tras crecer un módulo (TraslapoQueCabeDiceElEfecto); 1.00 no baja del mínimo pero sí del actual
+        OpcionesTablero o = OpcionesTablero.PorDefecto with { Cambios = new CambiosManuales(Traslapos: new Dictionary<string, int> { ["S1–S2"] = 1200 }) };
+
+        OpcionEdicion aplicar = Opcion(Previa("S1–S2", AccionEdicion.Traslapo, 1.00, o), "aplicar");
+
+        Assert.Equal((false, "Solo puede crecer: escribe un largo mayor que el actual (1.40 m)."), (aplicar.SePuede, aplicar.Texto));
     }
 
     [Fact]

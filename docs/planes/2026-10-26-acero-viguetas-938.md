@@ -314,6 +314,13 @@ En Revit, con `PROY_JULIO_BETO`:
   - Largo en S: la tangente √((alto − 2R)² − (2R)²) más dos ganchos (454.03 con 135°, igual que en Revit).
 - [x] **La grapa de la vigueta va en S o en C** (Juan, 26-oct): `ConfigEstribos.Forma` (S por defecto). En el paso de
   estribos, con grapa, la fila dice "Grapa" y lleva los botones C/S, como la de un adicional abierto.
+- **Hallazgo H12** (2026-10-26, Vigueta 1 = VB #388864, medida con el MCP): los largos coinciden con el tablero, pero
+  los bastones rectos de arriba llegaban hasta la cara de afuera de la pata del gancho de 90° de la corrida y se metían
+  1.3 cm en ella (los puntos rojos del alzado).
+  - `PlanificadorAcero.AnidarGanchos`: una barra recta debajo de una con gancho, en la misma punta, termina donde acaba
+    el doblez de afuera (doblado / 2 + diámetro; 50.7 con el #4). Antes solo se corrían las que tenían gancho.
+  - `ArmadorVista.Armar` recibe el plan (lo arma `SesionTablero.Vista`, el mismo de los choques): el alzado muestra el
+    bastón con el largo que se crea en Revit. En la Vigueta 1, 1.08 pasa a 1.02.
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

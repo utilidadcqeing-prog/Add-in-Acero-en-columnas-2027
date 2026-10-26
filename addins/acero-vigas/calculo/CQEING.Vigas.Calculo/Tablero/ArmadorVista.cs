@@ -28,7 +28,11 @@ public static class ArmadorVista
         return new PorticoEnLista(p.Nombre, p.Nombre, sub, tipo, tramos);
     }
 
-    public static VistaPortico Armar(PorticoLeido p, OpcionesTablero o, Reglas r)
+    /// <param name="plan">
+    /// El de "Generar", si se puede generar: los bastones se muestran con el largo que se crea en Revit (un bastón recto
+    /// del borde termina antes del gancho de la corrida, Vigueta 1 del 26-oct).
+    /// </param>
+    public static VistaPortico Armar(PorticoLeido p, OpcionesTablero o, Reglas r, PlanAcero? plan = null)
     {
         TipoViga tipo = o.Tipo ?? p.Tipo;
         bool esVigueta = (o.Elemento ?? p.Elemento) == Elemento.Vigueta, detectadaVigueta = p.Elemento == Elemento.Vigueta;
@@ -66,11 +70,21 @@ public static class ArmadorVista
             Rotulo.EnPulgadas(b.Grupos, b.LargoRecto, b.Largo))).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
             M(t.Minimo), $"#{t.Diametro}", t.Manual, F(M(t.Hasta - t.Desde), "0.00"))).ToList();
-        var bastones = rv.Bastones.Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
+        var bastones = rv.Bastones.Select(ComoEnRevit).Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Donde(p, b), Cantidad([b.Grupo]), b.Kg,
             b.LargoRecto < CalculadorBastones.LargoDe(o.Bastones, b.Id),
             Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde, ColoresDiametro.De(b.Grupo.Diametro),
             Rotulo.De([b.Grupo], b.LargoRecto, b.Largo), Rotulo.EnPulgadas([b.Grupo], b.LargoRecto, b.Largo))).ToList();
+
+        // el bastón con las puntas del plan; si sus barras quedaron distintas, el más corto
+        Baston ComoEnRevit(Baston b)
+        {
+            List<PiezaLongitudinal> piezas = plan?.Bastones.Where(x => x.Pieza == b.Id).ToList() ?? [];
+            if (piezas.Count == 0 || piezas.Min(x => x.Largo) == b.Largo)
+                return b;
+            int largo = piezas.Min(x => x.Largo);
+            return b with { Desde = piezas.Max(x => x.Desde), Hasta = piezas.Min(x => x.Hasta), Largo = largo, Kg = b.Kg * largo / b.Largo };
+        }
         var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
             .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d), Rotulo.Pulgadas(d))).ToList();
 

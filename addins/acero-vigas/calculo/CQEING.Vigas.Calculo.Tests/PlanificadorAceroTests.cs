@@ -74,6 +74,29 @@ public class PlanificadorAceroTests
     }
 
     [Fact]
+    public void UnBastonRectoEnElBorde_TerminaAntesDelGanchoDeLaCorrida()
+    {
+        // Vigueta 1 (VB #388864, 26-oct): el bastón de arriba llegaba hasta la cara de afuera de la pata del gancho de 90°
+        // de la corrida y se metía 1.3 cm en ella. Termina donde acaba el doblez: 76/2 + 12.7 = 50.7 más adentro.
+        PorticoLeido vigueta = Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Bastones = new ArmadoBastones(new GrupoBarras(1, 4)) };
+        Baston enElCalculo = CalculoPortico.Calcular(vigueta, o, Reglas.Generales)!.Vigas.Bastones.First(b => b.Id == "BS1");
+
+        PlanAcero plan = PlanificadorAcero.Planificar("Vigueta 1", vigueta, o, Reglas.Generales)!;
+
+        PiezaLongitudinal corrida = plan.Barras.Where(b => b.Capa == Posicion.Superior).MinBy(b => b.Desde)!;
+        PiezaLongitudinal baston = plan.Bastones.Single(b => b.Pieza == "BS1");
+        Assert.Equal(TipoGancho.De90, corrida.GanchoInicio);
+        Assert.Equal(enElCalculo.Desde, corrida.Desde);
+        Assert.Equal((corrida.Desde + 51, enElCalculo.Largo - 51), (baston.Desde, baston.Largo));
+    }
+
+    [Fact]
     public void VariasFilas_CadaPiezaEnSuPuestoDelCorte()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(7, 5)] };

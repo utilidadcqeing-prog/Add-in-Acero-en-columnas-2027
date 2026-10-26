@@ -573,7 +573,8 @@
         const o = opcion('aplicar');
         const ok = !!o && o.sePuede;
         // en rojo solo si lo escrito es otro largo y no se puede; con el largo actual es solo la indicación
-        const otro = Math.abs(num(s.draft, lapLen(SL)) - lapLen(SL)) > 1e-9;
+        // (el largo se compara como se muestra: 1.098 se ve 1.10 y escribir 1.10 es el mismo)
+        const otro = f2(num(s.draft, lapLen(SL))) !== f2(lapLen(SL));
         sl = { id: SL.id, min: f2(SL.minimo), diam: SL.diametro, cur: f2(lapLen(SL)),
           eff: o ? o.texto : 'Escribe un largo en metros.', effCol: ok ? '#1E5C38' : (o && otro ? '#B42318' : '#5E6670'),
           off: !ok, applyBg: ok ? '#1F5FAF' : '#9AA3AD', notManual: !SL.manual, resetCol: SL.manual ? '#1F5FAF' : '#9AA3AD',
