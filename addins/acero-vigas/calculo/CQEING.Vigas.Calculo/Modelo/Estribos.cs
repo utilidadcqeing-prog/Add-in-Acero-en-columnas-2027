@@ -84,12 +84,16 @@ public sealed record Tramo(string Nombre, double CaraIzquierda, double CaraDerec
 /// Lo que necesita el motor de estribos: el pórtico, la sección (sus barras y recubrimientos) y la configuración del
 /// pórtico, con la de cada tramo que la cambie. Las claves de <paramref name="PorTramo"/> son los nombres de los tramos
 /// (<c>"A-B"</c>, <c>"Voladizo D"</c>). El diámetro del estribo de la sección es el de <paramref name="General"/>.
+/// <paramref name="Principal"/> es el estribo obligatorio <c>"E"</c>: el cerrado de las esquinas, o en una vigueta
+/// (<see cref="TipoEstribo.Abierto"/>) una grapa en S por el centro que abraza la barra de arriba y la de abajo
+/// (decisión 8 del plan docs/planes/2026-10-26-acero-viguetas-938.md).
 /// </summary>
 public sealed record EntradaEstribos(
     Portico Portico,
     EntradaSeccion Seccion,
     ConfigEstribos General,
-    IReadOnlyDictionary<string, ConfigEstribos>? PorTramo = null);
+    IReadOnlyDictionary<string, ConfigEstribos>? PorTramo = null,
+    TipoEstribo Principal = TipoEstribo.Cerrado);
 
 /// <summary>
 /// Los estribos iguales de un tramo: <c>"E"</c> es el cerrado de las esquinas y <c>"E1"</c>, <c>"E2"</c>… los

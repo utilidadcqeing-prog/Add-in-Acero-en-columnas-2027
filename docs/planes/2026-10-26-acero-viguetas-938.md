@@ -282,7 +282,21 @@ En Revit, con `PROY_JULIO_BETO`:
   - Arreglo de protección:
     - `CreadorEstribos.Cerrado` borra el estribo a medio crear y devuelve null.
     - `GeneradorAcero` también atrapa `InternalException`. Ese grupo se anota en el resumen y lo demás se genera.
-  - El arreglo de fondo es la decisión 8: la vigueta no lleva cerrado.
+  - El arreglo de fondo es la decisión 8: la vigueta no lleva cerrado. Commit `82e57c9`.
+- [x] **Grapa en S en la vigueta, decisión 8** (2026-10-26):
+  - `Modelo/Estribos.cs`: `EntradaEstribos.Principal`, con `Cerrado` por defecto.
+  - `Estribos/MotorEstribos.cs`: con `Abierto`, el `E` es una grapa en S en X = ancho/2, de recubrimiento a
+    recubrimiento. Su largo es una rama más dos ganchos.
+  - `Tablero/CalculoPortico.cs`: `EsVigueta` decide la grapa y la barra única.
+  - `Tablero/ArmadorVista.cs`: la grapa lleva su trazo en el corte y en la lista se llama "Grapa en S".
+  - `Tablero/web/tablero.js`: con grapa no se dibuja el rectángulo del cerrado, se dibuja su trazo, y el texto del
+    corte dice "Grapa en S #3".
+  - El plan de generación (`RamaDe`), Revit (`CreadorEstribos.Abierto`, `CorregirAbierto`) y la vista previa ya
+    manejaban abiertos en S, así que no cambian.
+  - Pruebas: 3 en `MotorEstribosTests`, 1 en `CalculoPorticoTests` y 1 en `ArmadorVistaTests`, más la grapa con su
+    rama en X = 50 dentro de la prueba de vigueta de `PlanificadorAceroTests`. Las 6 fallaron antes de implementar. La
+    suite completa pasa (1021 pruebas).
+  - Desplegado en local (Revit 2026). Falta generarla en Revit.
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

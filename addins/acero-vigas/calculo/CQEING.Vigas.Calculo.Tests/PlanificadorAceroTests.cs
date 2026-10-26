@@ -65,6 +65,12 @@ public class PlanificadorAceroTests
         // por dentro de la corrida: fila 2, o fila 3 donde la barra que traslapa ya ocupa la 2
         Assert.All(plan.Bastones, b => Assert.InRange(b.Fila, 2, 3));
         Assert.NotEmpty(plan.Estribos);
+        // la grapa en S (decisión 8 del plan de #938) abraza la barra de arriba y la de abajo, al centro
+        Assert.All(plan.Estribos.Where(g => g.Pieza == "E"), g =>
+        {
+            Assert.Equal((TipoEstribo.Abierto, FormaGrapa.S), (g.Tipo, g.Forma));
+            Assert.Equal(50, Assert.IsType<Rama>(g.Rama).X, 6);
+        });
     }
 
     [Fact]

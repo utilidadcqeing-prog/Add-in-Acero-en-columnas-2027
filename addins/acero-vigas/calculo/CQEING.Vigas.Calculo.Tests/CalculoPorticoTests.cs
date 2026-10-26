@@ -58,6 +58,17 @@ public class CalculoPorticoTests
     }
 
     [Fact]
+    public void UnaVigueta_LlevaGrapaEnSYUnaVigaElCerrado()
+    {
+        // Decisión 8 del plan de #938: la Vigueta T1 del plano no tiene cerrado.
+        PorticoCalculado vigueta = CalculoPortico.Calcular(Vigueta(), UnaBarra, Reglas.Generales)!;
+        PorticoCalculado viga = CalculoPortico.Calcular(ArmadorVistaTests.Portico1(), OpcionesTablero.PorDefecto, Reglas.Generales)!;
+
+        Assert.All(vigueta.Estribos.Estribos.Where(e => e.Id == "E"), e => Assert.Equal((TipoEstribo.Abierto, FormaGrapa.S), (e.Tipo, e.Forma)));
+        Assert.All(viga.Estribos.Estribos.Where(e => e.Id == "E"), e => Assert.Equal(TipoEstribo.Cerrado, e.Tipo));
+    }
+
+    [Fact]
     public void UnaVigaConUnaBarraPorCara_SigueSinPoderse()
     {
         Assert.False(CalculoPortico.Calcular(Vigueta(Elemento.Viga), UnaBarra, Reglas.Generales)!.SePuedeGenerar);

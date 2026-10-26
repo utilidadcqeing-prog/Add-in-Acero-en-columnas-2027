@@ -270,7 +270,8 @@ public static class ArmadorVista
         // Los adicionales, con el mismo trazo que la vista previa 3D: sus ganchos según el ángulo y la forma (Juan, 22-oct).
         IReadOnlyList<double[]>? Trazo(EstriboEnSeccion f, EstriboEnPortico x)
         {
-            if (f.Id == MotorEstribos.IdCerrado)
+            // el cerrado de las esquinas lo dibuja la página como rectángulo; la grapa de la vigueta lleva su trazo
+            if (f.Id == MotorEstribos.IdCerrado && f.Tipo == TipoEstribo.Cerrado)
                 return null;
             Rama? rama = f.Tipo == TipoEstribo.Abierto ? PlanificadorAcero.RamaDe(re.Seccion, f.Izquierda, r) : null;
             var unoSolo = new GrupoEstribos(f.Id, x.Tramo, f.Tipo, x.Diametro, x.Gancho, f.Izquierda, f.Derecha, f.Abajo, f.Arriba,
@@ -305,7 +306,8 @@ public static class ArmadorVista
                 string detalle = cerrado
                     ? $"zonas {F(o.Estribos.LargoZona / 1000.0, "0.00")} cada {F(o.Estribos.SeparacionZona / 1000.0, "0.00")} · centro cada {F(o.Estribos.SeparacionCentro / 1000.0, "0.00")}"
                     : g.Count() == tramos ? "todo el pórtico" : string.Join(", ", g.Select(e => e.Tramo.StartsWith("Voladizo") ? e.Tramo : "Viga " + e.Tramo));
-                string tipo = cerrado ? "Estribo cerrado" : g.Key.Tipo == TipoEstribo.Cerrado ? "Adicional cerrado" : "Adicional abierto";
+                string tipo = cerrado ? (g.Key.Tipo == TipoEstribo.Cerrado ? "Estribo cerrado" : "Grapa en S")
+                    : g.Key.Tipo == TipoEstribo.Cerrado ? "Adicional cerrado" : "Adicional abierto";
                 return new FilaEstribos(g.Key.Id, tipo, g.Sum(e => e.Posiciones.Count), $"#{g.Key.Diametro}", M(g.First().Largo), detalle, g.Sum(e => e.Kg));
             })
             .ToList();

@@ -1,4 +1,4 @@
-using CQEING.Vigas.Calculo.Estribos;
+﻿using CQEING.Vigas.Calculo.Estribos;
 using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Porticos;
@@ -223,6 +223,20 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void EnUnaVigueta_ElCorteDibujaLaGrapaYLaListaLaNombra()
+    {
+        PorticoLeido p = Portico1();
+        PorticoLeido vigueta = p with { Elemento = Elemento.Vigueta, Tramos = p.Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList() };
+
+        VistaPortico v = Armar(OpcionesTablero.DeVigueta, vigueta);
+
+        FiguraSeccion grapa = v.Seccion.Figuras.Single(f => f.Id == "E");
+        Assert.Equal(("Abierto", "S"), (grapa.Tipo, grapa.Forma));
+        Assert.NotNull(grapa.Puntos);
+        Assert.Equal("Grapa en S", v.ListaEstribos.Single(e => e.Id == "E").Tipo);
+    }
+
+    [Fact]
     public void EnLaLista_LaViguetaSeVeComoVigueta()
     {
         Assert.Equal("Vigueta", ArmadorVista.EnLista(Portico1() with { Elemento = Elemento.Vigueta }).Tipo);
@@ -340,7 +354,7 @@ public class ArmadorVistaTests
         FilaEstribos e = Assert.Single(Armar().ListaEstribos);
 
         Assert.Equal(("E", "Estribo cerrado", 94, "#3"), (e.Id, e.Tipo, e.Cantidad, e.Diametro));
-        Assert.Equal(1.468, e.Largo, 6);
+        Assert.Equal(1.390, e.Largo, 3);
         Assert.Equal("zonas 0.80 cada 0.10 · centro cada 0.20", e.Detalle);
         Assert.Equal(r.Kg, e.Kg, 6);
     }

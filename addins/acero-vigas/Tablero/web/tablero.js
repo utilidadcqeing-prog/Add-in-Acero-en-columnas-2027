@@ -124,7 +124,7 @@
   // La sección del corte 1-1 (#91), con el factor de `sec` (ver seccionA en valores): la usan la pestaña y la ventana.
   const dibujoSeccion = (sec) => html`
     <div style="position: relative; width: ${sec.wpx}; height: ${sec.hpx}; flex-shrink: 0; background: #F1F3F5; border: 1px solid #9AA3AD; box-sizing: border-box">
-      <div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid ${sec.stC}; border-radius: ${sec.stRadio}"></div>
+      ${sec.stOn ? html`<div style="position: absolute; left: ${sec.stL}; top: ${sec.stT}; right: ${sec.stR}; bottom: ${sec.stB}; border: ${sec.stW} solid ${sec.stC}; border-radius: ${sec.stRadio}"></div>` : null}
       ${sec.adds.map((sh) => html`
         <div style="position: absolute; left: ${sh.l}; top: ${sh.t}; width: ${sh.w}; height: ${sh.h}; border: ${sh.bd}; border-radius: ${sh.r}; background: ${sh.bg}; box-sizing: border-box; pointer-events: none"></div>`)}
       ${sec.trazos.length ? html`
@@ -622,7 +622,10 @@
       // línea 1-1 en el alzado (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
       const C = P ? P.corte : null;
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
-      const cerrado = secc.figuras.find((f) => f.id === 'E');
+      // el estribo obligatorio: el cerrado de las esquinas, o en una vigueta la grapa en S (decisión 8 del plan de #938)
+      const principal = secc.figuras.find((f) => f.id === 'E');
+      const grapa = !!principal && principal.tipo !== 'Cerrado';
+      const cerrado = grapa ? null : principal;
       const recCm = num(s.rec, 4);
       // Estribos adicionales (#85, hallazgo E8): con "+ Cerrado" o "+ Abierto" el corte queda eligiendo barras. Cada barra
       // es un PuntoBarra del motor: su cara, su fila desde 1 (la de la cara) y su número de izquierda a derecha en la fila.
@@ -658,12 +661,12 @@
         // los adicionales con su trazo de C# (PreviaAcero.EnElCorte): los ganchos según el ángulo y la forma C/S, como
         // salen en Revit (Juan, 22-oct). Sin trazo (no debería pasar), la figura simple de antes.
         // El grueso es el diámetro de la barra a escala (Juan, 22-oct), por el eje del trazo.
-        trazos: secc.figuras.filter((f) => f.id !== 'E' && f.puntos).map((f) => ({
+        trazos: secc.figuras.filter((f) => (f.id !== 'E' || grapa) && f.puntos).map((f) => ({
           pts: f.puntos.map((p) => p[0] * K + ',' + p[1] * K).join(' '), w: grueso(f, K), c: colorEstribo(f) })),
         adds: secc.figuras.filter((f) => f.id !== 'E' && !f.puntos).map((f) => (f.tipo === 'Cerrado'
           ? { l: f.izquierda * K + 'px', t: f.arriba * K + 'px', w: (f.derecha - f.izquierda) * K + 'px', h: (f.abajo - f.arriba) * K + 'px', bd: '2px solid ' + colorEstribo(f), r: '3px', bg: 'transparent' }
           : { l: (f.izquierda * K - 1) + 'px', t: f.arriba * K + 'px', w: '2px', h: (f.abajo - f.arriba) * K + 'px', bd: 'none', r: '0', bg: colorEstribo(f) })),
-        stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
+        stOn: !grapa, stL: (cerrado ? cerrado.izquierda : recCm) * K + 'px', stT: (cerrado ? cerrado.arriba : recCm) * K + 'px',
         stR: (cerrado ? secc.anchoCm - cerrado.derecha : recCm) * K + 'px', stB: (cerrado ? secc.altoCm - cerrado.abajo : recCm) * K + 'px',
         // El cerrado de las esquinas, con el grueso de su barra hacia adentro desde las caras exteriores y la esquina
         // redondeada por fuera como el doblado de estribo (4 d de diámetro interior: radio exterior 3 d).
@@ -758,6 +761,7 @@
         pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
           + limite + ' abajo. Llevas ' + nArriba + ' arriba y ' + nAbajo + ' abajo.' : '',
         confTxt: est.conf + ' m', s1Txt: 'cada ' + est.s1, s2Txt: 'cada ' + est.s2, bastTxt: s.bastDef + ' m',
+        secEstTexto: grapa ? 'Grapa en S ' + s.est.estD : 'Estribo cerrado ' + s.est.estD + ' en las esquinas',
         secAddText: adicionales.length ? ' · ' + adicionales.length + (adicionales.length === 1 ? ' adicional' : ' adicionales') : '',
         startCerrado: empezar('Cerrado'), startAbierto: empezar('Abierto'), cancelPick: () => this.setState({ pick: null }),
         addPick: () => { this.setState({ pick: null }); ponerAdicionales(misAdicionales.concat({ tipo: pk.tipo, barras: pk.barras })); },
@@ -995,7 +999,7 @@
               <span>Mirando a la ${v.cutMira} · proyección ${v.cutProf} m</span>
               <span><b>Arriba</b> · ${v.secTop}</span>
               <span><b>Abajo</b> · ${v.secBot}</span>
-              <span>Estribo cerrado ${v.secEstD} en las esquinas${v.secAddText}</span>
+              <span>${v.secEstTexto}${v.secAddText}</span>
               ${v.isPicking ? html`
                 <span style="color: #9A5B00; line-height: 1.45">${v.pickMsg}</span>` : null}
               <span style="color: #5E6670">Recubrimiento ${v.rec} cm · al eje de la barra ${v.alEje} cm</span>

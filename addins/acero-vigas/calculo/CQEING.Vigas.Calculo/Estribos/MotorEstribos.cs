@@ -1,3 +1,4 @@
+using CQEING.Vigas.Calculo.Generacion;
 using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Seccion;
 
@@ -28,7 +29,11 @@ public static class MotorEstribos
         // La sección usa el diámetro del pórtico; el de un tramo solo cambia el largo y los kilos de sus estribos.
         EntradaSeccion seccion = e.Seccion with { DiametroEstribo = e.General.Diametro };
         Recubrimientos rec = seccion.Recubrimiento;
-        var principal = new EstriboEnSeccion(IdCerrado, TipoEstribo.Cerrado, rec.Lados, seccion.Ancho - rec.Lados, rec.Abajo, seccion.Alto - rec.Arriba);
+        // En una vigueta, la grapa en S va por el centro, donde están sus barras (una por cara, al centro).
+        bool grapa = e.Principal == TipoEstribo.Abierto;
+        var principal = grapa
+            ? new EstriboEnSeccion(IdCerrado, TipoEstribo.Abierto, seccion.Ancho / 2, seccion.Ancho / 2, rec.Abajo, seccion.Alto - rec.Arriba)
+            : new EstriboEnSeccion(IdCerrado, TipoEstribo.Cerrado, rec.Lados, seccion.Ancho - rec.Lados, rec.Abajo, seccion.Alto - rec.Arriba);
 
         bool generalValida = EsValida(e.General, General, avisos);
         // Los tramos que llevan estribos: con su configuración válida y su diámetro en las reglas.
@@ -56,11 +61,13 @@ public static class MotorEstribos
         {
             IReadOnlyList<double> posiciones = DistribuidorEstribos.Posiciones(t, c, regla.Diametro);
             double alto = AltoAlEje(seccion, regla);
-            int gancho = Gancho(regla, c.Gancho);
+            double radio = Radio(regla), gancho = Gancho(regla, c.Gancho, radio);
             EstriboEnPortico Estribo(string id, TipoEstribo tipo, double largo, FormaGrapa forma = FormaGrapa.C) =>
                 new(id, tipo, t.Nombre, c.Diametro, c.Gancho, posiciones, largo, Kg(posiciones.Count, largo, regla), forma);
 
-            estribos.Add(Estribo(IdCerrado, TipoEstribo.Cerrado, Largo(TipoEstribo.Cerrado, seccion.Ancho - 2 * rec.Lados - regla.Diametro, alto, gancho)));
+            estribos.Add(grapa
+                ? Estribo(IdCerrado, TipoEstribo.Abierto, Largo(TipoEstribo.Abierto, 0, alto, radio, gancho), FormaGrapa.S)
+                : Estribo(IdCerrado, TipoEstribo.Cerrado, Largo(TipoEstribo.Cerrado, seccion.Ancho - 2 * rec.Lados - regla.Diametro, alto, radio, gancho)));
             // Los adicionales van solo en los tramos de su configuración, con las posiciones del cerrado de ese tramo.
             foreach (EstriboAdicional a in c.Adicionales ?? [])
             {
@@ -68,7 +75,7 @@ public static class MotorEstribos
                     continue;
                 // Por dentro, el cerrado abraza siempre las mismas barras; por el eje, crece con el estribo del tramo.
                 double ancho = f.Derecha - f.Izquierda - 2 * estriboSeccion + regla.Diametro;
-                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, ancho, alto, gancho), a.Tipo == TipoEstribo.Abierto ? a.Forma : FormaGrapa.C));
+                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, ancho, alto, radio, gancho),a.Tipo == TipoEstribo.Abierto ? a.Forma : FormaGrapa.C));
             }
         }
         return new ResultadoEstribos(estribos, corte, [principal, .. figuras], avisos);
@@ -113,27 +120,32 @@ public static class MotorEstribos
     private static double AltoAlEje(EntradaSeccion s, ReglaDiametro estribo) =>
         s.Alto - s.Recubrimiento.Arriba - s.Recubrimiento.Abajo - estribo.Diametro;
 
-    private static int Gancho(ReglaDiametro r, GanchoEstribo g) => g switch
-    {
-        GanchoEstribo.De135 => r.Estribo135.B,
-        GanchoEstribo.De180 => r.Gancho180.B,
-        _ => Gancho90(r),
-    };
+    /// <summary>
+    /// Radio de los dobleces por el eje: Revit dobla todo el estribo (esquinas y ganchos) con el doblado de estribo del
+    /// tipo de barra, que es el del 135° del cuadro (4 d si el cuadro no lo trae).
+    /// </summary>
+    private static double Radio(ReglaDiametro r) => (r.Estribo135.D ?? 4 * r.Diametro) / 2 + r.Diametro / 2;
 
     /// <summary>
-    /// El cuadro no trae estribo de 90°: Revit lo dibuja con cola de 6 d (<c>GanchoPropio.DeEstribo</c>), así que su
-    /// largo es esa cola más el arco de 90° por el eje, con el doblado de estribo (el del 135°; 4 d si el cuadro no lo
-    /// trae). Antes se usaba el gancho de 90° de las barras, con cola de 12 d, y el largo y los kg salían inflados (24-oct).
+    /// Lo que suma un gancho: su arco por el eje más la cola recta del tipo de gancho que crea el add-in
+    /// (<see cref="GanchoPropio.DeEstribo"/>; 6 d si el cuadro no la trae).
     /// </summary>
-    private static int Gancho90(ReglaDiametro r)
+    private static double Gancho(ReglaDiametro r, GanchoEstribo g, double radio)
     {
-        double d = r.Diametro, doblado = r.Estribo135.D ?? 4 * d;
-        return (int)Math.Round(6 * d + Math.PI / 2 * (doblado / 2 + d / 2));
+        (int grados, int? cola) = GanchoPropio.DeEstribo(g, r);
+        return grados * Math.PI / 180 * radio + (cola ?? 6 * r.Diametro);
     }
 
-    /// <summary>Decisión 8: el cerrado da la vuelta completa y el abierto es una sola rama; los dos llevan dos ganchos.</summary>
-    private static double Largo(TipoEstribo tipo, double ancho, double alto, int gancho) =>
-        (tipo == TipoEstribo.Cerrado ? 2 * (ancho + alto) : alto) + 2 * gancho;
+    /// <summary>
+    /// El largo como lo cuenta Revit (medido el 26-oct en la viga 388501 con ganchos de 90°, 135° y 180°): cada lado recto
+    /// pierde un radio en cada punta; el cerrado dobla tres esquinas y en la cuarta van los dos ganchos, y el abierto es
+    /// una rama con un gancho en cada punta. Antes se sumaba el perímetro con esquinas en ángulo recto más dos B del cuadro
+    /// y el estribo salía unos 8 cm más largo que en Revit. <paramref name="ancho"/> y <paramref name="alto"/> van por el eje.
+    /// </summary>
+    private static double Largo(TipoEstribo tipo, double ancho, double alto, double radio, double gancho) =>
+        (tipo == TipoEstribo.Cerrado
+            ? 2 * (ancho + alto) - 8 * radio + 3 * Math.PI / 2 * radio
+            : alto - 2 * radio) + 2 * gancho;
 
     private static double Kg(int cantidad, double largo, ReglaDiametro r) => cantidad * largo / 1000 * r.KgPorMetro;
 }
