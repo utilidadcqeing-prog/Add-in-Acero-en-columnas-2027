@@ -37,6 +37,7 @@ internal static class GeneradorAcero
         var formasMalas = new HashSet<ElementId>();
         var creadas = new List<Creada>();
         var estribos = new List<(Rebar Conjunto, PorticoAGenerar Portico, GrupoEstribos Grupo)>();
+        var recubrimiento = new RecubrimientoTemporal(doc);
         using var t = new Transaction(doc, NombreTransaccion);
         FailureHandlingOptions opciones = t.GetFailureHandlingOptions();
         var manejo = new ManejoDeFallas();
@@ -76,17 +77,40 @@ internal static class GeneradorAcero
                     creadas.Add(new Creada(barra, c, p, esBaston));
                 }
             }
-            foreach (GrupoEstribos g in p.Plan.Estribos)
+            foreach (GrupoEstribos g in p.Plan.Estribos.Where(g => g.Tipo == TipoEstribo.Cerrado))
+                CrearYAnotar(g);
+
+            // Las grapas, con el recubrimiento de Revit de sus vigas casi nulo (ver RecubrimientoTemporal): se orientan y
+            // se amarran a las caras antes de devolverlo.
+            List<GrupoEstribos> abiertos = p.Plan.Estribos.Where(g => g.Tipo == TipoEstribo.Abierto).ToList();
+            if (abiertos.Count == 0)
+                continue;
+            recubrimiento.Poner(p.Vigas.Select(id => long.TryParse(id, out long n) ? doc.GetElement(new ElementId(n)) : null).OfType<Element>());
+            doc.Regenerate();
+            var grapas = abiertos.Select(g => (Conjunto: CrearYAnotar(g), Grupo: g)).Where(x => x.Conjunto is not null).ToList();
+            doc.Regenerate();
+            bool volteadas = false;
+            foreach ((Rebar? conjunto, GrupoEstribos g) in grapas)
+                volteadas |= CreadorEstribos.OrientarAbierto(conjunto!, p.Ubicacion, g);
+            if (volteadas)
+                doc.Regenerate();
+            foreach ((Rebar? conjunto, _) in grapas)
+                CreadorEstribos.FijarPuntas(conjunto!);
+            recubrimiento.Quitar();
+
+            Rebar? CrearYAnotar(GrupoEstribos g)
             {
                 if (CrearEstribos(doc, p, g, tipos, formaEstribo, formasMalas) is { } conjunto)
                 {
                     MarcaAcero.Marcar(conjunto, p.Id, $"{g.Pieza} {g.Tramo}");
                     estribos.Add((conjunto, p, g));
+                    return conjunto;
                 }
-                else
-                    fallas.Add($"{g.Pieza} de {g.Tramo} ({p.Id}): Revit no pudo crear los estribos #{g.Diametro}.");
+                fallas.Add($"{g.Pieza} de {g.Tramo} ({p.Id}): Revit no pudo crear los estribos #{g.Diametro}.");
+                return null;
             }
         }
+        recubrimiento.Terminar();
 
         // Los ganchos y el punto de cada barra se miran con la geometría ya regenerada; se regenera una vez más solo si se
         // cambió algo.
@@ -97,8 +121,6 @@ internal static class GeneradorAcero
             volteados |= CreadorBarras.FijarEnSuPunto(c.Barra, c.Portico.Ubicacion, c.Pieza);
             volteados |= CreadorBarras.CorregirGanchos(c.Barra, c.Pieza, CreadorBarras.Pies(c.Portico.Ubicacion.ZAbajo + c.Pieza.YCorte));
         }
-        foreach ((Rebar conjunto, PorticoAGenerar p, GrupoEstribos g) in estribos)
-            volteados |= CreadorEstribos.CorregirAbierto(conjunto, p.Ubicacion, g);
         // Siempre: FijarEnSuPunto cambia restricciones aunque no mueva nada, y las barras se miden ya resueltas.
         doc.Regenerate();
         // Con la primera barra de cada conjunto ya en su punto, las demás van al suyo.

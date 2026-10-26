@@ -296,7 +296,24 @@ En Revit, con `PROY_JULIO_BETO`:
   - Pruebas: 3 en `MotorEstribosTests`, 1 en `CalculoPorticoTests` y 1 en `ArmadorVistaTests`, más la grapa con su
     rama en X = 50 dentro de la prueba de vigueta de `PlanificadorAceroTests`. Las 6 fallaron antes de implementar. La
     suite completa pasa (1021 pruebas).
-  - Desplegado en local (Revit 2026). Falta generarla en Revit.
+  - Desplegado en local (Revit 2026). Commit `c1798d3`, junto con el largo de estribos como lo cuenta Revit.
+- **Hallazgo H11** (2026-10-26, al generar la Vigueta 6): la grapa en S salió en Revit con el doblez a 18 mm de la cara
+  en vez de 30, y con la forma "CQ Grapa C".
+  - Medido con subtransacción en la vigueta 389858: Revit amarra las puntas de la grapa al recubrimiento de la viga
+    (25 mm en el modelo). El doblez #3 mide 57 mm de ancho y en 10 cm no cabe entre los recubrimientos de los lados:
+    en C Revit corre la grapa 3.5 mm y en S la desarma. Con un recubrimiento de 10 mm, las dos quedan exactas.
+  - Aparte, en S la rama va en diagonal y Revit pone cada gancho perpendicular a ella: con las puntas en vertical los
+    dobleces se corrían. La rama ahora es la tangente a los dos dobleces, cada uno apoyado en su barra
+    (`Rama.Puntas`, `Rama.Dobleces`). Medido: dobleces exactos, recubrimiento 30 y largo 507.33 con gancho de 180°.
+  - `RecubrimientoTemporal`: mientras se crean las grapas, sus vigas tienen un recubrimiento de Revit de 5 mm; se
+    orientan los ganchos por el centro de cada doblez (`CreadorEstribos.OrientarAbierto`, en lugar de
+    `CorregirAbierto`), las puntas se amarran a la cara de la viga (`FijarPuntas`) y se devuelve el recubrimiento.
+    El tipo temporal se borra: el modelo queda igual.
+  - La forma sigue llamándose "CQ Grapa C" en S: Revit toma la orientación de los ganchos como del ejemplar y reusa la
+    forma del documento.
+  - Largo en S: la tangente √((alto − 2R)² − (2R)²) más dos ganchos (454.03 con 135°, igual que en Revit).
+- [x] **La grapa de la vigueta va en S o en C** (Juan, 26-oct): `ConfigEstribos.Forma` (S por defecto). En el paso de
+  estribos, con grapa, la fila dice "Grapa" y lleva los botones C/S, como la de un adicional abierto.
 - [ ] Pendiente con Carlos: diámetro y recubrimiento de arranque de vigueta (decisión 3) y armado mínimo de la
       vigueta de borde (decisión 5).
 - [ ] Pasos implementados.

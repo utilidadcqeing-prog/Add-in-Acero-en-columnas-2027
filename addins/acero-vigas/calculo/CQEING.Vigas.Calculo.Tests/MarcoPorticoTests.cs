@@ -39,6 +39,18 @@ public class MarcoPorticoTests
     }
 
     [Fact]
+    public void DelModeloAlCorte_EsLaVueltaDeAlModelo()
+    {
+        double c = Math.Cos(Math.PI / 6), s = Math.Sin(Math.PI / 6);
+        var u = new UbicacionPortico(c, s, 1000, 2000, 3000, 3500, 300, 500, []);
+
+        (double x, double y) = MarcoPortico.EnCorte(u, MarcoPortico.AlModelo(u, 700, 42.5, 310));
+
+        Assert.Equal(42.5, x, 6);
+        Assert.Equal(310, y, 6);
+    }
+
+    [Fact]
     public void LaVigaDeUnPunto_EsLaQueLoContieneOLaMasCercana()
     {
         UbicacionPortico u = EnX(new VigaEnPortico("v1", 0, 4000), new VigaEnPortico("v2", 4400, 8000));

@@ -19,6 +19,13 @@ public static class MarcoPortico
         return new Punto3(u.OrigenX + x * u.Ux - lado * u.Uy, u.OrigenY + x * u.Uy + lado * u.Ux, u.ZAbajo + yCorte);
     }
 
+    /// <summary>La X y la Y del corte de un punto del modelo: la vuelta de <see cref="AlModelo"/>.</summary>
+    public static (double X, double Y) EnCorte(UbicacionPortico u, Punto3 p)
+    {
+        double lado = -(p.X - u.OrigenX) * u.Uy + (p.Y - u.OrigenY) * u.Ux;
+        return (u.Ancho / 2 - lado, p.Z - u.ZAbajo);
+    }
+
     /// <summary>La x de un punto del modelo en el marco del pórtico: mm desde el eje A, a lo largo del pórtico.</summary>
     public static double EnPortico(UbicacionPortico u, Punto3 p) => (p.X - u.OrigenX) * u.Ux + (p.Y - u.OrigenY) * u.Uy;
 

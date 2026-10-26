@@ -29,8 +29,8 @@ public class MotorEstribosTests
         new(Ancho: 100, Alto: 350, Recubrimientos.Iguales(30), DiametroEstribo: 3,
             Superior: [new GrupoBarras(1, 4)], Inferior: [new GrupoBarras(1, 4)], Reglas.Generales, PermiteUnaBarra: true);
 
-    private static ResultadoEstribos ConGrapa() =>
-        MotorEstribos.Calcular(new EntradaEstribos(Datos.PorticoMaqueta(), VigaT1(), General, Principal: TipoEstribo.Abierto));
+    private static ResultadoEstribos ConGrapa(ConfigEstribos? general = null) =>
+        MotorEstribos.Calcular(new EntradaEstribos(Datos.PorticoMaqueta(), VigaT1(), general ?? General, Principal: TipoEstribo.Abierto));
 
     [Fact]
     public void EnUnaVigueta_ElEstriboEsUnaGrapaEnS()
@@ -39,6 +39,16 @@ public class MotorEstribosTests
 
         Assert.NotEmpty(r.Estribos);
         Assert.All(r.Estribos.Where(e => e.Id == "E"), e => Assert.Equal((TipoEstribo.Abierto, FormaGrapa.S), (e.Tipo, e.Forma)));
+    }
+
+    [Fact]
+    public void LaGrapaDeLaViguetaPuedeIrEnC()
+    {
+        ResultadoEstribos r = ConGrapa(General with { Forma = FormaGrapa.C });
+
+        Assert.All(r.Estribos.Where(e => e.Id == "E"), e => Assert.Equal((TipoEstribo.Abierto, FormaGrapa.C), (e.Tipo, e.Forma)));
+        // en C la rama es vertical: 233 entre dobleces, más dos ganchos de 135° (112.96); medido en Revit, 458.9
+        Assert.All(r.Estribos.Where(e => e.Id == "E"), e => Assert.Equal(458.92, e.Largo, 2));
     }
 
     [Fact]
@@ -52,8 +62,9 @@ public class MotorEstribosTests
     [Fact]
     public void LaGrapaEsUnaRamaConDosGanchos()
     {
-        // por el eje: 350 − 2·30 − 9.5 = 280.5, menos un radio en cada punta (233), más dos ganchos de 135° del #3 (112.96)
-        Assert.All(ConGrapa().Estribos.Where(e => e.Id == "E"), e => Assert.Equal(458.92, e.Largo, 2));
+        // En S la rama es la tangente entre los dos dobleces, que quedan a 233 y con los centros a un lado y al otro de
+        // ella: √(233² − (2 · 23.75)²) = 228.11, más dos ganchos de 135° del #3 (112.96). Medido en Revit, 454.03.
+        Assert.All(ConGrapa().Estribos.Where(e => e.Id == "E"), e => Assert.Equal(454.03, e.Largo, 2));
     }
 
     /// <summary>La viga 388501 (25 × 35, recubrimiento 4, estribo #3) del modelo de prueba, medida en Revit el 26-oct.</summary>

@@ -299,14 +299,14 @@ public static class ArmadorVista
     {
         int tramos = DistribuidorEstribos.Tramos(p.Portico).Count;
         return re.Estribos
-            .GroupBy(e => (e.Id, e.Tipo, e.Diametro, Largo: Math.Round(e.Largo, 3)))
+            .GroupBy(e => (e.Id, e.Tipo, e.Diametro, Largo: Math.Round(e.Largo, 3), e.Forma))
             .Select(g =>
             {
                 bool cerrado = g.Key.Id == MotorEstribos.IdCerrado;
                 string detalle = cerrado
                     ? $"zonas {F(o.Estribos.LargoZona / 1000.0, "0.00")} cada {F(o.Estribos.SeparacionZona / 1000.0, "0.00")} · centro cada {F(o.Estribos.SeparacionCentro / 1000.0, "0.00")}"
                     : g.Count() == tramos ? "todo el pórtico" : string.Join(", ", g.Select(e => e.Tramo.StartsWith("Voladizo") ? e.Tramo : "Viga " + e.Tramo));
-                string tipo = cerrado ? (g.Key.Tipo == TipoEstribo.Cerrado ? "Estribo cerrado" : "Grapa en S")
+                string tipo = cerrado ? (g.Key.Tipo == TipoEstribo.Cerrado ? "Estribo cerrado" : $"Grapa en {g.Key.Forma}")
                     : g.Key.Tipo == TipoEstribo.Cerrado ? "Adicional cerrado" : "Adicional abierto";
                 return new FilaEstribos(g.Key.Id, tipo, g.Sum(e => e.Posiciones.Count), $"#{g.Key.Diametro}", M(g.First().Largo), detalle, g.Sum(e => e.Kg));
             })

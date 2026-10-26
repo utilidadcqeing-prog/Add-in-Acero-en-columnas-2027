@@ -30,7 +30,7 @@
     rec: '4', recUp: '', recDown: '', recSide: '', sepMode: 'pegada', sepCm: '1', maxCapas: '3',
     bastDef: '2.00', bastHook: false, bastLen: {}, bastSupN: '1', bastSupD: '', bastInfN: '1', bastInfD: '',
     // adicionales (#85, hallazgo E8): [{ tipo: 'Cerrado' | 'Abierto', barras: [{ cara, fila, numero, nombre }] }]
-    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20', adicionales: [] }, estMarc: null, tramosSel: [],
+    est: { estD: '#3', estG: '135°', conf: '0.80', s1: '0.10', s2: '0.20', adicionales: [], forma: 'S' }, estMarc: null, tramosSel: [],
     // corte 1-1 (#91): cutX vacío = la vista tipo que elige C#
     cutX: '', depth: '0.10', mira: 'derecha',
     // edición (#84): CambiosManuales en mm (barras y traslapos ya; movidos y ganchos, fases B y C) y bastones arrastrados
@@ -69,7 +69,7 @@
     // la fila a mano de cada tipo (#84): '' = Auto
     const grupos = (rows) => rows.map((r) => ({ cantidad: r.n, diametro: diametro(r.d), fila: r.f ? Number(r.f) : null }));
     const estribos = (e) => ({ diametro: diametro(e.estD), gancho: ({ '135°': 'De135', '180°': 'De180' })[e.estG] || 'De90',
-      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)),
+      largoZona: mm(n(e.conf)), separacionZona: mm(n(e.s1)), separacionCentro: mm(n(e.s2)), forma: e.forma || 'S',
       adicionales: (e.adicionales || []).map((a) => ({ tipo: a.tipo, forma: a.forma || 'C',
         barras: a.barras.map((b) => ({ cara: b.cara, fila: b.fila, numero: b.numero })) })) });
     const baston = (cant, d, filas) => ({ cantidad: Math.max(0, Math.round(n(cant))), diametro: diametro(d || filas[0].d) });
@@ -622,7 +622,7 @@
       // línea 1-1 en el alzado (decisión 10 del plan docs/planes/2026-10-17-corte-vigas-91.md).
       const C = P ? P.corte : null;
       const secc = P ? P.seccion : { anchoCm: 30, altoCm: 50, barras: [], figuras: [] };
-      // el estribo obligatorio: el cerrado de las esquinas, o en una vigueta la grapa en S (decisión 8 del plan de #938)
+      // el estribo obligatorio: el cerrado de las esquinas, o en una vigueta la grapa en S o en C (decisión 8 del plan de #938)
       const principal = secc.figuras.find((f) => f.id === 'E');
       const grapa = !!principal && principal.tipo !== 'Cerrado';
       const cerrado = grapa ? null : principal;
@@ -761,7 +761,7 @@
         pickMsg: pk ? 'Estribo ' + pk.tipo.toLowerCase() + ': haz clic en el corte en ' + limite + (limite === 1 ? ' barra' : ' barras') + ' arriba y '
           + limite + ' abajo. Llevas ' + nArriba + ' arriba y ' + nAbajo + ' abajo.' : '',
         confTxt: est.conf + ' m', s1Txt: 'cada ' + est.s1, s2Txt: 'cada ' + est.s2, bastTxt: s.bastDef + ' m',
-        secEstTexto: grapa ? 'Grapa en S ' + s.est.estD : 'Estribo cerrado ' + s.est.estD + ' en las esquinas',
+        secEstTexto: grapa ? 'Grapa en ' + (principal.forma || 'S') + ' ' + s.est.estD : 'Estribo cerrado ' + s.est.estD + ' en las esquinas',
         secAddText: adicionales.length ? ' · ' + adicionales.length + (adicionales.length === 1 ? ' adicional' : ' adicionales') : '',
         startCerrado: empezar('Cerrado'), startAbierto: empezar('Abierto'), cancelPick: () => this.setState({ pick: null }),
         addPick: () => { this.setState({ pick: null }); ponerAdicionales(misAdicionales.concat({ tipo: pk.tipo, barras: pk.barras })); },
@@ -774,6 +774,9 @@
         segMiraIzq: s.mira === 'izquierda' ? on : off, segMiraDer: s.mira === 'izquierda' ? off : on,
         secTop: qtyOf(s.sup) + (supI.filas > 1 ? ' en ' + supI.filas + ' filas' : ''), secBot: qtyOf(s.inf) + (infI.filas > 1 ? ' en ' + infI.filas + ' filas' : ''),
         estD: est.estD, estG: est.estG, conf: est.conf, s1: est.s1, s2: est.s2, secEstD: s.est.estD,
+        // la grapa de la vigueta va en S o en C (26-oct), con los mismos botones que la de un adicional abierto
+        esGrapa: grapa, formasGrapa: ['C', 'S'].map((f) => ({ f, pressed: (est.forma || 'S') === f ? 'true' : 'false', label: 'Grapa en ' + f,
+          style: (est.forma || 'S') === f ? on : off, pick: () => setEst('forma')({ target: { value: f } }) })),
         estScope: nSel ? 'Se aplica a ' + nSel + (nSel === 1 ? ' tramo marcado' : ' tramos marcados') + ' en la lista.' : 'Se aplica a todo el pórtico. Marca tramos en la lista para darles otros valores.',
         estScopeBg: nSel ? '#E8F0FA' : '#F4F6F8',
         showSteps: step !== 'reglas' && !!P, panelEmpty: !P && step !== 'reglas',
@@ -1297,13 +1300,18 @@
               <text x="254" y="92" text-anchor="middle" font-size="10" fill="#5E6670" font-family="IBM Plex Mono, monospace">${v.s1Txt}</text>
             </svg>
             <div style="display: flex; align-items: center; gap: 8px">
-              <span style="font-weight: 600; flex: 1">Estribo</span>
+              <span style="font-weight: 600; flex: 1">${v.esGrapa ? 'Grapa' : 'Estribo'}</span>
               <select aria-label="Diámetro del estribo" value=${v.estD} onChange=${v.setEstD} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                 ${opcionesDiametro(v.disponibles, 3, 4, v.estD, true)}
               </select>
               <select aria-label="Gancho del estribo" value=${v.estG} onChange=${v.setEstG} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                 <option value="135°">135°</option><option value="90°">90°</option><option value="180°">180°</option>
               </select>
+              ${v.esGrapa ? html`
+                <div role="group" aria-label="Forma de la grapa" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                  ${v.formasGrapa.map((fo) => html`
+                    <button type="button" aria-label=${fo.label} aria-pressed=${fo.pressed} onClick=${fo.pick} style="height: 30px; width: 30px; padding: 0; border: 0; font: inherit; font-weight: 600; cursor: pointer; ${fo.style}">${fo.f}</button>`)}
+                </div>` : null}
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px">
               <span style="font-weight: 600">Junto a las columnas</span>

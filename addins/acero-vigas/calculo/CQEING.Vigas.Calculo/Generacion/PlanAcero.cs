@@ -75,6 +75,37 @@ public sealed record Rama(double X, double YArriba, double YAbajo, double Diamet
         int alCentro = X <= anchoViga / 2 ? 1 : -1;
         return (forma == FormaGrapa.S ? -alCentro : alCentro, alCentro);
     }
+
+    /// <summary>
+    /// Dónde va el centro de cada doblez en el corte: la cara interior del doblez toca su barra por fuera (abajo de la de
+    /// abajo, arriba de la de arriba), así la grapa queda en el recubrimiento. <paramref name="radio"/> es el del doblez
+    /// por el eje y <paramref name="d"/> el diámetro de la grapa, en mm.
+    /// </summary>
+    public ((double X, double Y) Abajo, (double X, double Y) Arriba) Dobleces(double radio, double d)
+    {
+        double adentro = radio - d / 2 - Diametro / 2;
+        return ((X, YAbajo + adentro), (X, YArriba - adentro));
+    }
+
+    /// <summary>
+    /// La línea que se le pasa a Revit, de abajo hacia arriba: la rama es la tangente a los dos dobleces, cada uno del lado
+    /// de <see cref="Lados"/>, y cada punta sigue la rama hasta la cara exterior de su doblez (Revit recorta de ahí un
+    /// radio más medio diámetro y dobla). En C la rama es vertical; en S queda en diagonal y Revit pone cada gancho
+    /// perpendicular a ella, así que con las puntas en vertical los dobleces se corrían (medido en Revit el 26-oct).
+    /// </summary>
+    public ((double X, double Y) Inicio, (double X, double Y) Fin) Puntas(double anchoViga, FormaGrapa forma, double radio, double d)
+    {
+        ((double X, double Y) abajo, (double X, double Y) arriba) = Dobleces(radio, d);
+        (int ladoAbajo, int ladoArriba) = Lados(anchoViga, forma);
+        // De centro a centro: dx = largo·u + k·n, con n la normal a la izquierda de la rama (u girado 90°).
+        double dx = arriba.X - abajo.X, dy = arriba.Y - abajo.Y, k = (ladoArriba - ladoAbajo) * radio;
+        double d2 = dx * dx + dy * dy, largo = Math.Sqrt(Math.Max(0, d2 - k * k));
+        double ux = (largo * dx + k * dy) / d2, uy = (largo * dy - k * dx) / d2, nx = -uy, ny = ux;
+        // la rama pasa a un radio del centro, del lado que le toca a cada barra
+        double alDoblez = radio + d / 2;
+        return ((abajo.X - ladoAbajo * radio * nx - alDoblez * ux, abajo.Y - ladoAbajo * radio * ny - alDoblez * uy),
+            (arriba.X - ladoArriba * radio * nx + alDoblez * ux, arriba.Y - ladoArriba * radio * ny + alDoblez * uy));
+    }
 }
 
 /// <summary>

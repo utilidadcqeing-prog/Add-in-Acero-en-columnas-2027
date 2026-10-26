@@ -44,13 +44,15 @@ public sealed record EstriboAdicional(TipoEstribo Tipo, IReadOnlyList<PuntoBarra
 /// <param name="LargoZona">Largo de la zona junto a cada columna (0 = sin zona).</param>
 /// <param name="SeparacionZona">Un estribo cada, en la zona junto a las columnas.</param>
 /// <param name="SeparacionCentro">Un estribo cada, como máximo, en el centro de la luz.</param>
+/// <param name="Forma">La de la grapa que lleva la vigueta en vez del cerrado (en S o en C, 26-oct); en una viga no cuenta.</param>
 public sealed record ConfigEstribos(
     int Diametro = 3,
     GanchoEstribo Gancho = GanchoEstribo.De135,
     int LargoZona = 800,
     int SeparacionZona = 100,
     int SeparacionCentro = 200,
-    IReadOnlyList<EstriboAdicional>? Adicionales = null);
+    IReadOnlyList<EstriboAdicional>? Adicionales = null,
+    FormaGrapa Forma = FormaGrapa.S);
 
 /// <summary>Una luz entre dos apoyos, o un voladizo antes del primer apoyo o después del último.</summary>
 public enum TipoTramo
@@ -85,8 +87,8 @@ public sealed record Tramo(string Nombre, double CaraIzquierda, double CaraDerec
 /// pórtico, con la de cada tramo que la cambie. Las claves de <paramref name="PorTramo"/> son los nombres de los tramos
 /// (<c>"A-B"</c>, <c>"Voladizo D"</c>). El diámetro del estribo de la sección es el de <paramref name="General"/>.
 /// <paramref name="Principal"/> es el estribo obligatorio <c>"E"</c>: el cerrado de las esquinas, o en una vigueta
-/// (<see cref="TipoEstribo.Abierto"/>) una grapa en S por el centro que abraza la barra de arriba y la de abajo
-/// (decisión 8 del plan docs/planes/2026-10-26-acero-viguetas-938.md).
+/// (<see cref="TipoEstribo.Abierto"/>) una grapa por el centro que abraza la barra de arriba y la de abajo, en S o en C
+/// según <see cref="ConfigEstribos.Forma"/> (decisión 8 del plan docs/planes/2026-10-26-acero-viguetas-938.md).
 /// </summary>
 public sealed record EntradaEstribos(
     Portico Portico,

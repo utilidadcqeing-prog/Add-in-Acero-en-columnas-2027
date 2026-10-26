@@ -29,7 +29,7 @@ public static class MotorEstribos
         // La sección usa el diámetro del pórtico; el de un tramo solo cambia el largo y los kilos de sus estribos.
         EntradaSeccion seccion = e.Seccion with { DiametroEstribo = e.General.Diametro };
         Recubrimientos rec = seccion.Recubrimiento;
-        // En una vigueta, la grapa en S va por el centro, donde están sus barras (una por cara, al centro).
+        // En una vigueta, la grapa (en S o en C) va por el centro, donde están sus barras (una por cara, al centro).
         bool grapa = e.Principal == TipoEstribo.Abierto;
         var principal = grapa
             ? new EstriboEnSeccion(IdCerrado, TipoEstribo.Abierto, seccion.Ancho / 2, seccion.Ancho / 2, rec.Abajo, seccion.Alto - rec.Arriba)
@@ -66,8 +66,8 @@ public static class MotorEstribos
                 new(id, tipo, t.Nombre, c.Diametro, c.Gancho, posiciones, largo, Kg(posiciones.Count, largo, regla), forma);
 
             estribos.Add(grapa
-                ? Estribo(IdCerrado, TipoEstribo.Abierto, Largo(TipoEstribo.Abierto, 0, alto, radio, gancho), FormaGrapa.S)
-                : Estribo(IdCerrado, TipoEstribo.Cerrado, Largo(TipoEstribo.Cerrado, seccion.Ancho - 2 * rec.Lados - regla.Diametro, alto, radio, gancho)));
+                ? Estribo(IdCerrado, TipoEstribo.Abierto, Largo(TipoEstribo.Abierto, c.Forma, 0, alto, radio, gancho), c.Forma)
+                : Estribo(IdCerrado, TipoEstribo.Cerrado, Largo(TipoEstribo.Cerrado, FormaGrapa.C, seccion.Ancho - 2 * rec.Lados - regla.Diametro, alto, radio, gancho)));
             // Los adicionales van solo en los tramos de su configuración, con las posiciones del cerrado de ese tramo.
             foreach (EstriboAdicional a in c.Adicionales ?? [])
             {
@@ -75,7 +75,8 @@ public static class MotorEstribos
                     continue;
                 // Por dentro, el cerrado abraza siempre las mismas barras; por el eje, crece con el estribo del tramo.
                 double ancho = f.Derecha - f.Izquierda - 2 * estriboSeccion + regla.Diametro;
-                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, ancho, alto, radio, gancho),a.Tipo == TipoEstribo.Abierto ? a.Forma : FormaGrapa.C));
+                FormaGrapa forma = a.Tipo == TipoEstribo.Abierto ? a.Forma : FormaGrapa.C;
+                estribos.Add(Estribo(f.Id, a.Tipo, Largo(a.Tipo, forma, ancho, alto, radio, gancho), forma));
             }
         }
         return new ResultadoEstribos(estribos, corte, [principal, .. figuras], avisos);
@@ -141,11 +142,15 @@ public static class MotorEstribos
     /// pierde un radio en cada punta; el cerrado dobla tres esquinas y en la cuarta van los dos ganchos, y el abierto es
     /// una rama con un gancho en cada punta. Antes se sumaba el perímetro con esquinas en ángulo recto más dos B del cuadro
     /// y el estribo salía unos 8 cm más largo que en Revit. <paramref name="ancho"/> y <paramref name="alto"/> van por el eje.
+    /// En S la rama es la tangente entre los dos dobleces, que quedan uno a cada lado (<see cref="Rama.Puntas"/>).
     /// </summary>
-    private static double Largo(TipoEstribo tipo, double ancho, double alto, double radio, double gancho) =>
-        (tipo == TipoEstribo.Cerrado
+    private static double Largo(TipoEstribo tipo, FormaGrapa forma, double ancho, double alto, double radio, double gancho)
+    {
+        double rama = alto - 2 * radio;
+        return (tipo == TipoEstribo.Cerrado
             ? 2 * (ancho + alto) - 8 * radio + 3 * Math.PI / 2 * radio
-            : alto - 2 * radio) + 2 * gancho;
+            : forma == FormaGrapa.S ? Math.Sqrt(Math.Max(0, rama * rama - 4 * radio * radio)) : rama) + 2 * gancho;
+    }
 
     private static double Kg(int cantidad, double largo, ReglaDiametro r) => cantidad * largo / 1000 * r.KgPorMetro;
 }

@@ -237,6 +237,19 @@ public class ArmadorVistaTests
     }
 
     [Fact]
+    public void LaGrapaDeLaViguetaEnC_SeDibujaYSeNombraEnC()
+    {
+        PorticoLeido p = Portico1();
+        PorticoLeido vigueta = p with { Elemento = Elemento.Vigueta, Tramos = p.Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList() };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Estribos = OpcionesTablero.DeVigueta.Estribos with { Forma = FormaGrapa.C } };
+
+        VistaPortico v = Armar(o, vigueta);
+
+        Assert.Equal("C", v.Seccion.Figuras.Single(f => f.Id == "E").Forma);
+        Assert.Equal("Grapa en C", v.ListaEstribos.Single(e => e.Id == "E").Tipo);
+    }
+
+    [Fact]
     public void EnLaLista_LaViguetaSeVeComoVigueta()
     {
         Assert.Equal("Vigueta", ArmadorVista.EnLista(Portico1() with { Elemento = Elemento.Vigueta }).Tipo);
