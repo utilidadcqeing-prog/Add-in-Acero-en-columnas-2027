@@ -67,11 +67,12 @@ public static class PlantaArmado
     /// El eje de una grapa con los centros de sus dos dobleces ya ubicados.
     /// <paramref name="ladoInicio"/> / <paramref name="ladoFin"/>: +1 si el
     /// gancho abre a la izquierda de inicio→fin (visto desde arriba), −1 si a la
-    /// derecha, como en <see cref="GanchoGrapa.Linea"/>.
+    /// derecha, como en <see cref="GanchoGrapa.Linea"/>. Cada punta con su
+    /// ángulo y su cola (ángulo por punta, docs/planes/2026-10-26-diseno-grapas-angulo-por-punta.md).
     /// </summary>
     public static IReadOnlyList<(double X, double Y)> Grapa(
         (double X, double Y) centroInicio, (double X, double Y) centroFin, int ladoInicio, int ladoFin,
-        double diametro, double doblez, double cola)
+        AnguloGancho anguloInicio, AnguloGancho anguloFin, double diametro, double doblez, double colaInicio, double colaFin)
     {
         double r = doblez / 2 + diametro / 2;
         if (Math.Sqrt(Cuadrado(centroFin.X - centroInicio.X) + Cuadrado(centroFin.Y - centroInicio.Y)) <= 1e-9)
@@ -83,35 +84,43 @@ public static class PlantaArmado
         // los ganchos derechos y la recta en diagonal, con un quiebre que una
         // barra real no tiene.
         ((double X, double Y) a, (double X, double Y) b) =
-            GanchoGrapa.Linea(centroInicio, centroFin, 0, r, ladoInicio, ladoFin);
+            GanchoGrapa.Linea(centroInicio, centroFin, (0, r), (0, r), ladoInicio, ladoFin);
         double largo = Math.Sqrt(Cuadrado(b.X - a.X) + Cuadrado(b.Y - a.Y));
         if (largo <= 1e-9) return Array.Empty<(double, double)>();
         (double X, double Y) u = ((b.X - a.X) / largo, (b.Y - a.Y) / largo);
         (double X, double Y) l = (-u.Y, u.X);
 
-        // Del lado de la cola (hacia donde abre), por afuera (hacia la cara), al
-        // lado del tramo recto: media vuelta alrededor del centro.
-        List<(double X, double Y)> Gancho((double X, double Y) centro, int lado, (double X, double Y) haciaAfuera)
+        // Desde el tramo recto (g = 180°), por afuera (hacia la cara), hacia el
+        // lado donde abre, el ángulo del gancho; después la cola, tangente al
+        // final del doblez. Con 180° la cola vuelve hacia adentro; con 90° sale
+        // derecha hacia el lado que abre; con 135°, en diagonal hacia el núcleo.
+        // Devuelve de la punta de la cola al tramo recto.
+        List<(double X, double Y)> Gancho((double X, double Y) centro, int lado, (double X, double Y) haciaAfuera,
+            AnguloGancho angulo, double cola)
         {
-            var arco = new List<(double X, double Y)>();
-            for (double g = 0; g <= 180 + 1e-9; g += PasoGrados)
+            (double X, double Y) Punto(double grados)
             {
-                double c = Math.Cos(g * Math.PI / 180), s = Math.Sin(g * Math.PI / 180);
-                arco.Add((centro.X + r * (c * lado * l.X + s * haciaAfuera.X), centro.Y + r * (c * lado * l.Y + s * haciaAfuera.Y)));
+                double c = Math.Cos(grados * Math.PI / 180), s = Math.Sin(grados * Math.PI / 180);
+                return (centro.X + r * (c * lado * l.X + s * haciaAfuera.X), centro.Y + r * (c * lado * l.Y + s * haciaAfuera.Y));
             }
+
+            double desde = 180 - (int)angulo;
+            var arco = new List<(double X, double Y)>();
+            for (double g = desde; g <= 180 + 1e-9; g += PasoGrados) arco.Add(Punto(g));
+
+            double cd = Math.Cos(desde * Math.PI / 180), sd = Math.Sin(desde * Math.PI / 180);
+            (double X, double Y) direccion = (sd * lado * l.X - cd * haciaAfuera.X, sd * lado * l.Y - cd * haciaAfuera.Y);
+            arco.Insert(0, Mas(arco[0], (direccion.X * cola, direccion.Y * cola)));
             return arco;
         }
 
-        // Inicio: punta de la cola → doblez → tramo recto. La cola va hacia adentro (+u).
-        List<(double X, double Y)> inicio = Gancho(centroInicio, ladoInicio, (-u.X, -u.Y));
-        var puntos = new List<(double X, double Y)> { Mas(inicio[0], (u.X * cola, u.Y * cola)) };
-        puntos.AddRange(inicio);
+        // Inicio: punta de la cola → doblez → tramo recto.
+        var puntos = Gancho(centroInicio, ladoInicio, (-u.X, -u.Y), anguloInicio, colaInicio);
 
-        // Fin: tramo recto → doblez → cola hacia adentro (−u).
-        List<(double X, double Y)> fin = Gancho(centroFin, ladoFin, u);
+        // Fin: tramo recto → doblez → punta de la cola.
+        List<(double X, double Y)> fin = Gancho(centroFin, ladoFin, u, anguloFin, colaFin);
         fin.Reverse();
         puntos.AddRange(fin);
-        puntos.Add(Mas(fin[^1], (-u.X * cola, -u.Y * cola)));
         return puntos;
     }
 
@@ -149,8 +158,22 @@ public static class PlantaArmado
         return Grapa(
             CentroDelGancho(inicio.X, inicio.Y, inicio.Radio, doblez, u),
             CentroDelGancho(fin.X, fin.Y, fin.Radio, doblez, (-u.X, -u.Y)),
-            ladoInicio, ladoFin, diametro, doblez, Cola180(diametroMm));
+            ladoInicio, ladoFin, pieza.AnguloInicio, pieza.AnguloFin, diametro, doblez,
+            Cola(pieza.AnguloInicio, diametroMm), Cola(pieza.AnguloFin, diametroMm));
     }
+
+    /// <summary>
+    /// Cola recta del gancho de grapa de ese ángulo: 180° y 135° del cuadro
+    /// (<see cref="Cola180"/>, <see cref="Cola135"/>); 90°, 6 diámetros: el
+    /// cuadro no trae un 90° de estribo (el suyo es el de anclaje de las
+    /// longitudinales), mismo criterio que el add-in de vigas.
+    /// </summary>
+    public static double Cola(AnguloGancho angulo, double diametroMm) => angulo switch
+    {
+        AnguloGancho.Grados135 => Cola135(diametroMm),
+        AnguloGancho.Grados90 => 6 * diametroMm / 1000,
+        _ => Cola180(diametroMm),
+    };
 
     /// <summary>
     /// Dónde va el centro del doblez de una grapa que abraza la barra de

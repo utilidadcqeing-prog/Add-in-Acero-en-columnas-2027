@@ -865,7 +865,8 @@ public static class GeneradorLongitudinal
             // Con los MISMOS lados con los que después se orientan los ganchos
             // en IntentarGrapa (#167).
             ((double X, double Y) d, (double X, double Y) h) =
-                GanchoGrapa.Linea(centroInicio, centroFin, medido.Axial, medido.Lateral, lados.Inicio, lados.Fin);
+                GanchoGrapa.Linea(centroInicio, centroFin, (medido.Axial, medido.Lateral), (medido.Axial, medido.Lateral),
+                    lados.Inicio, lados.Fin);
             return (new XYZ(d.X, d.Y, z), new XYZ(h.X, h.Y, z));
         }
 

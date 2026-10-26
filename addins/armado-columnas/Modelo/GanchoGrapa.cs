@@ -103,10 +103,12 @@ public static class GanchoGrapa
 
     /// <summary>
     /// La línea que hay que pedirle a Revit para que los dos ganchos queden
-    /// con su centro donde se quiere. <paramref name="axial"/> y
-    /// <paramref name="lateral"/> son lo MEDIDO en una grapa de prueba: dónde
-    /// queda el centro del gancho respecto de la punta de la línea pedida, a
-    /// lo largo de la grapa (hacia adentro) y de costado (hacia donde abre).
+    /// con su centro donde se quiere. <paramref name="inicio"/> y
+    /// <paramref name="fin"/> son lo MEDIDO en una grapa de prueba con el
+    /// gancho de cada punta: dónde queda el centro del gancho respecto de la
+    /// punta de la línea pedida, a lo largo de la grapa (hacia adentro) y de
+    /// costado (hacia donde abre). Pueden diferir si cada punta lleva otro
+    /// ángulo.
     /// </summary>
     /// <param name="ladoInicio">
     /// +1 si el gancho del inicio abre hacia la izquierda de la grapa (girando
@@ -114,8 +116,8 @@ public static class GanchoGrapa
     /// </param>
     /// <param name="ladoFin">Ídem para el gancho del fin. Distinto de <paramref name="ladoInicio"/> en una S.</param>
     public static ((double X, double Y) Desde, (double X, double Y) Hasta) Linea(
-        (double X, double Y) centroInicio, (double X, double Y) centroFin, double axial, double lateral,
-        int ladoInicio, int ladoFin)
+        (double X, double Y) centroInicio, (double X, double Y) centroFin,
+        (double Axial, double Lateral) inicio, (double Axial, double Lateral) fin, int ladoInicio, int ladoFin)
     {
         // Lo medido es respecto de la línea pedida, y en una S (o si los dos
         // centros no están a la misma altura de la sección) esa línea no es
@@ -130,9 +132,11 @@ public static class GanchoGrapa
             (double ux, double uy) = ((hasta.X - desde.X) / largo, (hasta.Y - desde.Y) / largo);
             (double lx, double ly) = (-uy, ux);
             (double X, double Y) nuevoDesde =
-                (centroInicio.X - ux * axial - lx * ladoInicio * lateral, centroInicio.Y - uy * axial - ly * ladoInicio * lateral);
+                (centroInicio.X - ux * inicio.Axial - lx * ladoInicio * inicio.Lateral,
+                 centroInicio.Y - uy * inicio.Axial - ly * ladoInicio * inicio.Lateral);
             (double X, double Y) nuevoHasta =
-                (centroFin.X + ux * axial - lx * ladoFin * lateral, centroFin.Y + uy * axial - ly * ladoFin * lateral);
+                (centroFin.X + ux * fin.Axial - lx * ladoFin * fin.Lateral,
+                 centroFin.Y + uy * fin.Axial - ly * ladoFin * fin.Lateral);
 
             bool quieto = Math.Abs(nuevoDesde.X - desde.X) + Math.Abs(nuevoDesde.Y - desde.Y) +
                           Math.Abs(nuevoHasta.X - hasta.X) + Math.Abs(nuevoHasta.Y - hasta.Y) < 1e-12;
