@@ -7,12 +7,40 @@ namespace CQEING.Vigas.Calculo.Tablero;
 /// Todo el tablero: la lista de pórticos, el abierto (null = ninguno) y las reglas. <paramref name="Elegidos"/> son los
 /// ids de los pórticos elegidos con "Seleccionar en Revit": la lista muestra solo esos (null = todos).
 /// <paramref name="DiametrosDisponibles"/> son los que tienen tipo de barra en el modelo (#85).
+/// <paramref name="Planta"/>: el dibujo en planta de cada nivel, para el modo "Planta" (planta, 27-oct).
 /// </summary>
 public sealed record VistaTablero(string Proyecto, IReadOnlyList<PorticoEnLista> Porticos, VistaPortico? Actual, VistaReglas Reglas, bool EnVivo,
-    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null);
+    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null, PlantaVista? Planta = null);
 
-/// <summary>Un pórtico en la columna izquierda. <paramref name="Sub"/> es como <c>"Eje 1 · A a D + voladizo"</c>.</summary>
-public sealed record PorticoEnLista(string Id, string Nombre, string Sub, string Tipo, IReadOnlyList<TramoEnLista> Tramos);
+/// <summary>
+/// Un pórtico en la columna izquierda. <paramref name="Sub"/> es como <c>"Eje 1 · A a D + voladizo"</c>.
+/// <paramref name="Grupo"/>: el sistema de viguetas iguales al que pertenece, como en <see cref="ElementoPlanta.Grupo"/>.
+/// </summary>
+public sealed record PorticoEnLista(string Id, string Nombre, string Sub, string Tipo, IReadOnlyList<TramoEnLista> Tramos, string Grupo = "");
+
+// La vista en planta (planta, 27-oct): un dibujo por nivel con ejes, columnas, vigas y viguetas, en m y en coordenadas
+// del modelo (la y hacia arriba). Al hacer clic en un elemento se abre su pórtico.
+
+/// <summary>Los niveles con pórticos, de abajo hacia arriba; el de los pórticos sin nivel (<c>"Sin nivel"</c>) al final.</summary>
+public sealed record PlantaVista(IReadOnlyList<NivelPlanta> Niveles);
+
+/// <summary>Un nivel: su nombre, su cota en m y lo que se dibuja en él.</summary>
+public sealed record NivelPlanta(string Nombre, double Elevacion, IReadOnlyList<EjePlanta> Ejes, IReadOnlyList<ColumnaPlanta> Columnas,
+    IReadOnlyList<ElementoPlanta> Elementos);
+
+/// <summary>Un eje de la grilla, de punta a punta, en m.</summary>
+public sealed record EjePlanta(string Nombre, double X1, double Y1, double X2, double Y2);
+
+/// <summary>La huella de una columna o un muro en planta: [x, y] en m.</summary>
+public sealed record ColumnaPlanta(IReadOnlyList<double[]> Puntos);
+
+/// <summary>
+/// Una viga o vigueta en planta: el eje del pórtico <paramref name="Portico"/> (su id en la lista) de punta a punta, en m.
+/// <paramref name="Tipo"/> es <c>"viga"</c> o <c>"vigueta"</c>. <paramref name="Grupo"/>: el sistema de viguetas
+/// iguales (mismo tipo, largo y dirección en el nivel), como <c>"VT_10X35 · 1"</c>, que llevan el mismo acero (Carlos);
+/// vacío en las vigas y en una vigueta sin otra igual.
+/// </summary>
+public sealed record ElementoPlanta(string Portico, string Tipo, double X1, double Y1, double X2, double Y2, double Ancho, string Grupo = "");
 
 /// <summary>
 /// Un tramo del pórtico: <paramref name="Id"/> es el nombre del motor (<c>"A-B"</c>, <c>"Voladizo D"</c>);

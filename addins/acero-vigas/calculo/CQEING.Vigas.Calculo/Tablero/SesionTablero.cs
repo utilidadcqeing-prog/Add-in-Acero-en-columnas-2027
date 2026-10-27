@@ -63,6 +63,10 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
     private readonly Dictionary<string, string> estados = [];
     private ResultadoLectura lectura = new([], []);
     private List<PorticoConId> porticos = [];
+
+    /// <summary>La vista en planta de lo leído y los sistemas de viguetas iguales que salen de ella (planta, 27-oct).</summary>
+    private PlantaVista planta = new([]);
+    private IReadOnlyDictionary<string, IReadOnlyList<string>> grupos = new Dictionary<string, IReadOnlyList<string>>();
     private List<string>? elegidos;
     private ReglasCargadas reglas = new(Reglas.Generales, null);
     private string? actual;
@@ -95,7 +99,11 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 if (Buscar(id) is null)
                     return [Vista()];
                 (opciones[id], actual) = (o, id);
-                return id == en3d ? [Vista(), Previa3d(id)] : [Vista()];
+                // un sistema de viguetas lleva el mismo acero en todas (Carlos; planta, 27-oct)
+                foreach (string otra in Miembros(id).Where(m => m != id))
+                    opciones[otra] = o;
+                // la vista previa 3D sigue el cambio si está en el pórtico o en otra del sistema
+                return en3d is not null && Miembros(id).Contains(en3d) ? [Vista(), Previa3d(en3d)] : [Vista()];
             case Previsualizar(string id, OpcionesTablero o, PedidoEdicion pedido):
                 // no guarda las opciones: es solo ver qué pasaría (#84)
                 return Buscar(id) is { } p ? [new AJs(ProtocoloTablero.Previa(EditorTablero.Previsualizar(p, o, reglas.Reglas, pedido)))] : [];
@@ -120,10 +128,19 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             case VerTodos:
                 elegidos = null;
                 return [Vista()];
+            case ElegirVarios(var ids, string abrir):
+                List<string> validos = ids.Where(id => Buscar(id) is not null).Distinct().ToList();
+                if (validos.Count == 0)
+                    return [Vista()];
+                elegidos = validos.Count > 1 ? validos : null;
+                actual = validos.Contains(abrir) ? abrir : validos[0];
+                return enVivo
+                    ? [Vista(), new ARevit(AccionRevit.Seleccionar, validos.SelectMany(id => Buscar(id)!.Vigas).ToList())]
+                    : [Vista()];
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
             case Generar(IReadOnlyList<string> ids, var estadosPagina, bool forzar):
-                AGenerar generar = AGenerar(ids, estadosPagina);
+                AGenerar generar = AGenerar(ConSusSistemas(ids), EstadosDelSistema(ids, estadosPagina));
                 // Decisión 8 del plan de choques: avisa los choques de todos los que se generan, no solo del abierto. No
                 // bloquea: "Generar de todos modos" vuelve con forzar.
                 if (!forzar && ConChoques(generar) is { Count: > 0 } conChoques)
@@ -174,6 +191,38 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         return new AGenerar(aGenerar, saltados, reglas.Reglas);
     }
 
+    /// <summary>
+    /// Los pórticos del sistema de viguetas de <paramref name="id"/> (él incluido), en su orden; solo él si no está en
+    /// ninguno (planta, 27-oct).
+    /// </summary>
+    private IReadOnlyList<string> Miembros(string id) => grupos.GetValueOrDefault(id) ?? [id];
+
+    /// <summary>Los ids con los demás miembros del sistema de cada vigueta, sin repetir y en su orden.</summary>
+    private List<string> ConSusSistemas(IReadOnlyList<string> ids) => ids.SelectMany(Miembros).Distinct().ToList();
+
+    /// <summary>
+    /// Los estados de la página con el del miembro de un sistema copiado a los demás que no traen uno propio: el del
+    /// abierto si viene, si no el primero que venga. Sin estados, null (como antes).
+    /// </summary>
+    private IReadOnlyDictionary<string, string>? EstadosDelSistema(IReadOnlyList<string> ids, IReadOnlyDictionary<string, string>? estadosPagina)
+    {
+        if (estadosPagina is null)
+            return null;
+        var todos = new Dictionary<string, string>(estadosPagina);
+        foreach (string id in ids.Where(grupos.ContainsKey))
+        {
+            IReadOnlyList<string> miembros = Miembros(id);
+            string? fuente = actual is not null && miembros.Contains(actual) && estadosPagina.ContainsKey(actual)
+                ? actual
+                : miembros.FirstOrDefault(estadosPagina.ContainsKey);
+            if (fuente is null)
+                continue;
+            foreach (string m in miembros.Where(m => !estadosPagina.ContainsKey(m)))
+                todos[m] = estadosPagina[fuente];
+        }
+        return todos;
+    }
+
     /// <summary>Los pórticos de <paramref name="generar"/> con choques, con cuántos puntos tiene cada uno, en su orden.</summary>
     private List<PorticoConChoques> ConChoques(AGenerar generar)
     {
@@ -211,6 +260,8 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
         en3d = null; // la vista previa es del documento anterior: quien recarga la quita en Revit
         lectura = leer();
         porticos = ConId(lectura.Porticos);
+        planta = ArmadorPlanta.Armar(porticos.Select(p => (p.Id, p.Portico)), lectura.Modelo);
+        grupos = ArmadorPlanta.Grupos(planta);
         foreach (string nombre in opciones.Keys.Where(n => Buscar(n) is null).ToList())
             opciones.Remove(nombre);
         foreach (string nombre in estados.Keys.Where(n => Buscar(n) is null).ToList())
@@ -299,10 +350,17 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 with { Id = actual!, Estado = estados.GetValueOrDefault(actual!) });
         }
         var lista = porticos.Select(p => ArmadorVista.EnLista(p.Portico) is var l && p.Nivel is not null
-            ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}" }
-            : l with { Id = p.Id }).ToList();
-        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos, Disponibles())));
+            ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}", Grupo = GrupoDe(p.Id) }
+            : l with { Id = p.Id, Grupo = GrupoDe(p.Id) }).ToList();
+        return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos, Disponibles(),
+            planta)));
     }
+
+    /// <summary>El texto del sistema de viguetas del pórtico en la planta; vacío si no está en ninguno.</summary>
+    private string GrupoDe(string id) =>
+        grupos.ContainsKey(id)
+            ? planta.Niveles.SelectMany(n => n.Elementos).First(e => e.Portico == id).Grupo
+            : "";
 
     /// <summary>
     /// Los puntos donde las barras del pórtico abierto se tocan, sobre el mismo plan que crea "Generar". Van solo como

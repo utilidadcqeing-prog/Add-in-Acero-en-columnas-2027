@@ -76,6 +76,29 @@
         { id: 'Pórtico 3a', nombre: 'Pórtico 3a', sub: 'Eje 3 · A a B', tipo: 'Aérea' },
         { id: 'Pórtico 3b', nombre: 'Pórtico 3b', sub: 'Eje 3 · C a D', tipo: 'Aérea' },
         { id: 'Pórtico C1', nombre: 'Pórtico C1', sub: 'Cimentación · eje 1', tipo: 'Cimentación' }];
+    // Planta (opción D, 27-oct): viguetas de la demostración, dos grupos de iguales (3 en el paño B–C / 1–2 y 2 en el
+    // paño C–D / 2–3), y la planta de dos niveles con los ids de la lista. En 'largo' no hay planta (muestra el aviso).
+    if (estado !== 'largo') {
+      [['Vigueta 1', 'VT_10X35 · 1', 'Paño B–C / 1–2 · 10×35'], ['Vigueta 2', 'VT_10X35 · 1', 'Paño B–C / 1–2 · 10×35'],
+        ['Vigueta 3', 'VT_10X35 · 1', 'Paño B–C / 1–2 · 10×35'], ['Vigueta 4', 'VT_10X30 · 2', 'Paño C–D / 2–3 · 10×30'],
+        ['Vigueta 5', 'VT_10X30 · 2', 'Paño C–D / 2–3 · 10×30']]
+        .forEach(([id, grupo, sub]) => PORS.push({ id, nombre: id, sub, tipo: 'Aérea', grupo }));
+    }
+    const EJES_DEMO = [['A', 0], ['B', 6], ['C', 12], ['D', 18]].map(([nombre, x]) => ({ nombre, x1: x, y1: -1, x2: x, y2: 12 }))
+      .concat([['1', 0], ['2', 6], ['3', 11]].map(([nombre, y]) => ({ nombre, x1: -1, y1: y, x2: 19, y2: y })));
+    const COLUMNAS_DEMO = [0, 6, 12, 18].flatMap((x) => [0, 6, 11].map((y) =>
+      ({ puntos: [[x - 0.2, y - 0.2], [x + 0.2, y - 0.2], [x + 0.2, y + 0.2], [x - 0.2, y + 0.2]] })));
+    const viga = (portico, x1, y1, x2, y2) => ({ portico, tipo: 'viga', x1, y1, x2, y2, ancho: 0.30, grupo: '' });
+    const vigueta = (portico, grupo, x, y1, y2) => ({ portico, tipo: 'vigueta', x1: x, y1, x2: x, y2, ancho: 0.10, grupo });
+    const PLANTA = estado === 'largo' ? null : { niveles: [
+      { nombre: 'Cimentación', elevacion: 0, ejes: EJES_DEMO, columnas: COLUMNAS_DEMO,
+        elementos: [viga('Pórtico C1', 0, 0, 18, 0)] },
+      { nombre: 'Nivel 2', elevacion: 3.0, ejes: EJES_DEMO, columnas: COLUMNAS_DEMO,
+        elementos: [viga('Pórtico 1', 0, 0, 20, 0), viga('Pórtico 2', 0, 6, 18, 6), viga('Pórtico 3a', 0, 11, 6, 11),
+          viga('Pórtico 3b', 12, 11, 18, 11),
+          vigueta('Vigueta 1', 'VT_10X35 · 1', 7.5, 0, 6), vigueta('Vigueta 2', 'VT_10X35 · 1', 9, 0, 6),
+          vigueta('Vigueta 3', 'VT_10X35 · 1', 10.5, 0, 6),
+          vigueta('Vigueta 4', 'VT_10X30 · 2', 14, 6, 11), vigueta('Vigueta 5', 'VT_10X30 · 2', 16, 6, 11)] }] };
     const TRAMOS = G.tramos.map(([id, nombre, desde, hasta]) => ({ id, nombre, desde, hasta }));
     let actual = estado === 'vacio' ? null : (estado === 'cimentacion' ? 'Pórtico C1' : PORS[0].id);
     let enVivo = true;
@@ -353,6 +376,7 @@
         diametrosDisponibles: [3, 4, 5, 6, 7, 8],
         porticos: PORS.map((p) => ({ ...p, tramos: TRAMOS })),
         actual: actual ? armar(actual, opciones[actual] || OPCIONES0) : null,
+        planta: PLANTA,
       };
     }
     const msgVista = () => ({ tipo: 'vista', vista: vista() });
@@ -478,6 +502,14 @@
         case 'previsualizar': return [previa(m)];
         case 'cambiarEnVivo': enVivo = m.activo; return [msgVista()];
         case 'verTodos': elegidos = null; return [msgVista()];
+        // clic y Ctrl+clic en la planta: con dos o más quedan como elegidos
+        case 'elegirVarios': {
+          const ids = m.ids.filter((id, i) => PORS.some((p) => p.id === id) && m.ids.indexOf(id) === i);
+          if (!ids.length) return [msgVista()];
+          elegidos = ids.length > 1 ? ids : null;
+          actual = ids.includes(m.abrir) ? m.abrir : ids[0];
+          return [msgVista()];
+        }
         case 'guardarReglas':
           if (!(num(m.reglas.multiplo, 0) > 0)) return [aviso('El múltiplo de corte debe ser mayor que 0.')];
           reglas = { ...m.reglas, problema: null };

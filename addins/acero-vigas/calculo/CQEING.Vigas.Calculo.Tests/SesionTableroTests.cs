@@ -118,6 +118,27 @@ public sealed class SesionTableroTests : IDisposable
         Assert.Equal(JsonValueKind.Null, todos.GetProperty("elegidos").ValueKind);
     }
 
+    /// <summary>Ctrl+clic en la planta: con dos o más quedan como elegidos; con uno solo, la lista vuelve a ser completa.</summary>
+    [Fact]
+    public void ElegirVariosEnLaPlantaFiltraYAbreElPedido()
+    {
+        PorticoLeido otro = ArmadorVistaTests.Portico1() with { Nombre = "Pórtico 2", Vigas = ["401"] };
+        lectura = new ResultadoLectura([ArmadorVistaTests.Portico1(), otro], []);
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+
+        IReadOnlyList<Salida> salidas = s.Manejar(new ElegirVarios(["Pórtico 1", "Pórtico 2", "No existe"], "Pórtico 2"));
+        JsonElement v = VistaDe(salidas);
+
+        Assert.Equal(["Pórtico 1", "Pórtico 2"], v.GetProperty("elegidos").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal("Pórtico 2", s.Actual);
+        Assert.Equal(["101", "102", "103", "104", "401"], Assert.Single(salidas.OfType<ARevit>()).Vigas);
+
+        JsonElement uno = VistaDe(s.Manejar(new ElegirVarios(["Pórtico 1"], "Pórtico 1")));
+        Assert.Equal(JsonValueKind.Null, uno.GetProperty("elegidos").ValueKind);
+        Assert.Equal("Pórtico 1", s.Actual);
+    }
+
     [Fact]
     public void ElegirVigasFueraDeLosPorticosAvisaYNoCambia()
     {
@@ -604,6 +625,72 @@ public sealed class SesionTableroTests : IDisposable
         JsonElement v = VistaDe([ConUbicacion([9.525, 12.7, 15.875, 16]).Vista()]);
 
         Assert.Equal([3, 4, 5], v.GetProperty("diametrosDisponibles").EnumerateArray().Select(x => x.GetInt32()));
+    }
+
+    // Sistema de viguetas (planta, 27-oct): al tomar una se toman todas las iguales, con el mismo acero.
+
+    /// <summary>Tres viguetas iguales del Nivel 2 (en y = 0, 1 y 2 m) y la viga del eje 1, todas con ubicación.</summary>
+    private SesionTablero ConViguetas()
+    {
+        PorticoLeido viga = PlanificadorAceroTests.Portico();
+        PorticoLeido Vigueta(int n) => viga with
+        {
+            Nombre = $"Vigueta {n}",
+            Elemento = Elemento.Vigueta,
+            Vigas = [$"v{n}"],
+            Ubicacion = viga.Ubicacion! with { OrigenY = n * 1000 },
+        };
+        lectura = new([Vigueta(1), Vigueta(2), Vigueta(3), viga with { Ubicacion = viga.Ubicacion! with { OrigenY = -3000 } }], []);
+        SesionTablero s = Sesion();
+        s.Manejar(new Listo());
+        return s;
+    }
+
+    [Fact]
+    public void LaVistaTraeLaPlantaYElSistemaDeCadaVigueta()
+    {
+        JsonElement v = VistaDe([ConViguetas().Vista()]);
+
+        Assert.Equal(["30×50 · 1", "30×50 · 1", "30×50 · 1", ""], v.GetProperty("porticos").EnumerateArray().Select(p => p.GetProperty("grupo").GetString()));
+        JsonElement nivel = Assert.Single(v.GetProperty("planta").GetProperty("niveles").EnumerateArray());
+        Assert.Equal("Nivel 2", nivel.GetProperty("nombre").GetString());
+        Assert.Equal(["vigueta", "vigueta", "vigueta", "viga"], nivel.GetProperty("elementos").EnumerateArray().Select(e => e.GetProperty("tipo").GetString()));
+    }
+
+    [Fact]
+    public void CalcularUnaViguetaLeDaElMismoAceroATodoElSistema()
+    {
+        SesionTablero s = ConViguetas();
+
+        s.Manejar(new Calcular("Vigueta 2", OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(4, 5)] }));
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Vigueta 1", "Pórtico 1"], Forzar: true)).OfType<AGenerar>());
+
+        Assert.Equal(["Vigueta 1", "Vigueta 2", "Vigueta 3", "Pórtico 1"], g.Porticos.Select(p => p.Id));
+        Assert.Equal([4, 4, 4, 3], g.Porticos.Select(p => p.Plan.Barras.Count(b => b.Pieza == "S1")));
+    }
+
+    [Fact]
+    public void GenerarElSistemaSinRepetirNiPerderElOrden()
+    {
+        SesionTablero s = ConViguetas();
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Pórtico 1", "Vigueta 3", "Vigueta 1"], Forzar: true)).OfType<AGenerar>());
+
+        Assert.Equal(["Pórtico 1", "Vigueta 1", "Vigueta 2", "Vigueta 3"], g.Porticos.Select(p => p.Id));
+    }
+
+    [Fact]
+    public void ElEstadoDeLaPaginaDeUnaViguetaPasaALasDelSistemaQueNoTraenUno()
+    {
+        SesionTablero s = ConViguetas();
+        s.Manejar(new ElegirPortico("Vigueta 2"));
+        const string propio = """{"sup":[{"n":2,"d":"#4"}]}""";
+
+        AGenerar g = Assert.Single(s.Manejar(new Generar(["Vigueta 2"],
+            new Dictionary<string, string> { ["Vigueta 2"] = EstadoPagina, ["Vigueta 3"] = propio }, Forzar: true)).OfType<AGenerar>());
+
+        Assert.Equal([EstadoPagina, EstadoPagina, propio],
+            g.Porticos.Select(p => ConfiguracionGuardada.Leer(p.Configuracion)!.Value.Estado));
     }
 
     [Fact]
