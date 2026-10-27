@@ -1095,9 +1095,7 @@
         <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #1F5FAF; border-radius: 6px; background: #F3F7FC">
           <span style="width: 10px; height: 10px; flex-shrink: 0; background: #1F5FAF"></span>
           <span title=${info} style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${info}</span>
-        </div>
-        <p style="margin: 0; font-size: 12px; color: #5E6670; line-height: 1.45">Clic en una viga para abrir su pórtico. Ctrl+clic para seleccionar varios. En viguetas se toman todas las iguales del paño. Arrastra para mover; rueda del mouse para zoom.</p>
-      </div>`;
+        </div>      </div>`;
     }
 
     render() {
@@ -1163,9 +1161,7 @@
                   </div>`)}
               </div>` : null}
           </div>`)}
-      </div>
-      <p style="margin: 0; font-size: 12px; color: #5E6670; line-height: 1.45">Un pórtico es la viga continua de un eje. Marca tramos para darles estribos distintos.</p>
-      </div>`}
+      </div>      </div>`}
     </div>
 
     ${v.hasPor ? html`
@@ -1310,9 +1306,7 @@
       <div style="flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 16px">
         <div style="display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 360px; text-align: center">
           <svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true"><rect x="4" y="20" width="48" height="16" rx="2" stroke="#9AA3AD" stroke-width="1.6" fill="none"></rect><path d="M8 25h40M8 31h40" stroke="#C9CFD6" stroke-width="1.4" stroke-dasharray="3 3"></path><path d="M30 6l12 7-5 1.5-2.5 5.5z" stroke="#1F5FAF" stroke-width="1.6" fill="none" stroke-linejoin="round"></path></svg>
-          <span style="font-size: 16px; font-weight: 600">Elige un pórtico para empezar</span>
-          <span style="color: #5E6670; line-height: 1.5">Haz clic en un pórtico de la lista o selecciona una viga en el modelo. Aquí verás sus barras, traslapos, bastones y estribos.</span>
-          <button type="button" onClick=${v.pickInRevit} style="height: 36px; padding: 0 16px; border: 1px solid #1F5FAF; border-radius: 6px; background: #1F5FAF; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">Seleccionar en Revit</button>
+          <span style="font-size: 16px; font-weight: 600">Elige un pórtico para empezar</span>          <button type="button" onClick=${v.pickInRevit} style="height: 36px; padding: 0 16px; border: 1px solid #1F5FAF; border-radius: 6px; background: #1F5FAF; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">Seleccionar en Revit</button>
         </div>
       </div>` : null}
 
@@ -1441,9 +1435,7 @@
           </div>` : null}
 
         ${v.isBastones ? html`
-          <div style="display: flex; flex-direction: column; gap: 16px">
-            <span style="color: #3F4A57; line-height: 1.5">Barras sueltas de refuerzo. <b>Arriba</b> van centradas en cada columna, también en las de borde; <b>abajo</b>, en el centro de cada luz.</span>
-            <svg width="308" height="104" viewBox="0 0 308 104" role="img" aria-label="Bastones arriba sobre las columnas y abajo en el centro de cada luz">
+          <div style="display: flex; flex-direction: column; gap: 16px">            <svg width="308" height="104" viewBox="0 0 308 104" role="img" aria-label="Bastones arriba sobre las columnas y abajo en el centro de cada luz">
               <rect x="10" y="30" width="288" height="40" fill="#F1F3F5" stroke="#9AA3AD"></rect>
               <rect x="10" y="14" width="14" height="72" fill="#D5DAE0" stroke="#9AA3AD"></rect>
               <rect x="147" y="14" width="14" height="72" fill="#D5DAE0" stroke="#9AA3AD"></rect>
@@ -1480,19 +1472,14 @@
                 <select aria-label="Diámetro de los bastones de abajo" value=${v.bastInfD} onChange=${v.setBastInfD} style="height: 32px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; background: #FFFFFF; color: #16191D; padding: 0 6px">
                   ${opcionesDiametro(v.disponibles, 3, 8, v.bastInfD, false)}
                 </select>
-              </div>
-              <span style="font-size: 12px; color: #5E6670; line-height: 1.5">Barras por bastón. Por defecto, 1 del diámetro de las esquinas; con 0, esa cara no lleva bastones.</span>
-            </div>
+              </div>            </div>
             <div style="display: flex; align-items: center; gap: 8px">
               <span style="font-weight: 600; flex: 1">Gancho</span>
               <div style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
                 <button type="button" onClick=${v.hookNo} style="height: 30px; padding: 0 14px; border: 0; font: inherit; cursor: pointer; ${v.segHookNo}">Sin gancho</button>
                 <button type="button" onClick=${v.hookYes} style="height: 30px; padding: 0 14px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segHookYes}">Con gancho</button>
               </div>
-            </div>
-            <span style="font-size: 12px; color: #5E6670; line-height: 1.5; margin-top: -8px">El gancho solo va en la punta que llega al borde de la viga o del voladizo.</span>
-            <span style="font-size: 12px; color: #5E6670; line-height: 1.5">Su largo no se redondea y queda mitad a cada lado de su eje; si llega al borde de la viga, se corta en la punta. Haz clic en un bastón del dibujo para cambiarle el largo solo a él. Van en el primer puesto libre de la fila, empezando por la esquina.</span>
-          </div>` : null}
+            </div>          </div>` : null}
 
         ${v.isEstribos ? html`
           <div style="display: flex; flex-direction: column; gap: 14px">
@@ -1574,15 +1561,11 @@
                     <button type="button" onClick=${v.cancelPick} style="height: 30px; padding: 0 8px; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">Cancelar</button>
                   </div>
                 </div>` : null}
-              <span style="font-size: 12px; color: #5E6670; line-height: 1.5">Se eligen en el corte 1-1 con un clic en cada barra. El cerrado necesita 2 barras arriba y 2 abajo; el abierto, 1 y 1. En cada vertical manda la barra que se elige primero; si una vecina queda muy cerca, también se corre. Las esquinas no se mueven. Las barras que se mueven para alinearse lo hacen en todo el pórtico; el adicional va donde se aplica este paso.</span>
             </div>
-            <span style="font-size: 12px; color: #5E6670; line-height: 1.5">El estribo cerrado que abraza las barras de las esquinas se pone solo. El primero va a 5 cm de la cara de la columna. Si una luz es más corta que las dos zonas juntas, toda la luz lleva la separación de columnas. El voladizo lleva la zona junto a su columna y el resto con la separación del centro.</span>
           </div>` : null}
 
         ${v.isCorteStep ? html`
-          <div style="display: flex; flex-direction: column; gap: 14px">
-            <span style="color: #3F4A57; line-height: 1.5">El corte 1-1 muestra la sección de la viga en ese punto. Por defecto se ubica donde la sección es la más común. Arrastra la línea 1-1 en el alzado para moverlo de estribo en estribo, sin pasar por traslapos ni apoyos: el corte se ve en una ventana que puedes ocultar.</span>
-            <div style="display: flex; align-items: center; gap: 8px">
+          <div style="display: flex; flex-direction: column; gap: 14px">            <div style="display: flex; align-items: center; gap: 8px">
               <label for="cut-x" style="font-weight: 600; flex: 1">Distancia desde el eje A</label>
               <input id="cut-x" type="text" inputmode="decimal" value=${v.cutX} onInput=${v.setCutX} style="width: 70px; height: 32px; padding: 0 8px; border: 1px solid ${v.cutBd}; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #16191D" />
               <span style="color: #5E6670">m</span>
@@ -1611,9 +1594,7 @@
               Volver al pórtico
             </button>
             <div style="display: flex; flex-direction: column; gap: 2px">
-              <span style="font-weight: 600; font-size: 15px">Reglas generales</span>
-              <span style="font-size: 12px; color: #5E6670">Son la base para todos los proyectos.</span>
-            </div>
+              <span style="font-weight: 600; font-size: 15px">Reglas generales</span>            </div>
             ${v.rulesWarn ? html`
               <div role="alert" style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #E8C88F; border-radius: 6px; background: #FDF6EA; font-size: 12px; line-height: 1.45">
                 <span style="font-weight: 600">Hay cambios sin guardar en las reglas generales.</span>
@@ -1642,9 +1623,7 @@
                 <button type="button" onClick=${v.set6} disabled=${v.locked} style="height: 28px; padding: 0 12px; border: 0; font: inherit; cursor: pointer; ${v.seg6}">6 m</button>
                 <button type="button" onClick=${v.set12} disabled=${v.locked} style="height: 28px; padding: 0 12px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.seg12}">12 m</button>
               </div>
-            </div>
-            <span style="font-size: 12px; color: #5E6670; margin-top: -8px">Si un tramo no se puede resolver con 6 m, se usa una de 12 m.</span>
-            <div style="display: flex; flex-direction: column; gap: 6px">
+            </div>            <div style="display: flex; flex-direction: column; gap: 6px">
               <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
                 <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Gancho 180°</span><span>Estribo 135°</span><span>kg/m</span>
               </div>
@@ -1656,9 +1635,7 @@
                   <input type="text" aria-label=${ru.labG180} value=${ru.g180} onInput=${ru.setG180} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labE} value=${ru.e} onInput=${ru.setE} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labK} value=${ru.k} onInput=${ru.setK} disabled=${v.locked} style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 6px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
-                </div>`)}
-              <span style="font-size: 12px; color: #5E6670; line-height: 1.45">Valores en metros, de los cuadros de ganchos y traslapos. El traslapo depende solo del diámetro. Las barras terminan con gancho de 90°; el estribo de 135° sale del cuadro de dimensiones mínimas y el de 180°, de la columna Gancho 180°.</span>
-            </div>
+                </div>`)}            </div>
           </div>` : null}
       </div>
     </div>
