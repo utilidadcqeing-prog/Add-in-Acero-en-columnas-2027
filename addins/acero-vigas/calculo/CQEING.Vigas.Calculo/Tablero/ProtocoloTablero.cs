@@ -38,6 +38,13 @@ public sealed record CambiarEnVivo(bool Activo) : MensajeTablero;
 /// <summary>"Ver todos": la lista vuelve a mostrar todos los pórticos después de elegir vigas en Revit.</summary>
 public sealed record VerTodos() : MensajeTablero;
 
+/// <summary>
+/// Clic y Ctrl+clic en la planta (27-oct): <paramref name="Ids"/> son los pórticos seleccionados y
+/// <paramref name="Abrir"/>, el que se abre. Con dos o más, quedan como los elegidos con "Seleccionar en Revit": la lista
+/// muestra solo esos y "Generar" los crea todos; con uno solo, es como elegirlo en la lista.
+/// </summary>
+public sealed record ElegirVarios(IReadOnlyList<string> Ids, string Abrir) : MensajeTablero;
+
 /// <summary>"Guardar y bloquear" en la pantalla Reglas, con los textos de sus campos.</summary>
 public sealed record GuardarReglas(VistaReglas Reglas) : MensajeTablero;
 
@@ -100,6 +107,8 @@ public static class ProtocoloTablero
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
                 "cambiarEnVivo" => new CambiarEnVivo(nodo["activo"]?.GetValue<bool>() ?? false),
                 "verTodos" => new VerTodos(),
+                "elegirVarios" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } varios
+                    ? new ElegirVarios(varios, Texto(nodo, "abrir")) : new Desconocido(tipo),
                 "generar" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } ids
                     ? new Generar(ids, nodo["estados"]?.Deserialize<Dictionary<string, string>>(Json), nodo["forzar"]?.GetValue<bool>() ?? false)
                     : new Desconocido(tipo),

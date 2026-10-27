@@ -89,4 +89,8 @@ public enum TipoAvisoLectura
 /// <summary>Aviso de la lectura; <paramref name="Elemento"/> es el nombre del pórtico o los ids de las vigas.</summary>
 public sealed record AvisoLectura(TipoAvisoLectura Tipo, string Elemento);
 
-public sealed record ResultadoLectura(IReadOnlyList<PorticoLeido> Porticos, IReadOnlyList<AvisoLectura> Avisos);
+/// <summary>
+/// Lo que sale del agrupador. <paramref name="Modelo"/> es lo leído de Revit, para la vista en planta del tablero: ejes,
+/// columnas y el nivel y el tipo de cada viga (planta, 27-oct). Null = no se tiene (la planta va sin ejes ni columnas).
+/// </summary>
+public sealed record ResultadoLectura(IReadOnlyList<PorticoLeido> Porticos, IReadOnlyList<AvisoLectura> Avisos, ModeloLeido? Modelo = null);

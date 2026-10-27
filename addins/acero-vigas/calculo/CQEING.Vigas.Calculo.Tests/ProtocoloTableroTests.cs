@@ -23,6 +23,16 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LeeElegirVariosDeLaPlanta()
+    {
+        ElegirVarios m = Assert.IsType<ElegirVarios>(ProtocoloTablero.Leer("""{"tipo":"elegirVarios","ids":["P1","P2"],"abrir":"P2"}"""));
+
+        Assert.Equal(["P1", "P2"], m.Ids);
+        Assert.Equal("P2", m.Abrir);
+        Assert.Equal(new Desconocido("elegirVarios"), ProtocoloTablero.Leer("""{"tipo":"elegirVarios","abrir":"P2"}"""));
+    }
+
+    [Fact]
     public void CalcularTraeLasOpcionesDeLaPagina()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(5, 5), new GrupoBarras(2, 4)], Cara = Cara.Final };

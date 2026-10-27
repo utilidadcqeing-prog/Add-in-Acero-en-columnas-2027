@@ -57,7 +57,7 @@ public static class AgrupadorPorticos
                 porticos.Add(Armar(linea, modelo.Ejes, cadena, propios, nombre, eje?.Nombre, desde, hasta, avisos, clase));
             }
         }
-        return new ResultadoLectura(porticos, avisos);
+        return new ResultadoLectura(porticos, avisos, modelo);
     }
 
     /// <summary>

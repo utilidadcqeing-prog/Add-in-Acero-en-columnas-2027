@@ -172,12 +172,46 @@
     }
   }
 
+  // Planta (opción D, 27-oct): la barra izquierda tiene dos modos, Lista (la de siempre) y Planta, donde crece a 440 px
+  // y muestra el nivel en planta para abrir un pórtico con un clic. Los datos llegan en `vista.planta` (C#).
+  const ANCHO_LISTA = 260, ANCHO_PLANTA = 440, ALTO_PLANTA = 400, MARGEN_PLANTA = 30;
+  const TAB_ON = 'background: #1F5FAF; color: #FFFFFF', TAB_OFF = 'background: #FFFFFF; color: #16191D';
+  const CHIP_ON = 'border: 1px solid #1F5FAF; background: #E8F0FA; color: #1F5FAF; font-weight: 600';
+  const CHIP_OFF = 'border: 1px solid #C9CFD6; background: #FFFFFF; color: #5E6670';
+
+  // Los elementos del nivel que se ven elegidos: el del pórtico abierto y, si es una vigueta con grupo, todo su grupo.
+  function elegidosEnPlanta(nivel, id) {
+    const els = nivel.elementos || [];
+    const el = id == null ? null : els.find((e) => e.portico === id);
+    if (!el) return [];
+    return el.tipo === 'vigueta' && el.grupo ? els.filter((e) => e.grupo === el.grupo) : [el];
+  }
+
+  // La escala del dibujo: el rectángulo de todo el nivel (elementos, columnas y ejes) cabe en la caja con 30 px de
+  // margen; el zoom escala desde el centro y `pan` lo corre en px (arrastrar). El modelo tiene la Y hacia arriba: en
+  // pantalla se invierte.
+  function escalaDePlanta(nivel, W, H, zoom, pan = { x: 0, y: 0 }) {
+    const xs = [], ys = [];
+    const pon = (x, y) => { if (Number.isFinite(x) && Number.isFinite(y)) { xs.push(x); ys.push(y); } };
+    (nivel.elementos || []).forEach((e) => { pon(e.x1, e.y1); pon(e.x2, e.y2); });
+    (nivel.ejes || []).forEach((e) => { pon(e.x1, e.y1); pon(e.x2, e.y2); });
+    (nivel.columnas || []).forEach((c) => (c.puntos || []).forEach((p) => pon(p[0], p[1])));
+    if (!xs.length) return null;
+    const menor = (a) => a.reduce((m, x) => Math.min(m, x), Infinity), mayor = (a) => a.reduce((m, x) => Math.max(m, x), -Infinity);
+    const x0 = menor(xs), x1 = mayor(xs), y0 = menor(ys), y1 = mayor(ys);
+    const s = Math.min((W - 2 * MARGEN_PLANTA) / Math.max(x1 - x0, 1), (H - 2 * MARGEN_PLANTA) / Math.max(y1 - y0, 1)) * zoom;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    return { s, X: (x) => W / 2 + pan.x + (x - cx) * s, Y: (y) => H / 2 + pan.y - (y - cy) * s };
+  }
+
   class Tablero extends Component {
     constructor(props) {
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
         cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
-        vw: window.innerWidth, vh: window.innerHeight, choqueAbierto: -1, arreglos: null, deshacer: null },
+        vw: window.innerWidth, vh: window.innerHeight, choqueAbierto: -1, arreglos: null, deshacer: null,
+        // la barra izquierda: 'lista' o 'planta', el nivel elegido (null = el del pórtico abierto), lo que se muestra y el zoom
+        barra: 'lista', plNivel: null, plVer: { viga: true, vigueta: true }, plZoom: 1, plPan: { x: 0, y: 0 } },
       OPCIONES0, props.inicial || {});
       this.opcionesPorPortico = {};
       this.alCambiarTamano = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
@@ -211,7 +245,9 @@
     // "no se usa el espacio bien").
     medidas() {
       const W = Math.max(1440, this.state.vw), H = Math.max(900, this.state.vh);
-      return { pageW: W + 'px', pageH: H + 'px', dibujoW: 788 + W - 1440, dibujoH: 300 + H - 900 };
+      // En Planta la barra izquierda crece 180 px: el centro los resta para que el alzado no crezca ni se desborde.
+      const extra = this.state.barra === 'planta' ? ANCHO_PLANTA - ANCHO_LISTA : 0;
+      return { pageW: W + 'px', pageH: H + 'px', dibujoW: 788 + W - 1440 - extra, dibujoH: 300 + H - 900 };
     }
 
     // Lo elegido en el alzado o la lista; sin elegir, el traslapo del aviso largo o nada (Carlos, 21-oct, min 13:20:
@@ -710,6 +746,8 @@
         const active = p.id === porId;
         return { id: p.id, name: p.nombre, sub: p.sub, tipo: p.tipo, open: active, bg: active ? '#F3F7FC' : '#FFFFFF', bd: active ? '#1F5FAF' : '#FFFFFF',
           pick: () => { this.setState({ ver: 'todo', sel: undefined, pick: null }); enviar({ tipo: 'elegirPortico', id: p.id }); },
+          // viguetas iguales (opción D): la etiqueta muestra el grupo en azul; sin grupo, el tipo como siempre
+          grupo: p.grupo || '',
           tramos: (active ? p.tramos : []).map((t) => {
             const on2 = tramosSel.includes(t.id);
             return { name: t.nombre, chkLabel: 'Marcar ' + t.nombre, pressed: on2 ? 'true' : 'false', bg: s.ver === t.id && active ? '#E8F0FA' : 'transparent',
@@ -897,6 +935,171 @@
       };
     }
 
+    // Abre un pórtico desde la planta: lo mismo que el clic en la lista (mismo mensaje a C#); no cambia de modo.
+    elegirDesdePlanta(id) {
+      this.setState({ ver: 'todo', sel: undefined, pick: null });
+      this.props.enviar({ tipo: 'elegirPortico', id });
+    }
+
+    // El modo Planta de la barra izquierda (opción D): nivel, filtros, el dibujo con zoom, leyenda y lo elegido.
+    barraPlanta(P) {
+      const s = this.state, vista = this.props.vista;
+      const planta = vista.planta, niveles = planta && Array.isArray(planta.niveles) ? planta.niveles : [];
+      if (!niveles.length) {
+        return html`<div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 16px; text-align: center; font-size: 12px; color: #5E6670">No hay datos de planta para este modelo.</div>`;
+      }
+      const idP = P ? P.id : null;
+      const delAbierto = idP == null ? null : niveles.find((n) => (n.elementos || []).some((e) => e.portico === idP));
+      const nivel = niveles.find((n) => n.nombre === s.plNivel) || delAbierto || niveles[0];
+      const W = ANCHO_PLANTA - 28, H = ALTO_PLANTA, iw = W - 2, ih = H - 2;
+      const pan = s.plPan || { x: 0, y: 0 };
+      const esc = escalaDePlanta(nivel, iw, ih, s.plZoom, pan);
+      const ver = s.plVer;
+      const elegidos = elegidosEnPlanta(nivel, idP);
+      const porDe = (id) => (vista.porticos || []).find((p) => p.id === id);
+      // zoom hacia el punto (mx, my) de la caja: lo que está bajo el mouse se queda quieto
+      const zoom = (z, mx = iw / 2, my = ih / 2) => {
+        const z0 = this.state.plZoom, z1 = Math.max(0.5, Math.min(8, Math.round(z * 100) / 100)), k = z1 / z0, p0 = this.state.plPan || { x: 0, y: 0 };
+        this.setState({ plZoom: z1, plPan: { x: mx - iw / 2 - (mx - iw / 2 - p0.x) * k, y: my - ih / 2 - (my - ih / 2 - p0.y) * k } });
+      };
+      const ajustar = () => this.setState({ plZoom: 1, plPan: { x: 0, y: 0 } });
+      const tog = (k) => () => this.setState({ plVer: { ...this.state.plVer, [k]: !this.state.plVer[k] } });
+      const cota = (e) => (e >= 0 ? '+' : '−') + Math.abs(e).toFixed(2);
+      const fin = (a) => Number.isFinite(a.x1) && Number.isFinite(a.y1) && Number.isFinite(a.x2) && Number.isFinite(a.y2);
+      const f = (n) => n.toFixed(1);
+
+      // Arrastrar mueve el dibujo; si el mouse se movió, el clic que sigue no abre nada.
+      const arrastrar = (ev) => {
+        if (ev.button !== 0) return;
+        const x0 = ev.clientX, y0 = ev.clientY, p0 = this.state.plPan || { x: 0, y: 0 };
+        this.plArrastro = false;
+        const mover = (m) => {
+          const dx = m.clientX - x0, dy = m.clientY - y0;
+          if (!this.plArrastro && Math.hypot(dx, dy) < 3) return;
+          this.plArrastro = true;
+          this.setState({ plPan: { x: p0.x + dx, y: p0.y + dy }, plMoviendo: true });
+        };
+        const soltar = () => {
+          window.removeEventListener('pointermove', mover);
+          window.removeEventListener('pointerup', soltar);
+          this.setState({ plMoviendo: false });
+        };
+        window.addEventListener('pointermove', mover);
+        window.addEventListener('pointerup', soltar);
+      };
+      // Selección como en Revit: clic = solo ese; Ctrl+clic agrega o quita (una vigueta con grupo, todo su grupo). Con dos
+      // o más quedan como los elegidos de "Seleccionar en Revit": la lista muestra esos y "Generar en Revit" los crea todos.
+      const seleccion = vista.elegidos ? vista.elegidos : idP != null ? [idP] : [];
+      const delGrupo = (e) => e.tipo === 'vigueta' && e.grupo ? (nivel.elementos || []).filter((o) => o.grupo === e.grupo).map((o) => o.portico) : [e.portico];
+      const enSeleccion = new Set(seleccion.flatMap((id) => {
+        const e = (nivel.elementos || []).find((o) => o.portico === id);
+        return e ? delGrupo(e) : [id];
+      }));
+      const elegirVarios = (ids, id) => {
+        this.setState({ ver: 'todo', sel: undefined, pick: null });
+        this.props.enviar({ tipo: 'elegirVarios', ids, abrir: id });
+      };
+      const abrir = (e, ev) => {
+        if (this.plArrastro) return;
+        if (!(ev && (ev.ctrlKey || ev.metaKey))) return elegirVarios([e.portico], e.portico);
+        const ids = delGrupo(e), quitar = ids.every((id) => seleccion.includes(id));
+        const nuevos = quitar ? seleccion.filter((id) => !ids.includes(id)) : seleccion.concat(ids.filter((id) => !seleccion.includes(id)));
+        if (!nuevos.length) return;
+        elegirVarios(nuevos, quitar ? (nuevos.includes(idP) ? idP : nuevos[0]) : e.portico);
+      };
+
+      // Cada viga o vigueta es su rectángulo real en planta (ancho del modelo, con un mínimo para que se vea).
+      const items = esc ? (nivel.elementos || []).filter(fin).map((e, i) => {
+        const vig = e.tipo === 'vigueta', off = !ver[vig ? 'vigueta' : 'viga'], abierto = elegidos.includes(e);
+        const on = abierto || enSeleccion.has(e.portico);
+        const ax = esc.X(e.x1), ay = esc.Y(e.y1), bx = esc.X(e.x2), by = esc.Y(e.y2);
+        const L = Math.hypot(bx - ax, by - ay) || 1, nx = -(by - ay) / L, ny = (bx - ax) / L;
+        const t = Math.max(vig ? 2.5 : 3.5, (e.ancho > 0 ? e.ancho : vig ? 0.1 : 0.3) * esc.s) / 2;
+        const por = porDe(e.portico);
+        return { key: i, off, on, vig, label: (por ? por.nombre : String(e.portico)) + (e.grupo ? ' (' + e.grupo + ')' : ''),
+          pick: (ev) => abrir(e, ev),
+          tecla: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.plArrastro = false; abrir(e, ev); } },
+          a: [ax, ay], b: [bx, by],
+          pts: [[ax + nx * t, ay + ny * t], [bx + nx * t, by + ny * t], [bx - nx * t, by - ny * t], [ax - nx * t, ay - ny * t]].map((p) => f(p[0]) + ',' + f(p[1])).join(' '),
+          fill: off ? '#F1F3F5' : abierto ? '#1F5FAF' : on ? '#9DBBE3' : vig ? '#E4E7EB' : '#C9CFD6',
+          stroke: off ? '#D9DDE2' : on ? '#174A8A' : vig ? '#7C8692' : '#5E6670' };
+      }) : [];
+      // los elegidos encima, para que no los tape otro
+      items.sort((p, q) => (p.on ? 1 : 0) - (q.on ? 1 : 0) || (p.vig ? 1 : 0) - (q.vig ? 1 : 0));
+      const ejes = esc ? (nivel.ejes || []).filter(fin).map((a, i) => {
+        let p = [esc.X(a.x1), esc.Y(a.y1)], q = [esc.X(a.x2), esc.Y(a.y2)];
+        const vertical = Math.abs(q[1] - p[1]) > Math.abs(q[0] - p[0]);
+        // la burbuja va en el extremo de arriba (eje vertical) o de la izquierda (horizontal), 16 px afuera
+        if (vertical ? q[1] < p[1] : q[0] < p[0]) [p, q] = [q, p];
+        const L = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1, ux = (p[0] - q[0]) / L, uy = (p[1] - q[1]) / L;
+        const cx = Math.max(11, Math.min(iw - 11, p[0] + ux * 16)), cy = Math.max(11, Math.min(ih - 11, p[1] + uy * 16));
+        return { key: i, n: a.nombre, p, q, cx, cy, fx: p[0] + ux * 6, fy: p[1] + uy * 6 };
+      }) : [];
+      const cols = esc ? (nivel.columnas || []).map((c) => (c.puntos || []).map((pt) => f(esc.X(pt[0])) + ',' + f(esc.Y(pt[1]))).join(' ')) : [];
+
+      const el0 = elegidos.find((e) => e.portico === idP);
+      const porA = idP == null ? null : porDe(idP);
+      const info = seleccion.length > 1 ? seleccion.length + ' pórticos seleccionados · Generar en Revit los crea todos'
+        : !el0 ? 'Ningún pórtico abierto en este nivel'
+        : el0.tipo === 'vigueta' && el0.grupo ? el0.grupo + ' · ' + elegidos.length + ' viguetas iguales seleccionadas'
+        : (porA ? porA.nombre + ' · ' + porA.sub : String(idP));
+
+      return html`
+      <div style="display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <label for="nivel-planta" style="color: #5E6670; font-size: 12px">Nivel</label>
+          <select id="nivel-planta" value=${nivel.nombre} onChange=${(ev) => this.setState({ plNivel: ev.target.value, plZoom: 1, plPan: { x: 0, y: 0 } })} style="flex: 1; height: 32px; padding: 0 8px; border: 1px solid #C9CFD6; border-radius: 6px; font: inherit; color: #16191D; background: #FFFFFF">
+            ${niveles.map((n) => html`<option value=${n.nombre}>${n.nombre + (Number.isFinite(n.elevacion) ? ' · ' + cota(n.elevacion) : '')}</option>`)}
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px">
+          <span style="color: #5E6670; font-size: 12px; margin-right: 2px">Mostrar</span>
+          <button type="button" aria-pressed=${ver.viga ? 'true' : 'false'} onClick=${tog('viga')} style="height: 24px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; ${ver.viga ? CHIP_ON : CHIP_OFF}">Vigas</button>
+          <button type="button" aria-pressed=${ver.vigueta ? 'true' : 'false'} onClick=${tog('vigueta')} style="height: 24px; padding: 0 10px; border-radius: 999px; font: inherit; font-size: 12px; cursor: pointer; ${ver.vigueta ? CHIP_ON : CHIP_OFF}">Viguetas</button>
+        </div>
+        <div onWheel=${(ev) => { ev.preventDefault(); const r = ev.currentTarget.getBoundingClientRect(); zoom(s.plZoom * (ev.deltaY < 0 ? 1.15 : 1 / 1.15), ev.clientX - r.left - 1, ev.clientY - r.top - 1); }} style="position: relative; width: ${W}px; height: ${H}px; flex-shrink: 0; overflow: hidden; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; box-sizing: border-box">
+          <svg width=${iw} height=${ih} onPointerDown=${arrastrar} style="position: absolute; left: 0; top: 0; display: block; touch-action: none; user-select: none; cursor: ${s.plMoviendo ? 'grabbing' : 'grab'}">
+            <style>${'.pl-el{cursor:pointer;outline:none}.pl-el:hover .pl-cuerpo,.pl-el:focus-visible .pl-cuerpo{stroke:#1F5FAF;stroke-width:1.6}.pl-off{cursor:default;pointer-events:none}'}</style>
+            <g aria-hidden="true">
+              ${ejes.map((a) => html`<line key=${a.key} x1=${f(a.fx)} y1=${f(a.fy)} x2=${f(a.q[0])} y2=${f(a.q[1])} stroke="#B5BCC4" stroke-width="0.8" stroke-dasharray="10 3 2 3"></line>`)}
+            </g>
+            ${items.map((e) => html`
+              <g key=${e.key} class=${e.off ? 'pl-el pl-off' : 'pl-el'} role="button" tabindex=${e.off ? -1 : 0} aria-label=${e.label} aria-pressed=${e.on ? 'true' : 'false'} aria-disabled=${e.off ? 'true' : 'false'} onClick=${e.pick} onKeyDown=${e.tecla}>
+                <title>${e.label}</title>
+                <line x1=${f(e.a[0])} y1=${f(e.a[1])} x2=${f(e.b[0])} y2=${f(e.b[1])} stroke="transparent" stroke-width="12" stroke-linecap="round"></line>
+                <polygon class="pl-cuerpo" points=${e.pts} fill=${e.fill} stroke=${e.stroke} stroke-width="0.8" stroke-linejoin="round"></polygon>
+              </g>`)}
+            <g aria-hidden="true" style="pointer-events: none">
+              ${cols.map((pts, i) => html`<polygon key=${i} points=${pts} fill="#3F4A57" stroke="#16191D" stroke-width="0.6"></polygon>`)}
+              ${ejes.map((a) => html`<g key=${'b' + a.key}>
+                <circle cx=${f(a.cx)} cy=${f(a.cy)} r="9" fill="#FFFFFF" stroke="#7C8692" stroke-width="1"></circle>
+                <text x=${f(a.cx)} y=${f(a.cy)} text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="600" fill="#3F4A57" font-family="'IBM Plex Sans', 'Segoe UI', sans-serif">${a.n}</text>
+              </g>`)}
+            </g>
+          </svg>
+          <div style="position: absolute; right: 6px; top: 6px; z-index: 5; display: flex; flex-direction: column; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden; background: #FFFFFF">
+            <button type="button" onClick=${() => zoom(s.plZoom * 1.25)} aria-label="Acercar" style="width: 28px; height: 28px; border: 0; background: #FFFFFF; font: inherit; font-size: 15px; color: #16191D; cursor: pointer">+</button>
+            <button type="button" onClick=${() => zoom(s.plZoom / 1.25)} aria-label="Alejar" style="width: 28px; height: 28px; border: 0; border-top: 1px solid #C9CFD6; background: #FFFFFF; font: inherit; font-size: 15px; color: #16191D; cursor: pointer">−</button>
+            <button type="button" onClick=${ajustar} aria-label="Ver todo el nivel" title="Ver todo el nivel" style="width: 28px; height: 28px; border: 0; border-top: 1px solid #C9CFD6; background: #FFFFFF; cursor: pointer; display: grid; place-items: center">
+              <svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M1.5 5V1.5H5M9 1.5h3.5V5M12.5 9v3.5H9M5 12.5H1.5V9" stroke="#16191D" stroke-width="1.4" fill="none"></path></svg>
+            </button>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #5E6670">
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #C9CFD6; border: 1px solid #5E6670; box-sizing: border-box"></span>Viga</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; background: #E4E7EB; border: 1px solid #7C8692; box-sizing: border-box"></span>Vigueta</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; background: #3F4A57"></span>Columna</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #1F5FAF"></span>Abierto</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #9DBBE3"></span>Seleccionado</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #1F5FAF; border-radius: 6px; background: #F3F7FC">
+          <span style="width: 10px; height: 10px; flex-shrink: 0; background: #1F5FAF"></span>
+          <span title=${info} style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${info}</span>
+        </div>
+        <p style="margin: 0; font-size: 12px; color: #5E6670; line-height: 1.45">Clic en una viga para abrir su pórtico. Ctrl+clic para seleccionar varios. En viguetas se toman todas las iguales del paño. Arrastra para mover; rueda del mouse para zoom.</p>
+      </div>`;
+    }
+
     render() {
       const m = this.medidas();
       if (!this.props.vista) return html`<div style="width: ${m.pageW}; height: ${m.pageH}; background: #EEF0F2"></div>`;
@@ -922,7 +1125,13 @@
 
   <div style="flex: 1; min-height: 0; display: flex">
 
-    <div style="width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #FFFFFF; border-right: 1px solid #D9DDE2; box-sizing: border-box">
+    <div style="width: ${this.state.barra === 'planta' ? ANCHO_PLANTA : ANCHO_LISTA}px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #FFFFFF; border-right: 1px solid #D9DDE2; box-sizing: border-box; overflow: hidden; transition: width 180ms ease-out">
+      <div style="flex-shrink: 0; display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+        <button type="button" aria-pressed=${this.state.barra === 'planta' ? 'false' : 'true'} onClick=${() => this.setState({ barra: 'lista' })} style="flex: 1; height: 30px; border: 0; font: inherit; cursor: pointer; ${this.state.barra === 'planta' ? TAB_OFF : TAB_ON}">Lista</button>
+        <button type="button" aria-pressed=${this.state.barra === 'planta' ? 'true' : 'false'} onClick=${() => this.setState({ barra: 'planta' })} style="flex: 1; height: 30px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${this.state.barra === 'planta' ? TAB_ON : TAB_OFF}">Planta</button>
+      </div>
+      ${this.state.barra === 'planta' ? this.barraPlanta(P) : html`
+      <div style="display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0">
       <div style="display: flex; align-items: baseline; justify-content: space-between">
         <span style="font-weight: 600">Pórticos</span>
         <span style="color: #5E6670; font-size: 12px">${v.porCount}${v.filtrado ? html` · <button type="button" onClick=${v.verTodos} style="padding: 0; border: 0; background: transparent; font: inherit; color: #1F5FAF; cursor: pointer">Ver todos</button>` : null}</span>
@@ -939,7 +1148,7 @@
             <button type="button" onClick=${p.pick} style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 0; background: transparent; font: inherit; color: #16191D; text-align: left; cursor: pointer">
               <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; white-space: nowrap">
                 <span style="font-weight: 600">${p.name}</span>
-                <span style="flex-shrink: 0; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: #EEF0F2; color: #3F4A57">${p.tipo}</span>
+                <span style="flex-shrink: 0; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: ${p.grupo ? '#E8F0FA' : '#EEF0F2'}; color: ${p.grupo ? '#1F5FAF' : '#3F4A57'}">${p.grupo || p.tipo}</span>
               </span>
               <span title=${p.sub} style="font-size: 12px; color: #5E6670; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${p.sub}</span>
             </button>
@@ -956,6 +1165,7 @@
           </div>`)}
       </div>
       <p style="margin: 0; font-size: 12px; color: #5E6670; line-height: 1.45">Un pórtico es la viga continua de un eje. Marca tramos para darles estribos distintos.</p>
+      </div>`}
     </div>
 
     ${v.hasPor ? html`
