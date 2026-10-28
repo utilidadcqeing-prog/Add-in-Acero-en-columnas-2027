@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using CQEING.Gestor.Core;
 
 namespace CQEING.GestorRevit;
 
@@ -8,7 +9,7 @@ namespace CQEING.GestorRevit;
 internal static class LanzadorGestor
 {
     public const string Titulo = "Gestor de add-ins CQEING";
-    private const string EnlaceDescarga = "https://github.com/utilidadcqeing-prog/Add-in-Acero-en-columnas-2027/releases";
+    private const string EnlaceDescarga = $"https://github.com/{Repositorio.Nombre}/releases";
 
     /// <summary>%LOCALAPPDATA%\CQEING.Gestor\current\CQEING.Gestor.exe, o null si el gestor no está instalado.</summary>
     public static string? Ruta()
