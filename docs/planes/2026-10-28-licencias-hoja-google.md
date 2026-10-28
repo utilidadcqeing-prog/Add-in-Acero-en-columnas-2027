@@ -86,7 +86,8 @@ Git for Windows para crear las claves.
     La URL redirige y `Invoke-RestMethod` y `curl -L` siguen la redirección y reciben el JSON. Resultados:
     - `?codigo=xx` da `{"error":"codigo"}`;
     - un código nuevo crea **una** fila `pendiente` («Prueba Ñandú» se guardó bien);
-    - una segunda consulta no duplica la fila, solo actualiza «Última conexión» y «Versión gestor»;
+    - una segunda consulta no duplica la fila, solo actualiza «Última conexión» y «Versión gestor» (y el nombre
+      mientras esté `pendiente`, Decisión 15);
     - con `aprobado` llega `{"estado":"aprobado","licencia":…}`. La firma se verificó con `publica.pem` (`crypto.verify`
       de Node: `true`). Vigencia de 72 h. El nombre firmado es el de la hoja, no el que mandó el equipo. Las fechas
       llevan milisegundos (`2026-10-28T17:03:05.352Z`), y la Tarea 2 debe leerlas así;
@@ -148,6 +149,12 @@ Git for Windows para crear las claves.
     Cuando llega el gestor nuevo (por el repo del código, con la release puente), ya encuentra los add-ins en
     `CQEING-releases` y no muestra un catálogo vacío. Los add-ins se publican **solo** en `CQEING-releases`; el gestor,
     en los dos mientras el repo del código siga público (paso «Release puente» de `publicar-gestor.yml`).
+15. **Una fila `pendiente` toma el último nombre que llega** (2026-10-28, prueba local en el PC de Juan,
+    `1ED1-1966-43E4-292E`). Al abrirse, el gestor consulta solo, sin nombre guardado, con el usuario de Windows
+    (`LENOVO`), y esa consulta crea la fila. Cuando la persona escribía su nombre y pulsaba «Solicitar acceso», el
+    `Registro` lo recibía (`juan felipe`), pero la fila seguía en `LENOVO`, porque `atender_` no tocaba una fila que ya
+    existía. Ahora, mientras esté `pendiente`, el nombre se actualiza. Aprobada o revocada, no se toca: quien aprueba
+    puede haberlo corregido a mano, y es el nombre que se firma.
 
 ## Restricciones globales
 

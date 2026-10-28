@@ -105,6 +105,9 @@ function atender_(solicitud, ahora) {
     } else if (estado === 'revocado') {
       respuesta = { estado: 'revocado' };
     } else {
+      // Al abrirse, el gestor consulta con el usuario de Windows antes de que la persona escriba su nombre: mientras
+      // nadie la haya aprobado, la fila toma el último nombre que llegó. Aprobada, el nombre ya no se toca.
+      if (solicitud.nombre) equipos.getRange(fila, COL.nombre).setValue(solicitud.nombre);
       respuesta = { estado: 'pendiente' };
     }
   }
