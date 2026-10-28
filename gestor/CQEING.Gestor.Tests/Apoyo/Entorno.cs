@@ -25,8 +25,23 @@ internal sealed class Entorno : IDisposable
             Rutas,
             programFiles);
         Reinicio = new ReinicioRevit(Procesos, Rutas, TimeSpan.FromSeconds(1));
-        Vista = new VistaGestor(Gestor, Actualizador, Reinicio, () => new DateTime(2026, 10, 17, 9, 5, 0));
+        Directory.CreateDirectory(CarpetaLicencia);
+        Renovador = new RenovadorLicencia(new ServicioLicencias(ClienteHttp.Crear(Licencias), LicenciasFalso.Url), CarpetaLicencia,
+            () => AhoraUtc, LicenciasFalso.Codigo, LicenciasFalso.Publica);
+        Vista = new VistaGestor(Gestor, Actualizador, Reinicio, Renovador, () => new DateTime(2026, 10, 17, 9, 5, 0));
     }
+
+    /// <summary>El mismo reloj fijo de la ventana, en UTC, para la licencia.</summary>
+    public static readonly DateTime AhoraUtc = new(2026, 10, 17, 14, 5, 0, DateTimeKind.Utc);
+
+    public LicenciasFalso Licencias { get; } = new();
+    public RenovadorLicencia Renovador { get; }
+
+    /// <summary>Hace de %LOCALAPPDATA%\CQEING: licencia.json, licencia-vista.txt y licencia-nombre.txt.</summary>
+    public string CarpetaLicencia => Path.Combine(_raiz, "licencia");
+
+    public void GuardarLicencia(DateTime emitidaUtc, string nombre) =>
+        File.WriteAllText(Path.Combine(CarpetaLicencia, "licencia.json"), LicenciasFalso.Licencia(emitidaUtc, nombre));
 
     public GitHubFalso GitHub { get; } = new();
     public ActualizadorFalso Actualizador { get; } = new();

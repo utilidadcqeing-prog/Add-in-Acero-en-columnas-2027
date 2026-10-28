@@ -42,7 +42,8 @@ public static class Program
         });
 
         Application aplicacion = CrearAplicacion();
-        aplicacion.Run(new VentanaPrincipal(new VistaGestor(GestorAddins.Crear(), new ActualizadorVelopack(), reinicio)));
+        aplicacion.Run(new VentanaPrincipal(new VistaGestor(
+            GestorAddins.Crear(), new ActualizadorVelopack(), reinicio, RenovadorLicencia.Crear(ClienteHttp.Crear()))));
     }
 
     /// <summary>La aplicación WPF con el tema del gestor. Un error no previsto se muestra en vez de cerrar la ventana en silencio.</summary>

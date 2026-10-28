@@ -343,7 +343,7 @@ public class VistaGestorVariosAniosTests : IDisposable
         await ((ComandoAsync)_e.Tarjeta("armado-columnas").Versiones.Single().Usar).EjecutarAsync();
         _e.GitHub.Publicar("armado-columnas", "Armado de columnas", "1.1.0", anios: ["2026", "2027"]);
 
-        var otraVentana = new VistaGestor(_e.Gestor, _e.Actualizador, _e.Reinicio);
+        var otraVentana = new VistaGestor(_e.Gestor, _e.Actualizador, _e.Reinicio, _e.Renovador);
         await otraVentana.BuscarNovedades.EjecutarAsync();
 
         Assert.Equal("2026", otraVentana.AnioElegido!.Anio);
