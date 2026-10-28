@@ -98,6 +98,9 @@
     <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.EstadoPanel.cs">
       <Link>Vistas\VentanaConfiguradorEstribos.EstadoPanel.cs</Link>
     </Compile>
+    <Compile Include="..\..\addins\armado-columnas\Vistas\VentanaConfiguradorEstribos.Aceptacion.cs">
+      <Link>Vistas\VentanaConfiguradorEstribos.Aceptacion.cs</Link>
+    </Compile>
 
     <Page Include="..\..\addins\armado-columnas\Vistas\PanelFiltros3D.xaml">
       <Link>Vistas\PanelFiltros3D.xaml</Link>

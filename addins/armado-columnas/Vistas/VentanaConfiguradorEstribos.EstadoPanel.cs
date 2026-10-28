@@ -7,7 +7,8 @@ using System.Windows.Threading;
 
 /// <summary>
 /// Lo que se recalcula cada vez que cambia algo del panel: si tiene cambios
-/// sin guardar respecto de la configuración elegida (#179). Mismo esquema que
+/// sin guardar respecto de la configuración elegida (#179) y el color de los ✓
+/// (ámbar si algo aceptado cambió, #168). Mismo esquema que
 /// la vista previa (<c>VentanaConfiguradorEstribos.VistaPrevia.cs</c>): se
 /// engancha a los campos que ya existen y junta los cambios seguidos en una
 /// sola pasada.
@@ -48,6 +49,7 @@ public partial class VentanaConfiguradorEstribos
         {
             _estadoPanelPendiente = false;
             ActualizarCambiosSinGuardar();
+            RefrescarEstadoAceptacion();
         }));
     }
 }

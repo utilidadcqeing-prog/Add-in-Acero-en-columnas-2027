@@ -16,6 +16,9 @@ public class ComandoEstribos : IExternalCommand
 {
     private static VentanaConfiguradorEstribos? _ventana;
 
+    /// <summary>El proyecto sobre el que trabaja <see cref="_ventana"/> (#168).</summary>
+    private static Document? _documentoVentana;
+
     // Issue #24 (sincronizar selección): vive a nivel de comando, no de
     // ventana, porque VentanaConfiguradorEstribos no puede referenciar
     // Autodesk.Revit -- es la misma regla de L1 que la mantiene corriendo
@@ -54,15 +57,26 @@ public class ComandoEstribos : IExternalCommand
             return Result.Failed;
         }
 
-        if (_ventana is not null && _ventana.IsLoaded)
-        {
-            _ventana.Activate();
-            return Result.Succeeded;
-        }
-
         // J2: proveedores reales sobre el documento activo. La ventana no cambió
         // una línea -- ver L1, este era exactamente el punto de la interfaz.
         Document doc = uiapp.ActiveUIDocument.Document;
+
+        if (_ventana is not null && _ventana.IsLoaded)
+        {
+            // #168: la ventana abierta trabaja sobre el proyecto en el que se
+            // abrió. Si ahora el activo es otro, se cierra (pregunta si hay
+            // tramos sin generar) y se abre una para el proyecto nuevo.
+            if (_documentoVentana is not null && !(_documentoVentana.IsValidObject && _documentoVentana.Equals(doc)))
+                _ventana.Close();
+
+            if (_ventana is not null)
+            {
+                _ventana.Activate();
+                return Result.Succeeded;
+            }
+        }
+
+        _documentoVentana = doc;
 
         OfrecerVarillasPropias(doc);
 

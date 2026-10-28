@@ -34,7 +34,10 @@
                         </Style.Triggers>
                     </Style>
                 </StackPanel.Style>
-                <TextBlock Text="{Binding Chulito}" Foreground="{StaticResource Exito}" FontWeight="Bold"
+                <!-- #168: el color dice el estado (verde, ámbar, gris) y un clic lo saca. -->
+                <TextBlock Text="{Binding Chulito}" Foreground="{Binding ColorChulito}" FontWeight="Bold"
+                           ToolTip="{Binding AyudaChulito}" Background="Transparent"
+                           PreviewMouseLeftButtonDown="ChulitoLista_MouseLeftButtonDown"
                            VerticalAlignment="Center" Width="12" Margin="0,0,2,0" />
                 <TextBlock Text="{Binding Etiqueta}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Etiqueta}">
@@ -145,6 +148,11 @@
                                     <TextBlock Text="tramo activo" Style="{StaticResource TextoLeyenda}" />
                                     <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="{StaticResource Exito}" Margin="0,0,4,0" VerticalAlignment="Center" />
                                     <TextBlock Text="se genera (clic para sacarlo)" Style="{StaticResource TextoLeyenda}" />
+                                    <!-- #168 -->
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AvisoBorde}" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="cambiado, vuelve a aceptar" Style="{StaticResource TextoLeyenda}" />
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextoApagado}" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="ya generado" Style="{StaticResource TextoLeyenda}" />
                                 </WrapPanel>
 
                                 <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
@@ -408,6 +416,15 @@
                      se va a armar, si no el botón de generar es una caja negra
                      (issue #56). -->
                 <TextBlock x:Name="TextoResumenGeneracion" Foreground="{StaticResource ExitoTexto}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <!-- #168: sacar todos los ✓ de una vez, y volver atrás si fue sin querer. -->
+                <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
+                    <Button x:Name="BotonQuitarTodos" Content="Quitar todos los ✓" Style="{StaticResource BotonSecundario}" Height="22" Padding="8,0"
+                            ToolTip="Saca de la generación todos los tramos aceptados. Su configuración queda cargada."
+                            Visibility="Collapsed" Click="BotonQuitarTodos_Click" />
+                    <Button x:Name="BotonDeshacerQuitar" Content="Deshacer" Style="{StaticResource BotonSecundario}" Height="22" Padding="8,0" Margin="6,0,0,0"
+                            ToolTip="Vuelve a poner los ✓ que se acaban de quitar."
+                            Visibility="Collapsed" Click="BotonDeshacerQuitar_Click" />
+                </StackPanel>
                 <TextBlock x:Name="TextoEstado" Foreground="{StaticResource TextoSecundario}" TextWrapping="Wrap" />
             </StackPanel>
             <!-- #145: lo que generó el add-in antes se reemplaza siempre; la casilla

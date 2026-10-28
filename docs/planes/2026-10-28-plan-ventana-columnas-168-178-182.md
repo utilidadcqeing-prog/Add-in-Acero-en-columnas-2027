@@ -107,6 +107,12 @@ Qué tiene cada columna, de mayor a menor prioridad:
       `Logica/RegistroGeneradosRevit` (DataStorage, clave `UniqueId`, se escribe
       en la transacción de generar). La ventana lo carga al abrir y avisa si la
       columna cambió. Falta probar en Revit.
-- [ ] #168
+- [x] #168: `VentanaConfiguradorEstribos.Aceptacion.cs` (`EstadoAceptacion`:
+      verde / ámbar / gris). Cada ✓ guarda una copia de lo aceptado
+      (`_aceptadoComo`, `_longitudinalAceptado`) y Generar usa eso. Los botones
+      de aceptar pasan a «Quitar ✓» (y dejan de ser el de Enter); ✓ clickeable en
+      elevación, planta y lista; «Quitar todos los ✓» + «Deshacer»; pregunta al
+      cerrar; otro proyecto activo → ventana nueva. El recubrimiento no entra en
+      la copia: se genera con el que esté elegido.
 - [ ] #181
 - [ ] Retest en Revit

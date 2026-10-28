@@ -306,6 +306,10 @@ public partial class VentanaConfiguradorEstribos : Window
         ConectarVistaPrevia();
         ConectarEstadoPanel();
 
+        // #168: no perder tramos aceptados sin generar al cerrar.
+        Closing += AlCerrar;
+        PanelPlanta.ChulitoClicked += QuitarColumna;
+
         RefrescarConfiguracionesGuardadas();
         CargarColumnas();
         ActualizarResumenDeGeneracion();
@@ -742,11 +746,14 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     private void RedibujarPanelPlanta()
     {
-        HashSet<string> configuradas = _tramosAceptados.Select(t => t.ColumnaId).ToHashSet();
+        // #168: el ✓ de cada columna con el mismo color que en la lista.
+        Dictionary<string, EstadoAceptacion> estados = _nodos
+            .Where(n => n.EsColumna && n.Estado != EstadoAceptacion.Ninguno)
+            .ToDictionary(n => n.ColumnaId, n => n.Estado);
 
         PanelPlanta.Cargar(
             _contexto.ListarColumnas(), _contexto.ListarRejillas(),
-            _columnaIdActiva, _columnasElegidas, configuradas);
+            _columnaIdActiva, _columnasElegidas, estados);
     }
 
     /// <summary>
@@ -1288,12 +1295,24 @@ public partial class VentanaConfiguradorEstribos : Window
         int delMismoTipo = TramosDeLaColumnaActiva(t => t.Tipo == activo.Tipo).Count - 1;
         int enLaColumna = TramosDeLaColumnaActiva(null).Count - 1;
 
-        BotonAceptarMismoTipo.Content = $"✓  Aceptar y aplicar al resto de {RotuloPlural(activo.Tipo)} ({delMismoTipo})";
+        // #168: el par de cada botón. Si todo lo que tocaría ya está aceptado y
+        // sin cambios, el botón quita. Enter (botón por defecto, #120) solo
+        // acepta: dos Enter seguidos no pueden aceptar y quitar.
+        bool quitarActivo = TodosPendientes(null);
+        BotonAceptar.Content = quitarActivo ? "✕  Quitar ✓ de este tramo" : "✓  Aceptar este tramo";
+        BotonAceptar.IsDefault = !quitarActivo;
+
+        TipoTramo tipo = activo.Tipo;
+        BotonAceptarMismoTipo.Content = TodosPendientes(t => t.Tipo == tipo)
+            ? $"✕  Quitar ✓ de {RotuloPlural(activo.Tipo)} ({delMismoTipo + 1})"
+            : $"✓  Aceptar y aplicar al resto de {RotuloPlural(activo.Tipo)} ({delMismoTipo})";
         BotonAceptarMismoTipo.Visibility = delMismoTipo > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // Si todos los tramos de la columna son del mismo tipo, los dos botones
         // harían exactamente lo mismo: se muestra uno solo.
-        BotonAceptarColumna.Content = $"✓  Aceptar y aplicar a toda la columna ({enLaColumna + 1})";
+        BotonAceptarColumna.Content = TodosPendientes(_ => true)
+            ? $"✕  Quitar ✓ de toda la columna ({enLaColumna + 1})"
+            : $"✓  Aceptar y aplicar a toda la columna ({enLaColumna + 1})";
         BotonAceptarColumna.Visibility = enLaColumna > 0 && delMismoTipo != enLaColumna
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -1702,17 +1721,26 @@ public partial class VentanaConfiguradorEstribos : Window
             .ToList();
     }
 
-    private void BotonAceptar_Click(object sender, RoutedEventArgs e) => Aceptar(extenderA: null);
+    // #168: cada botón es un interruptor. Si todo lo que tocaría ya está
+    // aceptado y sin cambios, quita; si no, acepta.
+
+    private void BotonAceptar_Click(object sender, RoutedEventArgs e) => AceptarOQuitar(extenderA: null);
 
     private void BotonAceptarMismoTipo_Click(object sender, RoutedEventArgs e)
     {
         if (_columnaActiva is null) return;
 
         TipoTramo tipo = _columnaActiva.Tramos[_tramoActivoIndice].Tipo;
-        Aceptar(t => t.Tipo == tipo);
+        AceptarOQuitar(t => t.Tipo == tipo);
     }
 
-    private void BotonAceptarColumna_Click(object sender, RoutedEventArgs e) => Aceptar(_ => true);
+    private void BotonAceptarColumna_Click(object sender, RoutedEventArgs e) => AceptarOQuitar(_ => true);
+
+    private void AceptarOQuitar(Func<Tramo, bool>? extenderA)
+    {
+        if (TodosPendientes(extenderA)) QuitarDelGesto(extenderA);
+        else Aceptar(extenderA);
+    }
 
     /// <summary>
     /// El gesto central de la ventana desde el issue #56: acepta el tramo
@@ -1768,6 +1796,9 @@ public partial class VentanaConfiguradorEstribos : Window
             // listas de grapas y cajas, editarlas en una las cambiaría en todas.
             _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores().Copiar();
 
+            // #168: lo que se aceptó, aparte de lo que se siga tecleando. Es lo que se genera.
+            _longitudinalAceptado[idColumna] = _longitudinalPorColumna[idColumna].Copiar();
+
             // El recubrimiento elegido también es parte de "la misma
             // configuración para varias columnas": se lleva a las que todavía
             // no tienen uno propio, sin pisar el que alguien ya eligió.
@@ -1783,6 +1814,7 @@ public partial class VentanaConfiguradorEstribos : Window
                 _configPorTramo[(idColumna, indice)] = CopiarTramo(plantilla);
 
                 _tramosAceptados.Add((idColumna, indice));
+                _aceptadoComo[(idColumna, indice)] = CopiarTramo(plantilla);
                 aceptados++;
 
                 // El chequeo de L1 vs altura sí depende de CADA tramo: distintas
@@ -1819,48 +1851,22 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstado.Text = string.Join(" ", mensaje);
 
-        RefrescarChulitos();
-        RedibujarElevacion();
-        RedibujarPanelPlanta();
-        ActualizarResumenDeGeneracion();
+        OlvidarDeshacer();
+        RefrescarEstadoAceptacion();
     }
 
     /// <summary>
-    /// Saca un tramo de la generación. El chulito no es una casilla que haya que
-    /// tildar (eso es justamente lo que pidió sacar William), pero tiene que
-    /// haber forma de deshacer uno puesto por error: se clickea el ✓ en la
-    /// elevación. La configuración del tramo NO se borra -- queda cargada por si
-    /// se lo vuelve a aceptar.
+    /// Saca un tramo de la columna activa de la generación: clic en su ✓ de la
+    /// elevación. La configuración del tramo NO se borra -- queda cargada por
+    /// si se lo vuelve a aceptar.
     /// </summary>
     private void QuitarAceptacion(int indiceTramo)
     {
-        if (_columnaIdActiva is not string idColumna) return;
-        if (!_tramosAceptados.Remove((idColumna, indiceTramo))) return;
+        if (_columnaIdActiva is not string idColumna || !_tramosAceptados.Contains((idColumna, indiceTramo))) return;
 
-        TextoEstado.Text = $"Tramo {indiceTramo} de {_columnaActiva?.Marca} sacado de la generación " +
+        Quitar(new[] { (idColumna, indiceTramo) });
+        TextoEstado.Text = $"Tramo {indiceTramo + 1} de {_columnaActiva?.Marca} sacado de la generación " +
                            "(su configuración queda cargada).";
-
-        RefrescarChulitos();
-        RedibujarElevacion();
-        RedibujarPanelPlanta();
-        ActualizarResumenDeGeneracion();
-    }
-
-    /// <summary>
-    /// Pasa <see cref="_tramosAceptados"/> a los <see cref="NodoLista"/>, que es
-    /// lo que muestra la lista de columnetas. Una fila de columna lleva chulito
-    /// si alguno de sus tramos está aceptado.
-    /// </summary>
-    private void RefrescarChulitos()
-    {
-        HashSet<string> columnasConAceptados = _tramosAceptados.Select(t => t.ColumnaId).ToHashSet();
-
-        foreach (NodoLista nodo in _nodos)
-        {
-            nodo.Aceptado = nodo.EsColumna
-                ? columnasConAceptados.Contains(nodo.ColumnaId)
-                : _tramosAceptados.Contains((nodo.ColumnaId, nodo.TramoIndice));
-        }
     }
 
     /// <summary>
@@ -1872,9 +1878,14 @@ public partial class VentanaConfiguradorEstribos : Window
         int columnas = _tramosAceptados.Select(t => t.ColumnaId).Distinct().Count();
         int tramos = _tramosAceptados.Count;
 
+        BotonQuitarTodos.Visibility = tramos > 0 ? Visibility.Visible : Visibility.Collapsed;
+
         if (tramos == 0)
         {
-            TextoResumenGeneracion.Text = "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar.";
+            // #168: después de generar no queda nada pendiente, y lo generado no se repite.
+            TextoResumenGeneracion.Text = _generadas.Count > 0
+                ? "Todavía no hay nada pendiente: lo generado tiene ✓ gris y no se vuelve a generar salvo que lo aceptes otra vez."
+                : "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar.";
             TextoResumenGeneracion.ToolTip = null;
             BotonGenerar.ToolTip = "Primero acepta al menos un tramo.";
             return;
@@ -1898,6 +1909,11 @@ public partial class VentanaConfiguradorEstribos : Window
         string completa = "Se van a generar estos tramos:\n" + string.Join("\n", porColumna);
 
         TextoResumenGeneracion.Text = $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓ — {lista}";
+
+        // #168: lo editado después de aceptar se genera con lo último aceptado.
+        int editados = _tramosAceptados.Count(t => EstadoDe(t.ColumnaId, t.Indice) == EstadoAceptacion.Editado);
+        if (editados > 0)
+            TextoResumenGeneracion.Text += $". Ojo: {editados} tramo(s) con ✓ ámbar tienen cambios sin aceptar; se generan con lo último aceptado.";
         TextoResumenGeneracion.ToolTip = completa;
         BotonGenerar.ToolTip = completa;
     }
@@ -2017,6 +2033,7 @@ public partial class VentanaConfiguradorEstribos : Window
             double alto = Math.Max(1, Y(tramo.ZInferior) - yTop);
             bool activo = i == _tramoActivoIndice;
             bool aceptado = _columnaIdActiva is not null && _tramosAceptados.Contains((_columnaIdActiva, i));
+            EstadoAceptacion estado = _columnaIdActiva is null ? EstadoAceptacion.Ninguno : EstadoDe(_columnaIdActiva, i);
 
             if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
             {
@@ -2041,7 +2058,7 @@ public partial class VentanaConfiguradorEstribos : Window
             // puede ser las tres cosas a la vez. Va con un tinte verde suave
             // sobre el tramo para que "lo que se genera" se lea de un vistazo
             // en toda la columna, no leyendo ✓ por ✓.
-            if (aceptado)
+            if (estado == EstadoAceptacion.Pendiente)
             {
                 var tinte = new Rectangle
                 {
@@ -2053,21 +2070,26 @@ public partial class VentanaConfiguradorEstribos : Window
                 Canvas.SetLeft(tinte, xColumna);
                 Canvas.SetTop(tinte, yTop);
                 CanvasElevacion.Children.Add(tinte);
+            }
 
+            // #168: verde = se genera, ámbar = cambiado desde que se aceptó o
+            // se generó, gris = ya generado. Solo se saca lo que está aceptado.
+            if (estado != EstadoAceptacion.Ninguno)
+            {
                 int indiceDelChulito = i;
                 var chulito = new TextBlock
                 {
                     Text = "✓",
                     FontSize = 13,
                     FontWeight = FontWeights.Bold,
-                    Foreground = Paleta.Exito,
-                    Cursor = System.Windows.Input.Cursors.Hand,
-                    ToolTip = "Este tramo se genera. Clic para sacarlo.",
+                    Foreground = ColorDe(estado),
+                    Cursor = aceptado ? System.Windows.Input.Cursors.Hand : null,
+                    ToolTip = AyudaDe(estado, aceptado),
                     Background = Brushes.Transparent,
                 };
                 Canvas.SetLeft(chulito, xColumna - sobresaleNudo - 18);
                 Canvas.SetTop(chulito, yTop + Math.Max(0, alto / 2 - 9));
-                chulito.MouseLeftButtonUp += (_, _) => QuitarAceptacion(indiceDelChulito);
+                if (aceptado) chulito.MouseLeftButtonUp += (_, _) => QuitarAceptacion(indiceDelChulito);
                 CanvasElevacion.Children.Add(chulito);
             }
 
@@ -2139,14 +2161,15 @@ public partial class VentanaConfiguradorEstribos : Window
 
             for (int i = 0; i < contexto.Tramos.Count; i++)
             {
+                // #168: lo ACEPTADO, no lo que quedó tecleado después.
                 tramos.Add(aceptados.Contains(i)
-                    ? (_configPorTramo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos))
+                    ? (_aceptadoComo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos))
                     : null);
             }
 
-            ConfigLongitudinal longitudinal = _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? l)
+            ConfigLongitudinal longitudinal = _longitudinalAceptado.TryGetValue(id, out ConfigLongitudinal? l)
                 ? l
-                : ConfigLongitudinalPorDefecto(_tipos);
+                : _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? actual) ? actual : ConfigLongitudinalPorDefecto(_tipos);
 
             plan.Columnas.Add(new ColumnaPlan
             {
@@ -2260,11 +2283,16 @@ public partial class VentanaConfiguradorEstribos : Window
 
         // #180: lo mismo que quedó guardado en el modelo (RegistroGeneradosRevit).
         if (_planEnviado is not null)
+        {
             foreach (ColumnaPlan columna in _planEnviado.Columnas)
             {
                 _generadas.TryGetValue(columna.Id, out ColumnaGenerada? previa);
                 _generadas[columna.Id] = ColumnaGenerada.Combinar(previa, columna, _planEnviado.GeneradoEl);
             }
+
+            // #168: lo generado pasa a ✓ gris y sale de la próxima generación.
+            MarcarGenerados(_planEnviado);
+        }
         _planEnviado = null;
 
         TextoEstado.Text =
@@ -2325,26 +2353,36 @@ public sealed class NodoLista : INotifyPropertyChanged
     public string? IdElementoHost { get; init; }
 
     /// <summary>
-    /// Si este tramo (o, en una fila de columna, alguno de sus tramos) está
-    /// aceptado y por lo tanto se va a generar. La fuente de la verdad es
-    /// <c>_tramosAceptados</c> en la ventana; esto es el espejo para la lista,
-    /// y lo sincroniza <c>RefrescarChulitos</c>.
+    /// En qué está este tramo (o, en una fila de columna, el resumen de sus
+    /// tramos) respecto de la generación (#168). La fuente de la verdad está
+    /// en la ventana; esto es el espejo para la lista, y lo sincroniza
+    /// <c>RefrescarEstadoAceptacion</c>.
     /// </summary>
-    private bool _aceptado;
-    public bool Aceptado
+    private EstadoAceptacion _estado;
+    public EstadoAceptacion Estado
     {
-        get => _aceptado;
+        get => _estado;
         set
         {
-            if (_aceptado == value) return;
-            _aceptado = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Aceptado)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Chulito)));
+            if (_estado == value) return;
+            _estado = value;
+            foreach (string propiedad in new[] { nameof(Estado), nameof(Chulito), nameof(ColorChulito), nameof(AyudaChulito) })
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propiedad));
         }
     }
 
-    /// <summary>El ✓ que muestra la lista -- vacío si no está aceptado.</summary>
-    public string Chulito => _aceptado ? "✓" : "";
+    /// <summary>El ✓ que muestra la lista -- vacío si no está aceptado ni generado.</summary>
+    public string Chulito => _estado == EstadoAceptacion.Ninguno ? "" : "✓";
+
+    public Brush ColorChulito => VentanaConfiguradorEstribos.ColorDe(_estado);
+
+    public string? AyudaChulito => _estado switch
+    {
+        EstadoAceptacion.Pendiente => "Se genera. Clic para sacarlo.",
+        EstadoAceptacion.Editado => "Cambiado desde que se aceptó o se generó. Clic para sacarlo si estaba aceptado.",
+        EstadoAceptacion.Generado => "Ya generado.",
+        _ => null,
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }
