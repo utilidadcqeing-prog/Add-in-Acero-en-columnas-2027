@@ -142,6 +142,12 @@ Git for Windows para crear las claves.
     antes no había licencia vigente: al abrir, «Buscar novedades» reescribe la franja de aviso y lo taparía.
 11. **`configurar()` arma la hoja** (pestañas, encabezados, lista de estados, columna de código como texto), para no
     hacerlo a mano. Si `Config!B2` está vacío, el aviso va a la cuenta que implementó el script.
+14. **Primero los add-ins en `CQEING-releases`, después el gestor en los dos repos** (2026-10-28, al implementar la
+    #197). Corrige el orden de la Tarea 8. Los gestores ya instalados leen solo el repo del código, así que no ven los
+    add-ins nuevos publicados en `CQEING-releases`, y nadie se queda sin botones por actualizar antes que el gestor.
+    Cuando llega el gestor nuevo (por el repo del código, con la release puente), ya encuentra los add-ins en
+    `CQEING-releases` y no muestra un catálogo vacío. Los add-ins se publican **solo** en `CQEING-releases`; el gestor,
+    en los dos mientras el repo del código siga público (paso «Release puente» de `publicar-gestor.yml`).
 
 ## Restricciones globales
 
@@ -444,20 +450,35 @@ Después de una `Aprobada` nueva, `Aviso` = `Licencia recibida. Reinicie Revit p
 
 ### Tarea 8: Publicar y cerrar el repo
 
-El orden importa: **primero el gestor**, porque trae el componente que pide la licencia. Quien actualice los add-ins
-sin tener el gestor nuevo se queda sin botones y sin forma de pedir acceso.
+El orden es el de la Decisión 14: **primero los add-ins en `CQEING-releases`, después el gestor**. `utilidadcqeing-prog`
+es una cuenta personal, no una organización (API de GitHub, `type: User`): el repo y el token los crea quien entra
+con esa cuenta.
 
-- [ ] **Repo nuevo.** Crear el repo público `utilidadcqeing-prog/CQEING-releases`, solo con releases y sin código. Lo
-      crea alguien con permisos de administrador de la organización (confirmar con Carlos).
-- [ ] **Token para publicar.** Un token de grano fino con permiso de escritura de *contents* solo sobre
-      `CQEING-releases`, guardado como secret `TOKEN_RELEASES`. En `publicar.yml` y `publicar-gestor.yml`:
-      `GH_TOKEN: ${{ secrets.TOKEN_RELEASES }}` y `gh release create … --repo utilidadcqeing-prog/CQEING-releases`.
-- [ ] **Cambiar el nombre del repo** a `utilidadcqeing-prog/CQEING-releases` en `Repositorio.Nombre` y en
-      `LanzadorGestor.EnlaceDescarga` (Hallazgo 6).
-- [ ] **Publicar el gestor** con `gestor-vX.Y.Z` en el repo actual, para que los gestores ya instalados lo encuentren,
-      y también en `CQEING-releases`. Después, cada add-in con su etiqueta.
-- [ ] **Cerrar.** Cuando los equipos aprobados tengan todo actualizado, pasar este repo a **privado** y borrar del repo
-      público las releases viejas, que no traen licencia.
+- [x] **Código** (rama `licencias-releases-197`, 2026-10-28): `Repositorio.Nombre` = `utilidadcqeing-prog/CQEING-releases`
+      y `LanzadorGestor.EnlaceDescarga` lo toma de ahí (Hallazgo 6). `publicar.yml` publica solo en `REPO_RELEASES`
+      con `TOKEN_RELEASES` y baja su permiso a `contents: read`. `publicar-gestor.yml` publica en `REPO_RELEASES` y,
+      con `github.token`, hace la **release puente** en el repo del código. Sin el secret, los dos fallan con un
+      mensaje claro. `LosWorkflowsPublicanDondeLeeElGestorTests` vigila que el workflow y `Repositorio.Nombre` coincidan.
+- [ ] **Repo nuevo** (cuenta `utilidadcqeing-prog`): <https://github.com/new>, nombre `CQEING-releases`, **público**,
+      marcar «Add a README file». Sin un primer commit, `gh release create` no puede crear la etiqueta.
+- [ ] **Token** (cuenta `utilidadcqeing-prog`): *Settings → Developer settings → Personal access tokens →
+      Fine-grained tokens → Generate new token*. Resource owner `utilidadcqeing-prog`; *Only select repositories* →
+      `CQEING-releases`; *Repository permissions → Contents: Read and write*; vencimiento de un año, con recordatorio
+      para renovarlo (vencido, las publicaciones fallan).
+- [ ] **Secret**: en el repo del código, *Settings → Secrets and variables → Actions → New repository secret*,
+      nombre `TOKEN_RELEASES`, valor el token. El token no se pega en ningún otro lado.
+- [ ] **URL de Carlos.** Tras la transferencia, Carlos **edita** la implementación de Juan (*Gestionar
+      implementaciones → lápiz → Nueva versión*): editarla no cambia la URL. Si en «Ejecutar como» sale su correo,
+      `ServicioLicencias.Url` se queda como está; si sigue el de Juan, crea una implementación nueva y se cambia la URL.
+      Comprobar antes de quitar a Juan: una solicitud nueva le llega a Carlos por correo, y después de quitarlo el
+      gestor sigue recibiendo respuesta.
+- [ ] **Unir** el PR #198 a `main` (ya trae esta rama). Sin etiquetas no se publica nada.
+- [ ] **Publicar cada add-in** con su etiqueta, ya con la licencia: van solo a `CQEING-releases` y los gestores viejos
+      no los ven.
+- [ ] **Publicar el gestor** con `gestor-vX.Y.Z`: queda en `CQEING-releases` y en el repo del código (puente).
+- [ ] **Cerrar.** Cuando los equipos aprobados tengan el gestor nuevo, pasar el repo del código a **privado**, quitar el
+      paso «Release puente» de `publicar-gestor.yml` y volver su permiso a `contents: read`. Las releases viejas quedan
+      ocultas con el repo privado; borrarlas es opcional.
 - [ ] **Avisar a Carlos** de lo que no tiene arreglo: una copia vieja que nunca se actualice sigue funcionando.
 
 ## Cómo probarlo
@@ -532,4 +553,7 @@ Después, la lista de la Tarea 7.
         menos de 12 h, el `revocado` recién se aplica en la primera renovación después de esas 12 h, y como mucho a los
         3 días, cuando vence.
   - [ ] Copiar `licencia.json` a otro PC (no hay otro PC disponible el 28-oct).
-- [ ] Tarea 8: publicado, repo privado, releases viejas borradas.
+- [ ] Tarea 8 (#197): publicado y repo del código privado.
+  - [x] 2026-10-28, rama `licencias-releases-197`: código y workflows (ver Tarea 8). `CQEING.Gestor.Core.Tests`
+        228/228 (2 nuevas) y `CQEING.Gestor.Tests` 37/37 en verde; `GestorRevit` compila para 2026 y 2027 sin avisos.
+  - [ ] Repo, token, secret, publicación y cierre (pasos de la Tarea 8).

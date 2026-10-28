@@ -4,8 +4,13 @@ on:
   push:
     tags: ['gestor-v*']
 
+# contents: write solo para la release puente en este repo (último paso).
 permissions:
   contents: write
+
+env:
+  # El mismo que Repositorio.Nombre en el gestor; una prueba vigila que coincidan.
+  REPO_RELEASES: utilidadcqeing-prog/CQEING-releases
 
 jobs:
   publicar:
@@ -60,6 +65,16 @@ jobs:
             if (-not (Test-Path (Join-Path Releases $archivo))) { throw "vpk no generó $archivo." }
           }
       - name: Crear la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.TOKEN_RELEASES }}
+        run: |
+          if (-not $env:GH_TOKEN) { throw "Falta el secret TOKEN_RELEASES (docs/planes/2026-10-28-licencias-hoja-google.md, Tarea 8)." }
+          $tag = '${{ github.ref_name }}'
+          gh release create $tag (Get-ChildItem Releases -File).FullName --repo $env:REPO_RELEASES --title $tag --notes-file notas.md
+      # Puente (issue #197): los gestores ya instalados leen este repo y se actualizan desde aquí al gestor que lee
+      # REPO_RELEASES. Quitar este paso cuando este repo pase a privado.
+      - name: Release puente en este repo
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
