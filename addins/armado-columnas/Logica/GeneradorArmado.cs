@@ -85,6 +85,9 @@ public static class GeneradorArmado
         if (ganchoPropio.Aviso is not null)
             res.Avisos.Add($"Estribos: {ganchoPropio.Aviso}; se usa el gancho configurado en cada tramo.");
 
+        if (VarillasPropias.CompletarPeso(doc) is string avisoPeso)
+            res.Avisos.Add($"Varillas: {avisoPeso}.");
+
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
         var ganchosYaAvisados = new HashSet<(ElementId Barra, ElementId Gancho)>();
 

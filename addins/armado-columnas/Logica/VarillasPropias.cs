@@ -54,6 +54,7 @@ public static class VarillasPropias
                     throw new InvalidOperationException($"«{tipo.Name}» quedó con {medido:0.#} mm en vez de {v.DiametroMm:0.#} mm");
             }
 
+            if (CompletarPeso(doc) is string avisoPeso) throw new InvalidOperationException(avisoPeso);
             transaccion.Commit();
             return null;
         }
@@ -62,6 +63,52 @@ public static class VarillasPropias
             if (transaccion.HasStarted() && !transaccion.HasEnded()) transaccion.RollBack();
             return ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Le pone a cada varilla propia el peso por metro del cuadro
+    /// (<see cref="CuadroVarillas.Varilla.KgPorMetro"/>). <c>RebarBarType.Create</c>
+    /// la entrega con 0, y entonces la masa de las barras salía 0 en las
+    /// cantidades (28-oct: «#3 CQEING» con 0 kg/m, «#3» de la plantilla con
+    /// 0,56). Corrige también las que ya estaban creadas en el modelo. Hay que
+    /// llamarla dentro de una transacción. Devuelve un aviso si alguna no se
+    /// pudo, o null.
+    ///
+    /// Se llenan dos cosas: cualquier parámetro del tipo con dato «masa por
+    /// unidad de longitud» que se pueda editar (en las plantillas del equipo,
+    /// «kg/m»: es lo que leen las tablas y el cuadro de cantidades, y el único
+    /// peso que hay en Revit 2026), y en 2027 además el peso propio de la
+    /// barra (<c>BarMassPerUnitLength</c>, que no existe en la API de 2026).
+    /// </summary>
+    public static string? CompletarPeso(Document doc)
+    {
+        Dictionary<string, RebarBarType> tipos = new FilteredElementCollector(doc)
+            .OfClass(typeof(RebarBarType)).Cast<RebarBarType>()
+            .GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First());
+
+        string? aviso = null;
+        foreach (CuadroVarillas.Varilla v in CuadroVarillas.Cuadro)
+        {
+            if (!tipos.TryGetValue(CuadroVarillas.NombrePropio(v.Numero), out RebarBarType? tipo)) continue;
+            try
+            {
+                double objetivo = UnitUtils.ConvertToInternalUnits(v.KgPorMetro, UnitTypeId.KilogramsPerMeter);
+                foreach (Parameter p in tipo.Parameters)
+                {
+                    if (p.IsReadOnly || p.StorageType != StorageType.Double) continue;
+                    if (p.Definition.GetDataType() != SpecTypeId.MassPerUnitLength) continue;
+                    if (Math.Abs(p.AsDouble() - objetivo) > 1e-9) p.Set(objetivo);
+                }
+#if !REVIT2026
+                if (Math.Abs(tipo.BarMassPerUnitLength - objetivo) > 1e-9) tipo.BarMassPerUnitLength = objetivo;
+#endif
+            }
+            catch (Exception ex)
+            {
+                aviso = $"no se pudo poner el peso por metro de «{tipo.Name}» ({v.KgPorMetro:0.###} kg/m): {ex.Message}";
+            }
+        }
+        return aviso;
     }
 
     /// <summary>
