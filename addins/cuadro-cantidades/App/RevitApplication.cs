@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Windows.Media.Imaging;
 using Autodesk.Revit.UI;
+using CQEING.Compartido;
 using CQEING_CuadroCantidades.Commands;
 using CQEING_CuadroCantidades.Core;
 using CQEING_CuadroCantidades.Services;
@@ -22,6 +23,10 @@ public sealed class RevitApplication : IExternalApplication
     /// <returns>Resultado de la ejecución del inicio de la aplicación.</returns>
     public Result OnStartup(UIControlledApplication application)
     {
+        // Sin licencia vigente no se inicia nada ni se crea el botón; el aviso lo da el componente del gestor (issue #189).
+        // OnShutdown no se ve afectado: cada servicio comprueba si se inició antes de apagarse.
+        if (!Licencia.Vigente(out _)) return Result.Succeeded;
+
         // Inicializa el gestor de ejecución de eventos asíncronos en el hilo de Revit
         RevitEventExecutor.Initialize();
 

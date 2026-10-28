@@ -8,6 +8,9 @@ public class AppVigas : IExternalApplication
 {
     public Result OnStartup(UIControlledApplication app)
     {
+        // Sin licencia vigente no se crea el botón; el aviso lo da el componente del gestor (issue #189).
+        if (!Licencia.Vigente(out _)) return Result.Succeeded;
+
         RibbonPanel panel = CintaCqeing.ObtenerPanel(app, "Vigas");
 
         panel.AddItem(CintaCqeing.CrearBoton(
