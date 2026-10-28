@@ -135,6 +135,11 @@ Git for Windows para crear las claves.
     «Abrir el gestor», y no se cierra sola. Texto: el motivo con el código del equipo y «Abra el Gestor de add-ins y
     pulse "Solicitar acceso". Si ya lo pidió y se lo aprobaron, reinicie Revit.». El registro de soporte de
     `AvisoNovedades` pasó a `RegistroSoporte`, compartido; la licencia escribe en `licencia-revit.log`.
+13. **La consulta de la licencia al abrir el gestor no ocupa la ventana** (2026-10-28, al implementar la #195).
+    `VistaGestor.ConsultarLicenciaAsync` corre a la par de «Buscar novedades» y no pasa por `OcuparAsync`, así las
+    tarjetas y sus botones no esperan a Google. Mientras consulta, «Solicitar acceso» queda deshabilitado para no mandar
+    dos pedidos a la vez. El aviso «Licencia recibida. Reinicie Revit…» sale solo al pulsar «Solicitar acceso» y solo si
+    antes no había licencia vigente: al abrir, «Buscar novedades» reescribe la franja de aviso y lo taparía.
 11. **`configurar()` arma la hoja** (pestañas, encabezados, lista de estados, columna de código como texto), para no
     hacerlo a mano. Si `Config!B2` está vacío, el aviso va a la cuenta que implementó el script.
 
@@ -490,6 +495,21 @@ Después, la lista de la Tarea 7.
       (Decisión 12) y `RegistroSoporte.cs`, llamado desde `AppGestorRevit.OnStartup`. `VentanaAviso.Boton` pasó a
       `internal` para reutilizarlo. `GestorRevit` compila para 2026 y 2027 sin avisos; núcleo (226) y gestor (28) en
       verde. El comportamiento se prueba en Revit en la Tarea 7.
-- [ ] Tarea 6 implementada.
+- [x] Tarea 6 (#195), 2026-10-28, rama `licencias-gestor-195` (sale de `seguridad-licencias`):
+  - [x] `VistaGestor` recibe `RenovadorLicencia` (después de `reinicio`) y suma `TextoLicencia`, `CodigoEquipo`,
+        `PideNombre`, `NombreSolicitante`, `SolicitarAcceso`, `CopiarCodigo` y `ConsultarLicenciaAsync` (Decisión 13).
+        `VentanaPrincipal.xaml` tiene la franja encima del año de Revit y las tarjetas; `VentanaPrincipal.xaml.cs`
+        lanza la consulta junto con «Buscar novedades»; `Program.Main` pasa `RenovadorLicencia.Crear(ClienteHttp.Crear())`.
+  - [x] Pruebas: `Apoyo/LicenciasFalso.cs` (servicio falso con clave RSA de prueba y código `AAAA-BBBB-CCCC-DDDD`),
+        `Entorno` con carpeta de licencia temporal y reloj fijo, y `VistaGestorLicenciaTests` con 9 casos: vigente,
+        sin licencia y nombre vacío, pendiente, aprobada con aviso de reinicio, aprobada con licencia previa sin aviso,
+        sin conexión sin licencia, sin conexión con licencia vigente, revocada, y que la consulta no frena las tarjetas.
+        `CQEING.Gestor.Tests` 37/37 y `CQEING.Gestor.Core.Tests` 226/226 en verde; `CQEING.Gestor` compila.
+  - [x] Captura real en `docs/planes/imagenes/2026-10-28-licencia-gestor.png`: el gestor compilado de esta rama
+        (`gestor/CQEING.Gestor/bin/Debug/net8.0-windows/CQEING.Gestor.exe`) abierto en el PC del desarrollador, sin
+        `licencia.json`. La consulta al abrir fue contra el servicio de prueba real (Hallazgo 11) y respondió `pendiente`:
+        la franja muestra «Solicitud enviada. Falta que la aprueben.» con el código del equipo, y las tarjetas cargaron
+        sin esperar a la licencia. Sin nombre guardado, la solicitud fue con el usuario de Windows (Tarea 3, paso 1).
+        Falta probar «Solicitar acceso», «Copiar» y el paso a `aprobado` en la Tarea 7 (#196).
 - [ ] Tarea 7: probado en Revit.
 - [ ] Tarea 8: publicado, repo privado, releases viejas borradas.
