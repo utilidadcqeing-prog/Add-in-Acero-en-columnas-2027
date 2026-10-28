@@ -91,67 +91,7 @@ public static class BarraContinua
         }
 
         return $"Rebar {r.Id.Value} host {r.GetHostId().Value} " +
-               $"({GeometriaSeccion.Metros(a.X):0.###}, {GeometriaSeccion.Metros(a.Y):0.###}) Z {Z(a.Z)} -> {Z(b.Z)} ganchos[{ganchos}]" +
-               DescribirLargo(r);
-    }
-
-    /// <summary>
-    /// TEMPORAL -- #177: las longitudinales salen unos cm más largas. Agrega
-    /// el largo que da Revit (redondeado y sin redondear), la altura que
-    /// ocupa la barra contando ganchos y radios, y el redondeo que se le
-    /// aplica, para compararlo con el largo de corte de la pestaña.
-    /// </summary>
-    private static string DescribirLargo(Rebar r)
-    {
-        string texto = "";
-        try { texto += $"; largo total {GeometriaSeccion.Metros(r.TotalLength):0.####}"; }
-        catch (Exception ex) { texto += $"; largo total: {ex.GetType().Name}"; }
-
-        try
-        {
-            Parameter? largo = r.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH);
-            if (largo is not null) texto += $", REBAR_ELEM_LENGTH {GeometriaSeccion.Metros(largo.AsDouble()):0.####}";
-        }
-        catch (Exception ex) { texto += $", REBAR_ELEM_LENGTH: {ex.GetType().Name}"; }
-
-        try
-        {
-            List<XYZ> puntos = r
-                .GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0)
-                .SelectMany(c => c.Tessellate())
-                .ToList();
-            texto += $", con ganchos Z {Z(puntos.Min(q => q.Z))} -> {Z(puntos.Max(q => q.Z))}";
-
-            // Lo que se ve acotado en un plano: la pata del gancho hasta el
-            // borde exterior del doblez (eje + medio diámetro), para
-            // compararla con el gancho de la tabla.
-            (XYZ a, XYZ _) = Extremos(r);
-            double pata = puntos.Max(q => Math.Sqrt((q.X - a.X) * (q.X - a.X) + (q.Y - a.Y) * (q.Y - a.Y)));
-            if (pata > 1e-6 && r.Document.GetElement(r.GetTypeId()) is RebarBarType tipo)
-                texto += $", pata exterior del gancho {GeometriaSeccion.Metros(pata + tipo.BarModelDiameter / 2):0.####}";
-        }
-        catch (Exception ex) { texto += $", con ganchos: {ex.GetType().Name}"; }
-
-        texto += $", redondeo {DescribirRedondeo(r.GetReinforcementRoundingManager())}";
-        return texto;
-    }
-
-    /// <summary>TEMPORAL -- #177: de dónde sale el redondeo del largo y cuánto vale.</summary>
-    public static string DescribirRedondeo(ReinforcementRoundingManager gestor)
-    {
-        try
-        {
-            if (!gestor.IsActiveOnElement) return "inactivo";
-            if (gestor is not RebarRoundingManager barras) return "activo";
-            return $"activo ({barras.ApplicableReinforcementRoundingSource}): largo total " +
-                   $"{barras.ApplicableTotalLengthRounding:0.####} {gestor.GetLengthUnitTypeId().TypeId} " +
-                   $"{barras.ApplicableTotalLengthRoundingMethod}, tramos {barras.ApplicableSegmentLengthRounding:0.####} " +
-                   $"{barras.ApplicableSegmentLengthRoundingMethod}";
-        }
-        catch (Exception ex)
-        {
-            return $"? ({ex.GetType().Name}: {ex.Message})";
-        }
+               $"({GeometriaSeccion.Metros(a.X):0.###}, {GeometriaSeccion.Metros(a.Y):0.###}) Z {Z(a.Z)} -> {Z(b.Z)} ganchos[{ganchos}]";
     }
 
     /// <summary>

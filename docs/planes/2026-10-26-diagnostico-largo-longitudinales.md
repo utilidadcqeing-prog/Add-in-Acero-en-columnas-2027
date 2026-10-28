@@ -139,9 +139,12 @@ Misma columna con zapata, 16 piezas #4 CQEING.
   3,5003 / 6,0003 / 7,0003 / 2,5003 (antes, 1,4 mm de más). **OK.**
 - El gancho ya no se sale de la columna (Luciano).
 
-## Qué se agregó para medir (temporal, solo Debug)
+## Qué se agregó para medir (temporal, solo Debug) -- ya sacado
 
-El registro `%TEMP%\practicacq-longitudinal.log` ahora anota:
+Se sacó el 28-10, después del retest y de verificar que el cambio de
+forma del #176 (`DetallesPlegado.PonerFormaRecta`, «CQ Recta 90-0» /
+«CQ Recta 0-90») conserva los ganchos, la pata de 0,22 y los largos
+3,50 / 7,00 / 6,00 / 2,50. Mientras estuvo, el registro `%TEMP%\practicacq-longitudinal.log` ahora anota:
 
 - `REDONDEO del proyecto: ...` una vez por corrida (si está activo, de
   cuánto y con qué método).
@@ -171,4 +174,4 @@ todas desde Revit 2014). No cambia el acero que se genera.
 - [x] Retest en Revit (28-10): OK.
 - [ ] Unificar con vigas (B o cola E) con Carlos/Juan.
 - [ ] Recubrimiento arriba: la barra llega a la cara superior de la columna (tema aparte).
-- [ ] Sacar el diagnóstico temporal cuando quede resuelto.
+- [x] Sacado el diagnóstico temporal (28-10).

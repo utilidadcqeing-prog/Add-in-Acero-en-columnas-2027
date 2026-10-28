@@ -103,14 +103,6 @@ public static class GeneradorLongitudinal
 #if DEBUG
         BarraContinua.Traza = linea => traza.AppendLine(linea);
         ganchoPropio.Traza = linea => traza.AppendLine(linea);
-        // TEMPORAL -- #177: el redondeo de largos del proyecto (Configuración
-        // de armadura) puede alargar las barras; el add-in no lo controla.
-        try
-        {
-            traza.AppendLine("REDONDEO del proyecto: " + BarraContinua.DescribirRedondeo(
-                ReinforcementSettings.GetReinforcementSettings(doc).GetRebarRoundingManager()));
-        }
-        catch (Exception ex) { traza.AppendLine($"REDONDEO del proyecto: {ex.GetType().Name}: {ex.Message}"); }
 #endif
 
         foreach (ColumnaPlan columnaPlan in opciones.Plan.Columnas)
@@ -496,12 +488,6 @@ public static class GeneradorLongitudinal
             (RebarBarType barraDeLaPosicion, double x, double y, XYZ normal, bool esquina) = anillo[i];
 
             PlanTraslapos.PlanTipo plan = planTraslapos.De(grupoA: i % 2 == 0, EstandarCQ.DiametroMm(barraDeLaPosicion));
-
-            // TEMPORAL -- #177: lo que calculó la pestaña «Traslapos», para
-            // compararlo con el largo que da Revit a cada pieza.
-            BarraContinua.Traza?.Invoke(
-                $"PLAN grupo {plan.Grupo} Ø{plan.DiametroMm:0} «{barraDeLaPosicion.Name}»: piezas " +
-                string.Join("; ", plan.Piezas.Select(pz => $"{pz.ZDesde:0.###}..{pz.ZHasta:0.###} corte {pz.LargoCorte:0.###}")));
 
             // Un tipo de empalme por largo de traslapo; solo se crean los que
             // de verdad se usan.
