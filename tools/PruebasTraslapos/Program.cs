@@ -790,6 +790,16 @@ Probar("cuadro_2_cargado", () =>
     Cierto(CuadroVarillas.Cuadro.Single(v => v.Numero == 6).GanchoEstribo135 is null, "#6 sin 135°");
 });
 
+// ---- #177: el gancho de 90° suma menos que el B del cuadro, para que la pata por fuera mida B
+Probar("aporte_gancho_90_pata_b", () =>
+{
+    // #4: radio por el eje 0,04435; arco 0,0697 + B 0,222 - 2 radios 0,0887 - un diámetro 0,0127.
+    double aporte = CuadroVarillas.Cuadro.Single(v => v.Numero == 4).AporteGancho90;
+    Cierto(Math.Abs(aporte - 0.1903) < 0.0005, $"#4 suma 0,1903 (da {aporte:0.0000})");
+    foreach (CuadroVarillas.Varilla v in CuadroVarillas.Cuadro)
+        Cierto(v.AporteGancho90 > 0 && v.AporteGancho90 < v.Gancho90, $"#{v.Numero}: el aporte es positivo y menor que la pata");
+});
+
 // ---- #131: el acomodo de traslapos de una sección, sin Revit
 
 // Esquina inferior izquierda de una 40×40 (metros), #5, traslapo a 1,5–2,2 m.

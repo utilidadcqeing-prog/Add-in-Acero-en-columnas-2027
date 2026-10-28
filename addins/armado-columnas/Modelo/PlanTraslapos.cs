@@ -222,7 +222,7 @@ public static class PlanTraslapos
                 $"la barra Ø {diametroMm:0.#} mm del tipo {grupo} no está en el cuadro de la empresa: " +
                 "no se conoce su gancho ni su solape.");
 
-        var calculo = new Busqueda(columna, columna.ConGanchos ? varilla.Gancho90 : 0, solape, opciones, rangos);
+        var calculo = new Busqueda(columna, columna.ConGanchos ? varilla.AporteGancho90 : 0, solape, opciones, rangos);
         return calculo.Resolver() is { } plan
             ? new PlanTipo(grupo, diametroMm, plan.Piezas, plan.Traslapos, solape, enTramosDelOtro, null)
             : Fallido(grupo, diametroMm, solape, enTramosDelOtro, calculo.Motivo(grupo, varilla, enTramosDelOtro));
