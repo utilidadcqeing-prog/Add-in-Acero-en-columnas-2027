@@ -511,5 +511,25 @@ Después, la lista de la Tarea 7.
         la franja muestra «Solicitud enviada. Falta que la aprueben.» con el código del equipo, y las tarjetas cargaron
         sin esperar a la licencia. Sin nombre guardado, la solicitud fue con el usuario de Windows (Tarea 3, paso 1).
         Falta probar «Solicitar acceso», «Copiar» y el paso a `aprobado` en la Tarea 7 (#196).
-- [ ] Tarea 7: probado en Revit.
+- [ ] Tarea 7 (#196), 2026-10-28, Revit 2027.3, con los 4 add-ins y `gestor-revit` desplegados desde `licencias-gestor-195`:
+  - [x] Sin `licencia.json`: en la pestaña CQEING solo sale el panel «Gestor» y un único aviso con el código del equipo
+        (`imagenes/2026-10-28-licencia-revit-sin-licencia.png`). Juan ya había aprobado el equipo, así que el componente
+        renovó en segundo plano y dejó una licencia vigente hasta el 31-10-2026.
+  - [x] Con la licencia aprobada y Revit reiniciado: salen los 4 paneles y no hay aviso
+        (`imagenes/2026-10-28-licencia-revit-con-licencia.png`). El gestor de la rama muestra «Licencia vigente hasta el
+        31-10-2026 · PC» (`imagenes/2026-10-28-licencia-gestor-vigente.png`). El botón «Gestor de add-ins» de Revit abre
+        el gestor **instalado** (`%LOCALAPPDATA%\CQEING.Gestor\current`), que no tiene la franja hasta que se publique (Tarea 8).
+  - [x] Fecha `vence` editada a mano (2026 → 2027): solo sale el panel «Gestor». Al abrir, el componente vio la licencia
+        inválida, pidió otra y guardó una buena, emitida a las 20:17 UTC y con su vencimiento real.
+  - [x] Sin red, con la licencia vigente: los 4 add-ins cargan. Según los journals, desde que arranca Revit hasta que
+        arrancan los add-ins pasan 35 s sin red (`journal.0045`) y 38 s con red (`journal.0044`): la licencia no lo
+        demora. Después Revit sí se queda esperando (pausas de 27 s y 22 s), pero son servicios de Autodesk:
+        «Get Service Settings Retry … Host desconocido» y «Fail to download revit config from service». No es de CQEING.
+  - [x] Revocado: Juan pasó el equipo a `revocado`. Para no esperar las 12 h de la renovación (Decisión 4), se quitó
+        `licencia.json` a mano y se abrió Revit con red: solo sale el panel «Gestor» con el aviso. El gestor de la rama
+        muestra «El acceso de este equipo fue retirado. Código del equipo: D90A-820C-ACED-F4D9», con «Su nombre» y
+        «Solicitar acceso» (`imagenes/2026-10-28-licencia-gestor-revocada.png`). Ojo: con una licencia emitida hace
+        menos de 12 h, el `revocado` recién se aplica en la primera renovación después de esas 12 h, y como mucho a los
+        3 días, cuando vence.
+  - [ ] Copiar `licencia.json` a otro PC (no hay otro PC disponible el 28-oct).
 - [ ] Tarea 8: publicado, repo privado, releases viejas borradas.
