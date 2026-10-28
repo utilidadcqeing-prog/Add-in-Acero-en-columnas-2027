@@ -26,7 +26,7 @@
         </Border>
 
         <TextBlock TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Style="{StaticResource TextoAyuda}" Margin="0,8,0,0"
-                   Text="Valores en metros. E = largo recto del gancho; D = diámetro de doblado. «—»: el cuadro no lo da (la #2 no tiene traslapo en columnas; de la #6 a la #8 no hay estribo de 135°). En azul, las varillas que usa la columna activa." />
+                   Text="Valores en metros. B = pata del gancho de 90° de las longitudinales, medida por fuera del doblez (lo que se acota en el plano); E = largo recto del gancho; D = diámetro de doblado. «—»: el cuadro no lo da (la #2 no tiene traslapo en columnas; de la #6 a la #8 no hay estribo de 135°). En azul, las varillas que usa la columna activa." />
 
         <Button Content="Cerrar" Width="90" Height="30" HorizontalAlignment="Right" Style="{StaticResource BotonSecundario}" Margin="0,12,0,0"
                 Click="BotonCerrar_Click" />
