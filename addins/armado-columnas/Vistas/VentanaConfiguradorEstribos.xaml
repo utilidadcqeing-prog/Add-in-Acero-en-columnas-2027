@@ -220,10 +220,16 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones" ToolTip="Elige una configuración guardada para cargarla en el panel."
+                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones"
+                                  ToolTip="Elige una configuración guardada: se carga en la columna activa y en las que abras después que todavía no tengan nada propio."
                                   SelectionChanged="ComboConfiguraciones_SelectionChanged" />
-                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" ToolTip="Borra del modelo la configuración elegida en la lista." Content="Borrar" Style="{StaticResource BotonPeligro}"
+                        <!-- #178: volver a aplicarla (con una sola en la lista no se puede "volver a elegir"). -->
+                        <Button Grid.Column="1" x:Name="BotonAplicarConfiguracion" Content="Aplicar" Style="{StaticResource BotonSecundario}" IsEnabled="False"
+                                ToolTip="Carga la configuración elegida en todos los tramos de la columna activa, aunque ya tenga la suya. No acepta nada."
+                                Height="24" Margin="6,0,0,0" Click="BotonAplicarConfiguracion_Click" />
+                        <Button Grid.Column="2" x:Name="BotonBorrarConfiguracion" ToolTip="Borra del modelo la configuración elegida en la lista." Content="Borrar" Style="{StaticResource BotonPeligro}"
                                 Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
                     </Grid>
                     <Grid Margin="0,4,0,0">

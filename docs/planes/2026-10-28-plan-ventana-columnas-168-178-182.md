@@ -95,8 +95,11 @@ Qué tiene cada columna, de mayor a menor prioridad:
 
 ## Pendiente
 
-- [ ] #182
-- [ ] #178 + #179
+- [x] #182 (a5d2035)
+- [x] #178: `AplicarConfiguracion` lleva la configuración a todos los tramos
+      de la columna y a su longitudinal; `TieneAlgoPropio` = aceptado o algo
+      distinto del valor por defecto. Botón «Aplicar».
+- [ ] #179
 - [ ] #180
 - [ ] #168
 - [ ] #181

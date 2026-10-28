@@ -399,10 +399,14 @@ public partial class VentanaConfiguradorEstribos : Window
         _tramoActivoIndice = nodo.EsColumna ? 0 : nodo.TramoIndice;
         _modoColumnaCompleta = nodo.EsColumna;
 
+        // #178: la configuración elegida en la lista, si la columna no tiene nada propio.
+        string? configuracionCargada = CargarConfiguracionElegidaSiHaceFalta(nodo.ColumnaId);
+
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
         CargarRecubrimientoDeColumnaActiva();
+        if (configuracionCargada is not null) TextoEstado.Text = configuracionCargada;
         MostrarAvisos();
         NotificarElementosActivos();
 
@@ -451,40 +455,121 @@ public partial class VentanaConfiguradorEstribos : Window
         }
     }
 
+    /// <summary>La configuración elegida en la lista, o null si no hay ninguna elegida.</summary>
+    private ConfiguracionGuardada? ConfiguracionElegida() =>
+        ComboConfiguraciones.SelectedItem is string nombre ? _almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) : null;
+
     /// <summary>
-    /// Elegir una configuración solo CARGA el panel -- no acepta ningún tramo.
-    /// Llevarla a los tramos es el otro gesto (Aceptar), a propósito: así se
-    /// puede mirar qué trae antes de decidir nada.
+    /// Elegir una configuración la CARGA en la columna activa -- no acepta
+    /// ningún tramo. Llevarla a la generación es el otro gesto (Aceptar), a
+    /// propósito: así se puede mirar qué trae antes de decidir nada.
     /// </summary>
     private void ComboConfiguraciones_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        BotonAplicarConfiguracion.IsEnabled = ComboConfiguraciones.SelectedItem is string;
         if (_refrescandoConfiguraciones) return;
-        if (ComboConfiguraciones.SelectedItem is not string nombre) return;
-        if (_almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) is not { } guardada) return;
+        if (ConfiguracionElegida() is not { } guardada || _columnaIdActiva is not string idColumna) return;
 
-        MostrarConfigEnPanel(guardada.Tramo);
+        CampoNombreConfiguracion.Text = guardada.Nombre;
+        TextoEstado.Text = AplicarConfiguracion(guardada, idColumna);
+        MostrarColumnaActivaEnPanel();
+    }
+
+    /// <summary>
+    /// #178: con una sola configuración en la lista no hay forma de "volver a
+    /// elegirla", y una columna que ya tiene lo suyo no la toma sola al
+    /// activarse. Este botón la aplica a la columna activa.
+    /// </summary>
+    private void BotonAplicarConfiguracion_Click(object sender, RoutedEventArgs e)
+    {
+        if (ConfiguracionElegida() is not { } guardada)
+        {
+            TextoEstado.Text = "Elige en la lista la configuración que quieras aplicar.";
+            return;
+        }
+        if (_columnaIdActiva is not string idColumna) return;
+
+        TextoEstado.Text = AplicarConfiguracion(guardada, idColumna);
+        MostrarColumnaActivaEnPanel();
+    }
+
+    /// <summary>
+    /// Lleva la configuración a TODOS los tramos de la columna y a su acero
+    /// longitudinal (con sus estribos menores). Solo carga: no acepta nada.
+    /// Devuelve el texto para el estado.
+    /// </summary>
+    private string AplicarConfiguracion(ConfiguracionGuardada guardada, string idColumna)
+    {
+        ColumnaContexto columna = idColumna == _columnaIdActiva && _columnaActiva is not null ? _columnaActiva : _contexto.Leer(idColumna);
+        foreach (Tramo tramo in columna.Tramos)
+            _configPorTramo[(idColumna, tramo.Indice)] = CopiarTramo(guardada.Tramo);
 
         // Los estribos menores (grapas y cajas) no están en el panel: se editan
-        // aparte y viven por columna. Cargar la configuración los lleva a la
-        // columna activa, si no el resumen que se muestra sería mentira.
+        // aparte y viven por columna. La configuración los lleva a la columna,
+        // si no el resumen que se muestra sería mentira.
         ConfigLongitudinal longitudinal = guardada.Longitudinal.Copiar();
         bool eraVieja = longitudinal.MigrarBarrasPorCara();
         longitudinal.MigrarEstribosMenores();
         int descartadas = longitudinal.DescartarMenoresFueraDeRango();
-        if (_columnaIdActiva is string idColumna) _longitudinalPorColumna[idColumna] = longitudinal;
-        MostrarLongitudinalEnPanel(longitudinal);
-
-        CampoNombreConfiguracion.Text = nombre;
-        RevalidarPanel();
+        _longitudinalPorColumna[idColumna] = longitudinal;
 
         string menores = ResumenEstribosMenores(longitudinal);
-        TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel ({menores.ToLowerInvariant().TrimEnd('.')}). " +
-                           "Todavía no se aplicó a ningún tramo: para eso, aprieta Aceptar.";
+        string texto = $"Configuración «{guardada.Nombre}» cargada en {columna.Marca} ({menores.ToLowerInvariant().TrimEnd('.')}). " +
+                       "Todavía no se aceptó ningún tramo: para eso, aprieta Aceptar.";
         if (eraVieja)
-            TextoEstado.Text += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
+            texto += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
         if (descartadas > 0)
-            TextoEstado.Text += $" Se quitaron {descartadas} estribo(s) menor(es) que apuntaban a barras que esta configuración ya no tiene.";
+            texto += $" Se quitaron {descartadas} estribo(s) menor(es) que apuntaban a barras que esta configuración ya no tiene.";
+        return texto;
     }
+
+    /// <summary>Vuelve a llenar el panel con lo guardado de la columna activa (tramo activo y longitudinal).</summary>
+    private void MostrarColumnaActivaEnPanel()
+    {
+        CargarPanelDelTramoActivo();
+        CargarLongitudinalDeColumnaActiva();
+        RevalidarPanel();
+    }
+
+    /// <summary>
+    /// #178: si la columna no tiene nada propio (ni tocado en esta sesión ni
+    /// aceptado), toma la configuración elegida en la lista. Una columna que ya
+    /// tiene lo suyo se respeta: para pisarla está «Aplicar». Devuelve el texto
+    /// para el estado, o null si no se cargó nada.
+    /// </summary>
+    private string? CargarConfiguracionElegidaSiHaceFalta(string idColumna)
+    {
+        if (ConfiguracionElegida() is not { } guardada || TieneAlgoPropio(idColumna)) return null;
+        return AplicarConfiguracion(guardada, idColumna);
+    }
+
+    /// <summary>
+    /// Si la columna tiene algo distinto de los valores por defecto: aceptado,
+    /// o algún tramo o el longitudinal cambiado. Solo haber pasado por ella no
+    /// cuenta (al navegar se guarda lo que muestra el panel, que puede ser el
+    /// por defecto).
+    /// </summary>
+    private bool TieneAlgoPropio(string idColumna)
+    {
+        if (_tramosAceptados.Any(t => t.ColumnaId == idColumna)) return true;
+
+        ConfigTramo porDefecto = ConfigPorDefecto(_tipos);
+        if (_configPorTramo.Any(kv => kv.Key.ColumnaId == idColumna && !ComparadorConfig.Igual(kv.Value, porDefecto))) return true;
+
+        return _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? longitudinal) &&
+               !ComparadorConfig.Igual(longitudinal, ConfigLongitudinalPorDefecto(_tipos));
+    }
+
+    private static ConfigTramo CopiarTramo(ConfigTramo c) => new()
+    {
+        Modo = c.Modo,
+        TipoBarraNombre = c.TipoBarraNombre,
+        TipoGanchoNombre = c.TipoGanchoNombre,
+        EspaciadoUniforme = c.EspaciadoUniforme,
+        LongitudConfinamiento = c.LongitudConfinamiento,
+        EspaciadoConfinado = c.EspaciadoConfinado,
+        EspaciadoNoConfinado = c.EspaciadoNoConfinado,
+    };
 
     /// <summary>
     /// Enter en el nombre de la configuración guarda, en vez de disparar
@@ -1582,16 +1667,7 @@ public partial class VentanaConfiguradorEstribos : Window
                 // Copia independiente por tramo -- no una referencia compartida.
                 // Editar uno solo después (con las flechas) no le tiene que
                 // cambiar el valor a los demás que recibieron esta misma config.
-                _configPorTramo[(idColumna, indice)] = new ConfigTramo
-                {
-                    Modo = plantilla.Modo,
-                    TipoBarraNombre = plantilla.TipoBarraNombre,
-                    TipoGanchoNombre = plantilla.TipoGanchoNombre,
-                    EspaciadoUniforme = plantilla.EspaciadoUniforme,
-                    LongitudConfinamiento = plantilla.LongitudConfinamiento,
-                    EspaciadoConfinado = plantilla.EspaciadoConfinado,
-                    EspaciadoNoConfinado = plantilla.EspaciadoNoConfinado,
-                };
+                _configPorTramo[(idColumna, indice)] = CopiarTramo(plantilla);
 
                 _tramosAceptados.Add((idColumna, indice));
                 aceptados++;
