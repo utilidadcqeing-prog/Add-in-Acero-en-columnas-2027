@@ -248,6 +248,12 @@ public partial class PanelVistaPrevia : UserControl
             bool tapada = PaqueteEstribos.EstaTapada(p, piezas);
             Brush color = tapada ? ColorTapada : Pincel(diametroPieza(p));
             double grosor = Math.Max(1.2, diametroPieza(p) / 1000 * escala);
+            // Un borde fino, como el de las barras: con el mismo diámetro que
+            // el estribo grande salían del mismo color y no se veía dónde
+            // empezaba cada uno (#182).
+            Lienzo.Children.Add(DibujoArmado.Trazo(
+                PlantaArmado.Menor(p, k => BarrasDe(p.Eje, k), centroComun, diametroPieza(p), doblezPieza(p)),
+                Q, Paleta.Texto, grosor + 1, tapada ? 0.6 : 1));
             Lienzo.Children.Add(DibujoArmado.Trazo(
                 PlantaArmado.Menor(p, k => BarrasDe(p.Eje, k), centroComun, diametroPieza(p), doblezPieza(p)),
                 Q, color, grosor, tapada ? 0.6 : 1));
