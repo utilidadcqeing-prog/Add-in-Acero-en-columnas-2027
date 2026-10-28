@@ -7,4 +7,10 @@
     <RootNamespace>CQEING.Gestor.Core</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- La misma verificación de licencia que compila cada add-in (addins/compartido): una sola fuente. Issue #189. -->
+    <Compile Include="..\..\addins\compartido\Licencia.cs;..\..\addins\compartido\CodigoEquipo.cs" Link="Compartido\%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="CQEING.Gestor.Core.Tests" />
+  </ItemGroup>
+
 </Project>

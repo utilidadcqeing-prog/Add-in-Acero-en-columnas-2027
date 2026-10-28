@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Firma real de Apps Script para probar que .NET la verifica (tools/licencias/LEEME.md, paso 4). -->
+    <None Include="Datos\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\CQEING.Gestor.Core\CQEING.Gestor.Core.csproj" />
   </ItemGroup>
 
