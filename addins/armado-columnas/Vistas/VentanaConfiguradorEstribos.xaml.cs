@@ -41,6 +41,18 @@ public partial class VentanaConfiguradorEstribos : Window
     private readonly IAlmacenConfiguraciones _almacen;
 
     /// <summary>
+    /// #180: con qué se generó cada columna, leído del modelo al abrir y
+    /// actualizado en cada generación. Lo generado se carga en el panel por
+    /// encima de todo lo demás (decisión de Luciano, 28-oct).
+    /// </summary>
+    private readonly IRegistroGenerados _registroGenerados;
+
+    private readonly Dictionary<string, ColumnaGenerada> _generadas = new();
+
+    /// <summary>El plan que se mandó a generar, hasta que vuelve el resultado.</summary>
+    private PlanArmado? _planEnviado;
+
+    /// <summary>
     /// Una copia de <see cref="ConfigTramo"/> por (columna, tramo). Es el
     /// germen de la persistencia que formaliza L5 ("D1 — ida y vuelta sin
     /// perder nada"): alcanza para que navegar con la lista o las flechas no
@@ -197,13 +209,14 @@ public partial class VentanaConfiguradorEstribos : Window
 
     public VentanaConfiguradorEstribos(
         IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false,
-        IAlmacenConfiguraciones? almacen = null)
+        IAlmacenConfiguraciones? almacen = null, IRegistroGenerados? registroGenerados = null)
     {
         InitializeComponent();
 
         _contexto = contexto;
         _tipos = tipos;
         _almacen = almacen ?? new AlmacenConfiguracionesEnMemoria();
+        _registroGenerados = registroGenerados ?? new RegistroGeneradosEnMemoria();
 
         BannerSimulado.Visibility = modoSimulado ? Visibility.Visible : Visibility.Collapsed;
 
@@ -315,8 +328,47 @@ public partial class VentanaConfiguradorEstribos : Window
         ListaColumnetas.ItemsSource = columnetas;
         PestanaColumnetas.Visibility = columnetas.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+        CargarLoGenerado();
+
         NodoLista? primerTramo = _nodos.FirstOrDefault(n => !n.EsColumna);
         if (primerTramo is not null) Activar(primerTramo);
+    }
+
+    /// <summary>
+    /// #180: las columnas que ya se generaron arrancan con lo que se usó al
+    /// generar (tramos, longitudinal con sus estribos menores y recubrimiento).
+    /// Si la columna cambió en Revit desde entonces se carga igual, por índice
+    /// de tramo, y se avisa al activarla.
+    /// </summary>
+    private void CargarLoGenerado()
+    {
+        foreach (string id in _nodos.Where(n => n.EsColumna).Select(n => n.ColumnaId))
+        {
+            if (_registroGenerados.Leer(id) is not { AlgunTramo: true } generada) continue;
+
+            ColumnaContexto columna = _contexto.Leer(id);
+            for (int i = 0; i < Math.Min(columna.Tramos.Count, generada.Tramos.Count); i++)
+                if (generada.Tramos[i] is ConfigTramo cfg) _configPorTramo[(id, i)] = CopiarTramo(cfg);
+
+            ConfigLongitudinal longitudinal = generada.Longitudinal.Copiar();
+            longitudinal.MigrarEstribosMenores();
+            _longitudinalPorColumna[id] = longitudinal;
+            if (generada.Recubrimiento is double recubrimiento) _recubrimientoPorColumna[id] = recubrimiento;
+
+            _generadas[id] = generada;
+        }
+    }
+
+    /// <summary>#180: el texto de estado al activar una columna ya generada, o null si no se generó.</summary>
+    private string? EstadoDeLoGenerado(string idColumna, ColumnaContexto columna)
+    {
+        if (!_generadas.TryGetValue(idColumna, out ColumnaGenerada? generada)) return null;
+
+        string texto = $"{columna.Marca} ya se generó ({generada.GeneradoEl:dd/MM/yyyy HH:mm}): el panel muestra la configuración con la que se generó.";
+        IReadOnlyList<string> cambios = generada.Cambios(columna);
+        if (cambios.Count > 0)
+            texto += $" Ojo: la columna cambió en Revit desde entonces ({string.Join("; ", cambios)}). Revísala antes de volver a generar.";
+        return texto;
     }
 
     private void AgregarColumnaYTramos(ColumnaResumen resumen)
@@ -407,7 +459,7 @@ public partial class VentanaConfiguradorEstribos : Window
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
         CargarRecubrimientoDeColumnaActiva();
-        if (configuracionCargada is not null) TextoEstado.Text = configuracionCargada;
+        if ((configuracionCargada ?? EstadoDeLoGenerado(nodo.ColumnaId, _columnaActiva)) is string estado) TextoEstado.Text = estado;
         MostrarAvisos();
         NotificarElementosActivos();
 
@@ -546,14 +598,14 @@ public partial class VentanaConfiguradorEstribos : Window
     }
 
     /// <summary>
-    /// Si la columna tiene algo distinto de los valores por defecto: aceptado,
-    /// o algún tramo o el longitudinal cambiado. Solo haber pasado por ella no
-    /// cuenta (al navegar se guarda lo que muestra el panel, que puede ser el
-    /// por defecto).
+    /// Si la columna tiene algo distinto de los valores por defecto: generado
+    /// (#180), aceptado, o algún tramo o el longitudinal cambiado. Solo haber
+    /// pasado por ella no cuenta (al navegar se guarda lo que muestra el panel,
+    /// que puede ser el por defecto).
     /// </summary>
     private bool TieneAlgoPropio(string idColumna)
     {
-        if (_tramosAceptados.Any(t => t.ColumnaId == idColumna)) return true;
+        if (_generadas.ContainsKey(idColumna) || _tramosAceptados.Any(t => t.ColumnaId == idColumna)) return true;
 
         ConfigTramo porDefecto = ConfigPorDefecto(_tipos);
         if (_configPorTramo.Any(kv => kv.Key.ColumnaId == idColumna && !ComparadorConfig.Igual(kv.Value, porDefecto))) return true;
@@ -2141,6 +2193,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstado.Text = "Generando armado en Revit…";
         BotonGenerar.IsEnabled = false;
+        _planEnviado = plan;
 
         GenerarSolicitado?.Invoke(opciones);
     }
@@ -2205,8 +2258,17 @@ public partial class VentanaConfiguradorEstribos : Window
         // terminar en un crash nativo de Revit en vez de una excepción.
         _contexto.InvalidarCache();
 
+        // #180: lo mismo que quedó guardado en el modelo (RegistroGeneradosRevit).
+        if (_planEnviado is not null)
+            foreach (ColumnaPlan columna in _planEnviado.Columnas)
+            {
+                _generadas.TryGetValue(columna.Id, out ColumnaGenerada? previa);
+                _generadas[columna.Id] = ColumnaGenerada.Combinar(previa, columna, _planEnviado.GeneradoEl);
+            }
+        _planEnviado = null;
+
         TextoEstado.Text =
-            $"Generado: {resultado.GruposCreados} estribo(s) creado(s)" +
+            $"Generado:{resultado.GruposCreados} estribo(s) creado(s)" +
             (resultado.Eliminados > 0 ? $", {resultado.Eliminados} elemento(s) de acero anterior(es) reemplazado(s)" : "") +
             (resultado.TramosOmitidos > 0 ? $", {resultado.TramosOmitidos} tramo(s) omitido(s)" : "") +
             ".";
@@ -2220,6 +2282,7 @@ public partial class VentanaConfiguradorEstribos : Window
     public void MostrarErrorGeneracion(string mensaje)
     {
         BotonGenerar.IsEnabled = true;
+        _planEnviado = null;
 
         // Aunque haya fallado, la corrida ya modificó el documento antes de
         // tirar la excepción (ver MostrarResultadoGeneracion) -- misma razón

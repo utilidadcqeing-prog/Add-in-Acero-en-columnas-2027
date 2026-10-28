@@ -842,5 +842,37 @@ Probar("planear_seccion_con_gancho_no_prueba_diagonal", () =>
     Cierto(sinGancho[0].Eje.X != 0 && sinGancho[0].Eje.Y != 0, $"sin gancho, diagonal: {sinGancho[0].Eje}");
 });
 
+Probar("columna_generada_combina_por_tramo", () =>
+{
+    // #180: regenerar solo el tramo 2 deja lo de antes en los otros (su acero
+    // sigue en el modelo) y manda el longitudinal nuevo.
+    var contexto = new ColumnaContexto { BaseX = 0.4, BaseY = 0.4, ZInferior = 0, ZSuperior = 9, Tramos = new[] { T(0, 3), T(3, 6), T(6, 9) } };
+    var primera = ColumnaGenerada.Combinar(null, new ColumnaPlan
+    {
+        Contexto = contexto, Tramos = new() { new ConfigTramo { EspaciadoUniforme = 0.2 }, new ConfigTramo { EspaciadoUniforme = 0.2 }, null },
+        Longitudinal = new ConfigLongitudinal { BarrasPorCaraX = 2 },
+    }, DateTime.Now);
+    var segunda = ColumnaGenerada.Combinar(primera, new ColumnaPlan
+    {
+        Contexto = contexto, Tramos = new() { null, new ConfigTramo { EspaciadoUniforme = 0.1 }, null },
+        Longitudinal = new ConfigLongitudinal { BarrasPorCaraX = 4 },
+    }, DateTime.Now);
+    Igual(0.2, segunda.Tramos[0]!.EspaciadoUniforme, "tramo 0, el de antes");
+    Igual(0.1, segunda.Tramos[1]!.EspaciadoUniforme, "tramo 1, el nuevo");
+    Cierto(segunda.Tramos[2] is null, "tramo 2, nunca generado");
+    Cierto(segunda.Longitudinal.BarrasPorCaraX == 4, "longitudinal nuevo");
+    Cierto(segunda.Cambios(contexto).Count == 0, "sin cambios");
+});
+
+Probar("columna_generada_avisa_cambios", () =>
+{
+    var antes = new ColumnaContexto { BaseX = 0.4, BaseY = 0.4, ZInferior = 0, ZSuperior = 3, Tramos = new[] { T(0, 3) } };
+    var generada = ColumnaGenerada.Combinar(null, new ColumnaPlan { Contexto = antes, Tramos = new() { new ConfigTramo() } }, DateTime.Now);
+    var casiIgual = new ColumnaContexto { BaseX = 0.402, BaseY = 0.4, ZInferior = 0, ZSuperior = 3.001, Tramos = new[] { T(0, 3) } };
+    Cierto(generada.Cambios(casiIgual).Count == 0, "medio cm de tolerancia");
+    var otra = new ColumnaContexto { BaseX = 0.45, BaseY = 0.4, ZInferior = 0, ZSuperior = 3.5, Tramos = new[] { T(0, 3), T(3, 3.5) } };
+    Cierto(generada.Cambios(otra).Count == 3, string.Join("; ", generada.Cambios(otra)));
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

@@ -78,7 +78,8 @@ public class ComandoEstribos : IExternalCommand
             new LectorContexto(doc),
             new ProveedorTiposReal(doc),
             modoSimulado: false,
-            almacen);
+            almacen,
+            new RegistroGeneradosRevit(doc));
 
         _ventana.ElementosActivados += ids =>
         {

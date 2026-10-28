@@ -102,7 +102,11 @@ Qué tiene cada columna, de mayor a menor prioridad:
 - [x] #179: «Guardar como nueva» (no pisa una existente), «Guardar cambios»
       y «Eliminar» con confirmación; línea «• El panel tiene cambios sin guardar
       en …» (`ActualizarCambiosSinGuardar`, en `VentanaConfiguradorEstribos.EstadoPanel.cs`).
-- [ ] #180
+- [x] #180: `Modelo/ColumnaGenerada` (lo generado por tramo + longitudinal +
+      recubrimiento + medida de la columna; `Combinar` por tramo, `Cambios`),
+      `Logica/RegistroGeneradosRevit` (DataStorage, clave `UniqueId`, se escribe
+      en la transacción de generar). La ventana lo carga al abrir y avisa si la
+      columna cambió. Falta probar en Revit.
 - [ ] #168
 - [ ] #181
 - [ ] Retest en Revit
