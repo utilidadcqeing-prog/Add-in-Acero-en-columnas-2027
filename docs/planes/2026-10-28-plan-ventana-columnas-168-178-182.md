@@ -114,5 +114,14 @@ Qué tiene cada columna, de mayor a menor prioridad:
       elevación, planta y lista; «Quitar todos los ✓» + «Deshacer»; pregunta al
       cerrar; otro proyecto activo → ventana nueva. El recubrimiento no entra en
       la copia: se genera con el que esté elegido.
-- [ ] #181
+- [x] #181: `Modelo/GanchosLongitudinales` (misma regla que el generador:
+      hacia el centro, girado por el lindero; punta a B − ½ diámetro del eje;
+      `SeSale` si la punta pasa el borde de la sección). La vista previa dibuja
+      los ganchos solo de lado: en cada vista, los que doblan a lo ancho de ella
+      (los otros doblan hacia adentro de la hoja). Rojo y aviso si se salen.
+      Selector «Tramo activo / Columna completa»; con la columna completa el alto
+      va a otra escala que el ancho (a una sola escala la sección quedaba de
+      pocos píxeles) y no se dibujan estribos. Limitación: si el generador
+      cambia la normal de una esquina para acomodar un traslapo, la vista previa
+      no lo sabe y dibuja el gancho con la normal de siempre.
 - [ ] Retest en Revit

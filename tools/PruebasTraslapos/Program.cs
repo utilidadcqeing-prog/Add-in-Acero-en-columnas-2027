@@ -874,5 +874,41 @@ Probar("columna_generada_avisa_cambios", () =>
     Cierto(generada.Cambios(otra).Count == 3, string.Join("; ", generada.Cambios(otra)));
 });
 
+Probar("ganchos_longitudinales_hacia_el_centro", () =>
+{
+    // #181: misma regla que GeneradorLongitudinal.OrientacionesHaciaAdentro.
+    var barras = new[]
+    {
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.06, 0.06, N4),  // abajo: dobla en X
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.34, 0.34, N4),  // arriba: dobla en Y
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.CaraX, 0.20, 0.06, N4),    // dobla en Y
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.CaraY, 0.34, 0.20, N4),    // dobla en X
+    };
+    var g = GanchosLongitudinales.Calcular(barras, 0.4, 0.4, Array.Empty<TramoLindero>(), (0, 0));
+    Cierto(g[0].Dx == 1 && g[0].Dy == 0, $"esquina de abajo a la izquierda: ({g[0].Dx}, {g[0].Dy})");
+    Cierto(g[1].Dx == 0 && g[1].Dy == -1, $"esquina de arriba a la derecha: ({g[1].Dx}, {g[1].Dy})");
+    Cierto(g[2].Dx == 0 && g[2].Dy == 1, $"cara X de abajo: ({g[2].Dx}, {g[2].Dy})");
+    Cierto(g[3].Dx == -1 && g[3].Dy == 0, $"cara Y de la derecha: ({g[3].Dx}, {g[3].Dy})");
+    Igual(0.222 - 0.00635, g[0].Recto, "del eje a la punta: B menos medio diámetro");
+    Cierto(g.All(x => !x.SeSale), "en 40×40 ninguno se sale");
+});
+
+Probar("ganchos_longitudinales_se_salen_en_columna_chica", () =>
+{
+    // 25×25 con #4: la punta de la esquina queda a 0,272 del borde.
+    var esquina = new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.056, 0.056, N4);
+    Cierto(GanchosLongitudinales.Calcular(new[] { esquina }, 0.25, 0.25, Array.Empty<TramoLindero>(), (0, 0))[0].SeSale, "se sale");
+});
+
+Probar("ganchos_longitudinales_giran_por_el_lindero", () =>
+{
+    // Lindero vertical en x = 0,45 (en planta); la columna empieza en x = 0,2.
+    // La esquina de abajo a la izquierda dobla hacia +X y cruzaría: se gira.
+    var lindero = new[] { new TramoLindero(0.45, -5, 0.45, 5) };
+    var esquina = new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.06, 0.06, N4);
+    var g = GanchosLongitudinales.Calcular(new[] { esquina }, 0.4, 0.4, lindero, (0.2, 0))[0];
+    Cierto(g.Girado && g.Dx == -1, $"girado hacia −X: ({g.Dx}, {g.Dy})");
+});
+
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
 return fallas == 0 ? 0 : 1;

@@ -36,8 +36,16 @@ public partial class PanelVistaPrevia : UserControl
     private const double MargenCotasZonas = 34;
     private const double MargenCotaAlto = 22;
 
-    /// <summary>Una barra en la elevación: dónde cae a lo ancho de la vista (metros) y su diámetro.</summary>
-    private sealed record BarraVista(double Posicion, double DiametroMm);
+    /// <summary>
+    /// Una barra en la elevación: dónde cae a lo ancho de la vista (metros) y
+    /// su diámetro. <paramref name="Gancho"/>: hacia dónde dobla su gancho a lo
+    /// ancho de la vista (−1 o 1), o null si no lleva o dobla hacia adentro
+    /// de la hoja (#181).
+    /// </summary>
+    private sealed record BarraVista(double Posicion, double DiametroMm, GanchosLongitudinales.Gancho? DatosGancho = null, int? Gancho = null);
+
+    /// <summary>Con «Columna completa» las vistas de lado son el doble de altas: entra toda la columna.</summary>
+    private const double AltoElevacionesColumna = 2 * AltoElevaciones;
 
     public PanelVistaPrevia() => InitializeComponent();
 
@@ -71,11 +79,16 @@ public partial class PanelVistaPrevia : UserControl
     /// El estribo más grueso de la columna: el generador corre las longitudinales
     /// con ese (<c>GeneradorLongitudinal</c>, "diametroEstribo").
     /// </param>
+    /// <param name="origenEnPlanta">
+    /// Dónde cae en planta la esquina de abajo a la izquierda de la sección, en
+    /// metros: solo para girar los ganchos que cruzarían la línea de propiedad.
+    /// </param>
     public void Mostrar(
         ColumnaContexto columna, Tramo tramo, ConfigTramo cfgTramo, ConfigLongitudinal cfgLong,
-        double recubrimiento, Func<string?, TipoBarra?> barraDe, double diametroEstriboPlantaMm)
+        double recubrimiento, Func<string?, TipoBarra?> barraDe, double diametroEstriboPlantaMm,
+        (double X, double Y) origenEnPlanta = default)
     {
-        _redibujar = () => Mostrar(columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm);
+        _redibujar = () => Mostrar(columna, tramo, cfgTramo, cfgLong, recubrimiento, barraDe, diametroEstriboPlantaMm, origenEnPlanta);
         Lienzo.Children.Clear();
         Leyenda.Children.Clear();
         Resumen.Children.Clear();
@@ -154,13 +167,29 @@ public partial class PanelVistaPrevia : UserControl
         DibujarPlanta(tramoX, tramoY, (ladoX / 2, ladoY / 2), dx, dy, recubrimiento, dEstribo, doblezEstribo, barras, piezas,
             DiametroPieza, DoblezPieza, XColumna, YFila, columnas, filas, aMarcar, verTraslapo ? choques.PiezasTraslapo : null);
 
+        // #181: los ganchos de 90° de las puntas, con la misma regla que el
+        // generador (hacia el centro; girado si cruza el lindero). Solo se
+        // dibujan de lado: desde arriba taparían las varillas (Luciano, 28-oct).
+        bool conGanchos = PlanTraslapos.Columna.De(columna).ConGanchos;
+        Dictionary<SeccionPlanta.BarraEnPlanta, GanchosLongitudinales.Gancho> ganchos = conGanchos
+            ? GanchosLongitudinales.Calcular(barras, ladoX, ladoY, columna.Lindero, origenEnPlanta).ToDictionary(g => g.Barra)
+            : new Dictionary<SeccionPlanta.BarraEnPlanta, GanchosLongitudinales.Gancho>();
+        BarraVista Vista(SeccionPlanta.BarraEnPlanta b, double posicion, bool aLoAnchoEnX)
+        {
+            if (!ganchos.TryGetValue(b, out GanchosLongitudinales.Gancho? g)) return new BarraVista(posicion, b.DiametroMm);
+            int aLoAncho = aLoAnchoEnX ? g.Dx : g.Dy;
+            return new BarraVista(posicion, b.DiametroMm, g, aLoAncho == 0 ? null : aLoAncho);
+        }
+
         // Frente: se mira la cara de abajo (paralela a X); costado: la de la izquierda (paralela a Y).
         List<BarraVista> frente = barras
             .Where(b => b.Y < ladoY / 2 && b.Posicion != PosicionBarra.CaraY)
-            .Select(b => new BarraVista(b.X + dx, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
+            .OrderBy(b => b.Posicion)
+            .Select(b => Vista(b, b.X + dx, aLoAnchoEnX: true)).ToList();
         List<BarraVista> costado = barras
             .Where(b => b.X < ladoX / 2 && b.Posicion != PosicionBarra.CaraX)
-            .Select(b => new BarraVista(b.Y + dy, b.DiametroMm)).OrderBy(b => b.Posicion).ToList();
+            .OrderBy(b => b.Posicion)
+            .Select(b => Vista(b, b.Y + dy, aLoAnchoEnX: false)).ToList();
 
         Tramo? debajo = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice - 1);
         Tramo? encima = columna.Tramos.FirstOrDefault(t => t.Indice == tramo.Indice + 1);
@@ -168,19 +197,33 @@ public partial class PanelVistaPrevia : UserControl
         // Los vecinos (nudo o zapata) se muestran recortados, solo para ubicar el
         // tramo. Las dos elevaciones van a la misma escala, y el ancho a la misma
         // que el alto (#133: nada exagerado). Si la columna es tan ancha que no
-        // entra, se achica todo junto.
+        // entra, se achica todo junto. Con «Columna completa», de punta a punta.
+        // Abajo de todo se agrega lo que el acero entra en la zapata, para que
+        // se vea el gancho.
+        bool columnaCompleta = OpcionElevacionColumna.IsChecked == true;
+        double zBase = columna.Tramos.Count > 0 ? columna.Tramos[0].ZInferior : columna.ZInferior;
+        double anclaje = Math.Max(0, zBase - columna.ZInferiorLongitudinal);
         double anchoVista = (AnchoLienzo - 3 * 16) / 2;
-        double zMin = tramo.ZInferior - (debajo is null ? 0 : Math.Min(debajo.Altura, 0.4));
-        double zMax = tramo.ZSuperior + (encima is null ? 0 : Math.Min(encima.Altura, 0.4));
-        double escalaElevacion = EscalaDibujo.Ajustar(
-            Math.Max(tramoX, tramoY), zMax - zMin, anchoVista - MargenCotasZonas - MargenCotaAlto, AltoElevaciones);
+        double zMin = columnaCompleta ? zBase : tramo.ZInferior - (debajo is null ? 0 : Math.Min(debajo.Altura, 0.4));
+        double zMax = columnaCompleta ? columna.ZSuperior : tramo.ZSuperior + (encima is null ? 0 : Math.Min(encima.Altura, 0.4));
+        if (anclaje > 0 && (columnaCompleta || debajo is null)) zMin -= anclaje + 0.05;
+        // Un poco de aire arriba para que el gancho no toque el título.
+        if (conGanchos && (columnaCompleta || encima is null)) zMax += columnaCompleta ? (zMax - zMin) * 0.02 : 0.05;
+        double altoElevaciones = columnaCompleta ? AltoElevacionesColumna : AltoElevaciones;
+        double anchoUtil = anchoVista - MargenCotasZonas - MargenCotaAlto;
+        double escalaElevacion = EscalaDibujo.Ajustar(Math.Max(tramoX, tramoY), zMax - zMin, anchoUtil, altoElevaciones);
 
-        DibujarElevacion("De frente (cara X)", 16, tramoX, zMin, zMax, escalaElevacion, tramo, debajo, encima, frente, dEstribo,
+        // Con la columna entera, a una sola escala la sección queda de unos
+        // pocos píxeles y los ganchos no se ven: el ancho ocupa todo el ancho
+        // de la vista y el alto, todo el alto. Se avisa en el resumen.
+        double escalaAncho = columnaCompleta ? anchoUtil / Math.Max(tramoX, tramoY) : escalaElevacion;
+        var vista = new VistaDeLado(columna, tramo, debajo, encima, columnaCompleta, zMin, zMax, escalaAncho, escalaElevacion);
+        DibujarElevacion("De frente (cara X)", 16, tramoX, vista, frente, dEstribo,
             reparto, paquete, DiametroPieza, EjeCaja.Fila, c => XColumna(c) + dx);
-        DibujarElevacion("De costado (cara Y)", 32 + anchoVista, tramoY, zMin, zMax, escalaElevacion, tramo, debajo, encima, costado, dEstribo,
+        DibujarElevacion("De costado (cara Y)", 32 + anchoVista, tramoY, vista, costado, dEstribo,
             reparto, paquete, DiametroPieza, EjeCaja.Columna, f => YFila(f) + dy);
 
-        Lienzo.Height = YElevaciones + AltoElevaciones + 30;
+        Lienzo.Height = YElevaciones + altoElevaciones + 30;
 
         LlenarLeyenda(barras.Select(b => b.DiametroMm)
             .Concat(dEstribo is double de ? new[] { de } : Array.Empty<double>())
@@ -195,6 +238,35 @@ public partial class PanelVistaPrevia : UserControl
                 Paleta.Error, negrita: true);
         if (choques.VarillasSinRevisarEnTraslapo > 0)
             AgregarNota(ChoquesSeccion.NotaSinRevisar(choques.VarillasSinRevisarEnTraslapo), ColorAviso);
+
+        LlenarNotasDeGanchos(ganchos.Values.ToList(), ladoX, ladoY, columnaCompleta);
+    }
+
+    /// <summary>
+    /// #181: si algún gancho se sale de la columna, en rojo y antes de
+    /// generar. Abajo el gancho queda en la zapata (más ancha); arriba, en la
+    /// viga o la losa, que el add-in no mide: se avisa igual.
+    /// </summary>
+    private void LlenarNotasDeGanchos(IReadOnlyList<GanchosLongitudinales.Gancho> ganchos, double ladoX, double ladoY, bool columnaCompleta)
+    {
+        if (columnaCompleta)
+            AgregarNota("Columna completa: se ven el hormigón, las barras y sus ganchos (el alto va a otra escala que el ancho, " +
+                        "para que entre); los estribos, en «Tramo activo».", ColorTexto);
+        if (ganchos.Count == 0) return;
+
+        AgregarNota("Ganchos de 90° en las dos puntas, hacia el centro. De lado se ven los que doblan a lo ancho de cada vista; " +
+                    "los demás doblan hacia adentro de la hoja.", ColorTexto);
+
+        List<GanchosLongitudinales.Gancho> fuera = ganchos.Where(g => g.SeSale).ToList();
+        if (fuera.Count > 0)
+            AgregarNota(
+                $"⚠ {fuera.Count} gancho(s) se salen de la sección de {EscalaDibujo.Cm(ladoX)} × {EscalaDibujo.Cm(ladoY)} " +
+                $"(la pata llega a {fuera.Max(g => g.Recto) * 100:0.#} cm del eje de la barra; en rojo). Abajo quedan dentro de la zapata; " +
+                "arriba, revisa que entren en la viga o la losa.", Paleta.Error, negrita: true);
+        if (ganchos.Any(g => g.Girado))
+            AgregarNota($"{ganchos.Count(g => g.Girado)} gancho(s) girados para no cruzar la línea de propiedad.", ColorAviso);
+        if (ganchos.Any(g => g.SinSalida))
+            AgregarNota($"⚠ {ganchos.Count(g => g.SinSalida)} gancho(s) cruzan la línea de propiedad para los dos lados.", Paleta.Error, negrita: true);
     }
 
     // ------------------------------------------------------------- planta
@@ -298,41 +370,88 @@ public partial class PanelVistaPrevia : UserControl
 
     // ---------------------------------------------------------- elevación
 
-    /// <param name="escala">Píxeles por metro, la misma a lo ancho y a lo alto.</param>
+    /// <summary>
+    /// Lo que comparten las dos vistas de lado: qué se muestra (el tramo con
+    /// sus vecinos recortados, o la columna entera) y a qué escala.
+    /// </summary>
+    /// <param name="EscalaAncho">Píxeles por metro a lo ancho; con el tramo, la misma que a lo alto (#133).</param>
+    /// <param name="EscalaAlto">Píxeles por metro a lo alto.</param>
+    private sealed record VistaDeLado(
+        ColumnaContexto Columna, Tramo Tramo, Tramo? Debajo, Tramo? Encima, bool ColumnaCompleta, double ZMin, double ZMax,
+        double EscalaAncho, double EscalaAlto);
+
     private void DibujarElevacion(
-        string titulo, double x0, double lado, double zMin, double zMax, double escala, Tramo tramo, Tramo? debajo, Tramo? encima,
+        string titulo, double x0, double lado, VistaDeLado vista,
         List<BarraVista> barras, double? dEstribo, RepartoEstribos.Resultado? reparto, PaqueteEstribos.Paquete? paquete,
         Func<EstriboMenor, double> diametroPieza, EjeCaja ejeQueCorre, Func<int, double> posicionIndice)
     {
         Texto(titulo, x0, YElevaciones - 18, 11, FontWeights.SemiBold);
 
+        (ColumnaContexto columna, Tramo tramo, Tramo? debajo, Tramo? encima, bool columnaCompleta, double zMin, double zMax,
+            double escala, double escalaAlto) = vista;
         double anchoDibujo = lado * escala;
         double ox = x0 + MargenCotasZonas;
 
-        double Y(double z) => YElevaciones + (zMax - z) * escala;
+        double Y(double z) => YElevaciones + (zMax - z) * escalaAlto;
         double X(double posicion) => ox + posicion * escala;
 
-        Agregar(new Rectangle { Width = anchoDibujo, Height = (tramo.ZSuperior - tramo.ZInferior) * escala, Fill = ColorHormigon, Stroke = ColorContorno },
-            ox, Y(tramo.ZSuperior));
-
-        void Vecino(Tramo? t, double z1, double z2)
+        void Bloque(Tramo? t, double z1, double z2)
         {
-            if (t is null) return;
+            if (t is null || z2 <= z1) return;
             Brush relleno = t.Tipo == TipoTramo.DentroDeViga ? ColorNudo : t.Tipo == TipoTramo.ContraZapata ? ColorZapata : ColorHormigon;
-            Agregar(new Rectangle { Width = anchoDibujo, Height = Math.Max(0, (z2 - z1) * escala), Fill = relleno, Stroke = ColorContorno }, ox, Y(z2));
+            Agregar(new Rectangle { Width = anchoDibujo, Height = Math.Max(0, (z2 - z1) * escalaAlto), Fill = relleno, Stroke = ColorContorno }, ox, Y(z2));
         }
-        Vecino(debajo, zMin, tramo.ZInferior);
-        Vecino(encima, tramo.ZSuperior, zMax);
 
-        // Barras longitudinales, de punta a punta de lo que se muestra.
+        if (columnaCompleta)
+        {
+            foreach (Tramo t in columna.Tramos) Bloque(t, t.ZInferior, t.ZSuperior);
+        }
+        else
+        {
+            Agregar(new Rectangle { Width = anchoDibujo, Height = (tramo.ZSuperior - tramo.ZInferior) * escalaAlto, Fill = ColorHormigon, Stroke = ColorContorno },
+                ox, Y(tramo.ZSuperior));
+            Bloque(debajo, Math.Max(zMin, debajo?.ZInferior ?? zMin), tramo.ZInferior);
+            Bloque(encima, tramo.ZSuperior, zMax);
+        }
+
+        // Donde el acero entra en la zapata (más abajo que la columna), una
+        // franja más ancha, como la viga en el nudo de la elevación (#181).
+        double zBase = columna.Tramos.Count > 0 ? columna.Tramos[0].ZInferior : columna.ZInferior;
+        if (zMin < zBase - 1e-6)
+        {
+            double sobresale = Math.Min(0.15 * escala, 14);
+            Agregar(new Rectangle { Width = anchoDibujo + 2 * sobresale, Height = (zBase - zMin) * escalaAlto, Fill = ColorZapata, Stroke = ColorContorno },
+                ox - sobresale, Y(zBase));
+        }
+
+        // Barras longitudinales, de punta a punta de lo que se muestra; donde
+        // la barra termina en un gancho que dobla a lo ancho de la vista, el
+        // gancho (en rojo si se sale de la columna).
+        double zDesde = Math.Max(zMin, columna.ZInferiorLongitudinal), zHasta = Math.Min(zMax, columna.ZSuperior);
         foreach (BarraVista b in barras)
-            Linea(new Point(X(b.Posicion), Y(zMax)), new Point(X(b.Posicion), Y(zMin)), Pincel(b.DiametroMm), Math.Max(1.5, b.DiametroMm / 1000 * escala), false);
+        {
+            double grosor = Math.Max(1.5, b.DiametroMm / 1000 * escala);
+            GanchosLongitudinales.Gancho? g = b.Gancho is null ? null : b.DatosGancho;
+            bool ganchoAbajo = g is not null && zDesde <= columna.ZInferiorLongitudinal + 1e-6;
+            bool ganchoArriba = g is not null && zHasta >= columna.ZSuperior - 1e-6;
+            double radio = g?.Radio ?? 0;
+            Linea(new Point(X(b.Posicion), Y(ganchoArriba ? zHasta - radio : zHasta)), new Point(X(b.Posicion), Y(ganchoAbajo ? zDesde + radio : zDesde)),
+                Pincel(b.DiametroMm), grosor, false);
 
-        // El ancho de la cara y el alto del tramo.
+            if (g is null || b.Gancho is not int signo) continue;
+            Brush color = g.SeSale ? Paleta.Error : Pincel(b.DiametroMm);
+            Point APx(double u, double z) => new(X(u), Y(z));
+            if (ganchoAbajo) Lienzo.Children.Add(DibujoArmado.Trazo(EjeGancho(b.Posicion, zDesde, abajo: true, signo, g), APx, color, grosor));
+            if (ganchoArriba) Lienzo.Children.Add(DibujoArmado.Trazo(EjeGancho(b.Posicion, zHasta, abajo: false, signo, g), APx, color, grosor));
+        }
+
+        // El ancho de la cara y el alto del tramo (o de la columna).
+        double altoDesde = columnaCompleta ? zBase : tramo.ZInferior, altoHasta = columnaCompleta ? columna.ZSuperior : tramo.ZSuperior;
         Cotas.Horizontal(Lienzo, ox, ox + anchoDibujo, Y(zMin) + 5, EscalaDibujo.Cm(lado));
-        Cotas.Vertical(Lienzo, ox + anchoDibujo + 6, Y(tramo.ZSuperior), Y(tramo.ZInferior), EscalaDibujo.M(tramo.ZSuperior - tramo.ZInferior));
+        Cotas.Vertical(Lienzo, ox + anchoDibujo + 6, Y(altoHasta), Y(altoDesde), EscalaDibujo.M(altoHasta - altoDesde));
 
-        if (reparto is null || paquete is null || dEstribo is not double de) return;
+        // Con la columna entera no se dibujan estribos: cada tramo tiene los suyos.
+        if (columnaCompleta || reparto is null || paquete is null || dEstribo is not double de) return;
 
         double xIzq = barras.Min(b => b.Posicion), xDer = barras.Max(b => b.Posicion);
         foreach (double z in reparto.Alturas)
@@ -367,6 +486,26 @@ public partial class PanelVistaPrevia : UserControl
             t.LayoutTransform = new RotateTransform(-90);
             Agregar(t, xc + 2, (ya + yb) / 2 - 12);
         }
+    }
+
+    /// <summary>
+    /// El eje de un gancho de 90° en la vista de lado (#181): el arco del
+    /// doblez y la pata horizontal, en la punta <paramref name="z"/> de la
+    /// barra. <paramref name="u"/> es la posición de la barra a lo ancho de la
+    /// vista y <paramref name="signo"/>, hacia dónde dobla.
+    /// </summary>
+    private static IEnumerable<(double X, double Y)> EjeGancho(double u, double z, bool abajo, int signo, GanchosLongitudinales.Gancho g)
+    {
+        double r = g.Radio;
+        double cu = u + signo * r, cz = abajo ? z + r : z - r;
+        const int Pasos = 8;
+        for (int i = 0; i <= Pasos; i++)
+        {
+            // De la barra (al costado del centro del doblez) a la pata (abajo o arriba de él).
+            double t = i / (double)Pasos * Math.PI / 2;
+            yield return (cu - signo * r * Math.Cos(t), cz + (abajo ? -1 : 1) * r * Math.Sin(t));
+        }
+        yield return (u + signo * g.Recto, z);
     }
 
     // ------------------------------------------------------------ textos
