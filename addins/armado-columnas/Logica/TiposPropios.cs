@@ -47,7 +47,15 @@ public sealed class TiposPropios
     /// <summary>El cuadro está redondeado al milímetro.</summary>
     private const double ToleranciaExtensionMetros = 0.001;
 
-    private static readonly string[] NombresParametros = { "CQ A", "CQ B", "CQ C", "CQ D" };
+    /// <summary>
+    /// Las cotas de los lados (CQ A a CQ D) y las de los ganchos (#176): estas
+    /// dos últimas van atadas por fórmula al largo de cada gancho, como A y G
+    /// de la «T1» de la plantilla, y son las que el detalle de plegado acota en
+    /// los ganchos. Sin ellas el detalle solo mide los lados.
+    /// </summary>
+    private static readonly string[] NombresParametros = { "CQ A", "CQ B", "CQ C", "CQ D", "CQ Gancho inicio", "CQ Gancho fin" };
+    private const int ParametroGanchoInicio = 4;
+    private const int ParametroGanchoFin = 5;
 
     private readonly Document _doc;
     private readonly Dictionary<string, object> _cache = new();
@@ -98,6 +106,22 @@ public sealed class TiposPropios
         if (inicio != AnguloGancho.Grados180 || fin != AnguloGancho.Grados180) nombre += $" {(int)inicio}-{(int)fin}";
         return Cacheado(nombre, () => Forma(nombre, RebarStyle.StirrupTie, 1,
             () => CrearFormaGrapa(nombre, s, RebarStyle.StirrupTie, (int)inicio, (int)fin)));
+    }
+
+    /// <summary>
+    /// Barra recta con gancho en una punta o en las dos (#176, longitudinales):
+    /// la «00» de la plantilla que elegía Revit no ata ninguna cota al gancho,
+    /// así que el detalle de plegado no lo medía. Una forma por combinación
+    /// («CQ Recta 90-0»…; 0 = sin gancho), igual que las grapas, porque Revit
+    /// pide que los ganchos de la barra coincidan con los de la forma. Sin
+    /// ganchos no hay nada que acotar: null, y la barra va como siempre.
+    /// </summary>
+    public Pieza<RebarShape>? FormaRecta(int gradosInicio, int gradosFin)
+    {
+        if (gradosInicio == 0 && gradosFin == 0) return null;
+        string nombre = $"CQ Recta {gradosInicio}-{gradosFin}";
+        return Cacheado(nombre, () => Forma(nombre, RebarStyle.Standard, 1,
+            () => CrearFormaGrapa(nombre, false, RebarStyle.Standard, gradosInicio, gradosFin)));
     }
 
     /// <summary>Rectángulo cerrado de cuatro lados antihorario, cotas por fuera del doblez, 135° en las dos puntas: estribo principal y cajas.</summary>
@@ -210,10 +234,20 @@ public sealed class TiposPropios
             if (existente is not null)
             {
                 int segmentos = existente.GetRebarShapeDefinition() is RebarShapeDefinitionBySegments s ? s.NumberOfSegments : 0;
-                return existente.RebarStyle == estilo && segmentos == lados
-                    ? new Pieza<RebarShape>(existente, null)
-                    : new Pieza<RebarShape>(null,
+                if (existente.RebarStyle != estilo || segmentos != lados)
+                    return new Pieza<RebarShape>(null,
                         $"la forma «{nombre}» del modelo fue modificada (estilo {existente.RebarStyle}, {segmentos} lado(s)); no se usa.");
+
+                // #176: las formas creadas antes no tienen las cotas de los
+                // ganchos, y una forma ya creada no se puede cambiar. Se le
+                // cambia el nombre (las barras que ya la usan la conservan
+                // hasta que se regeneren) y se crea la nueva con el nombre de
+                // siempre. Sin parámetros se sigue con la vieja, como antes.
+                if (Parametros() is not { } p
+                    || existente.GetRebarShapeDefinition().HasParameter(p[ParametroGanchoInicio])
+                    || existente.GetRebarShapeDefinition().HasParameter(p[ParametroGanchoFin]))
+                    return new Pieza<RebarShape>(existente, null);
+                existente.Name = NombreLibre($"{nombre} (anterior)");
             }
 
             if (Parametros() is null)
@@ -225,6 +259,30 @@ public sealed class TiposPropios
         {
             return new Pieza<RebarShape>(null, $"no se pudo crear la forma propia «{nombre}»: {ex.Message}");
         }
+    }
+
+    /// <summary>El nombre pedido, o con " 2", " 3"… si ya hay una forma que se llama así.</summary>
+    private string NombreLibre(string nombre)
+    {
+        var usados = new HashSet<string>(new FilteredElementCollector(_doc).OfClass(typeof(RebarShape)).Select(f => f.Name));
+        string libre = nombre;
+        for (int i = 2; usados.Contains(libre); i++) libre = $"{nombre} {i}";
+        return libre;
+    }
+
+    /// <summary>
+    /// Las dos cotas de los ganchos (#176), con la misma fórmula que A y G de la
+    /// «T1» de la plantilla (leída el 28-oct: «Start Hook Length» / «End Hook
+    /// Length»). El nombre de la fórmula sale del idioma de Revit en uso, para
+    /// que también funcione con Revit en español.
+    /// </summary>
+    private void AgregarCotasGanchos(RebarShapeDefinition definicion, bool inicio = true, bool fin = true)
+    {
+        List<ElementId> p = _parametros!;
+        if (inicio)
+            definicion.AddFormulaParameter(p[ParametroGanchoInicio], LabelUtils.GetLabelForBuiltInParameter(ParameterTypeId.RebarShapeStartHookLength));
+        if (fin)
+            definicion.AddFormulaParameter(p[ParametroGanchoFin], LabelUtils.GetLabelForBuiltInParameter(ParameterTypeId.RebarShapeEndHookLength));
     }
 
     private RebarShape CrearFormaEstribo()
@@ -244,6 +302,7 @@ public sealed class TiposPropios
 
         for (int v = 1; v <= 3; v++)
             definicion.AddBendDefaultRadius(v, RebarShapeVertexTurn.Left, RebarShapeBendAngle.Right);
+        AgregarCotasGanchos(definicion);
 
         using var terminaciones = new RebarShapeTerminationsData(_doc)
         {
@@ -264,6 +323,7 @@ public sealed class TiposPropios
         definicion.AddParameter(p[0], EstandarCQ.APies(0.30));
         definicion.SetSegmentFixedDirection(0, 1, 0);
         definicion.AddConstraintParallelToSegment(0, p[0], false, false);
+        AgregarCotasGanchos(definicion, gradosInicio > 0, gradosFin > 0);
 
         using var terminaciones = new RebarShapeTerminationsData(_doc)
         {

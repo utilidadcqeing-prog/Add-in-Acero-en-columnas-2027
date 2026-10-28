@@ -85,6 +85,10 @@ public static class GeneradorArmado
         if (ganchoPropio.Aviso is not null)
             res.Avisos.Add($"Estribos: {ganchoPropio.Aviso}; se usa el gancho configurado en cada tramo.");
 
+        if (DetallesPlegado.AcotarGanchos(doc) is string avisoDetalle)
+            res.Avisos.Add($"Detalles de plegado: {avisoDetalle}.");
+        if (DetallesPlegado.AsegurarTipoPropio(doc) is string avisoTipoDetalle)
+            res.Avisos.Add($"Detalles de plegado: {avisoTipoDetalle}.");
         if (VarillasPropias.CompletarPeso(doc) is string avisoPeso)
             res.Avisos.Add($"Varillas: {avisoPeso}.");
 

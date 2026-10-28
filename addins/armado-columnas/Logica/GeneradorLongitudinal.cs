@@ -618,6 +618,11 @@ public static class GeneradorLongitudinal
         // Dónde quedó de verdad cada varilla, ya acomodada: las grapas y los
         // cerrados la buscan acá (#130).
         IReadOnlyList<IReadOnlyList<BarraContinua.PiezaReal>> acomodadas = BarraContinua.Acomodar(doc, creadas, ganchos);
+
+        // #176: con la forma propia, el detalle de plegado mide el gancho.
+        if (DetallesPlegado.PonerFormaRecta(doc, creadas.SelectMany(c => c.Cadena), propios) is string avisoForma)
+            avisosDeBarras.Add(avisoForma);
+
         var barrasReales = new List<BarraReal>();
         for (int i = 0; i < creadas.Count; i++)
             if (acomodadas[i].Count > 0)
