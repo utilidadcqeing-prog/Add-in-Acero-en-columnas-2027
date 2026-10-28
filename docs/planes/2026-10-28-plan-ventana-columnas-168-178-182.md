@@ -99,7 +99,9 @@ Qué tiene cada columna, de mayor a menor prioridad:
 - [x] #178: `AplicarConfiguracion` lleva la configuración a todos los tramos
       de la columna y a su longitudinal; `TieneAlgoPropio` = aceptado o algo
       distinto del valor por defecto. Botón «Aplicar».
-- [ ] #179
+- [x] #179: «Guardar como nueva» (no pisa una existente), «Guardar cambios»
+      y «Eliminar» con confirmación; línea «• El panel tiene cambios sin guardar
+      en …» (`ActualizarCambiosSinGuardar`, en `VentanaConfiguradorEstribos.EstadoPanel.cs`).
 - [ ] #180
 - [ ] #168
 - [ ] #181

@@ -291,6 +291,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         // Pestaña «Vista previa» (VentanaConfiguradorEstribos.VistaPrevia.cs).
         ConectarVistaPrevia();
+        ConectarEstadoPanel();
 
         RefrescarConfiguracionesGuardadas();
         CargarColumnas();
@@ -467,10 +468,11 @@ public partial class VentanaConfiguradorEstribos : Window
     private void ComboConfiguraciones_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         BotonAplicarConfiguracion.IsEnabled = ComboConfiguraciones.SelectedItem is string;
+        BotonBorrarConfiguracion.IsEnabled = ComboConfiguraciones.SelectedItem is string;
+        PedirEstadoPanel();
         if (_refrescandoConfiguraciones) return;
         if (ConfiguracionElegida() is not { } guardada || _columnaIdActiva is not string idColumna) return;
 
-        CampoNombreConfiguracion.Text = guardada.Nombre;
         TextoEstado.Text = AplicarConfiguracion(guardada, idColumna);
         MostrarColumnaActivaEnPanel();
     }
@@ -572,55 +574,113 @@ public partial class VentanaConfiguradorEstribos : Window
     };
 
     /// <summary>
-    /// Enter en el nombre de la configuración guarda, en vez de disparar
-    /// «Aceptar este tramo» (que es el botón por defecto de la ventana, #120).
+    /// Enter en el nombre de la configuración la guarda como nueva, en vez de
+    /// disparar «Aceptar este tramo» (que es el botón por defecto de la
+    /// ventana, #120).
     /// </summary>
     private void CampoNombreConfiguracion_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        BotonGuardarConfiguracion_Click(sender, e);
+        BotonGuardarComoNueva_Click(sender, e);
     }
 
-    private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
+    // #179: guardar como nueva, guardar cambios y eliminar son tres gestos
+    // distintos. Antes los dos primeros eran el mismo botón y dependía del
+    // nombre escrito si se creaba una o se pisaba otra sin aviso.
+
+    private void BotonGuardarComoNueva_Click(object sender, RoutedEventArgs e)
     {
         string nombre = CampoNombreConfiguracion.Text.Trim();
         if (nombre.Length == 0)
         {
-            TextoEstado.Text = "Escribe un nombre para la configuración antes de guardarla.";
+            TextoEstado.Text = "Escribe un nombre para la configuración nueva.";
+            return;
+        }
+        if (_almacen.Listar().Any(g => g.Nombre == nombre))
+        {
+            TextoEstado.Text = $"Ya hay una configuración «{nombre}». Elige otro nombre, o elígela en la lista y usa «Guardar cambios».";
             return;
         }
 
-        bool reemplaza = _almacen.Listar().Any(g => g.Nombre == nombre);
-
-        // Copia: si la configuración compartiera las listas de grapas/cajas con
-        // la columna de la que salió, seguir editando los estribos menores de
-        // esa columna cambiaría también lo guardado.
-        _almacen.Guardar(new ConfiguracionGuardada
-        {
-            Nombre = nombre,
-            Tramo = LeerConfigDelPanel(),
-            Longitudinal = LeerLongitudinalConEstribosMenores().Copiar(),
-        });
-
+        _almacen.Guardar(ConfiguracionDelPanel(nombre));
+        CampoNombreConfiguracion.Text = "";
         RefrescarConfiguracionesGuardadas(nombre);
-        TextoEstado.Text = reemplaza
-            ? $"Configuración «{nombre}» actualizada."
-            : $"Configuración «{nombre}» guardada.";
+        TextoEstado.Text = $"Configuración «{nombre}» guardada.";
+    }
+
+    private void BotonGuardarCambios_Click(object sender, RoutedEventArgs e)
+    {
+        if (ComboConfiguraciones.SelectedItem is not string nombre)
+        {
+            TextoEstado.Text = "Elige en la lista la configuración que quieras actualizar.";
+            return;
+        }
+        if (MessageBox.Show(this, $"¿Reemplazar la configuración «{nombre}» con lo que hay ahora en el panel?",
+                "Guardar cambios", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        _almacen.Guardar(ConfiguracionDelPanel(nombre));
+        RefrescarConfiguracionesGuardadas(nombre);
+        TextoEstado.Text = $"Configuración «{nombre}» actualizada.";
     }
 
     private void BotonBorrarConfiguracion_Click(object sender, RoutedEventArgs e)
     {
         if (ComboConfiguraciones.SelectedItem is not string nombre)
         {
-            TextoEstado.Text = "Elige en la lista la configuración que quieras borrar.";
+            TextoEstado.Text = "Elige en la lista la configuración que quieras eliminar.";
+            return;
+        }
+        if (MessageBox.Show(this, $"¿Eliminar del modelo la configuración «{nombre}»? No se puede deshacer.",
+                "Eliminar configuración", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        _almacen.Borrar(nombre);
+        RefrescarConfiguracionesGuardadas();
+        TextoEstado.Text = $"Configuración «{nombre}» eliminada.";
+    }
+
+    /// <summary>
+    /// El panel entero como configuración con nombre. Copia: si compartiera
+    /// las listas de grapas/cajas con la columna de la que salió, seguir
+    /// editando los estribos menores de esa columna cambiaría también lo guardado.
+    /// </summary>
+    private ConfiguracionGuardada ConfiguracionDelPanel(string nombre) => new()
+    {
+        Nombre = nombre,
+        Tramo = LeerConfigDelPanel(),
+        Longitudinal = LeerLongitudinalConEstribosMenores().Copiar(),
+    };
+
+    /// <summary>
+    /// #179: si el panel tiene cambios respecto de la configuración elegida.
+    /// Se compara contra lo que quedaría al cargarla (migrada), no contra el
+    /// JSON tal cual: una configuración vieja no tiene que salir "cambiada" solo
+    /// por venir en el formato anterior.
+    /// </summary>
+    private void ActualizarCambiosSinGuardar()
+    {
+        if (ConfiguracionElegida() is not { } guardada || _columnaActiva is null)
+        {
+            TextoCambiosSinGuardar.Visibility = Visibility.Collapsed;
+            BotonGuardarCambios.IsEnabled = false;
             return;
         }
 
-        _almacen.Borrar(nombre);
-        CampoNombreConfiguracion.Text = "";
-        RefrescarConfiguracionesGuardadas();
-        TextoEstado.Text = $"Configuración «{nombre}» borrada.";
+        ConfigLongitudinal suya = guardada.Longitudinal.Copiar();
+        suya.MigrarBarrasPorCara();
+        suya.MigrarEstribosMenores();
+        ConfigLongitudinal delPanel = LeerLongitudinalConEstribosMenores().Copiar();
+        delPanel.MigrarEstribosMenores();
+
+        bool cambiada = !ComparadorConfig.Igual(LeerConfigDelPanel(), guardada.Tramo) || !ComparadorConfig.Igual(delPanel, suya);
+        TextoCambiosSinGuardar.Text = cambiada
+            ? $"• El panel tiene cambios sin guardar en «{guardada.Nombre}»."
+            : $"El panel coincide con «{guardada.Nombre}».";
+        TextoCambiosSinGuardar.Foreground = cambiada ? Paleta.AvisoTexto : Paleta.TextoSecundario;
+        TextoCambiosSinGuardar.Visibility = Visibility.Visible;
+        BotonGuardarCambios.IsEnabled = cambiada;
     }
 
     /// <summary>
@@ -1568,6 +1628,7 @@ public partial class VentanaConfiguradorEstribos : Window
         // (el ángulo de un gancho, Voltear, la barra de una pieza) no la
         // redibujaba: hacía falta borrar la pieza y volver a ponerla (Luciano, 26-oct).
         PedirVistaPrevia();
+        PedirEstadoPanel();
     }
 
     // ------------------------------------------------------------- aceptar

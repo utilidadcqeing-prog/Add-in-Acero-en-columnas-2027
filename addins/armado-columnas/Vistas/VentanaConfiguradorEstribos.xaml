@@ -229,20 +229,32 @@
                         <Button Grid.Column="1" x:Name="BotonAplicarConfiguracion" Content="Aplicar" Style="{StaticResource BotonSecundario}" IsEnabled="False"
                                 ToolTip="Carga la configuración elegida en todos los tramos de la columna activa, aunque ya tenga la suya. No acepta nada."
                                 Height="24" Margin="6,0,0,0" Click="BotonAplicarConfiguracion_Click" />
-                        <Button Grid.Column="2" x:Name="BotonBorrarConfiguracion" ToolTip="Borra del modelo la configuración elegida en la lista." Content="Borrar" Style="{StaticResource BotonPeligro}"
-                                Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
+                        <Button Grid.Column="2" x:Name="BotonBorrarConfiguracion" ToolTip="Elimina del modelo la configuración elegida en la lista (pregunta antes)." Content="Eliminar" Style="{StaticResource BotonPeligro}"
+                                IsEnabled="False" Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
+                    </Grid>
+                    <!-- #179: si el panel se apartó de la configuración elegida, y guardar esos cambios en ella. -->
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" x:Name="TextoCambiosSinGuardar" Style="{StaticResource TextoAyuda}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Visibility="Collapsed" />
+                        <Button Grid.Column="1" x:Name="BotonGuardarCambios" Content="Guardar cambios" Style="{StaticResource BotonSecundario}" IsEnabled="False"
+                                ToolTip="Reemplaza la configuración elegida con lo que hay ahora en el panel (pregunta antes)."
+                                Height="24" Margin="6,0,0,0" Click="BotonGuardarCambios_Click" />
                     </Grid>
                     <Grid Margin="0,4,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" ToolTip="Nombre con el que se guarda el panel actual. Enter = Guardar." KeyDown="CampoNombreConfiguracion_KeyDown"
+                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" ToolTip="Nombre de la configuración nueva. Enter = Guardar como nueva." KeyDown="CampoNombreConfiguracion_KeyDown"
                                  VerticalContentAlignment="Center" />
-                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" ToolTip="Guarda el panel entero (tramo + acero longitudinal) dentro del modelo, con este nombre." Content="Guardar" Style="{StaticResource BotonSecundario}"
-                                Height="24" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
+                        <Button Grid.Column="1" x:Name="BotonGuardarComoNueva" ToolTip="Guarda el panel entero (tramo + acero longitudinal) dentro del modelo, como una configuración nueva con este nombre." Content="Guardar como nueva" Style="{StaticResource BotonSecundario}"
+                                Height="24" Margin="6,0,0,0" Click="BotonGuardarComoNueva_Click" />
                     </Grid>
-                    <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre."
+                    <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre nuevo."
                                Style="{StaticResource TextoAyuda}" Margin="0,3,0,0" />
 
                     <Border Style="{StaticResource SeparadorSeccion}" />
