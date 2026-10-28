@@ -32,7 +32,7 @@ internal sealed class PuenteTablero
         this.uiapp = uiapp;
         leido = uiapp.ActiveUIDocument?.Document;
         sesion = new SesionTablero(Leer, new AlmacenReglas(AlmacenReglas.RutaPorDefecto), leido?.Title ?? "", NominalesDelModelo,
-            ConfiguracionDeViga, DobladosDelModelo);
+            ConfiguracionDeViga, DobladosDelModelo, TerminadaViga);
 
         ventana.MensajeRecibido += json => acciones.Encolar(app => Atender(app, ProtocoloTablero.Leer(json)));
         acciones.Fallo += texto => ventana.Enviar(ProtocoloTablero.Aviso($"No se pudo hacer en Revit: {texto}"));
@@ -53,6 +53,8 @@ internal sealed class PuenteTablero
                 Hacer(app, accion, vigas);
             else if (salida is AGenerar(var porticos, var saltados, Reglas reglas) && leido is not null)
                 ventana.Enviar(ProtocoloTablero.Resumen(GeneradorAcero.Generar(leido, porticos, saltados, reglas)));
+            else if (salida is ATerminado(var vigasTerminado, bool terminado) && leido is not null)
+                Marcar(leido, vigasTerminado, terminado);
             else if (salida is APrevia3d(var portico, Reglas reglasPrevia) && leido is not null)
             {
                 PreviaAcero3D.Mostrar(leido, AccionesRevit.Nombre3d, portico, reglasPrevia);
@@ -75,6 +77,21 @@ internal sealed class PuenteTablero
     /// <summary>Lo que guardó una generación anterior en la viga (plan de 22-oct, recordar el pórtico), o null.</summary>
     private string? ConfiguracionDeViga(string id) =>
         leido is not null && long.TryParse(id, out long n) ? ConfiguracionPortico.Leer(leido.GetElement(new ElementId(n))) : null;
+
+    /// <summary>Si la viga tiene la marca de terminado (punto 5 de Santiago, 28-oct).</summary>
+    private bool TerminadaViga(string id) =>
+        leido is not null && long.TryParse(id, out long n) && MarcaTerminado.Tiene(leido.GetElement(new ElementId(n)));
+
+    /// <summary>La palomita del tablero: pone o quita la marca en las vigas, en una sola operación de Revit.</summary>
+    private static void Marcar(Document doc, IReadOnlyList<string> vigas, bool terminado)
+    {
+        using var t = new Transaction(doc, terminado ? "Marcar pórtico terminado" : "Desmarcar pórtico terminado");
+        t.Start();
+        foreach (string id in vigas)
+            if (long.TryParse(id, out long n) && doc.GetElement(new ElementId(n)) is { } viga)
+                MarcaTerminado.Marcar(viga, terminado);
+        t.Commit();
+    }
 
     private void Hacer(UIApplication app, AccionRevit accion, IReadOnlyList<string> vigas)
     {

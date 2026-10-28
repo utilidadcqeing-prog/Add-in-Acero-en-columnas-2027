@@ -8,9 +8,11 @@ namespace CQEING.Vigas.Calculo.Tablero;
 /// ids de los pórticos elegidos con "Seleccionar en Revit": la lista muestra solo esos (null = todos).
 /// <paramref name="DiametrosDisponibles"/> son los que tienen tipo de barra en el modelo (#85).
 /// <paramref name="Planta"/>: el dibujo en planta de cada nivel, para el modo "Planta" (planta, 27-oct).
+/// <paramref name="Terminados"/>: los ids de los pórticos marcados como terminados (punto 5 de Santiago, 28-oct).
 /// </summary>
 public sealed record VistaTablero(string Proyecto, IReadOnlyList<PorticoEnLista> Porticos, VistaPortico? Actual, VistaReglas Reglas, bool EnVivo,
-    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null, PlantaVista? Planta = null);
+    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null, PlantaVista? Planta = null,
+    IReadOnlyList<string>? Terminados = null);
 
 /// <summary>
 /// Un pórtico en la columna izquierda. <paramref name="Sub"/> es como <c>"Eje 1 · A a D + voladizo"</c>.

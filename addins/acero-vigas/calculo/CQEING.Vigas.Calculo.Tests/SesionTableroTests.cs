@@ -693,6 +693,67 @@ public sealed class SesionTableroTests : IDisposable
             g.Porticos.Select(p => ConfiguracionGuardada.Leer(p.Configuracion)!.Value.Estado));
     }
 
+    // Pórtico terminado (punto 5 de Santiago, 28-oct): la palomita junto al nombre y el verde en la planta.
+
+    private static List<string?> Terminados(SesionTablero s) =>
+        VistaDe([s.Vista()]).GetProperty("terminados").EnumerateArray().Select(t => t.GetString()).ToList();
+
+    [Fact]
+    public void MarcarTerminadoLoGuardaEnSusVigasYLoMuestra()
+    {
+        SesionTablero s = ConUbicacion();
+
+        IReadOnlyList<Salida> salidas = s.Manejar(new MarcarTerminado("Pórtico 1", true));
+
+        ATerminado marca = Assert.Single(salidas.OfType<ATerminado>());
+        Assert.True(marca.Terminado);
+        Assert.Equal(PlanificadorAceroTests.Portico().Vigas, marca.Vigas);
+        Assert.Equal(["Pórtico 1"], VistaDe(salidas).GetProperty("terminados").EnumerateArray().Select(t => t.GetString()));
+    }
+
+    [Fact]
+    public void DesmarcarTerminadoLoQuita()
+    {
+        SesionTablero s = ConUbicacion();
+        s.Manejar(new MarcarTerminado("Pórtico 1", true));
+
+        Assert.False(Assert.Single(s.Manejar(new MarcarTerminado("Pórtico 1", false)).OfType<ATerminado>()).Terminado);
+        Assert.Empty(Terminados(s));
+    }
+
+    [Fact]
+    public void MarcarUnPorticoQueNoEstaNoTocaRevit()
+    {
+        Assert.Empty(ConUbicacion().Manejar(new MarcarTerminado("Otro", true)).OfType<ATerminado>());
+    }
+
+    [Fact]
+    public void MarcarUnaViguetaMarcaTodoSuSistema()
+    {
+        SesionTablero s = ConViguetas();
+
+        ATerminado marca = Assert.Single(s.Manejar(new MarcarTerminado("Vigueta 2", true)).OfType<ATerminado>());
+
+        Assert.Equal(["v1", "v2", "v3"], marca.Vigas);
+        Assert.Equal(["Vigueta 1", "Vigueta 2", "Vigueta 3"], Terminados(s));
+    }
+
+    [Fact]
+    public void LoMarcadoEnLasVigasSeLeeAlRecargar()
+    {
+        lectura = new([ArmadorVistaTests.Portico1()], []);
+        var marcadas = new HashSet<string>();
+        var s = new SesionTablero(() => lectura, new AlmacenReglas(Path.Combine(carpeta, "reglas.json")), "Proyecto de prueba",
+            terminadaViga: marcadas.Contains);
+        s.Manejar(new Listo());
+        Assert.Empty(Terminados(s));
+
+        marcadas.Add(ArmadorVistaTests.Portico1().Vigas[0]);
+        s.Recargar();
+
+        Assert.Equal(["Pórtico 1"], Terminados(s));
+    }
+
     [Fact]
     public void SinLectorDeDiametros_SonLosDeLasReglas()
     {

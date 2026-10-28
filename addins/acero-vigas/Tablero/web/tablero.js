@@ -766,7 +766,10 @@
       const nEstAll = P ? P.estribos : 0;
       const avisoTexto = (avisoLargo || avisoOtro || { texto: '' }).texto;
       const corte = avisoTexto.indexOf('. ');
+      // la palomita de terminado junto al nombre (punto 5 de Santiago, 28-oct); la marca vive en las vigas de Revit
+      const terminado = !!P && (vista.terminados || []).includes(P.id);
       return {
+        terminado, toggleTerminado: () => { if (P) enviar({ tipo: 'marcarTerminado', id: P.id, terminado: !terminado }); },
         pors, porCount: elegidos ? enLista.length + ' de ' + PORS.length : PORS.length + ' en el modelo', filtrado: !!elegidos,
         verTodos: () => enviar({ tipo: 'verTodos' }), q: s.q, proyecto: vista.proyecto, por: por ? { name: por.nombre, sub: por.sub } : { name: '', sub: '' }, hasPor: !!P, noPor: !P,
         tipo, isCim, isAviso, summary: (bars.length + BAST.length) + ' barras · ' + nEstAll + ' estribos · ' + lapsAll.length + ' traslapos · ' + (P ? P.kg : 0).toFixed(1) + ' kg',
@@ -991,6 +994,8 @@
       // o más quedan como los elegidos de "Seleccionar en Revit": la lista muestra esos y "Generar en Revit" los crea todos.
       const seleccion = vista.elegidos ? vista.elegidos : idP != null ? [idP] : [];
       const delGrupo = (e) => e.tipo === 'vigueta' && e.grupo ? (nivel.elementos || []).filter((o) => o.grupo === e.grupo).map((o) => o.portico) : [e.portico];
+      // los terminados salen en verde (punto 5 de Santiago, 28-oct); el abierto y los seleccionados van encima
+      const terminados = new Set(vista.terminados || []);
       const enSeleccion = new Set(seleccion.flatMap((id) => {
         const e = (nivel.elementos || []).find((o) => o.portico === id);
         return e ? delGrupo(e) : [id];
@@ -1011,7 +1016,7 @@
       // Cada viga o vigueta es su rectángulo real en planta (ancho del modelo, con un mínimo para que se vea).
       const items = esc ? (nivel.elementos || []).filter(fin).map((e, i) => {
         const vig = e.tipo === 'vigueta', off = !ver[vig ? 'vigueta' : 'viga'], abierto = elegidos.includes(e);
-        const on = abierto || enSeleccion.has(e.portico);
+        const on = abierto || enSeleccion.has(e.portico), listo = terminados.has(e.portico);
         const ax = esc.X(e.x1), ay = esc.Y(e.y1), bx = esc.X(e.x2), by = esc.Y(e.y2);
         const L = Math.hypot(bx - ax, by - ay) || 1, nx = -(by - ay) / L, ny = (bx - ax) / L;
         const t = Math.max(vig ? 2.5 : 3.5, (e.ancho > 0 ? e.ancho : vig ? 0.1 : 0.3) * esc.s) / 2;
@@ -1021,8 +1026,8 @@
           tecla: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.plArrastro = false; abrir(e, ev); } },
           a: [ax, ay], b: [bx, by],
           pts: [[ax + nx * t, ay + ny * t], [bx + nx * t, by + ny * t], [bx - nx * t, by - ny * t], [ax - nx * t, ay - ny * t]].map((p) => f(p[0]) + ',' + f(p[1])).join(' '),
-          fill: off ? '#F1F3F5' : abierto ? '#1F5FAF' : on ? '#9DBBE3' : vig ? '#E4E7EB' : '#C9CFD6',
-          stroke: off ? '#D9DDE2' : on ? '#174A8A' : vig ? '#7C8692' : '#5E6670' };
+          fill: off ? '#F1F3F5' : abierto ? '#1F5FAF' : on ? '#9DBBE3' : listo ? '#CDEBD5' : vig ? '#E4E7EB' : '#C9CFD6',
+          stroke: off ? '#D9DDE2' : on ? '#174A8A' : listo ? '#3B8A57' : vig ? '#7C8692' : '#5E6670' };
       }) : [];
       // los elegidos encima, para que no los tape otro
       items.sort((p, q) => (p.on ? 1 : 0) - (q.on ? 1 : 0) || (p.vig ? 1 : 0) - (q.vig ? 1 : 0));
@@ -1091,6 +1096,7 @@
           <span style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; background: #3F4A57"></span>Columna</span>
           <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #1F5FAF"></span>Abierto</span>
           <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #9DBBE3"></span>Seleccionado</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #CDEBD5; border: 1px solid #3B8A57; box-sizing: border-box"></span>Terminado</span>
         </div>
         <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #1F5FAF; border-radius: 6px; background: #F3F7FC">
           <span style="width: 10px; height: 10px; flex-shrink: 0; background: #1F5FAF"></span>
@@ -1168,7 +1174,15 @@
       <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px">
         <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap">
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-            <span style="font-size: 18px; font-weight: 600">${v.por.name}</span>
+            <span style="display: flex; align-items: center; gap: 8px">
+              <span style="font-size: 18px; font-weight: 600">${v.por.name}</span>
+              <button type="button" onClick=${v.toggleTerminado} aria-pressed=${v.terminado ? 'true' : 'false'} title=${v.terminado ? 'Quitar la marca de terminado' : 'Marcar como terminado'} style="display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 4px; border: 0; border-radius: 11px; background: transparent; font: inherit; font-size: 11px; font-weight: 600; color: #3B8A57; cursor: pointer">
+                <span style="width: 16px; height: 16px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid ${v.terminado ? '#3B8A57' : '#B5BCC4'}; background: ${v.terminado ? '#3B8A57' : 'transparent'}; display: grid; place-items: center; transition: background 120ms ease-out, border-color 120ms ease-out">
+                  ${v.terminado ? html`<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5.2l2.2 2.2L8.5 2.6" stroke="#FFFFFF" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>` : null}
+                </span>
+                ${v.terminado ? 'Terminado' : null}
+              </button>
+            </span>
             <span style="font-size: 12px; color: #5E6670; overflow: hidden; text-overflow: ellipsis">${v.por.sub} · ${v.tipo} · ${v.summary}</span>
           </div>
           <label for="ver-main" style="color: #5E6670; font-size: 12px">Ver</label>

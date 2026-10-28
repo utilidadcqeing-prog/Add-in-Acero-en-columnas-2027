@@ -33,6 +33,13 @@ public class ProtocoloTableroTests
     }
 
     [Fact]
+    public void LeeMarcarTerminado()
+    {
+        Assert.Equal(new MarcarTerminado("P1", true), ProtocoloTablero.Leer("""{"tipo":"marcarTerminado","id":"P1","terminado":true}"""));
+        Assert.Equal(new MarcarTerminado("P1", false), ProtocoloTablero.Leer("""{"tipo":"marcarTerminado","id":"P1","terminado":false}"""));
+    }
+
+    [Fact]
     public void CalcularTraeLasOpcionesDeLaPagina()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(5, 5), new GrupoBarras(2, 4)], Cara = Cara.Final };

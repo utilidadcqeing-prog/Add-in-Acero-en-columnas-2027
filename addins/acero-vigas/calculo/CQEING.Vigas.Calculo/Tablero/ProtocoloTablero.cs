@@ -56,6 +56,12 @@ public sealed record GuardarReglas(VistaReglas Reglas) : MensajeTablero;
 /// </summary>
 public sealed record Generar(IReadOnlyList<string> Ids, IReadOnlyDictionary<string, string>? Estados = null, bool Forzar = false) : MensajeTablero;
 
+/// <summary>
+/// La palomita junto al nombre del pórtico (punto 5 de Santiago, 28-oct): marcarlo o desmarcarlo como terminado, para
+/// verlo en verde en la planta.
+/// </summary>
+public sealed record MarcarTerminado(string Id, bool Terminado) : MensajeTablero;
+
 /// <summary>Un pórtico que se iba a generar con <paramref name="Cantidad"/> choques (los puntos del alzado).</summary>
 public sealed record PorticoConChoques(string Id, int Cantidad);
 
@@ -107,6 +113,7 @@ public static class ProtocoloTablero
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
                 "cambiarEnVivo" => new CambiarEnVivo(nodo["activo"]?.GetValue<bool>() ?? false),
                 "verTodos" => new VerTodos(),
+                "marcarTerminado" => new MarcarTerminado(Texto(nodo, "id"), nodo["terminado"]?.GetValue<bool>() ?? false),
                 "elegirVarios" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } varios
                     ? new ElegirVarios(varios, Texto(nodo, "abrir")) : new Desconocido(tipo),
                 "generar" => nodo["ids"]?.Deserialize<List<string>>(Json) is { } ids
