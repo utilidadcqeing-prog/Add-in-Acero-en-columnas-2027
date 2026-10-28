@@ -257,3 +257,81 @@ curva. Es la convención de los planos; el largo de corte es el correcto.
   cuando ya no haga falta.
 - Retest en Revit 2026: compila, pero no se probó (ahí el peso solo se llena
   en «kg/m»).
+
+## Error al generar: "The rebar splice connection cannot be maintained" (28-oct, tarde)
+
+Luciano generó otra columna y Revit dio 8 errores, uno por traslapo
+(reporte `Prueba 08072026_Error Report.html`). En cada par, la pieza de
+abajo había quedado con «CQ Recta 90-90» (815117, 815131, …) y la de
+arriba con «CQ Recta 0-90»: la pieza de abajo conservaba el gancho asignado
+en la punta del traslapo, y con una forma de gancho en las dos puntas Revit
+lo dibuja ahí y pierde el empalme. En la prueba anterior las piezas habían
+salido 90-0 / 0-90 y no pasó. Luciano canceló (no quedó nada en el modelo).
+
+Fix en `DetallesPlegado.PonerFormaRecta` (ajustado con Luciano): una punta
+empalmada (`Rebar.GetRebarSplice(punta)`, pública desde 2025) cuenta como sin
+gancho, y si tiene un gancho anotado se le borra (`SetHookTypeId(punta,
+InvalidElementId)`) antes de cambiar la forma. Así la pieza de 90-90 queda
+«CQ Recta 90-0» / «0-90» con la cota de su gancho de verdad. Sin verificar:
+que borrar ese gancho anotado no afecte el empalme ni el largo.
+
+Hipótesis de por qué no pasó en la prueba anterior (sin verificar): depende
+del sentido en que se dibuja la varilla antes de partirla (`DeArribaAAbajo`,
+elegido por el acomodo del traslapo); desde esa prueba «Generar» usa la
+configuración aceptada (#178/#180), que puede haber cambiado el acomodo.
+
+Pendiente de retest: generar esa misma columna sin errores, y con el conector
+revisar en cada pieza el gancho anotado de cada punta, dónde está el empalme
+y que el largo no cambie.
+
+### Segundo intento (28-oct, 15:32): mismo error, otra causa
+
+Con el ajuste de arriba volvieron los 8 errores, ahora con las dos piezas de
+cada par en «CQ Recta 0-90» (815101/815107, …). Si una es 0-90 la otra tenía
+que ser 90-0: `GetRebarSplice(punta)` no indicó bien la punta del traslapo en
+una de las piezas, así que se le borró su gancho de verdad y quedó el anotado
+en el traslapo. Luciano canceló.
+
+Cambio: ya no se usa `GetRebarSplice` ni se borra ningún gancho. Por cada
+varilla (la cadena de piezas), se lee la altura de las dos puntas del tramo
+recto de cada pieza (`GetCenterlineCurves` sin ganchos): solo la punta más
+baja y la más alta de toda la varilla pueden tener gancho de verdad (±1 cm).
+Una pieza con gancho anotado en una punta de traslapo no se toca. La firma
+pasó a `PonerFormaRecta(doc, varillas, propios)` (la llamada en
+`GeneradorLongitudinal` pasa `creadas.Select(c => c.Cadena)`).
+
+### Tercer intento: mismo error. Se saca el cambio de las longitudinales
+
+Con la decisión por altura (sin tocar las piezas con gancho anotado en el
+traslapo) volvió el error. Conclusión: cambiarle la forma a una pieza
+empalmada (`SetRebarShapeId`) no es seguro, aunque en la primera prueba haya
+funcionado en las 8 barras; no se sabe qué la hizo distinta.
+
+Decisión de Luciano (28-oct): se saca. Se borraron `DetallesPlegado.PonerFormaRecta`,
+`TiposPropios.FormaRecta` y la llamada en `GeneradorLongitudinal` (vuelve a
+como estaba en 39d4b3a). Las longitudinales quedan con la «00» de Revit y el
+detalle de plegado no mide su gancho. Estribos y grapas siguen con la cota de
+los ganchos (no tienen empalmes). Los modelos donde ya se generó pueden tener
+formas «CQ Recta …» sin usar: no molestan.
+
+Pendiente, si se retoma: un comando de diagnóstico que le cambie la forma a una
+sola pieza empalmada, mire si el empalme se mantiene y lo deshaga, para saber
+con datos en qué caso Revit lo acepta.
+
+### Causa real del error de empalmes (28-oct, 15:49)
+
+Con el cambio de forma ya sacado, el error siguió, y el reporte de las 15:49
+mostró las piezas con «CQ Recta 0-90» (también en #5) aunque el add-in ya no
+asignaba esa forma. La elige Revit: `BarraContinua.CrearEntera` usa
+`CreateFromCurves(useExistingShapeIfPossible: true)` y, desde que la prueba
+de las 13:50 dejó las «CQ Recta …» en el modelo, Revit las usa al crear y al
+partir, y con ellas pierde el empalme. En la prueba de las 13:50 no pasó
+porque esas formas se crearon recién al final.
+
+Fix: `DetallesPlegado.BorrarFormasRectas`, llamada en `GeneradorArmado`
+justo después de `BorrarAnteriores` (antes de crear las longitudinales):
+borra las «CQ Recta …» que ya no usa ninguna barra; si alguna la usan barras
+de otras columnas, avisa. Pendiente de retest.
+
+Lección: una forma propia que dejemos en el modelo puede ser elegida por
+Revit en cualquier `CreateFromCurves(useExistingShapeIfPossible: true)`.

@@ -43,44 +43,36 @@ public static class DetallesPlegado
     }
 
     /// <summary>
-    /// Les pone la forma recta propia (<see cref="TiposPropios.FormaRecta"/>)
-    /// a las piezas longitudinales con gancho, para que el detalle de plegado
-    /// mida el gancho (la «00» de la plantilla no ata ninguna cota a él). Va
-    /// sobre las piezas ya partidas y acomodadas: crearlas con la forma no
-    /// sirve, porque al partir en los traslapos Revit les vuelve a elegir la
-    /// «00» (medido el 28-oct, pieza 815298). <c>SetRebarShapeId</c> conserva
-    /// la geometría. Una pieza que no la acepte queda como estaba. Devuelve un
-    /// aviso si alguna no se pudo, o null.
+    /// Borra las formas «CQ Recta …» que dejó un intento anterior del #176
+    /// (28-oct) y que ya no usa ninguna barra. Las longitudinales se crean
+    /// pidiéndole a Revit una forma existente que encaje, y Revit las elegía
+    /// solo: con ellas perdía los empalmes al partir ("The rebar splice
+    /// connection cannot be maintained", reporte de las 15:49, con piezas
+    /// «CQ Recta 0-90» aunque el add-in ya no las asignaba). Una que todavía
+    /// use alguna barra no se borra: devuelve el aviso.
     /// </summary>
-    public static string? PonerFormaRecta(Document doc, IEnumerable<Rebar> piezas, TiposPropios propios)
+    public static string? BorrarFormasRectas(Document doc)
     {
-        string? aviso = null;
-        foreach (Rebar r in piezas)
+        var formas = new FilteredElementCollector(doc).OfClass(typeof(RebarShape)).Cast<RebarShape>()
+            .Where(f => f.Name.StartsWith("CQ Recta ", StringComparison.Ordinal)).ToList();
+        if (formas.Count == 0) return null;
+
+        var usadas = new HashSet<ElementId>(new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>()
+            .Select(r => r.GetShapeId()));
+        var enUso = new List<string>();
+        foreach (RebarShape forma in formas)
         {
-            if (!r.IsValidObject || !r.IsRebarShapeDriven()) continue;
-            int inicio = Grados(doc, r.GetHookTypeId(0)), fin = Grados(doc, r.GetHookTypeId(1));
-            if (propios.FormaRecta(inicio, fin) is not { } pieza) continue;
-            if (pieza.Tipo is not RebarShape forma)
+            if (usadas.Contains(forma.Id))
             {
-                aviso ??= pieza.Aviso;
+                enUso.Add(forma.Name);
                 continue;
             }
-            if (r.GetShapeId() == forma.Id) continue;
-            try
-            {
-                r.GetShapeDrivenAccessor().SetRebarShapeId(forma.Id);
-            }
-            catch (Exception ex)
-            {
-                aviso ??= $"no se pudo poner la forma «{forma.Name}» en la barra {r.Id.Value}: {ex.Message}";
-            }
+            doc.Delete(forma.Id);
         }
-        return aviso;
+        return enUso.Count == 0 ? null
+            : $"las formas {string.Join(", ", enUso.Select(n => $"«{n}»"))} las usan barras de otras columnas; " +
+              "pueden hacer fallar los traslapos al generar. Regenere esas columnas o cambie la forma de esas barras a «00».";
     }
-
-    /// <summary>El ángulo del gancho en grados enteros; 0 si no hay gancho.</summary>
-    private static int Grados(Document doc, ElementId gancho) =>
-        doc.GetElement(gancho) is RebarHookType tipo ? (int)Math.Round(tipo.HookAngle * 180 / Math.PI) : 0;
 
     /// <summary>
     /// El tipo de detalle de plegado propio, esquemático: dibuja la barra en

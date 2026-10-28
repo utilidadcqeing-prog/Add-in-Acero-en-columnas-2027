@@ -56,6 +56,8 @@ public static class GeneradorArmado
         // #145: regenerar reemplaza, no apila. Va antes de crear nada, y en la
         // misma transacción: si la generación falla, el acero anterior vuelve.
         res.Eliminados = BorrarAnteriores(doc, plan, opciones.BorrarArmadoAjeno);
+        if (DetallesPlegado.BorrarFormasRectas(doc) is string avisoFormas)
+            res.Avisos.Add($"Traslapos: {avisoFormas}");
 
 #if DEBUG
         // Solo en Debug: el paquete publicado (Release) no deja registros.

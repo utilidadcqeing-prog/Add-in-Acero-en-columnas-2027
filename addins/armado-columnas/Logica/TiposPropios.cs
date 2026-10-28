@@ -108,22 +108,6 @@ public sealed class TiposPropios
             () => CrearFormaGrapa(nombre, s, RebarStyle.StirrupTie, (int)inicio, (int)fin)));
     }
 
-    /// <summary>
-    /// Barra recta con gancho en una punta o en las dos (#176, longitudinales):
-    /// la «00» de la plantilla que elegía Revit no ata ninguna cota al gancho,
-    /// así que el detalle de plegado no lo medía. Una forma por combinación
-    /// («CQ Recta 90-0»…; 0 = sin gancho), igual que las grapas, porque Revit
-    /// pide que los ganchos de la barra coincidan con los de la forma. Sin
-    /// ganchos no hay nada que acotar: null, y la barra va como siempre.
-    /// </summary>
-    public Pieza<RebarShape>? FormaRecta(int gradosInicio, int gradosFin)
-    {
-        if (gradosInicio == 0 && gradosFin == 0) return null;
-        string nombre = $"CQ Recta {gradosInicio}-{gradosFin}";
-        return Cacheado(nombre, () => Forma(nombre, RebarStyle.Standard, 1,
-            () => CrearFormaGrapa(nombre, false, RebarStyle.Standard, gradosInicio, gradosFin)));
-    }
-
     /// <summary>Rectángulo cerrado de cuatro lados antihorario, cotas por fuera del doblez, 135° en las dos puntas: estribo principal y cajas.</summary>
     public Pieza<RebarShape> FormaEstribo() =>
         Cacheado(NombreFormaEstribo, () => Forma(NombreFormaEstribo, RebarStyle.StirrupTie, 4, CrearFormaEstribo));
