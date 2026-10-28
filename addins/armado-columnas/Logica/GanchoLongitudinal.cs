@@ -10,11 +10,14 @@ using practicacq.Modelo;
 /// <summary>
 /// El gancho de 90° de la barra longitudinal (anclaje en la zapata y remate):
 /// uno PROPIO del add-in, «CQ Gancho 90°», ajustado para que cada punta sume
-/// al largo de corte exactamente el <see cref="CuadroVarillas.Varilla.Gancho90"/>
-/// del cuadro de la empresa.
+/// al largo de corte exactamente el <see cref="CuadroVarillas.Varilla.AporteGancho90"/>:
+/// así la pata, medida por fuera del doblez, es el
+/// <see cref="CuadroVarillas.Varilla.Gancho90"/> del cuadro de la empresa
+/// (#177; hasta el 28-oct sumaba el Gancho90 entero y la pata salía 3,3 cm
+/// más larga en la #4).
 ///
 /// Hace falta porque la pestaña «Traslapos» redondea los largos de corte con
-/// el gancho del cuadro, y el de 90° del modelo («Estándar - 90°») suma menos:
+/// ese aporte, y el de 90° del modelo («Estándar - 90°») suma otra cosa:
 /// 0,188 m por punta en una #4 contra 0,222 m del cuadro (medido el 17-oct,
 /// docs/planes/2026-10-17-diagnostico-traslapos-variables.md). Ese gancho no
 /// se toca porque lo usan otras barras del modelo (vigas, por ejemplo).
@@ -31,13 +34,13 @@ public sealed class GanchoLongitudinal
     public const string Nombre = "CQ Gancho 90°";
 
     /// <summary>
-    /// Medio centímetro por punta: <c>TotalLength</c> sale redondeado al
-    /// centímetro (redondeo de armaduras del proyecto), así que la medición
-    /// de una punta no distingue menos que eso. Con 1 mm el ajuste saltaba
-    /// entre 0,220 y 0,225 sin llegar nunca a 0,222 y avisaba de más
-    /// (retest del 19-oct, docs/planes/2026-10-17-diagnostico-traslapos-variables.md).
+    /// Un milímetro por punta. Hasta el 19-oct era medio centímetro porque se
+    /// medía con <c>TotalLength</c>, redondeado al centímetro, y con 1 mm el
+    /// ajuste saltaba entre 0,220 y 0,225 sin llegar a 0,222. Desde #177 se
+    /// mide con <c>REBAR_ELEM_LENGTH</c>, que no se redondea (28-oct: 3,5014
+    /// contra 3,5 de <c>TotalLength</c>).
     /// </summary>
-    private const double ToleranciaMetros = 0.005;
+    private const double ToleranciaMetros = 0.001;
 
     private const double LargoDePruebaMetros = 1.0;
     private const int Intentos = 3;
@@ -78,7 +81,7 @@ public sealed class GanchoLongitudinal
         RebarHookType? gancho = Gancho();
         if (gancho is null) return new Resultado(null, _avisoGancho);
 
-        double objetivo = EstandarCQ.APies(varilla.Gancho90);
+        double objetivo = EstandarCQ.APies(varilla.AporteGancho90);
         try
         {
             for (int intento = 1; intento <= Intentos; intento++)
@@ -90,7 +93,7 @@ public sealed class GanchoLongitudinal
                 double diferencia = objetivo - aporte.Value;
                 Traza?.Invoke(
                     $"  gancho «{Nombre}» en «{barra.Name}», intento {intento}: suma {Metros(aporte.Value):0.0000} m por punta, " +
-                    $"el cuadro pide {varilla.Gancho90:0.000} m");
+                    $"para la pata de {varilla.Gancho90:0.000} m del cuadro tiene que sumar {varilla.AporteGancho90:0.0000} m");
                 if (Math.Abs(diferencia) <= EstandarCQ.APies(ToleranciaMetros)) return new Resultado(gancho, null);
                 if (intento == Intentos) break;
 
@@ -102,7 +105,7 @@ public sealed class GanchoLongitudinal
 
             return new Resultado(gancho,
                 $"el gancho «{Nombre}» de la barra «{barra.Name}» no quedó exactamente con el largo del cuadro " +
-                $"({varilla.Gancho90:0.000} m por punta); los largos de varilla en Revit pueden diferir unos milímetros de la pestaña «Traslapos».");
+                $"(pata de {varilla.Gancho90:0.000} m); los largos de varilla en Revit pueden diferir unos milímetros de la pestaña «Traslapos».");
         }
         catch (Exception ex)
         {
@@ -167,7 +170,10 @@ public sealed class GanchoLongitudinal
         try
         {
             _doc.Regenerate();
-            return (prueba.TotalLength - recta) / 2;
+            // El largo sin redondear (#177): TotalLength sale redondeado al
+            // centímetro y no deja ajustar a menos de medio centímetro por punta.
+            double largo = prueba.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? prueba.TotalLength;
+            return (largo - recta) / 2;
         }
         finally
         {

@@ -56,6 +56,8 @@ public static class GeneradorArmado
         // #145: regenerar reemplaza, no apila. Va antes de crear nada, y en la
         // misma transacción: si la generación falla, el acero anterior vuelve.
         res.Eliminados = BorrarAnteriores(doc, plan, opciones.BorrarArmadoAjeno);
+        if (DetallesPlegado.BorrarFormasRectas(doc) is string avisoFormas)
+            res.Avisos.Add($"Traslapos: {avisoFormas}");
 
 #if DEBUG
         // Solo en Debug: el paquete publicado (Release) no deja registros.
@@ -84,6 +86,13 @@ public static class GeneradorArmado
         TiposPropios.Pieza<RebarHookType> ganchoPropio = propios.GanchoEstribo();
         if (ganchoPropio.Aviso is not null)
             res.Avisos.Add($"Estribos: {ganchoPropio.Aviso}; se usa el gancho configurado en cada tramo.");
+
+        if (DetallesPlegado.AcotarGanchos(doc) is string avisoDetalle)
+            res.Avisos.Add($"Detalles de plegado: {avisoDetalle}.");
+        if (DetallesPlegado.AsegurarTipoPropio(doc) is string avisoTipoDetalle)
+            res.Avisos.Add($"Detalles de plegado: {avisoTipoDetalle}.");
+        if (VarillasPropias.CompletarPeso(doc) is string avisoPeso)
+            res.Avisos.Add($"Varillas: {avisoPeso}.");
 
         var cacheHost = new Dictionary<ElementId, (CurveLoop ContornoCrudo, double ZBase)>();
         var ganchosYaAvisados = new HashSet<(ElementId Barra, ElementId Gancho)>();

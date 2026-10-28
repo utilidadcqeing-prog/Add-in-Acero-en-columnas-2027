@@ -790,6 +790,16 @@ Probar("cuadro_2_cargado", () =>
     Cierto(CuadroVarillas.Cuadro.Single(v => v.Numero == 6).GanchoEstribo135 is null, "#6 sin 135°");
 });
 
+// ---- #177: el gancho de 90° suma menos que el B del cuadro, para que la pata por fuera mida B
+Probar("aporte_gancho_90_pata_b", () =>
+{
+    // #4: radio por el eje 0,04435; arco 0,0697 + B 0,222 - 2 radios 0,0887 - un diámetro 0,0127.
+    double aporte = CuadroVarillas.Cuadro.Single(v => v.Numero == 4).AporteGancho90;
+    Cierto(Math.Abs(aporte - 0.1903) < 0.0005, $"#4 suma 0,1903 (da {aporte:0.0000})");
+    foreach (CuadroVarillas.Varilla v in CuadroVarillas.Cuadro)
+        Cierto(v.AporteGancho90 > 0 && v.AporteGancho90 < v.Gancho90, $"#{v.Numero}: el aporte es positivo y menor que la pata");
+});
+
 // ---- #131: el acomodo de traslapos de una sección, sin Revit
 
 // Esquina inferior izquierda de una 40×40 (metros), #5, traslapo a 1,5–2,2 m.
@@ -830,6 +840,74 @@ Probar("planear_seccion_con_gancho_no_prueba_diagonal", () =>
     Cierto(r[0].Eje == (1, 0) || r[0].Eje == (0, 1), $"eje {r[0].Eje}");
     var sinGancho = AcomodoTraslapos.PlanearSeccion(new[] { Esquina40(false) }, obstaculos);
     Cierto(sinGancho[0].Eje.X != 0 && sinGancho[0].Eje.Y != 0, $"sin gancho, diagonal: {sinGancho[0].Eje}");
+});
+
+Probar("columna_generada_combina_por_tramo", () =>
+{
+    // #180: regenerar solo el tramo 2 deja lo de antes en los otros (su acero
+    // sigue en el modelo) y manda el longitudinal nuevo.
+    var contexto = new ColumnaContexto { BaseX = 0.4, BaseY = 0.4, ZInferior = 0, ZSuperior = 9, Tramos = new[] { T(0, 3), T(3, 6), T(6, 9) } };
+    var primera = ColumnaGenerada.Combinar(null, new ColumnaPlan
+    {
+        Contexto = contexto, Tramos = new() { new ConfigTramo { EspaciadoUniforme = 0.2 }, new ConfigTramo { EspaciadoUniforme = 0.2 }, null },
+        Longitudinal = new ConfigLongitudinal { BarrasPorCaraX = 2 },
+    }, DateTime.Now);
+    var segunda = ColumnaGenerada.Combinar(primera, new ColumnaPlan
+    {
+        Contexto = contexto, Tramos = new() { null, new ConfigTramo { EspaciadoUniforme = 0.1 }, null },
+        Longitudinal = new ConfigLongitudinal { BarrasPorCaraX = 4 },
+    }, DateTime.Now);
+    Igual(0.2, segunda.Tramos[0]!.EspaciadoUniforme, "tramo 0, el de antes");
+    Igual(0.1, segunda.Tramos[1]!.EspaciadoUniforme, "tramo 1, el nuevo");
+    Cierto(segunda.Tramos[2] is null, "tramo 2, nunca generado");
+    Cierto(segunda.Longitudinal.BarrasPorCaraX == 4, "longitudinal nuevo");
+    Cierto(segunda.Cambios(contexto).Count == 0, "sin cambios");
+});
+
+Probar("columna_generada_avisa_cambios", () =>
+{
+    var antes = new ColumnaContexto { BaseX = 0.4, BaseY = 0.4, ZInferior = 0, ZSuperior = 3, Tramos = new[] { T(0, 3) } };
+    var generada = ColumnaGenerada.Combinar(null, new ColumnaPlan { Contexto = antes, Tramos = new() { new ConfigTramo() } }, DateTime.Now);
+    var casiIgual = new ColumnaContexto { BaseX = 0.402, BaseY = 0.4, ZInferior = 0, ZSuperior = 3.001, Tramos = new[] { T(0, 3) } };
+    Cierto(generada.Cambios(casiIgual).Count == 0, "medio cm de tolerancia");
+    var otra = new ColumnaContexto { BaseX = 0.45, BaseY = 0.4, ZInferior = 0, ZSuperior = 3.5, Tramos = new[] { T(0, 3), T(3, 3.5) } };
+    Cierto(generada.Cambios(otra).Count == 3, string.Join("; ", generada.Cambios(otra)));
+});
+
+Probar("ganchos_longitudinales_hacia_el_centro", () =>
+{
+    // #181: misma regla que GeneradorLongitudinal.OrientacionesHaciaAdentro.
+    var barras = new[]
+    {
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.06, 0.06, N4),  // abajo: dobla en X
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.34, 0.34, N4),  // arriba: dobla en Y
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.CaraX, 0.20, 0.06, N4),    // dobla en Y
+        new SeccionPlanta.BarraEnPlanta(PosicionBarra.CaraY, 0.34, 0.20, N4),    // dobla en X
+    };
+    var g = GanchosLongitudinales.Calcular(barras, 0.4, 0.4, Array.Empty<TramoLindero>(), (0, 0));
+    Cierto(g[0].Dx == 1 && g[0].Dy == 0, $"esquina de abajo a la izquierda: ({g[0].Dx}, {g[0].Dy})");
+    Cierto(g[1].Dx == 0 && g[1].Dy == -1, $"esquina de arriba a la derecha: ({g[1].Dx}, {g[1].Dy})");
+    Cierto(g[2].Dx == 0 && g[2].Dy == 1, $"cara X de abajo: ({g[2].Dx}, {g[2].Dy})");
+    Cierto(g[3].Dx == -1 && g[3].Dy == 0, $"cara Y de la derecha: ({g[3].Dx}, {g[3].Dy})");
+    Igual(0.222 - 0.00635, g[0].Recto, "del eje a la punta: B menos medio diámetro");
+    Cierto(g.All(x => !x.SeSale), "en 40×40 ninguno se sale");
+});
+
+Probar("ganchos_longitudinales_se_salen_en_columna_chica", () =>
+{
+    // 25×25 con #4: la punta de la esquina queda a 0,272 del borde.
+    var esquina = new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.056, 0.056, N4);
+    Cierto(GanchosLongitudinales.Calcular(new[] { esquina }, 0.25, 0.25, Array.Empty<TramoLindero>(), (0, 0))[0].SeSale, "se sale");
+});
+
+Probar("ganchos_longitudinales_giran_por_el_lindero", () =>
+{
+    // Lindero vertical en x = 0,45 (en planta); la columna empieza en x = 0,2.
+    // La esquina de abajo a la izquierda dobla hacia +X y cruzaría: se gira.
+    var lindero = new[] { new TramoLindero(0.45, -5, 0.45, 5) };
+    var esquina = new SeccionPlanta.BarraEnPlanta(PosicionBarra.Esquina, 0.06, 0.06, N4);
+    var g = GanchosLongitudinales.Calcular(new[] { esquina }, 0.4, 0.4, lindero, (0.2, 0))[0];
+    Cierto(g.Girado && g.Dx == -1, $"girado hacia −X: ({g.Dx}, {g.Dy})");
 });
 
 Console.WriteLine(fallas == 0 ? "0 fallas" : $"{fallas} falla(s)");
