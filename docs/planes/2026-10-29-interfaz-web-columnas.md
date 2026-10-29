@@ -91,7 +91,7 @@
 
 14. **Una columna nueva arranca confinada** (Luciano, 29-oct: «que abra con los confinados»): estribo #3 confinado con L1 0.50, 0.07 en las puntas y 0.14 en el centro, y los nudos cada 0.14; longitudinal #4 con 1 barra por cara. El resto sale de `ValoresPorDefecto` (los de la ventana vieja, que no cambia).
 
-15. **Recubrimiento de 4 cm por defecto** (Luciano, 29-oct: «el recubrimiento que sea 4 por defecto»). Una columna nueva arranca con `ValoresPorDefecto.Recubrimiento = 0.04`, tenga lo que tenga asignado en Revit (antes se usaba el de Revit, y 4 cm solo si no tenía). El aviso de `LectorContexto` cuando el de Revit es distinto sigue saliendo. Una columna ya generada arranca con el recubrimiento con que se generó, y si no quedó guardado, con 4 cm. La 3D y «Generar» mandan siempre el valor explícito. Prueba: `ColumnaNueva_Recubrimiento4cm`.
+15. **Recubrimiento de 4 cm por defecto** (Luciano, 29-oct: «el recubrimiento que sea 4 por defecto»). Una columna nueva arranca con `ValoresPorDefecto.Recubrimiento = 0.04`, tenga lo que tenga asignado en Revit (antes se usaba el de Revit, y 4 cm solo si no tenía). El aviso de `LectorContexto` cuando el de Revit es distinto sigue saliendo, con el texto corregido en la tarea 5 (decía «Se usa igual», que en la ventana nueva ya no es cierto): «En Revit tiene un recubrimiento lateral de 2.5 cm, distinto del valor normal (4 cm). Revisa cuál corresponde: se usa el de «Recubrimiento».», cierto en las dos ventanas. Una columna ya generada arranca con el recubrimiento con que se generó, y si no quedó guardado, con 4 cm. La 3D y «Generar» mandan siempre el valor explícito. Prueba: `ColumnaNueva_Recubrimiento4cm`.
     - **Lo de Revit, a un clic** (Luciano, 29-oct: «que aparezca un texto con las otras opciones de la columna, como un texto azul resaltado y que al hacer clic se ponga automáticamente ese valor»). `ColumnaVista.RecubrimientosRevit` lleva los recubrimientos que la columna tiene en Revit (el de la columna y el de cada tramo libre o nudo, sin el de contra zapata, redondeados al mm y sin repetir). Debajo del campo «Recubrimiento», la página muestra «En Revit: 2.5 cm» con cada valor distinto del elegido como enlace azul; el clic manda `cambiarRecubrimiento` con ese valor. Prueba: `RecubrimientosRevit_LosDeLaColumna`.
 16. **Varillas: las CQEING primero** (Luciano, 29-oct: «poner lo de los filtros a las varillas y que aparezcan las cqeing primero»). Las listas de varillas de la página siguen el orden de `ProveedorTiposReal.ListarBarras` (las «#N CQEING» primero y por número, después las demás por nombre), como la ventana vieja; antes la sesión las reordenaba por diámetro. El filtro del #64 (en estribos y grapas solo las barras aptas para estribo) se mantiene. Prueba: `Catalogos_CqeingPrimero`.
 17. **El nombre de una columna sin marca es su eje** (por el hallazgo 13, mi decisión sobre lo que pidió Luciano):
@@ -255,16 +255,31 @@
 
 **Archivos:** modificar `Tablero/web/columnas.js` y `dibujos.js` (lo que falte respecto a la vista real), y `SesionColumnas.cs` si aparece un mensaje que no estaba.
 
-- [ ] **Paso 1:** en Revit, con una columna de tres pisos y zapata:
+- **Antes de Revit (29-oct):** lo que se puede comprobar sin Revit ya tiene prueba en `tools/PruebasTableroColumnas`: `CambiarBarrasX_CambiaLasBarrasDeLaSeccion`, `CambiarBarraEsquinas_CambiaSuColor` y `CambiarRecubrimiento_MueveLasBarras` (paso 1); `ArrancaConfinada_YLosNudosConElCentro`, `CambiarEspaciado_CambiaLasZonas`, `Excepcion_SeMarcaEnElTramo` y `Excepcion_SoloCambiaSuTramo` (paso 2). Las dos nuevas pasaron a la primera, porque el código ya estaba. También se corrigió el texto del aviso de recubrimiento (decisión 15).
+- [x] **Paso 1:** en Revit, con una columna de tres pisos y zapata (Luciano, 29-oct: «todo bien»):
   - +/− en X e Y cambia la sección al momento;
   - cambiar el diámetro de las esquinas cambia el color de esas barras;
   - «Más opciones → Recubrimiento» mueve las barras.
-- [ ] **Paso 2:** en Revit, en el paso 2:
+- [x] **Paso 2:** en Revit, en el paso 2 (Luciano, 29-oct: «todo bien»):
   - las tres zonas se ven en la elevación con sus «cada»;
   - pasar «Tramos libres» a confinado dibuja las zonas confinadas en cada tramo libre;
   - clic en un tramo y «Este tramo distinto» lo marca, y cambiar su espaciado cambia solo ese tramo.
-- [ ] **Paso 3:** generar esa columna y la misma con la ventana vieja, en dos copias del modelo, y comparar el acero (cantidad de barras y estribos por tramo, en una tabla de planificación). Anotar el resultado en «Hallazgos».
-- [ ] **Paso 4:** commit `Columnas: pasos Barras y Estribos en la ventana web (#208, #209)`.
+- [x] **Paso 3:** generar esa columna y la misma con la ventana vieja, en dos copias del modelo, y comparar el acero (cantidad de barras y estribos por tramo, en una tabla de planificación). Anotar el resultado en «Hallazgos».
+
+  **Resultado (29-oct, leído con el MCP de Revit):** Luciano generó 1-6 con la ventana nueva y 6-7 con la vieja, en el mismo modelo. Son dos columnas iguales: 0.40 × 0.40 bajo el piso 1 (Z −0.65 a 0), 0.30 × 0.30 en los pisos 1 y 2 (0 a 3.50 y 3.50 a 7.00). El acero de las dos es **idéntico**:
+
+  | | 1-6 (nueva) | 6-7 (vieja) |
+  |---|---|---|
+  | Estribos #3 «CQ Estribo» cada 0.20 | 5 grupos: 3 + 17 + 3 + 17 + 3 = 43 | 5 grupos: 3 + 17 + 3 + 17 + 3 = 43 |
+  | Largo de cada estribo | 2.97 / 16.83 m por grupo (iguales) | iguales |
+  | Longitudinales #4 | 16 piezas (8 varillas partidas en 2), largos 3.50, 6.00, 7.00 y 2.50 m, cuatro de cada uno | lo mismo |
+  | Ganchos | cada pieza: «CQ Gancho 90°» solo en la punta de afuera (fin), ninguno en el traslapo | lo mismo |
+  | Traslapo | «CQ Traslapo #4 · 1,195 m» en el inicio de cada pieza | lo mismo |
+
+  Ids: 1-6 = 816452…816564, 6-7 = 817203…817315. De paso confirma el arreglo de `docs/planes/2026-10-29-gancho-en-traslapo.md`: ninguna pieza tiene gancho en el traslapo.
+
+  Observación: todas las longitudinales (de las dos ventanas) quedaron con la forma «CQ Recta 0-90», la que dejó el #176 en el modelo. `DetallesPlegado.BorrarFormasRectas` no la puede borrar mientras alguna columna la use, y Revit la sigue eligiendo sola. Esta vez los traslapos salieron bien igual. Para sacarla del modelo hay que regenerar **juntas, en una sola generación,** todas las columnas que la usan: primero se borra su acero anterior y recién entonces la forma queda libre para borrarse. Una por una no alcanza, porque las demás la siguen usando (también sirve cambiar esas barras a «00»); queda anotado, no se arregla en esta tarea.
+- [x] **Paso 4:** commit `Columnas: pasos Barras y Estribos en la ventana web (#208, #209)`.
 
 ### Tarea 6: paso Grapas (#210)
 

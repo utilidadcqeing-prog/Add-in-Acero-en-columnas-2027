@@ -777,8 +777,10 @@ public sealed class LectorContexto : IProveedorContexto
 
             if (Math.Abs(recubrimientoMetros - RecubrimientoNormalMetros) > 0.001)
                 avisos.Add(
-                    $"Recubrimiento lateral de {recubrimientoMetros * 100:0.#} cm -- distinto del valor normal " +
-                    $"({RecubrimientoNormalMetros * 100:0} cm). Se usa igual, solo para que lo revisen.");
+                    // Vale para las dos ventanas: la nueva arranca con 4 cm y la vieja con el de Revit (decisión 15 de
+                    // docs/planes/2026-10-29-interfaz-web-columnas.md); en las dos manda el campo «Recubrimiento».
+                    $"En Revit tiene un recubrimiento lateral de {recubrimientoMetros * 100:0.#} cm, distinto del valor " +
+                    $"normal ({RecubrimientoNormalMetros * 100:0} cm). Revisa cuál corresponde: se usa el de «Recubrimiento».");
 
             return recubrimientoPies;
         }

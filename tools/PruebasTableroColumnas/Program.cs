@@ -241,6 +241,32 @@ Probar("CambiarBarrasX_CambiaLasBarrasDeLaSeccion", () =>
     Cierto(v.Columna.Seccion.Barras.Count(b => b.Posicion == "abajo") == 3, "3 barras en la cara de abajo");
 });
 
+Probar("CambiarBarraEsquinas_CambiaSuColor", () =>
+{
+    // Tarea 5, paso 1: las esquinas toman el color del diámetro nuevo; las caras no cambian.
+    SesionColumnas sesion = ConC12();
+    TipoBarra n6 = tipos.ListarBarras().Single(b => b.Nombre == "#6 COL");
+    VistaColumnas antes = sesion.Vista();
+    VistaColumnas v = Mandar(sesion, new { tipo = "cambiarLongitudinal", config = new { tipoBarraEsquinasNombre = n6.Nombre } });
+    List<BarraVista> esquinas = v.Columna!.Seccion.Barras.Where(b => b.Posicion == "esquina").ToList();
+    Cierto(esquinas.Count == 4, $"esquinas: {esquinas.Count}");
+    Cierto(esquinas.All(b => b.Color == ArmadorVistaColumnas.Color(n6.DiametroMm) && Math.Abs(b.DiametroMm - n6.DiametroMm) < 1e-9), "color y diámetro de las esquinas");
+    Cierto(v.Columna.Seccion.Barras.Where(b => b.Posicion != "esquina").Select(b => b.Color)
+        .SequenceEqual(antes.Columna!.Seccion.Barras.Where(b => b.Posicion != "esquina").Select(b => b.Color)), "las caras no cambian");
+});
+
+Probar("CambiarRecubrimiento_MueveLasBarras", () =>
+{
+    // Tarea 5, paso 1: más recubrimiento, las barras más hacia adentro.
+    SesionColumnas sesion = ConC12();
+    BarraVista antes = sesion.Vista().Columna!.Seccion.Barras.First(b => b.Posicion == "esquina");
+    VistaColumnas v = Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.06 });
+    BarraVista despues = v.Columna!.Seccion.Barras.First(b => b.Posicion == "esquina");
+    Igual(6, v.Columna.Seccion.Recubrimiento, "recubrimiento de la sección, en cm");
+    Igual(2, despues.X - antes.X, "la esquina se corre 2 cm en X");
+    Igual(2, despues.Y - antes.Y, "y 2 cm en Y");
+});
+
 Probar("CambiarEspaciado_CambiaLasZonas", () =>
 {
     VistaColumnas v = Mandar(ConC12(), new { tipo = "cambiarEstribos", tramosLibres = new { modo = "Uniforme", espaciadoUniforme = 0.15 } });
