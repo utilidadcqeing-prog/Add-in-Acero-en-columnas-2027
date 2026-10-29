@@ -20,15 +20,17 @@ public static class Lindero
 {
     /// <summary>
     /// Hasta dónde llega en planta la punta de un gancho de 90°, medido desde
-    /// el eje de la barra: el largo del cuadro más 2,5 diámetros por el
-    /// doblez y el grosor (medido el 22-oct: #4 llega a 25,6 cm con 22,2 del
-    /// cuadro; #7 a 44,4 cm con 38,8). Sin dato del cuadro, 16 diámetros.
+    /// el eje de la barra: el largo del cuadro, porque la pata medida por
+    /// fuera del doblez es ese largo (#177, 28-oct; antes la pata salía más
+    /// larga y esto sumaba 2,5 diámetros: #4 llegaba a 25,6 cm con 22,2 del
+    /// cuadro). Se deja medio diámetro de margen. Sin dato del cuadro, 16
+    /// diámetros.
     /// </summary>
     public static double AlcanceGancho90(double diametroMm)
     {
         double diametro = diametroMm / 1000;
         return CuadroVarillas.PorDiametro(diametroMm) is { } varilla
-            ? varilla.Gancho90 + 2.5 * diametro
+            ? varilla.Gancho90 + 0.5 * diametro
             : 16 * diametro;
     }
 

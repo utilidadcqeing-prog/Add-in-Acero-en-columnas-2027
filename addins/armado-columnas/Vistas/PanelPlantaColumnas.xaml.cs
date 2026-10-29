@@ -60,6 +60,12 @@ public partial class PanelPlantaColumnas : UserControl
     /// </summary>
     public event Action<IReadOnlyList<string>, bool>? ColumnasEnRectangulo;
 
+    /// <summary>
+    /// Clic en el ✓ de una columna aceptada (verde o ámbar): la ventana le
+    /// saca el ✓ a la columna entera (#168).
+    /// </summary>
+    public event Action<string>? ChulitoClicked;
+
     private static readonly Brush ColorColumna = Paleta.Contorno;
     private static readonly Brush ColorBordeColumna = Paleta.ContornoFuerte;
     private static readonly Brush ColorColumnaActiva = new SolidColorBrush(Paleta.ConAlfa(Paleta.ColorExitoClaro, 120));
@@ -73,8 +79,8 @@ public partial class PanelPlantaColumnas : UserControl
 
     private static readonly Brush ColorRejilla = Paleta.Contorno;
 
-    /// <summary>Mismo verde que el chulito de la elevación (VentanaConfiguradorEstribos).</summary>
-    private static readonly Brush ColorChulito = Paleta.Exito;
+    /// <summary>Dónde quedó cada ✓ que se puede clickear (aceptado: verde o ámbar).</summary>
+    private readonly List<(string Id, Rect Caja)> _chulitos = new();
 
     // Rectángulo de arrastre: azul para "ventana" (izq -> der, solo lo que
     // entra entero) y verde para "cruce" (der -> izq, todo lo que toca),
@@ -99,7 +105,7 @@ public partial class PanelPlantaColumnas : UserControl
              IReadOnlyList<Rejilla> Rejillas,
              string? IdActiva,
              IReadOnlySet<string> Elegidas,
-             IReadOnlySet<string> Configuradas)? _ultimo;
+             IReadOnlyDictionary<string, EstadoAceptacion> Estados)? _ultimo;
 
     private Point _inicioArrastre;
     private Rectangle? _rectanguloArrastre;
@@ -124,14 +130,15 @@ public partial class PanelPlantaColumnas : UserControl
     /// ya no son la misma cosa: <paramref name="idActiva"/> es la columna que
     /// muestra la elevación (verde); <paramref name="idsElegidas"/> son las que
     /// están seleccionadas, o sea a las que les cae lo que se acepte (azul); y
-    /// <paramref name="idsConfiguradas"/> son las que tienen al menos un tramo
-    /// aceptado, o sea las que se van a generar (✓ verde en la esquina).
+    /// <paramref name="estados"/> dice el ✓ de la esquina (#168): verde si
+    /// tiene tramos que se van a generar, ámbar si algo cambió desde que se
+    /// aceptó o se generó, gris si ya está generada.
     /// </summary>
     public void Cargar(
         IReadOnlyList<ColumnaResumen> columnas, IReadOnlyList<Rejilla> rejillas,
-        string? idActiva, IReadOnlySet<string> idsElegidas, IReadOnlySet<string> idsConfiguradas)
+        string? idActiva, IReadOnlySet<string> idsElegidas, IReadOnlyDictionary<string, EstadoAceptacion> estados)
     {
-        _ultimo = (columnas, rejillas, idActiva, idsElegidas, idsConfiguradas);
+        _ultimo = (columnas, rejillas, idActiva, idsElegidas, estados);
         Redibujar();
     }
 
@@ -139,6 +146,7 @@ public partial class PanelPlantaColumnas : UserControl
     {
         Lienzo.Children.Clear();
         _marcadores.Clear();
+        _chulitos.Clear();
         _descripciones.Clear();
         _rectanguloArrastre = null;
 
@@ -147,7 +155,7 @@ public partial class PanelPlantaColumnas : UserControl
          IReadOnlyList<Rejilla> rejillas,
          string? idActiva,
          IReadOnlySet<string> idsElegidas,
-         IReadOnlySet<string> idsConfiguradas) = estado;
+         IReadOnlyDictionary<string, EstadoAceptacion> estados) = estado;
         if (columnas.Count == 0 && rejillas.Count == 0) return;
 
         const double margen = 22;
@@ -200,7 +208,8 @@ public partial class PanelPlantaColumnas : UserControl
             DibujarRejilla(r, Cx, Cy);
 
         foreach (ColumnaResumen c in columnas)
-            DibujarColumna(c, Cx(c.X), Cy(c.Y), escala, c.Id == idActiva, idsElegidas.Contains(c.Id), idsConfiguradas.Contains(c.Id));
+            DibujarColumna(c, Cx(c.X), Cy(c.Y), escala, c.Id == idActiva, idsElegidas.Contains(c.Id),
+                estados.TryGetValue(c.Id, out EstadoAceptacion e) ? e : EstadoAceptacion.Ninguno);
 
         // Las etiquetas SIEMPRE después de todos los cuadraditos: así ninguna
         // queda tapada por una columna dibujada más tarde, y el chequeo de
@@ -334,7 +343,7 @@ public partial class PanelPlantaColumnas : UserControl
     /// etiqueta es la marca de ubicación, que es corta.
     /// </summary>
     /// <param name="escala">Píxeles por metro de la planta: la columna se dibuja de su tamaño real (#133).</param>
-    private void DibujarColumna(ColumnaResumen c, double x, double y, double escala, bool activa, bool elegida, bool configurada)
+    private void DibujarColumna(ColumnaResumen c, double x, double y, double escala, bool activa, bool elegida, EstadoAceptacion estado)
     {
         // A escala; sin lados conocidos, el cuadradito de siempre. Muy chica
         // no se vería: como mínimo 3 px.
@@ -368,19 +377,24 @@ public partial class PanelPlantaColumnas : UserControl
         // El ✓ de "esta columna tiene tramos aceptados, se va a generar" --
         // mismo símbolo y mismo verde que en la elevación (issue #56), para que
         // sea el mismo concepto y no dos marcas distintas que hay que aprender.
-        if (configurada)
+        // El color dice si se genera (verde), si cambió (ámbar) o si ya se
+        // generó (gris), igual que en la elevación y la lista (#168).
+        if (estado != EstadoAceptacion.Ninguno)
         {
             var chulito = new TextBlock
             {
                 Text = "✓",
                 FontSize = 11,
                 FontWeight = FontWeights.Bold,
-                Foreground = ColorChulito,
+                Foreground = VentanaConfiguradorEstribos.ColorDe(estado),
                 IsHitTestVisible = false,
             };
             Canvas.SetLeft(chulito, caja.Right - 1);
             Canvas.SetTop(chulito, caja.Top - 11);
             Lienzo.Children.Add(chulito);
+
+            if (estado is EstadoAceptacion.Pendiente or EstadoAceptacion.Editado)
+                _chulitos.Add((c.Id, new Rect(caja.Right - 3, caja.Top - 13, 12, 14)));
         }
 
         _marcadores.Add((c.Id, caja));
@@ -434,10 +448,12 @@ public partial class PanelPlantaColumnas : UserControl
     /// </summary>
     private void MostrarDescripcion(Point p)
     {
-        string? texto = _marcadores
-            .Where(m => m.Caja.Contains(p))
-            .Select(m => _descripciones.TryGetValue(m.Id, out string? d) ? d : null)
-            .FirstOrDefault();
+        string? texto = _chulitos.Any(c => c.Caja.Contains(p))
+            ? "Clic para quitarle el ✓ a la columna entera."
+            : _marcadores
+                .Where(m => m.Caja.Contains(p))
+                .Select(m => _descripciones.TryGetValue(m.Id, out string? d) ? d : null)
+                .FirstOrDefault();
 
         if (Equals(Lienzo.ToolTip, texto)) return;
         Lienzo.ToolTip = texto;
@@ -460,6 +476,15 @@ public partial class PanelPlantaColumnas : UserControl
 
         if (!huboArrastre)
         {
+            // Clic suelto sobre un ✓: se lo saca (#168). Va antes que la
+            // columna: el ✓ está en su esquina y la zona de clic las toca.
+            foreach ((string id, Rect caja) in _chulitos)
+            {
+                if (!caja.Contains(fin)) continue;
+                ChulitoClicked?.Invoke(id);
+                return;
+            }
+
             // Clic suelto: la columna que esté bajo el cursor, si hay alguna.
             foreach ((string id, Rect caja) in _marcadores)
             {

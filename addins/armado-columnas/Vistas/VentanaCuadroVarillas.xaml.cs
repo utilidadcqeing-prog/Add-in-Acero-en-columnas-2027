@@ -23,7 +23,7 @@ public partial class VentanaCuadroVarillas : Window
     private static readonly CultureInfo Es = CultureInfo.GetCultureInfo("es-CO");
 
     private static readonly string[] Encabezados =
-        { "Varilla", "Ø mm", "Traslapo", "Gancho 90°\nE / D", "Gancho 180°\nE / D", "Estribo 135°\nE / D", "kg/m" };
+        { "Varilla", "Ø mm", "Traslapo", "Gancho 90°\nB / D", "Gancho 180°\nE / D", "Estribo 135°\nE / D", "kg/m" };
 
     private static readonly SolidColorBrush FondoUsada = new(Paleta.ConAlfa(Paleta.ColorPrimario, 0x1F));
 
@@ -62,7 +62,10 @@ public partial class VentanaCuadroVarillas : Window
             Poner(varilla, fila, 0, fondo, Paleta.Separador);
             Poner(Numero(v.DiametroMm.ToString("0.0", Es)), fila, 1, fondo, Paleta.Separador);
             Poner(Numero(v.Traslapo is { } t ? t.ToString("0.00", Es) : "—"), fila, 2, fondo, Paleta.Separador);
-            Poner(Numero(Gancho(v.Gancho90Cuadro)), fila, 3, fondo, Paleta.Separador);
+            // El de las longitudinales se genera con la pata B (medida por fuera
+            // del doblez, #177), no con la E del cuadro 2: se muestra lo que se usa.
+            Poner(Numero(v.Gancho90.ToString("0.000", Es) + " / " + v.Gancho90Cuadro.DiametroDoblado.ToString("0.000", Es)),
+                fila, 3, fondo, Paleta.Separador);
             Poner(Numero(Gancho(v.Gancho180Cuadro)), fila, 4, fondo, Paleta.Separador);
             Poner(Numero(v.GanchoEstribo135 is { } e ? Gancho(e) : "—"), fila, 5, fondo, Paleta.Separador);
             Poner(Numero(v.KgPorMetro.ToString("0.000", Es)), fila, 6, fondo, Paleta.Separador);

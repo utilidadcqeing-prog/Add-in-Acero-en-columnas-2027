@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Windows;
 using CQEING.Gestor.Core;
 
 namespace CQEING.Gestor;
@@ -22,7 +24,11 @@ public sealed class VistaGestor : Observable
     private readonly GestorAddins _gestor;
     private readonly IActualizadorGestor _actualizador;
     private readonly ReinicioRevit _reinicio;
+    private readonly RenovadorLicencia _renovador;
     private readonly Func<DateTime> _ahora;
+    private InfoLicencia _licencia;
+    private string _nombreSolicitante;
+    private bool _consultandoLicencia;
     private ResumenGestor? _resumen;
     private OpcionAnio? _anioElegido;
     private int _operaciones;
@@ -35,12 +41,20 @@ public sealed class VistaGestor : Observable
     private string? _progresoGestor;
 
     /// <param name="reinicio">Cierra y reabre Revit después de instalar, para que cargue la versión nueva.</param>
-    public VistaGestor(GestorAddins gestor, IActualizadorGestor actualizador, ReinicioRevit reinicio, Func<DateTime>? ahora = null)
+    /// <param name="renovador">Lee, pide y renueva la licencia de este equipo (issue #195).</param>
+    public VistaGestor(GestorAddins gestor, IActualizadorGestor actualizador, ReinicioRevit reinicio, RenovadorLicencia renovador,
+        Func<DateTime>? ahora = null)
     {
         _gestor = gestor;
         _actualizador = actualizador;
         _reinicio = reinicio;
+        _renovador = renovador;
         _ahora = ahora ?? (() => DateTime.Now);
+        _licencia = renovador.Estado();
+        _nombreSolicitante = renovador.NombreGuardado ?? string.Empty;
+        SolicitarAcceso = new ComandoAsync(SolicitarAccesoAsync,
+            () => !Ocupado && !_consultandoLicencia && !string.IsNullOrWhiteSpace(NombreSolicitante));
+        CopiarCodigo = new ComandoAsync(CopiarCodigoAsync, () => CodigoEquipo is not null);
         BuscarNovedades = new ComandoAsync(BuscarNovedadesAsync, () => !Ocupado);
         ActualizarTodas = new ComandoAsync(ActualizarTodasAsync, () => !Ocupado && PuedeActualizarTodas);
         ActualizarGestor = new ComandoAsync(ActualizarGestorAsync, () => !Ocupado && MostrarAvisoGestor);
@@ -56,6 +70,53 @@ public sealed class VistaGestor : Observable
     public ComandoAsync ActualizarTodas { get; }
     public ComandoAsync ActualizarGestor { get; }
     public ComandoAsync CerrarAvisoGestor { get; }
+    public ComandoAsync SolicitarAcceso { get; }
+    public ComandoAsync CopiarCodigo { get; }
+
+    /// <summary>Franja de la licencia, encima de las tarjetas. Plan docs/planes/2026-10-28-licencias-hoja-google.md, Tarea 6.</summary>
+    public string TextoLicencia => _licencia switch
+    {
+        { Vigente: true } => $"Licencia vigente hasta el {_licencia.VenceUtc?.ToLocalTime():dd-MM-yyyy} · {_licencia.Nombre}",
+        { UltimaRespuesta: EstadoSolicitud.Pendiente } => $"Solicitud enviada. Falta que la aprueben. Código del equipo: {CodigoEquipo}",
+        { UltimaRespuesta: EstadoSolicitud.Revocada } => $"El acceso de este equipo fue retirado. Código del equipo: {CodigoEquipo}",
+        { UltimaRespuesta: EstadoSolicitud.SinConexion } => $"No se pudo consultar la licencia (sin conexión). Código del equipo: {CodigoEquipo}",
+        _ => $"Este equipo no tiene licencia. Código del equipo: {CodigoEquipo}",
+    };
+
+    public bool LicenciaVigente => _licencia.Vigente;
+
+    public string? CodigoEquipo => _licencia.CodigoEquipo;
+
+    /// <summary>Sin licencia vigente se muestran «Su nombre» y «Solicitar acceso».</summary>
+    public bool PideNombre => !_licencia.Vigente;
+
+    public string NombreSolicitante
+    {
+        get => _nombreSolicitante;
+        set
+        {
+            if (Cambiar(ref _nombreSolicitante, value)) ComandoAsync.Refrescar();
+        }
+    }
+
+    /// <summary>
+    /// Al abrir la ventana: renueva la licencia si hace falta (núcleo, Decisión 4) sin frenar las tarjetas, porque no usa
+    /// <see cref="OcuparAsync"/>. Mientras consulta no se puede «Solicitar acceso», para no mandar dos pedidos a la vez.
+    /// </summary>
+    public async Task ConsultarLicenciaAsync()
+    {
+        _consultandoLicencia = true;
+        ComandoAsync.Refrescar();
+        try
+        {
+            MostrarLicencia(await Task.Run(() => _renovador.RenovarAsync(null, forzar: false, VersionGestor)));
+        }
+        finally
+        {
+            _consultandoLicencia = false;
+            ComandoAsync.Refrescar();
+        }
+    }
 
     public ObservableCollection<TarjetaAddin> Tarjetas { get; } = [];
 
@@ -256,6 +317,42 @@ public sealed class VistaGestor : Observable
         Avisar(nameof(TextoAvisoGestor));
         ResultadoCierre cierre = await _reinicio.CerrarAsync(null);
         _reinicio.GuardarPendientes(cierre.Cerrados);
+    }
+
+    private static string VersionGestor => ComplementoEnRevit.VersionDelGestor(typeof(VistaGestor).Assembly);
+
+    /// <summary>Pide acceso con el nombre escrito. Si llega la primera licencia vigente, Revit tiene que reiniciarse para cargar los add-ins.</summary>
+    private Task SolicitarAccesoAsync() => OcuparAsync(async () =>
+    {
+        bool teniaLicencia = _licencia.Vigente;
+        InfoLicencia info = await Task.Run(() => _renovador.RenovarAsync(NombreSolicitante, forzar: true, VersionGestor));
+        MostrarLicencia(info);
+        if (!teniaLicencia && info is { Vigente: true, UltimaRespuesta: EstadoSolicitud.Aprobada })
+            MostrarAviso("Licencia recibida. Reinicie Revit para usar los add-ins.", esError: false);
+    });
+
+    private Task CopiarCodigoAsync()
+    {
+        try
+        {
+            Clipboard.SetText(CodigoEquipo!);
+        }
+        catch (ExternalException)
+        {
+            // Otro programa tiene el portapapeles tomado: el código igual se puede leer en la franja.
+            MostrarAviso("No se pudo copiar el código. Intente de nuevo.", esError: true);
+        }
+        return Task.CompletedTask;
+    }
+
+    private void MostrarLicencia(InfoLicencia info)
+    {
+        _licencia = info;
+        Avisar(nameof(TextoLicencia));
+        Avisar(nameof(LicenciaVigente));
+        Avisar(nameof(CodigoEquipo));
+        Avisar(nameof(PideNombre));
+        ComandoAsync.Refrescar();
     }
 
     /// <summary>Cuenta las operaciones en curso (Actualizar todas encadena varias) y refresca los botones.</summary>

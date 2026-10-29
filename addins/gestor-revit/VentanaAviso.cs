@@ -9,7 +9,7 @@ namespace CQEING.GestorRevit;
 
 /// <summary>
 /// Aviso pequeño en la esquina inferior derecha: cuántas y cuáles versiones nuevas hay, con «Abrir el gestor» y «Más
-/// tarde». No es modal ni roba el foco, así que no interrumpe el trabajo, y se cierra solo (no mientras el ratón está encima).
+/// tarde». Actualizar es obligatorio: los add-ins desactualizados no se dejan usar (BloqueoPorVersion). No es modal ni roba el foco, así que no interrumpe el trabajo, y se cierra solo (no mientras el ratón está encima).
 /// </summary>
 internal sealed class VentanaAviso : Window
 {
@@ -63,9 +63,14 @@ internal sealed class VentanaAviso : Window
         panel.Children.Add(new TextBlock { Text = Titulo(novedades.Count), FontWeight = FontWeights.SemiBold, FontSize = 13, Margin = new Thickness(0, 0, 0, 8) });
         foreach (Novedad novedad in novedades)
             panel.Children.Add(new TextBlock { Text = Linea(novedad), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) });
+        bool gestor = novedades.Any(n => n.Id == EtiquetaRelease.IdGestor);
         panel.Children.Add(new TextBlock
         {
-            Text = "Se actualizan desde el gestor, sin cerrar Revit. El cambio se ve al reiniciar Revit.",
+            Text = gestor
+                ? "Actualizar es obligatorio: mientras el gestor no esté al día no se puede usar ningún add-in. Ábralo y pulse " +
+                  "«Actualizar y reiniciar»; los add-ins vuelven a funcionar al reiniciar Revit."
+                : "Actualizar es obligatorio: hasta hacerlo, estos add-ins no se pueden usar. Se actualizan desde el gestor, " +
+                  "sin cerrar Revit, y vuelven a funcionar al reiniciar Revit.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brushes.DimGray,
             Margin = new Thickness(0, 8, 0, 12),
@@ -78,7 +83,8 @@ internal sealed class VentanaAviso : Window
         return panel;
     }
 
-    private static Button Boton(string texto, Action accion)
+    /// <summary>Botón de los avisos del gestor en Revit (también lo usa <see cref="VentanaLicencia"/>).</summary>
+    internal static Button Boton(string texto, Action accion)
     {
         var boton = new Button { Content = texto, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(8, 0, 0, 0) };
         boton.Click += (_, _) => accion();

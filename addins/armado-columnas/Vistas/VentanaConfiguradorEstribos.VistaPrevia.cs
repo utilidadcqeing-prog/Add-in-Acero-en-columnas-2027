@@ -68,9 +68,14 @@ public partial class VentanaConfiguradorEstribos
 
         (ConfigTramo cfgTramo, double recubrimiento, double estriboMasGrueso) = EntradasDeLaSeccion(idColumna, _columnaActiva);
 
+        // #181: dónde está la sección en planta, solo si hay lindero (los ganchos que lo cruzarían se giran).
+        (double X, double Y) origen = default;
+        if (_columnaActiva.Lindero.Count > 0 && _contexto.ListarColumnas().FirstOrDefault(c => c.Id == idColumna) is { } resumen)
+            origen = (resumen.X - _columnaActiva.BaseX / 2, resumen.Y - _columnaActiva.BaseY / 2);
+
         PanelDeVistaPrevia.Mostrar(
             _columnaActiva, _columnaActiva.Tramos[_tramoActivoIndice], cfgTramo, LeerLongitudinalConEstribosMenores(),
-            recubrimiento, BarraPorNombre, estriboMasGrueso);
+            recubrimiento, BarraPorNombre, estriboMasGrueso, origen);
 
         // Los mismos cambios actualizan la vista 3D, si está abierta (#123).
         PedirVista3D(abrirVista: false);

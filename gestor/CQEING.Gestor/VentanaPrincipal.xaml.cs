@@ -10,8 +10,13 @@ public partial class VentanaPrincipal : Window
     {
         InitializeComponent();
         DataContext = vista;
-        // Primera consulta al abrir; después, solo con «Buscar novedades».
-        Loaded += async (_, _) => await vista.BuscarNovedades.EjecutarAsync();
+        // Primera consulta al abrir; después, solo con «Buscar novedades». La licencia se consulta a la par, sin frenar las tarjetas.
+        Loaded += async (_, _) =>
+        {
+            Task licencia = vista.ConsultarLicenciaAsync();
+            await vista.BuscarNovedades.EjecutarAsync();
+            await licencia;
+        };
     }
 
     /// <summary>El menú «⋯» se abre con clic o teclado; el ContextMenu no hereda el DataContext de la tarjeta por sí solo.</summary>

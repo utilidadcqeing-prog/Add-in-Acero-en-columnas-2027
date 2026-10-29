@@ -6,6 +6,11 @@ public class App : IExternalApplication
 {
     public Result OnStartup(UIControlledApplication app)
     {
+        // Sin licencia vigente no se crean los botones; el aviso lo da el componente del gestor (issue #189).
+        if (!Licencia.Vigente(out _)) return Result.Succeeded;
+        // Con una versión nueva publicada, tampoco: hay que actualizar desde el gestor (actualización obligatoria).
+        if (!BloqueoPorVersion.AlDia(app)) return Result.Succeeded;
+
         RibbonPanel panelEstructural = CintaCqeing.ObtenerPanel(app, "Estructural");
 
         panelEstructural.AddItem(CintaCqeing.CrearBoton(
@@ -65,6 +70,15 @@ public class App : IExternalApplication
             "Diagnóstico\nvista 3D",
             "practicacq.ComandoDiagnosticoPrevia3D",
             "TEMPORAL: mide cuánto tarda la vista previa 3D en generar de prueba una columna y deshacerlo, y comprueba que no queda nada.",
+            "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoDetallePlegado.cs.
+        // Sacar este botón (y el comando) una vez cerrado el #176.
+        panelHerramientas.AddItem(CintaCqeing.CrearBoton(
+            "ComandoDiagnosticoDetallePlegado",
+            "Diagnóstico\ndetalle plegado",
+            "practicacq.ComandoDiagnosticoDetallePlegado",
+            "TEMPORAL: compara los tipos de detalle de plegado del modelo (si acotan los ganchos) y qué barra representa cada detalle. Solo lee.",
             "iconoCQ"));
 #endif
 

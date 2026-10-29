@@ -61,6 +61,27 @@ public static class CuadroVarillas
         /// cuadro de varillas de la ventana (#142) los muestre igual en los dos.
         /// </summary>
         public required double KgPorMetro { get; init; }
+
+        /// <summary>
+        /// Lo que el gancho de 90° suma al largo de corte, en metros, para que
+        /// su pata medida por fuera del doblez sea el <see cref="Gancho90"/>
+        /// del cuadro (#177: Luciano, 28-oct, "por ahora B"). Antes el gancho
+        /// sumaba el B entero y Revit alargaba la pata: 0,255 en vez de 0,222
+        /// en la #4. El tramo recto llega a la cara de afuera del doblez, así
+        /// que se suma el arco por el eje más la cola, menos el radio y medio
+        /// diámetro que el tramo ya cubre -- la misma regla que
+        /// <c>Reglas.LargoGancho</c> de vigas (#943), con B en vez de la cola E.
+        /// </summary>
+        public double AporteGancho90
+        {
+            get
+            {
+                double diametro = DiametroMm / 1000;
+                double radio = Gancho90Cuadro.DiametroDoblado / 2 + diametro / 2;
+                double cola = Gancho90 - radio - diametro / 2;
+                return radio * System.Math.PI / 2 + cola - radio - diametro / 2;
+            }
+        }
     }
 
     /// <summary>

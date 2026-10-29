@@ -34,7 +34,10 @@
                         </Style.Triggers>
                     </Style>
                 </StackPanel.Style>
-                <TextBlock Text="{Binding Chulito}" Foreground="{StaticResource Exito}" FontWeight="Bold"
+                <!-- #168: el color dice el estado (verde, ámbar, gris) y un clic lo saca. -->
+                <TextBlock Text="{Binding Chulito}" Foreground="{Binding ColorChulito}" FontWeight="Bold"
+                           ToolTip="{Binding AyudaChulito}" Background="Transparent"
+                           PreviewMouseLeftButtonDown="ChulitoLista_MouseLeftButtonDown"
                            VerticalAlignment="Center" Width="12" Margin="0,0,2,0" />
                 <TextBlock Text="{Binding Etiqueta}" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Etiqueta}">
@@ -145,6 +148,11 @@
                                     <TextBlock Text="tramo activo" Style="{StaticResource TextoLeyenda}" />
                                     <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="{StaticResource Exito}" Margin="0,0,4,0" VerticalAlignment="Center" />
                                     <TextBlock Text="se genera (clic para sacarlo)" Style="{StaticResource TextoLeyenda}" />
+                                    <!-- #168 -->
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AvisoBorde}" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="cambiado, vuelve a aceptar" Style="{StaticResource TextoLeyenda}" />
+                                    <TextBlock Text="✓" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextoApagado}" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="ya generado" Style="{StaticResource TextoLeyenda}" />
                                 </WrapPanel>
 
                                 <!-- Flechas verticales y pegadas entre sí, no horizontales a los costados
@@ -220,23 +228,41 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones" ToolTip="Elige una configuración guardada para cargarla en el panel."
+                        <ComboBox Grid.Column="0" x:Name="ComboConfiguraciones"
+                                  ToolTip="Elige una configuración guardada: se carga en la columna activa y en las que abras después que todavía no tengan nada propio."
                                   SelectionChanged="ComboConfiguraciones_SelectionChanged" />
-                        <Button Grid.Column="1" x:Name="BotonBorrarConfiguracion" ToolTip="Borra del modelo la configuración elegida en la lista." Content="Borrar" Style="{StaticResource BotonPeligro}"
-                                Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
+                        <!-- #178: volver a aplicarla (con una sola en la lista no se puede "volver a elegir"). -->
+                        <Button Grid.Column="1" x:Name="BotonAplicarConfiguracion" Content="Aplicar" Style="{StaticResource BotonSecundario}" IsEnabled="False"
+                                ToolTip="Carga la configuración elegida en todos los tramos de la columna activa, aunque ya tenga la suya. No acepta nada."
+                                Height="24" Margin="6,0,0,0" Click="BotonAplicarConfiguracion_Click" />
+                        <Button Grid.Column="2" x:Name="BotonBorrarConfiguracion" ToolTip="Elimina del modelo la configuración elegida en la lista (pregunta antes)." Content="Eliminar" Style="{StaticResource BotonPeligro}"
+                                IsEnabled="False" Height="24" Margin="6,0,0,0" Click="BotonBorrarConfiguracion_Click" />
+                    </Grid>
+                    <!-- #179: si el panel se apartó de la configuración elegida, y guardar esos cambios en ella. -->
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" x:Name="TextoCambiosSinGuardar" Style="{StaticResource TextoAyuda}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" Visibility="Collapsed" />
+                        <Button Grid.Column="1" x:Name="BotonGuardarCambios" Content="Guardar cambios" Style="{StaticResource BotonSecundario}" IsEnabled="False"
+                                ToolTip="Reemplaza la configuración elegida con lo que hay ahora en el panel (pregunta antes)."
+                                Height="24" Margin="6,0,0,0" Click="BotonGuardarCambios_Click" />
                     </Grid>
                     <Grid Margin="0,4,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" ToolTip="Nombre con el que se guarda el panel actual. Enter = Guardar." KeyDown="CampoNombreConfiguracion_KeyDown"
+                        <TextBox Grid.Column="0" x:Name="CampoNombreConfiguracion" ToolTip="Nombre de la configuración nueva. Enter = Guardar como nueva." KeyDown="CampoNombreConfiguracion_KeyDown"
                                  VerticalContentAlignment="Center" />
-                        <Button Grid.Column="1" x:Name="BotonGuardarConfiguracion" ToolTip="Guarda el panel entero (tramo + acero longitudinal) dentro del modelo, con este nombre." Content="Guardar" Style="{StaticResource BotonSecundario}"
-                                Height="24" Margin="6,0,0,0" Click="BotonGuardarConfiguracion_Click" />
+                        <Button Grid.Column="1" x:Name="BotonGuardarComoNueva" ToolTip="Guarda el panel entero (tramo + acero longitudinal) dentro del modelo, como una configuración nueva con este nombre." Content="Guardar como nueva" Style="{StaticResource BotonSecundario}"
+                                Height="24" Margin="6,0,0,0" Click="BotonGuardarComoNueva_Click" />
                     </Grid>
-                    <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre."
+                    <TextBlock Text="Guarda el panel entero (tramo + acero longitudinal) con un nombre nuevo."
                                Style="{StaticResource TextoAyuda}" Margin="0,3,0,0" />
 
                     <Border Style="{StaticResource SeparadorSeccion}" />
@@ -390,6 +416,15 @@
                      se va a armar, si no el botón de generar es una caja negra
                      (issue #56). -->
                 <TextBlock x:Name="TextoResumenGeneracion" Foreground="{StaticResource ExitoTexto}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <!-- #168: sacar todos los ✓ de una vez, y volver atrás si fue sin querer. -->
+                <StackPanel Orientation="Horizontal" Margin="0,3,0,3">
+                    <Button x:Name="BotonQuitarTodos" Content="Quitar todos los ✓" Style="{StaticResource BotonSecundario}" Height="22" Padding="8,0"
+                            ToolTip="Saca de la generación todos los tramos aceptados. Su configuración queda cargada."
+                            Visibility="Collapsed" Click="BotonQuitarTodos_Click" />
+                    <Button x:Name="BotonDeshacerQuitar" Content="Deshacer" Style="{StaticResource BotonSecundario}" Height="22" Padding="8,0" Margin="6,0,0,0"
+                            ToolTip="Vuelve a poner los ✓ que se acaban de quitar."
+                            Visibility="Collapsed" Click="BotonDeshacerQuitar_Click" />
+                </StackPanel>
                 <TextBlock x:Name="TextoEstado" Foreground="{StaticResource TextoSecundario}" TextWrapping="Wrap" />
             </StackPanel>
             <!-- #145: lo que generó el add-in antes se reemplaza siempre; la casilla

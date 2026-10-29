@@ -41,6 +41,18 @@ public partial class VentanaConfiguradorEstribos : Window
     private readonly IAlmacenConfiguraciones _almacen;
 
     /// <summary>
+    /// #180: con qué se generó cada columna, leído del modelo al abrir y
+    /// actualizado en cada generación. Lo generado se carga en el panel por
+    /// encima de todo lo demás (decisión de Luciano, 28-oct).
+    /// </summary>
+    private readonly IRegistroGenerados _registroGenerados;
+
+    private readonly Dictionary<string, ColumnaGenerada> _generadas = new();
+
+    /// <summary>El plan que se mandó a generar, hasta que vuelve el resultado.</summary>
+    private PlanArmado? _planEnviado;
+
+    /// <summary>
     /// Una copia de <see cref="ConfigTramo"/> por (columna, tramo). Es el
     /// germen de la persistencia que formaliza L5 ("D1 — ida y vuelta sin
     /// perder nada"): alcanza para que navegar con la lista o las flechas no
@@ -197,13 +209,14 @@ public partial class VentanaConfiguradorEstribos : Window
 
     public VentanaConfiguradorEstribos(
         IProveedorContexto contexto, IProveedorTipos tipos, bool modoSimulado = false,
-        IAlmacenConfiguraciones? almacen = null)
+        IAlmacenConfiguraciones? almacen = null, IRegistroGenerados? registroGenerados = null)
     {
         InitializeComponent();
 
         _contexto = contexto;
         _tipos = tipos;
         _almacen = almacen ?? new AlmacenConfiguracionesEnMemoria();
+        _registroGenerados = registroGenerados ?? new RegistroGeneradosEnMemoria();
 
         BannerSimulado.Visibility = modoSimulado ? Visibility.Visible : Visibility.Collapsed;
 
@@ -291,6 +304,11 @@ public partial class VentanaConfiguradorEstribos : Window
 
         // Pestaña «Vista previa» (VentanaConfiguradorEstribos.VistaPrevia.cs).
         ConectarVistaPrevia();
+        ConectarEstadoPanel();
+
+        // #168: no perder tramos aceptados sin generar al cerrar.
+        Closing += AlCerrar;
+        PanelPlanta.ChulitoClicked += QuitarColumna;
 
         RefrescarConfiguracionesGuardadas();
         CargarColumnas();
@@ -314,8 +332,47 @@ public partial class VentanaConfiguradorEstribos : Window
         ListaColumnetas.ItemsSource = columnetas;
         PestanaColumnetas.Visibility = columnetas.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+        CargarLoGenerado();
+
         NodoLista? primerTramo = _nodos.FirstOrDefault(n => !n.EsColumna);
         if (primerTramo is not null) Activar(primerTramo);
+    }
+
+    /// <summary>
+    /// #180: las columnas que ya se generaron arrancan con lo que se usó al
+    /// generar (tramos, longitudinal con sus estribos menores y recubrimiento).
+    /// Si la columna cambió en Revit desde entonces se carga igual, por índice
+    /// de tramo, y se avisa al activarla.
+    /// </summary>
+    private void CargarLoGenerado()
+    {
+        foreach (string id in _nodos.Where(n => n.EsColumna).Select(n => n.ColumnaId))
+        {
+            if (_registroGenerados.Leer(id) is not { AlgunTramo: true } generada) continue;
+
+            ColumnaContexto columna = _contexto.Leer(id);
+            for (int i = 0; i < Math.Min(columna.Tramos.Count, generada.Tramos.Count); i++)
+                if (generada.Tramos[i] is ConfigTramo cfg) _configPorTramo[(id, i)] = CopiarTramo(cfg);
+
+            ConfigLongitudinal longitudinal = generada.Longitudinal.Copiar();
+            longitudinal.MigrarEstribosMenores();
+            _longitudinalPorColumna[id] = longitudinal;
+            if (generada.Recubrimiento is double recubrimiento) _recubrimientoPorColumna[id] = recubrimiento;
+
+            _generadas[id] = generada;
+        }
+    }
+
+    /// <summary>#180: el texto de estado al activar una columna ya generada, o null si no se generó.</summary>
+    private string? EstadoDeLoGenerado(string idColumna, ColumnaContexto columna)
+    {
+        if (!_generadas.TryGetValue(idColumna, out ColumnaGenerada? generada)) return null;
+
+        string texto = $"{columna.Marca} ya se generó ({generada.GeneradoEl:dd/MM/yyyy HH:mm}): el panel muestra la configuración con la que se generó.";
+        IReadOnlyList<string> cambios = generada.Cambios(columna);
+        if (cambios.Count > 0)
+            texto += $" Ojo: la columna cambió en Revit desde entonces ({string.Join("; ", cambios)}). Revísala antes de volver a generar.";
+        return texto;
     }
 
     private void AgregarColumnaYTramos(ColumnaResumen resumen)
@@ -399,10 +456,14 @@ public partial class VentanaConfiguradorEstribos : Window
         _tramoActivoIndice = nodo.EsColumna ? 0 : nodo.TramoIndice;
         _modoColumnaCompleta = nodo.EsColumna;
 
+        // #178: la configuración elegida en la lista, si la columna no tiene nada propio.
+        string? configuracionCargada = CargarConfiguracionElegidaSiHaceFalta(nodo.ColumnaId);
+
         RedibujarElevacion();
         CargarPanelDelTramoActivo();
         CargarLongitudinalDeColumnaActiva();
         CargarRecubrimientoDeColumnaActiva();
+        if ((configuracionCargada ?? EstadoDeLoGenerado(nodo.ColumnaId, _columnaActiva)) is string estado) TextoEstado.Text = estado;
         MostrarAvisos();
         NotificarElementosActivos();
 
@@ -451,91 +512,231 @@ public partial class VentanaConfiguradorEstribos : Window
         }
     }
 
+    /// <summary>La configuración elegida en la lista, o null si no hay ninguna elegida.</summary>
+    private ConfiguracionGuardada? ConfiguracionElegida() =>
+        ComboConfiguraciones.SelectedItem is string nombre ? _almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) : null;
+
     /// <summary>
-    /// Elegir una configuración solo CARGA el panel -- no acepta ningún tramo.
-    /// Llevarla a los tramos es el otro gesto (Aceptar), a propósito: así se
-    /// puede mirar qué trae antes de decidir nada.
+    /// Elegir una configuración la CARGA en la columna activa -- no acepta
+    /// ningún tramo. Llevarla a la generación es el otro gesto (Aceptar), a
+    /// propósito: así se puede mirar qué trae antes de decidir nada.
     /// </summary>
     private void ComboConfiguraciones_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        BotonAplicarConfiguracion.IsEnabled = ComboConfiguraciones.SelectedItem is string;
+        BotonBorrarConfiguracion.IsEnabled = ComboConfiguraciones.SelectedItem is string;
+        PedirEstadoPanel();
         if (_refrescandoConfiguraciones) return;
-        if (ComboConfiguraciones.SelectedItem is not string nombre) return;
-        if (_almacen.Listar().FirstOrDefault(g => g.Nombre == nombre) is not { } guardada) return;
+        if (ConfiguracionElegida() is not { } guardada || _columnaIdActiva is not string idColumna) return;
 
-        MostrarConfigEnPanel(guardada.Tramo);
+        TextoEstado.Text = AplicarConfiguracion(guardada, idColumna);
+        MostrarColumnaActivaEnPanel();
+    }
+
+    /// <summary>
+    /// #178: con una sola configuración en la lista no hay forma de "volver a
+    /// elegirla", y una columna que ya tiene lo suyo no la toma sola al
+    /// activarse. Este botón la aplica a la columna activa.
+    /// </summary>
+    private void BotonAplicarConfiguracion_Click(object sender, RoutedEventArgs e)
+    {
+        if (ConfiguracionElegida() is not { } guardada)
+        {
+            TextoEstado.Text = "Elige en la lista la configuración que quieras aplicar.";
+            return;
+        }
+        if (_columnaIdActiva is not string idColumna) return;
+
+        TextoEstado.Text = AplicarConfiguracion(guardada, idColumna);
+        MostrarColumnaActivaEnPanel();
+    }
+
+    /// <summary>
+    /// Lleva la configuración a TODOS los tramos de la columna y a su acero
+    /// longitudinal (con sus estribos menores). Solo carga: no acepta nada.
+    /// Devuelve el texto para el estado.
+    /// </summary>
+    private string AplicarConfiguracion(ConfiguracionGuardada guardada, string idColumna)
+    {
+        ColumnaContexto columna = idColumna == _columnaIdActiva && _columnaActiva is not null ? _columnaActiva : _contexto.Leer(idColumna);
+        foreach (Tramo tramo in columna.Tramos)
+            _configPorTramo[(idColumna, tramo.Indice)] = CopiarTramo(guardada.Tramo);
 
         // Los estribos menores (grapas y cajas) no están en el panel: se editan
-        // aparte y viven por columna. Cargar la configuración los lleva a la
-        // columna activa, si no el resumen que se muestra sería mentira.
+        // aparte y viven por columna. La configuración los lleva a la columna,
+        // si no el resumen que se muestra sería mentira.
         ConfigLongitudinal longitudinal = guardada.Longitudinal.Copiar();
         bool eraVieja = longitudinal.MigrarBarrasPorCara();
         longitudinal.MigrarEstribosMenores();
         int descartadas = longitudinal.DescartarMenoresFueraDeRango();
-        if (_columnaIdActiva is string idColumna) _longitudinalPorColumna[idColumna] = longitudinal;
-        MostrarLongitudinalEnPanel(longitudinal);
-
-        CampoNombreConfiguracion.Text = nombre;
-        RevalidarPanel();
+        _longitudinalPorColumna[idColumna] = longitudinal;
 
         string menores = ResumenEstribosMenores(longitudinal);
-        TextoEstado.Text = $"Configuración «{nombre}» cargada en el panel ({menores.ToLowerInvariant().TrimEnd('.')}). " +
-                           "Todavía no se aplicó a ningún tramo: para eso, aprieta Aceptar.";
+        string texto = $"Configuración «{guardada.Nombre}» cargada en {columna.Marca} ({menores.ToLowerInvariant().TrimEnd('.')}). " +
+                       "Todavía no se aceptó ningún tramo: para eso, aprieta Aceptar.";
         if (eraVieja)
-            TextoEstado.Text += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
+            texto += " Era una configuración con barras por tipo A/B: las esquinas tomaron la barra A y las caras la B; revísalas.";
         if (descartadas > 0)
-            TextoEstado.Text += $" Se quitaron {descartadas} estribo(s) menor(es) que apuntaban a barras que esta configuración ya no tiene.";
+            texto += $" Se quitaron {descartadas} estribo(s) menor(es) que apuntaban a barras que esta configuración ya no tiene.";
+        return texto;
+    }
+
+    /// <summary>Vuelve a llenar el panel con lo guardado de la columna activa (tramo activo y longitudinal).</summary>
+    private void MostrarColumnaActivaEnPanel()
+    {
+        CargarPanelDelTramoActivo();
+        CargarLongitudinalDeColumnaActiva();
+        RevalidarPanel();
     }
 
     /// <summary>
-    /// Enter en el nombre de la configuración guarda, en vez de disparar
-    /// «Aceptar este tramo» (que es el botón por defecto de la ventana, #120).
+    /// #178: si la columna no tiene nada propio (ni tocado en esta sesión ni
+    /// aceptado), toma la configuración elegida en la lista. Una columna que ya
+    /// tiene lo suyo se respeta: para pisarla está «Aplicar». Devuelve el texto
+    /// para el estado, o null si no se cargó nada.
+    /// </summary>
+    private string? CargarConfiguracionElegidaSiHaceFalta(string idColumna)
+    {
+        if (ConfiguracionElegida() is not { } guardada || TieneAlgoPropio(idColumna)) return null;
+        return AplicarConfiguracion(guardada, idColumna);
+    }
+
+    /// <summary>
+    /// Si la columna tiene algo distinto de los valores por defecto: generado
+    /// (#180), aceptado, o algún tramo o el longitudinal cambiado. Solo haber
+    /// pasado por ella no cuenta (al navegar se guarda lo que muestra el panel,
+    /// que puede ser el por defecto).
+    /// </summary>
+    private bool TieneAlgoPropio(string idColumna)
+    {
+        if (_generadas.ContainsKey(idColumna) || _tramosAceptados.Any(t => t.ColumnaId == idColumna)) return true;
+
+        ConfigTramo porDefecto = ConfigPorDefecto(_tipos);
+        if (_configPorTramo.Any(kv => kv.Key.ColumnaId == idColumna && !ComparadorConfig.Igual(kv.Value, porDefecto))) return true;
+
+        return _longitudinalPorColumna.TryGetValue(idColumna, out ConfigLongitudinal? longitudinal) &&
+               !ComparadorConfig.Igual(longitudinal, ConfigLongitudinalPorDefecto(_tipos));
+    }
+
+    private static ConfigTramo CopiarTramo(ConfigTramo c) => new()
+    {
+        Modo = c.Modo,
+        TipoBarraNombre = c.TipoBarraNombre,
+        TipoGanchoNombre = c.TipoGanchoNombre,
+        EspaciadoUniforme = c.EspaciadoUniforme,
+        LongitudConfinamiento = c.LongitudConfinamiento,
+        EspaciadoConfinado = c.EspaciadoConfinado,
+        EspaciadoNoConfinado = c.EspaciadoNoConfinado,
+    };
+
+    /// <summary>
+    /// Enter en el nombre de la configuración la guarda como nueva, en vez de
+    /// disparar «Aceptar este tramo» (que es el botón por defecto de la
+    /// ventana, #120).
     /// </summary>
     private void CampoNombreConfiguracion_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        BotonGuardarConfiguracion_Click(sender, e);
+        BotonGuardarComoNueva_Click(sender, e);
     }
 
-    private void BotonGuardarConfiguracion_Click(object sender, RoutedEventArgs e)
+    // #179: guardar como nueva, guardar cambios y eliminar son tres gestos
+    // distintos. Antes los dos primeros eran el mismo botón y dependía del
+    // nombre escrito si se creaba una o se pisaba otra sin aviso.
+
+    private void BotonGuardarComoNueva_Click(object sender, RoutedEventArgs e)
     {
         string nombre = CampoNombreConfiguracion.Text.Trim();
         if (nombre.Length == 0)
         {
-            TextoEstado.Text = "Escribe un nombre para la configuración antes de guardarla.";
+            TextoEstado.Text = "Escribe un nombre para la configuración nueva.";
+            return;
+        }
+        if (_almacen.Listar().Any(g => g.Nombre == nombre))
+        {
+            TextoEstado.Text = $"Ya hay una configuración «{nombre}». Elige otro nombre, o elígela en la lista y usa «Guardar cambios».";
             return;
         }
 
-        bool reemplaza = _almacen.Listar().Any(g => g.Nombre == nombre);
-
-        // Copia: si la configuración compartiera las listas de grapas/cajas con
-        // la columna de la que salió, seguir editando los estribos menores de
-        // esa columna cambiaría también lo guardado.
-        _almacen.Guardar(new ConfiguracionGuardada
-        {
-            Nombre = nombre,
-            Tramo = LeerConfigDelPanel(),
-            Longitudinal = LeerLongitudinalConEstribosMenores().Copiar(),
-        });
-
+        _almacen.Guardar(ConfiguracionDelPanel(nombre));
+        CampoNombreConfiguracion.Text = "";
         RefrescarConfiguracionesGuardadas(nombre);
-        TextoEstado.Text = reemplaza
-            ? $"Configuración «{nombre}» actualizada."
-            : $"Configuración «{nombre}» guardada.";
+        TextoEstado.Text = $"Configuración «{nombre}» guardada.";
+    }
+
+    private void BotonGuardarCambios_Click(object sender, RoutedEventArgs e)
+    {
+        if (ComboConfiguraciones.SelectedItem is not string nombre)
+        {
+            TextoEstado.Text = "Elige en la lista la configuración que quieras actualizar.";
+            return;
+        }
+        if (MessageBox.Show(this, $"¿Reemplazar la configuración «{nombre}» con lo que hay ahora en el panel?",
+                "Guardar cambios", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+            return;
+
+        _almacen.Guardar(ConfiguracionDelPanel(nombre));
+        RefrescarConfiguracionesGuardadas(nombre);
+        TextoEstado.Text = $"Configuración «{nombre}» actualizada.";
     }
 
     private void BotonBorrarConfiguracion_Click(object sender, RoutedEventArgs e)
     {
         if (ComboConfiguraciones.SelectedItem is not string nombre)
         {
-            TextoEstado.Text = "Elige en la lista la configuración que quieras borrar.";
+            TextoEstado.Text = "Elige en la lista la configuración que quieras eliminar.";
+            return;
+        }
+        if (MessageBox.Show(this, $"¿Eliminar del modelo la configuración «{nombre}»? No se puede deshacer.",
+                "Eliminar configuración", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
+
+        _almacen.Borrar(nombre);
+        RefrescarConfiguracionesGuardadas();
+        TextoEstado.Text = $"Configuración «{nombre}» eliminada.";
+    }
+
+    /// <summary>
+    /// El panel entero como configuración con nombre. Copia: si compartiera
+    /// las listas de grapas/cajas con la columna de la que salió, seguir
+    /// editando los estribos menores de esa columna cambiaría también lo guardado.
+    /// </summary>
+    private ConfiguracionGuardada ConfiguracionDelPanel(string nombre) => new()
+    {
+        Nombre = nombre,
+        Tramo = LeerConfigDelPanel(),
+        Longitudinal = LeerLongitudinalConEstribosMenores().Copiar(),
+    };
+
+    /// <summary>
+    /// #179: si el panel tiene cambios respecto de la configuración elegida.
+    /// Se compara contra lo que quedaría al cargarla (migrada), no contra el
+    /// JSON tal cual: una configuración vieja no tiene que salir "cambiada" solo
+    /// por venir en el formato anterior.
+    /// </summary>
+    private void ActualizarCambiosSinGuardar()
+    {
+        if (ConfiguracionElegida() is not { } guardada || _columnaActiva is null)
+        {
+            TextoCambiosSinGuardar.Visibility = Visibility.Collapsed;
+            BotonGuardarCambios.IsEnabled = false;
             return;
         }
 
-        _almacen.Borrar(nombre);
-        CampoNombreConfiguracion.Text = "";
-        RefrescarConfiguracionesGuardadas();
-        TextoEstado.Text = $"Configuración «{nombre}» borrada.";
+        ConfigLongitudinal suya = guardada.Longitudinal.Copiar();
+        suya.MigrarBarrasPorCara();
+        suya.MigrarEstribosMenores();
+        ConfigLongitudinal delPanel = LeerLongitudinalConEstribosMenores().Copiar();
+        delPanel.MigrarEstribosMenores();
+
+        bool cambiada = !ComparadorConfig.Igual(LeerConfigDelPanel(), guardada.Tramo) || !ComparadorConfig.Igual(delPanel, suya);
+        TextoCambiosSinGuardar.Text = cambiada
+            ? $"• El panel tiene cambios sin guardar en «{guardada.Nombre}»."
+            : $"El panel coincide con «{guardada.Nombre}».";
+        TextoCambiosSinGuardar.Foreground = cambiada ? Paleta.AvisoTexto : Paleta.TextoSecundario;
+        TextoCambiosSinGuardar.Visibility = Visibility.Visible;
+        BotonGuardarCambios.IsEnabled = cambiada;
     }
 
     /// <summary>
@@ -545,11 +746,14 @@ public partial class VentanaConfiguradorEstribos : Window
     /// </summary>
     private void RedibujarPanelPlanta()
     {
-        HashSet<string> configuradas = _tramosAceptados.Select(t => t.ColumnaId).ToHashSet();
+        // #168: el ✓ de cada columna con el mismo color que en la lista.
+        Dictionary<string, EstadoAceptacion> estados = _nodos
+            .Where(n => n.EsColumna && n.Estado != EstadoAceptacion.Ninguno)
+            .ToDictionary(n => n.ColumnaId, n => n.Estado);
 
         PanelPlanta.Cargar(
             _contexto.ListarColumnas(), _contexto.ListarRejillas(),
-            _columnaIdActiva, _columnasElegidas, configuradas);
+            _columnaIdActiva, _columnasElegidas, estados);
     }
 
     /// <summary>
@@ -1091,12 +1295,24 @@ public partial class VentanaConfiguradorEstribos : Window
         int delMismoTipo = TramosDeLaColumnaActiva(t => t.Tipo == activo.Tipo).Count - 1;
         int enLaColumna = TramosDeLaColumnaActiva(null).Count - 1;
 
-        BotonAceptarMismoTipo.Content = $"✓  Aceptar y aplicar al resto de {RotuloPlural(activo.Tipo)} ({delMismoTipo})";
+        // #168: el par de cada botón. Si todo lo que tocaría ya está aceptado y
+        // sin cambios, el botón quita. Enter (botón por defecto, #120) solo
+        // acepta: dos Enter seguidos no pueden aceptar y quitar.
+        bool quitarActivo = TodosPendientes(null);
+        BotonAceptar.Content = quitarActivo ? "✕  Quitar ✓ de este tramo" : "✓  Aceptar este tramo";
+        BotonAceptar.IsDefault = !quitarActivo;
+
+        TipoTramo tipo = activo.Tipo;
+        BotonAceptarMismoTipo.Content = TodosPendientes(t => t.Tipo == tipo)
+            ? $"✕  Quitar ✓ de {RotuloPlural(activo.Tipo)} ({delMismoTipo + 1})"
+            : $"✓  Aceptar y aplicar al resto de {RotuloPlural(activo.Tipo)} ({delMismoTipo})";
         BotonAceptarMismoTipo.Visibility = delMismoTipo > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // Si todos los tramos de la columna son del mismo tipo, los dos botones
         // harían exactamente lo mismo: se muestra uno solo.
-        BotonAceptarColumna.Content = $"✓  Aceptar y aplicar a toda la columna ({enLaColumna + 1})";
+        BotonAceptarColumna.Content = TodosPendientes(_ => true)
+            ? $"✕  Quitar ✓ de toda la columna ({enLaColumna + 1})"
+            : $"✓  Aceptar y aplicar a toda la columna ({enLaColumna + 1})";
         BotonAceptarColumna.Visibility = enLaColumna > 0 && delMismoTipo != enLaColumna
             ? Visibility.Visible
             : Visibility.Collapsed;
@@ -1483,6 +1699,7 @@ public partial class VentanaConfiguradorEstribos : Window
         // (el ángulo de un gancho, Voltear, la barra de una pieza) no la
         // redibujaba: hacía falta borrar la pieza y volver a ponerla (Luciano, 26-oct).
         PedirVistaPrevia();
+        PedirEstadoPanel();
     }
 
     // ------------------------------------------------------------- aceptar
@@ -1504,17 +1721,26 @@ public partial class VentanaConfiguradorEstribos : Window
             .ToList();
     }
 
-    private void BotonAceptar_Click(object sender, RoutedEventArgs e) => Aceptar(extenderA: null);
+    // #168: cada botón es un interruptor. Si todo lo que tocaría ya está
+    // aceptado y sin cambios, quita; si no, acepta.
+
+    private void BotonAceptar_Click(object sender, RoutedEventArgs e) => AceptarOQuitar(extenderA: null);
 
     private void BotonAceptarMismoTipo_Click(object sender, RoutedEventArgs e)
     {
         if (_columnaActiva is null) return;
 
         TipoTramo tipo = _columnaActiva.Tramos[_tramoActivoIndice].Tipo;
-        Aceptar(t => t.Tipo == tipo);
+        AceptarOQuitar(t => t.Tipo == tipo);
     }
 
-    private void BotonAceptarColumna_Click(object sender, RoutedEventArgs e) => Aceptar(_ => true);
+    private void BotonAceptarColumna_Click(object sender, RoutedEventArgs e) => AceptarOQuitar(_ => true);
+
+    private void AceptarOQuitar(Func<Tramo, bool>? extenderA)
+    {
+        if (TodosPendientes(extenderA)) QuitarDelGesto(extenderA);
+        else Aceptar(extenderA);
+    }
 
     /// <summary>
     /// El gesto central de la ventana desde el issue #56: acepta el tramo
@@ -1570,6 +1796,9 @@ public partial class VentanaConfiguradorEstribos : Window
             // listas de grapas y cajas, editarlas en una las cambiaría en todas.
             _longitudinalPorColumna[idColumna] = LeerLongitudinalConEstribosMenores().Copiar();
 
+            // #168: lo que se aceptó, aparte de lo que se siga tecleando. Es lo que se genera.
+            _longitudinalAceptado[idColumna] = _longitudinalPorColumna[idColumna].Copiar();
+
             // El recubrimiento elegido también es parte de "la misma
             // configuración para varias columnas": se lleva a las que todavía
             // no tienen uno propio, sin pisar el que alguien ya eligió.
@@ -1582,18 +1811,10 @@ public partial class VentanaConfiguradorEstribos : Window
                 // Copia independiente por tramo -- no una referencia compartida.
                 // Editar uno solo después (con las flechas) no le tiene que
                 // cambiar el valor a los demás que recibieron esta misma config.
-                _configPorTramo[(idColumna, indice)] = new ConfigTramo
-                {
-                    Modo = plantilla.Modo,
-                    TipoBarraNombre = plantilla.TipoBarraNombre,
-                    TipoGanchoNombre = plantilla.TipoGanchoNombre,
-                    EspaciadoUniforme = plantilla.EspaciadoUniforme,
-                    LongitudConfinamiento = plantilla.LongitudConfinamiento,
-                    EspaciadoConfinado = plantilla.EspaciadoConfinado,
-                    EspaciadoNoConfinado = plantilla.EspaciadoNoConfinado,
-                };
+                _configPorTramo[(idColumna, indice)] = CopiarTramo(plantilla);
 
                 _tramosAceptados.Add((idColumna, indice));
+                _aceptadoComo[(idColumna, indice)] = CopiarTramo(plantilla);
                 aceptados++;
 
                 // El chequeo de L1 vs altura sí depende de CADA tramo: distintas
@@ -1630,48 +1851,22 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstado.Text = string.Join(" ", mensaje);
 
-        RefrescarChulitos();
-        RedibujarElevacion();
-        RedibujarPanelPlanta();
-        ActualizarResumenDeGeneracion();
+        OlvidarDeshacer();
+        RefrescarEstadoAceptacion();
     }
 
     /// <summary>
-    /// Saca un tramo de la generación. El chulito no es una casilla que haya que
-    /// tildar (eso es justamente lo que pidió sacar William), pero tiene que
-    /// haber forma de deshacer uno puesto por error: se clickea el ✓ en la
-    /// elevación. La configuración del tramo NO se borra -- queda cargada por si
-    /// se lo vuelve a aceptar.
+    /// Saca un tramo de la columna activa de la generación: clic en su ✓ de la
+    /// elevación. La configuración del tramo NO se borra -- queda cargada por
+    /// si se lo vuelve a aceptar.
     /// </summary>
     private void QuitarAceptacion(int indiceTramo)
     {
-        if (_columnaIdActiva is not string idColumna) return;
-        if (!_tramosAceptados.Remove((idColumna, indiceTramo))) return;
+        if (_columnaIdActiva is not string idColumna || !_tramosAceptados.Contains((idColumna, indiceTramo))) return;
 
-        TextoEstado.Text = $"Tramo {indiceTramo} de {_columnaActiva?.Marca} sacado de la generación " +
+        Quitar(new[] { (idColumna, indiceTramo) });
+        TextoEstado.Text = $"Tramo {indiceTramo + 1} de {_columnaActiva?.Marca} sacado de la generación " +
                            "(su configuración queda cargada).";
-
-        RefrescarChulitos();
-        RedibujarElevacion();
-        RedibujarPanelPlanta();
-        ActualizarResumenDeGeneracion();
-    }
-
-    /// <summary>
-    /// Pasa <see cref="_tramosAceptados"/> a los <see cref="NodoLista"/>, que es
-    /// lo que muestra la lista de columnetas. Una fila de columna lleva chulito
-    /// si alguno de sus tramos está aceptado.
-    /// </summary>
-    private void RefrescarChulitos()
-    {
-        HashSet<string> columnasConAceptados = _tramosAceptados.Select(t => t.ColumnaId).ToHashSet();
-
-        foreach (NodoLista nodo in _nodos)
-        {
-            nodo.Aceptado = nodo.EsColumna
-                ? columnasConAceptados.Contains(nodo.ColumnaId)
-                : _tramosAceptados.Contains((nodo.ColumnaId, nodo.TramoIndice));
-        }
     }
 
     /// <summary>
@@ -1683,9 +1878,14 @@ public partial class VentanaConfiguradorEstribos : Window
         int columnas = _tramosAceptados.Select(t => t.ColumnaId).Distinct().Count();
         int tramos = _tramosAceptados.Count;
 
+        BotonQuitarTodos.Visibility = tramos > 0 ? Visibility.Visible : Visibility.Collapsed;
+
         if (tramos == 0)
         {
-            TextoResumenGeneracion.Text = "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar.";
+            // #168: después de generar no queda nada pendiente, y lo generado no se repite.
+            TextoResumenGeneracion.Text = _generadas.Count > 0
+                ? "Todavía no hay nada pendiente: lo generado tiene ✓ gris y no se vuelve a generar salvo que lo aceptes otra vez."
+                : "Todavía no hay nada aceptado: configura un tramo y aprieta Aceptar.";
             TextoResumenGeneracion.ToolTip = null;
             BotonGenerar.ToolTip = "Primero acepta al menos un tramo.";
             return;
@@ -1709,6 +1909,11 @@ public partial class VentanaConfiguradorEstribos : Window
         string completa = "Se van a generar estos tramos:\n" + string.Join("\n", porColumna);
 
         TextoResumenGeneracion.Text = $"Listo para generar: {columnas} columna(s), {tramos} tramo(s) con ✓ — {lista}";
+
+        // #168: lo editado después de aceptar se genera con lo último aceptado.
+        int editados = _tramosAceptados.Count(t => EstadoDe(t.ColumnaId, t.Indice) == EstadoAceptacion.Editado);
+        if (editados > 0)
+            TextoResumenGeneracion.Text += $". Ojo: {editados} tramo(s) con ✓ ámbar tienen cambios sin aceptar; se generan con lo último aceptado.";
         TextoResumenGeneracion.ToolTip = completa;
         BotonGenerar.ToolTip = completa;
     }
@@ -1828,6 +2033,7 @@ public partial class VentanaConfiguradorEstribos : Window
             double alto = Math.Max(1, Y(tramo.ZInferior) - yTop);
             bool activo = i == _tramoActivoIndice;
             bool aceptado = _columnaIdActiva is not null && _tramosAceptados.Contains((_columnaIdActiva, i));
+            EstadoAceptacion estado = _columnaIdActiva is null ? EstadoAceptacion.Ninguno : EstadoDe(_columnaIdActiva, i);
 
             if (tramo.Tipo is TipoTramo.DentroDeViga or TipoTramo.ContraZapata)
             {
@@ -1852,7 +2058,7 @@ public partial class VentanaConfiguradorEstribos : Window
             // puede ser las tres cosas a la vez. Va con un tinte verde suave
             // sobre el tramo para que "lo que se genera" se lea de un vistazo
             // en toda la columna, no leyendo ✓ por ✓.
-            if (aceptado)
+            if (estado == EstadoAceptacion.Pendiente)
             {
                 var tinte = new Rectangle
                 {
@@ -1864,21 +2070,26 @@ public partial class VentanaConfiguradorEstribos : Window
                 Canvas.SetLeft(tinte, xColumna);
                 Canvas.SetTop(tinte, yTop);
                 CanvasElevacion.Children.Add(tinte);
+            }
 
+            // #168: verde = se genera, ámbar = cambiado desde que se aceptó o
+            // se generó, gris = ya generado. Solo se saca lo que está aceptado.
+            if (estado != EstadoAceptacion.Ninguno)
+            {
                 int indiceDelChulito = i;
                 var chulito = new TextBlock
                 {
                     Text = "✓",
                     FontSize = 13,
                     FontWeight = FontWeights.Bold,
-                    Foreground = Paleta.Exito,
-                    Cursor = System.Windows.Input.Cursors.Hand,
-                    ToolTip = "Este tramo se genera. Clic para sacarlo.",
+                    Foreground = ColorDe(estado),
+                    Cursor = aceptado ? System.Windows.Input.Cursors.Hand : null,
+                    ToolTip = AyudaDe(estado, aceptado),
                     Background = Brushes.Transparent,
                 };
                 Canvas.SetLeft(chulito, xColumna - sobresaleNudo - 18);
                 Canvas.SetTop(chulito, yTop + Math.Max(0, alto / 2 - 9));
-                chulito.MouseLeftButtonUp += (_, _) => QuitarAceptacion(indiceDelChulito);
+                if (aceptado) chulito.MouseLeftButtonUp += (_, _) => QuitarAceptacion(indiceDelChulito);
                 CanvasElevacion.Children.Add(chulito);
             }
 
@@ -1950,14 +2161,15 @@ public partial class VentanaConfiguradorEstribos : Window
 
             for (int i = 0; i < contexto.Tramos.Count; i++)
             {
+                // #168: lo ACEPTADO, no lo que quedó tecleado después.
                 tramos.Add(aceptados.Contains(i)
-                    ? (_configPorTramo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos))
+                    ? (_aceptadoComo.TryGetValue((id, i), out ConfigTramo? cfg) ? cfg : ConfigPorDefecto(_tipos))
                     : null);
             }
 
-            ConfigLongitudinal longitudinal = _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? l)
+            ConfigLongitudinal longitudinal = _longitudinalAceptado.TryGetValue(id, out ConfigLongitudinal? l)
                 ? l
-                : ConfigLongitudinalPorDefecto(_tipos);
+                : _longitudinalPorColumna.TryGetValue(id, out ConfigLongitudinal? actual) ? actual : ConfigLongitudinalPorDefecto(_tipos);
 
             plan.Columnas.Add(new ColumnaPlan
             {
@@ -2004,6 +2216,7 @@ public partial class VentanaConfiguradorEstribos : Window
 
         TextoEstado.Text = "Generando armado en Revit…";
         BotonGenerar.IsEnabled = false;
+        _planEnviado = plan;
 
         GenerarSolicitado?.Invoke(opciones);
     }
@@ -2068,8 +2281,22 @@ public partial class VentanaConfiguradorEstribos : Window
         // terminar en un crash nativo de Revit en vez de una excepción.
         _contexto.InvalidarCache();
 
+        // #180: lo mismo que quedó guardado en el modelo (RegistroGeneradosRevit).
+        if (_planEnviado is not null)
+        {
+            foreach (ColumnaPlan columna in _planEnviado.Columnas)
+            {
+                _generadas.TryGetValue(columna.Id, out ColumnaGenerada? previa);
+                _generadas[columna.Id] = ColumnaGenerada.Combinar(previa, columna, _planEnviado.GeneradoEl);
+            }
+
+            // #168: lo generado pasa a ✓ gris y sale de la próxima generación.
+            MarcarGenerados(_planEnviado);
+        }
+        _planEnviado = null;
+
         TextoEstado.Text =
-            $"Generado: {resultado.GruposCreados} estribo(s) creado(s)" +
+            $"Generado:{resultado.GruposCreados} estribo(s) creado(s)" +
             (resultado.Eliminados > 0 ? $", {resultado.Eliminados} elemento(s) de acero anterior(es) reemplazado(s)" : "") +
             (resultado.TramosOmitidos > 0 ? $", {resultado.TramosOmitidos} tramo(s) omitido(s)" : "") +
             ".";
@@ -2083,6 +2310,7 @@ public partial class VentanaConfiguradorEstribos : Window
     public void MostrarErrorGeneracion(string mensaje)
     {
         BotonGenerar.IsEnabled = true;
+        _planEnviado = null;
 
         // Aunque haya fallado, la corrida ya modificó el documento antes de
         // tirar la excepción (ver MostrarResultadoGeneracion) -- misma razón
@@ -2125,26 +2353,36 @@ public sealed class NodoLista : INotifyPropertyChanged
     public string? IdElementoHost { get; init; }
 
     /// <summary>
-    /// Si este tramo (o, en una fila de columna, alguno de sus tramos) está
-    /// aceptado y por lo tanto se va a generar. La fuente de la verdad es
-    /// <c>_tramosAceptados</c> en la ventana; esto es el espejo para la lista,
-    /// y lo sincroniza <c>RefrescarChulitos</c>.
+    /// En qué está este tramo (o, en una fila de columna, el resumen de sus
+    /// tramos) respecto de la generación (#168). La fuente de la verdad está
+    /// en la ventana; esto es el espejo para la lista, y lo sincroniza
+    /// <c>RefrescarEstadoAceptacion</c>.
     /// </summary>
-    private bool _aceptado;
-    public bool Aceptado
+    private EstadoAceptacion _estado;
+    public EstadoAceptacion Estado
     {
-        get => _aceptado;
+        get => _estado;
         set
         {
-            if (_aceptado == value) return;
-            _aceptado = value;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Aceptado)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Chulito)));
+            if (_estado == value) return;
+            _estado = value;
+            foreach (string propiedad in new[] { nameof(Estado), nameof(Chulito), nameof(ColorChulito), nameof(AyudaChulito) })
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propiedad));
         }
     }
 
-    /// <summary>El ✓ que muestra la lista -- vacío si no está aceptado.</summary>
-    public string Chulito => _aceptado ? "✓" : "";
+    /// <summary>El ✓ que muestra la lista -- vacío si no está aceptado ni generado.</summary>
+    public string Chulito => _estado == EstadoAceptacion.Ninguno ? "" : "✓";
+
+    public Brush ColorChulito => VentanaConfiguradorEstribos.ColorDe(_estado);
+
+    public string? AyudaChulito => _estado switch
+    {
+        EstadoAceptacion.Pendiente => "Se genera. Clic para sacarlo.",
+        EstadoAceptacion.Editado => "Cambiado desde que se aceptó o se generó. Clic para sacarlo si estaba aceptado.",
+        EstadoAceptacion.Generado => "Ya generado.",
+        _ => null,
+    };
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }

@@ -106,6 +106,57 @@
                     </Grid>
                 </Border>
 
+                <!-- Licencia de este equipo (issue #195): estado, código y, sin licencia, «Solicitar acceso» -->
+                <Border Background="{StaticResource Superficie}" BorderBrush="{StaticResource Borde}" BorderThickness="1" CornerRadius="8"
+                        Padding="14,10" Margin="0,0,0,12" AutomationProperties.Name="Licencia de este equipo">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock FontFamily="{StaticResource Iconos}" FontSize="16" Margin="0,1,10,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="&#xE8D7;"/>
+                                        <Setter Property="Foreground" Value="{StaticResource Acento}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding LicenciaVigente}" Value="True">
+                                                <Setter Property="Text" Value="&#xE73E;"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Exito}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Grid.Column="1" Text="{Binding TextoLicencia}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       AutomationProperties.LiveSetting="Polite"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="26,6,0,0">
+                            <TextBlock Text="Código del equipo:" Foreground="{StaticResource TextoSuave}" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CodigoEquipo}" FontFamily="Consolas" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            <Button Style="{StaticResource BotonPlano}" Foreground="{StaticResource Acento}" Content="Copiar" Margin="8,0,0,0"
+                                    Command="{Binding CopiarCodigo}" ToolTip="Copiar el código del equipo"
+                                    AutomationProperties.Name="Copiar el código del equipo"/>
+                        </StackPanel>
+
+                        <Grid Margin="26,8,0,0" Visibility="{Binding PideNombre, Converter={StaticResource BoolAVisible}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Su nombre" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1" Text="{Binding NombreSolicitante, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="6,5" BorderBrush="{StaticResource Borde}" VerticalContentAlignment="Center" MaxLength="60"
+                                     AutomationProperties.Name="Su nombre"/>
+                            <Button Grid.Column="2" Style="{StaticResource BotonPrincipal}" Content="Solicitar acceso" Margin="8,0,0,0"
+                                    Command="{Binding SolicitarAcceso}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- Año de Revit y resumen -->
                 <Grid Margin="0,0,0,12">
                     <Grid.ColumnDefinitions>

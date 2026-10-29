@@ -14,6 +14,15 @@
             <RadioButton x:Name="OpcionZonaTraslapo" Content="Zona de traslapo" GroupName="SeccionChoques"
                          Checked="OpcionSeccion_Checked" />
         </StackPanel>
+        <!-- #181: las vistas de lado, del tramo activo o de la columna entera
+             (con los ganchos de las puntas). -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="De lado:" Margin="0,0,8,0" VerticalAlignment="Center" />
+            <RadioButton x:Name="OpcionElevacionTramo" Content="Tramo activo" GroupName="AlcanceElevacion" IsChecked="True"
+                         Margin="0,0,16,0" Checked="OpcionSeccion_Checked" />
+            <RadioButton x:Name="OpcionElevacionColumna" Content="Columna completa" GroupName="AlcanceElevacion"
+                         Checked="OpcionSeccion_Checked" />
+        </StackPanel>
         <StackPanel x:Name="Resumen" DockPanel.Dock="Bottom" Margin="0,6,0,0" />
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
             <Canvas x:Name="Lienzo" Width="350" Height="520" Background="Transparent"

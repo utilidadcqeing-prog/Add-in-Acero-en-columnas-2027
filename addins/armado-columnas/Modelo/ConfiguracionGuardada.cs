@@ -1,6 +1,7 @@
 namespace practicacq.Modelo;
 
 using System.Collections.Generic;
+using System.Text.Json;
 
 /// <summary>
 /// Una configuración con nombre, para no repetir los mismos clics en cada
@@ -61,4 +62,18 @@ public sealed class AlmacenConfiguracionesEnMemoria : IAlmacenConfiguraciones
     }
 
     public void Borrar(string nombre) => _guardadas.RemoveAll(g => g.Nombre == nombre);
+}
+
+/// <summary>
+/// Si dos configuraciones dicen lo mismo, campo por campo. Se compara el JSON
+/// (el mismo que se guarda en el modelo), así un campo nuevo entra solo en la
+/// comparación sin acordarse de agregarlo acá.
+/// </summary>
+public static class ComparadorConfig
+{
+    public static bool Igual(ConfigTramo? a, ConfigTramo? b) => Json(a) == Json(b);
+
+    public static bool Igual(ConfigLongitudinal? a, ConfigLongitudinal? b) => Json(a) == Json(b);
+
+    private static string Json<T>(T valor) => JsonSerializer.Serialize(valor);
 }
