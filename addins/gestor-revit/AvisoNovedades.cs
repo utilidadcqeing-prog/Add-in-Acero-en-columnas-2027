@@ -66,21 +66,5 @@ internal static class AvisoNovedades
     /// Deja en %LOCALAPPDATA%\CQEING\Gestor\aviso-revit.log por qué no hubo aviso, para quien da soporte. Una consulta
     /// que sale bien lo borra.
     /// </summary>
-    private static void Anotar(string? problema)
-    {
-        string archivo = Path.Combine(Path.GetDirectoryName(RutasGestor.DelUsuario().CarpetaCache)!, "aviso-revit.log");
-        try
-        {
-            if (problema is null) File.Delete(archivo);
-            else
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(archivo)!);
-                File.WriteAllText(archivo, $"{DateTime.Now:yyyy-MM-dd HH:mm} {problema}{Environment.NewLine}");
-            }
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // Anotar es opcional.
-        }
-    }
+    private static void Anotar(string? problema) => RegistroSoporte.Anotar("aviso-revit.log", problema);
 }

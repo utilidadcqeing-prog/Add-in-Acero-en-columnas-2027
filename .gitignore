@@ -23,3 +23,6 @@ Add-in de Armado CQEING_files/
 
 # Configuración local con claves (ver addins/imagenes/.env.example)
 .env
+
+# Claves de las licencias: nunca entran al repo (tools/licencias/LEEME.md)
+*.pem

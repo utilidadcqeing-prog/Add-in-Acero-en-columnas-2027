@@ -78,7 +78,8 @@ internal sealed class VentanaAviso : Window
         return panel;
     }
 
-    private static Button Boton(string texto, Action accion)
+    /// <summary>Botón de los avisos del gestor en Revit (también lo usa <see cref="VentanaLicencia"/>).</summary>
+    internal static Button Boton(string texto, Action accion)
     {
         var boton = new Button { Content = texto, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(8, 0, 0, 0) };
         boton.Click += (_, _) => accion();

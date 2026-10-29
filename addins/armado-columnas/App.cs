@@ -6,6 +6,9 @@ public class App : IExternalApplication
 {
     public Result OnStartup(UIControlledApplication app)
     {
+        // Sin licencia vigente no se crean los botones; el aviso lo da el componente del gestor (issue #189).
+        if (!Licencia.Vigente(out _)) return Result.Succeeded;
+
         RibbonPanel panelEstructural = CintaCqeing.ObtenerPanel(app, "Estructural");
 
         panelEstructural.AddItem(CintaCqeing.CrearBoton(
