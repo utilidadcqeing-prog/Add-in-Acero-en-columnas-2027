@@ -1,3 +1,5 @@
+using CQEING.Compartido;
+
 namespace CQEING.Gestor.Core;
 
 /// <param name="InstaladaPorAnio">Año de Revit → versión que el .addin de ese año tiene activa.</param>
@@ -52,6 +54,8 @@ public sealed class GestorAddins(FuenteReleases fuente, ConstructorCatalogo cata
         ResultadoCatalogo resultado = await catalogo.ConstruirAsync(releases.Releases, ct);
         IReadOnlyList<string> anios = DetectorRevit.AniosInstalados(programFiles);
 
+        foreach (string anio in anios) AnotarUltimas(resultado.Addins, anio);
+
         var avisos = new List<string>();
         if (releases.Aviso is not null) avisos.Add(releases.Aviso);
         avisos.AddRange(resultado.Avisos);
@@ -67,8 +71,18 @@ public sealed class GestorAddins(FuenteReleases fuente, ConstructorCatalogo cata
     {
         ResultadoReleases releases = await fuente.ObtenerRecienteAsync(vigencia, ct);
         ResultadoCatalogo resultado = await catalogo.ConstruirAsync(releases.Releases, ct);
+        AnotarUltimas(resultado.Addins, anio);
         return NovedadesRevit.De(LeerEstados(resultado.Addins, [anio]), anio);
     }
+
+    /// <summary>
+    /// Anota la última versión de cada add-in con paquete para ese año: un add-in más viejo no se deja usar al abrir Revit
+    /// (actualización obligatoria). También con la lista guardada: lo que ya se supo sigue valiendo sin red.
+    /// </summary>
+    private void AnotarUltimas(IReadOnlyList<EntradaCatalogo> catalogo, string anio) =>
+        ActualizacionObligatoria.Escribir(rutas.CarpetaCqeing, anio, catalogo
+            .Where(addin => addin.Ultima.Manifiesto.PaqueteParaRevit(anio) is not null)
+            .ToDictionary(addin => addin.Id, addin => addin.Ultima.Version.ToString()));
 
     /// <summary>
     /// Vuelve a leer del disco qué está instalado y descargado, con el mismo catálogo y SIN consultar GitHub

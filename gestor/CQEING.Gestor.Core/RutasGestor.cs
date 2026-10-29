@@ -18,6 +18,9 @@ public sealed class RutasGestor(string localAppData, string appData)
 
     public string CarpetaAddins => Path.Combine(localAppData, "CQEING", "Addins");
 
+    /// <summary>%LOCALAPPDATA%\CQEING: la licencia y las últimas versiones, lo que leen los add-ins al abrir Revit.</summary>
+    public string CarpetaCqeing => Path.Combine(localAppData, "CQEING");
+
     public string CarpetaCache => Path.Combine(localAppData, "CQEING", "Gestor", "cache");
 
     /// <summary>

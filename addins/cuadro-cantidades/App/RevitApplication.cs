@@ -26,6 +26,8 @@ public sealed class RevitApplication : IExternalApplication
         // Sin licencia vigente no se inicia nada ni se crea el botón; el aviso lo da el componente del gestor (issue #189).
         // OnShutdown no se ve afectado: cada servicio comprueba si se inició antes de apagarse.
         if (!Licencia.Vigente(out _)) return Result.Succeeded;
+        // Con una versión nueva publicada, tampoco: hay que actualizar desde el gestor (actualización obligatoria).
+        if (!BloqueoPorVersion.AlDia(application, AppConstants.RibbonTabName)) return Result.Succeeded;
 
         // Inicializa el gestor de ejecución de eventos asíncronos en el hilo de Revit
         RevitEventExecutor.Initialize();

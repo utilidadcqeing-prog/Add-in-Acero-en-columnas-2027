@@ -9,7 +9,7 @@ namespace CQEING.GestorRevit;
 
 /// <summary>
 /// Aviso pequeño en la esquina inferior derecha: cuántas y cuáles versiones nuevas hay, con «Abrir el gestor» y «Más
-/// tarde». No es modal ni roba el foco, así que no interrumpe el trabajo, y se cierra solo (no mientras el ratón está encima).
+/// tarde». Actualizar es obligatorio: los add-ins desactualizados no se dejan usar (BloqueoPorVersion). No es modal ni roba el foco, así que no interrumpe el trabajo, y se cierra solo (no mientras el ratón está encima).
 /// </summary>
 internal sealed class VentanaAviso : Window
 {
@@ -65,7 +65,8 @@ internal sealed class VentanaAviso : Window
             panel.Children.Add(new TextBlock { Text = Linea(novedad), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) });
         panel.Children.Add(new TextBlock
         {
-            Text = "Se actualizan desde el gestor, sin cerrar Revit. El cambio se ve al reiniciar Revit.",
+            Text = "Actualizar es obligatorio: hasta hacerlo, estos add-ins no se pueden usar. Se actualizan desde el gestor, " +
+                   "sin cerrar Revit, y vuelven a funcionar al reiniciar Revit.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brushes.DimGray,
             Margin = new Thickness(0, 8, 0, 12),

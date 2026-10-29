@@ -29,6 +29,15 @@ public class TodosLosAddinsExigenLicenciaTests
         Assert.True(sinLicencia.Length == 0,
             "Estos add-ins no preguntan por la licencia al arrancar. Agregar como primera línea de OnStartup " +
             $"«if (!Licencia.Vigente(out _)) return Result.Succeeded;»: {string.Join(", ", sinLicencia)}");
+
+        // Actualización obligatoria: igual que la licencia, un add-in que se olvide de la línea se podría seguir usando viejo.
+        string[] sinActualizacion = aplicaciones
+            .Where(archivo => !File.ReadAllText(archivo).Contains("BloqueoPorVersion.AlDia("))
+            .Select(archivo => Path.GetRelativePath(raiz!, archivo))
+            .ToArray();
+        Assert.True(sinActualizacion.Length == 0,
+            "Estos add-ins no exigen la última versión al arrancar. Agregar después de la licencia " +
+            $"«if (!BloqueoPorVersion.AlDia(app)) return Result.Succeeded;»: {string.Join(", ", sinActualizacion)}");
     }
 
     private static bool EnCarpeta(string addins, string archivo, params string[] carpetas) =>

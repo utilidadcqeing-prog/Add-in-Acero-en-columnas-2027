@@ -1,4 +1,5 @@
 using System.Net;
+using CQEING.Compartido;
 using CQEING.Gestor.Core.Tests.Apoyo;
 
 namespace CQEING.Gestor.Core.Tests;
@@ -88,6 +89,32 @@ public class GestorAddinsTests : IDisposable
         Assert.False(actualizado.HayActualizacion("2027"));
         Assert.Empty(despues.Avisos);
         Assert.False(despues.DesdeCache);
+    }
+
+    [Fact]
+    public async Task Consultar_anota_la_ultima_version_para_que_los_add_ins_viejos_no_carguen()
+    {
+        Publicar("1.0.0", "1.1.0");
+
+        await _gestor.ConsultarAsync();
+
+        Assert.Equal(new Dictionary<string, string> { ["armado-columnas"] = "1.1.0" }, ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2026"));
+        Assert.Empty(ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2027")); // ese Revit no está instalado
+    }
+
+    [Fact]
+    public async Task Las_novedades_dentro_de_Revit_tambien_anotan_y_sin_red_vale_lo_que_ya_se_supo()
+    {
+        Publicar("1.0.0");
+        await _gestor.NovedadesAsync("2026", TimeSpan.Zero);
+        Assert.Equal("1.0.0", ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2026")["armado-columnas"]);
+
+        Publicar("1.0.0", "1.1.0");
+        await _gestor.NovedadesAsync("2026", TimeSpan.Zero);
+        _sinRed = true;
+        await _gestor.NovedadesAsync("2026", TimeSpan.Zero);
+
+        Assert.Equal("1.1.0", ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2026")["armado-columnas"]);
     }
 
     [Fact]
