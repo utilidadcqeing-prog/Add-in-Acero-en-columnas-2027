@@ -817,7 +817,10 @@
       "grapas": 0,
       "cerrados": 0,
       "pisos": 5
-    }
+    },
+    "recubrimientosRevit": [
+      0.04
+    ]
   },
   "opciones": {
     "recubrimiento": 0.04,

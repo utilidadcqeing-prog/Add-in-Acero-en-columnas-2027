@@ -1,0 +1,11 @@
+<Window x:Class="practicacq.Tablero.VentanaColumnas"
+        x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Acero en columnas"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="#EEF0F2">
+    <!-- El navegador (WebView2) se crea en VentanaColumnas.xaml.cs, no aquí: ver el comentario del campo navegador. -->
+</Window>

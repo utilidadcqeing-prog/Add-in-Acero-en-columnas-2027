@@ -287,15 +287,60 @@ Probar("Generar_ArmaElMismoPlanQueLaVentanaVieja", () =>
     Mandar(sesion, new { tipo = "cambiarEstribos", tramosLibres = new { modo = "Uniforme", espaciadoUniforme = 0.15 } });
     ColumnaPlan real = sesion.OpcionesParaGenerar(false)!.Plan.Columnas.Single();
 
-    // Lo que arma hoy la ventana vieja con 0.15 en el panel y «Aceptar y aplicar a toda la columna».
+    // Lo que arma hoy la ventana vieja con 0.15 en el panel y «Aceptar y aplicar a toda la columna». El recubrimiento
+    // va explícito: 4 cm (decisión 15), lo mismo que elige la vieja cuando C-12 trae 4 cm en Revit.
     ConfigTramo cfg = ValoresPorDefecto.Tramo(tipos);
     cfg.EspaciadoUniforme = 0.15;
     var esperado = new ColumnaPlan
     {
-        Id = "C-12", Tramos = ComoAceptarTodaLaColumna(cfg, c12), Longitudinal = ValoresPorDefecto.Longitudinal(tipos), Recubrimiento = null,
+        Id = "C-12", Tramos = ComoAceptarTodaLaColumna(cfg, c12), Longitudinal = ValoresPorDefecto.Longitudinal(tipos), Recubrimiento = 0.04,
     };
     string Json(ColumnaPlan c) => JsonSerializer.Serialize(new { c.Id, c.Tramos, c.Longitudinal, c.Recubrimiento });
     Cierto(Json(esperado) == Json(real), $"esperado {Json(esperado)}\n         real     {Json(real)}");
+});
+
+Probar("SeleccionarEnRevit_ElementoDeArriba_EligeLaColumna", () =>
+{
+    // Hallazgo 12: en una planta de arriba se selecciona el elemento de ese piso, no el de abajo (el Id de la columna).
+    var sesion = new SesionColumnas(new ConCopiaDeC12(), tipos);
+    Cierto(sesion.ColumnasDe(new[] { "C-14-piso2", "C-14" }).SequenceEqual(new[] { "C-14" }), "dos pisos de la misma columna cuentan una");
+    Cierto(sesion.ColumnasDe(new[] { "un muro" }).Count == 0, "lo que no es columna no cuenta");
+    Cierto(sesion.ElementosEnRevit.Contains("C-14-piso2"), "«Todas» tiene que seleccionar también los pisos de arriba");
+    VistaColumnas v = sesion.SincronizarDesdeRevit(new[] { "C-14-piso2" });
+    Cierto(v.Elegidas.SequenceEqual(new[] { "C-14" }), "elegidas: " + string.Join(",", v.Elegidas));
+    Cierto(v.Columna?.Marca == "C-14", "tiene que mostrar la sección de C-14");
+});
+
+Probar("ColumnaNueva_Recubrimiento4cm", () =>
+{
+    // Decisión 15: C-14 trae 2.5 cm en Revit, y arranca igual con 4 cm.
+    var sesion = new SesionColumnas(new ConCopiaDeC12(), tipos);
+    VistaColumnas v = Mandar(sesion, new { tipo = "elegirColumnas", ids = new[] { "C-14" } });
+    Igual(0.04, v.Opciones.Recubrimiento, "en la página");
+    Igual(0.04, sesion.OpcionesPara3D()!.Plan.Columnas[0].Recubrimiento!.Value, "en la 3D");
+    Mandar(sesion, new { tipo = "cambiarEstribos", tramosLibres = new { espaciadoUniforme = 0.15 } });
+    Igual(0.04, sesion.OpcionesParaGenerar(false)!.Plan.Columnas[0].Recubrimiento!.Value, "al generar");
+});
+
+Probar("RecubrimientosRevit_LosDeLaColumna", () =>
+{
+    // Decisión 15: C-14 trae 2.5 cm en la columna y 4 cm en sus tramos; el 7.5 cm de contra zapata no cuenta.
+    var sesion = new SesionColumnas(new ConCopiaDeC12(), tipos);
+    VistaColumnas v = Mandar(sesion, new { tipo = "elegirColumnas", ids = new[] { "C-14" } });
+    Cierto(v.Columna!.RecubrimientosRevit.SequenceEqual(new[] { 0.025, 0.04 }), "en Revit: " + string.Join(", ", v.Columna.RecubrimientosRevit));
+    v = Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.025 });
+    Igual(0.025, v.Opciones.Recubrimiento, "el clic en «2.5 cm» lo pone");
+});
+
+Probar("Catalogos_CqeingPrimero", () =>
+{
+    // Decisión 16: el orden de ProveedorTiposReal (las CQEING primero y por número), no por diámetro.
+    var sesion = new SesionColumnas(new ProveedorContextoFalso(), new ConCqeingPrimero());
+    CatalogosVista cat = sesion.Vista().Catalogos;
+    Cierto(cat.BarrasLongitudinales.Take(2).Select(b => b.Nombre).SequenceEqual(new[] { "#3 CQEING", "#4 CQEING" }),
+        "longitudinales: " + string.Join(", ", cat.BarrasLongitudinales.Select(b => b.Nombre)));
+    Cierto(cat.BarrasEstribo.First().Nombre == "#3 CQEING", "estribo: " + string.Join(", ", cat.BarrasEstribo.Select(b => b.Nombre)));
+    Cierto(cat.BarrasEstribo.All(b => b.Nombre != "#2 COL"), "la #2 COL no es apta para estribo (#64)");
 });
 
 Probar("Generar_DejaElPedidoYLuegoLaMarcaGenerada", () =>
@@ -376,6 +421,20 @@ Probar("Ver3D_DejaElPedido", () =>
     Cierto(sesion.Pedido3D is { Partes: ModoPartes.SoloTraslapos }, "el filtro de traslapos");
 });
 
+Probar("Ver3D_CadaCambioLoVuelveAPedir", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.05 });
+    Cierto(sesion.Pedido3D is null, "sin abrir la 3D no se pide nada");
+    Mandar(sesion, new { tipo = "ver3D", filtro = "Todo" });
+    Cierto(sesion.Abrir3D && sesion.Pedido3D is not null, "el menú abre la vista");
+    sesion.Pedido3D = null;
+    sesion.Abrir3D = false;
+    Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.045 });
+    Cierto(sesion.Pedido3D is not null && !sesion.Abrir3D, "un cambio la redibuja sin volver a abrirla");
+    Igual(0.045, sesion.OpcionesPara3D()!.Plan.Columnas[0].Recubrimiento!.Value, "la 3D usa lo de ahora");
+});
+
 Probar("Excepcion_SeMarcaEnElTramo", () =>
 {
     int libre = Indices(c12, TipoTramo.Libre).Skip(1).First();
@@ -417,16 +476,39 @@ sealed class ConCopiaDeC12 : IProveedorContexto
         ColumnaContexto c12 = _falso.Leer("C-12");
         return new ColumnaContexto
         {
-            Marca = "C-14", BaseX = c12.BaseX, BaseY = c12.BaseY, Recubrimiento = c12.Recubrimiento,
+            // 2.5 cm, como una columna mal cargada en Revit (decisión 15: igual arranca con 4 cm).
+            Marca = "C-14", BaseX = c12.BaseX, BaseY = c12.BaseY, Recubrimiento = 0.025,
             ZInferior = c12.ZInferior, ZInferiorLongitudinal = c12.ZInferiorLongitudinal, ZSuperior = c12.ZSuperior,
             Tramos = c12.Tramos, Niveles = c12.Niveles,
         };
     }
 
     public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
-        _falso.ListarColumnas().Append(new ColumnaResumen("C-14", "C-14", false, 10, 0, "C-1", 0.40, 0.40)).ToList();
+        _falso.ListarColumnas()
+            // Dos pisos, como en Revit: el elemento de abajo es el Id (hallazgo 12).
+            .Append(new ColumnaResumen("C-14", "C-14", false, 10, 0, "C-1", 0.40, 0.40, new[] { "C-14", "C-14-piso2" }))
+            .ToList();
 
     public IReadOnlyList<Rejilla> ListarRejillas() => _falso.ListarRejillas();
 
     public void InvalidarCache() { }
+}
+
+/// <summary>Las barras como las da <c>ProveedorTiposReal</c>: las «#N CQEING» primero y por número, después las del modelo.</summary>
+sealed class ConCqeingPrimero : IProveedorTipos
+{
+    private readonly ProveedorTiposFalso _falso = new();
+
+    public IReadOnlyList<TipoBarra> ListarBarras() =>
+        new[] { 3, 4 }
+            .Select(n => CuadroVarillas.Cuadro.Single(v => v.Numero == n))
+            .Select(v => new TipoBarra(CuadroVarillas.NombrePropio(v.Numero), v.DiametroMm)
+            {
+                DobladoEstriboMm = 4 * v.DiametroMm,
+                DobladoGanchoMm = 6 * v.DiametroMm,
+            })
+            .Concat(_falso.ListarBarras())
+            .ToList();
+
+    public IReadOnlyList<TipoGancho> ListarGanchos() => _falso.ListarGanchos();
 }

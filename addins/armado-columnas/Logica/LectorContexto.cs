@@ -106,7 +106,9 @@ public sealed class LectorContexto : IProveedorContexto
                 MarcaUbicacion(p.pila[0].Instancia),
                 // Los lados, para dibujarla a escala en el selector (#133).
                 p.LadoX,
-                p.LadoY))
+                p.LadoY,
+                // Todos los pisos: al elegir en una planta de arriba se selecciona ese elemento, no el de abajo.
+                p.pila.Select(e => IdTexto(e.Instancia.Id)).ToList()))
             .ToList();
 
     /// <summary>

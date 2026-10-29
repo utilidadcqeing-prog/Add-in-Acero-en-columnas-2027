@@ -54,6 +54,7 @@
 9. **Traslapos por número de varilla** (29-oct, pedido de Luciano): `PlanTraslapos` da un `PlanTipo` por grupo (A o B, según la alternancia del anillo) **y** por diámetro, y el panel de hoy dibuja todos («A · #5», «A · #4», «B · #5»…). La vista lleva un plan por cada uno, con `cantidad` de barras y su `solape`; la página dibuja un carril por plan, con desplazamiento horizontal si no entran.
 10. **Formas reales en la sección** (29-oct, pedido de Luciano): grapas, estribos cerrados y el estribo principal se dibujan con `PlantaArmado` (`Menor`, `EstriboCerrado`), como hoy en la vista previa. La vista manda los `puntos` de cada pieza ya calculados por C#; `demo.js` tiene un port de esas funciones solo para la maqueta.
 11. **Cuadro de varillas** (29-oct, pedido de Luciano): en el gancho de 90° se muestra **solo la B** (`CuadroVarillas.Varilla.Gancho90`), sin la D.
+12. **Una columna son varios elementos de Revit** (29-oct, prueba de Luciano en Revit 2027: «cuando las seleccionaba no pasaba nada ni se iluminaba el botón de terminar»). `LectorContexto.ListarColumnas` junta en una pila los elementos de cada piso, y el `Id` de la columna es solo el del elemento de **abajo** (`pila[0]`). Al hacer clic en una planta de arriba se selecciona el elemento de ese piso, que la sesión no reconocía: la barra contaba 0 y «Terminar» seguía gris. Arreglo: `ColumnaResumen.Elementos` lleva los ids de todos los elementos de la pila, y `SesionColumnas.ColumnaDe(id)` traduce cualquiera de ellos a la columna. Lo usan la barra (contar), «Terminar» y «Todas» (selecciona todos los elementos). Prueba: `SeleccionarEnRevit_ElementoDeArriba_EligeLaColumna`.
 
 ## Decisiones
 
@@ -87,6 +88,10 @@
 13. **Maqueta aprobada** (Luciano, 29-oct: «carlos aprobó así que podemos seguir»). Carlos aprobó la versión 6 del artifact sin pedir cambios. Se sigue con la tarea 2.
 
 14. **Una columna nueva arranca confinada** (Luciano, 29-oct: «que abra con los confinados»): estribo #3 confinado con L1 0.50, 0.07 en las puntas y 0.14 en el centro, y los nudos cada 0.14; longitudinal #4 con 1 barra por cara. El resto sale de `ValoresPorDefecto` (los de la ventana vieja, que no cambia).
+
+15. **Recubrimiento de 4 cm por defecto** (Luciano, 29-oct: «el recubrimiento que sea 4 por defecto»). Una columna nueva arranca con `ValoresPorDefecto.Recubrimiento = 0.04`, tenga lo que tenga asignado en Revit (antes se usaba el de Revit, y 4 cm solo si no tenía). El aviso de `LectorContexto` cuando el de Revit es distinto sigue saliendo. Una columna ya generada arranca con el recubrimiento con que se generó, y si no quedó guardado, con 4 cm. La 3D y «Generar» mandan siempre el valor explícito. Prueba: `ColumnaNueva_Recubrimiento4cm`.
+    - **Lo de Revit, a un clic** (Luciano, 29-oct: «que aparezca un texto con las otras opciones de la columna, como un texto azul resaltado y que al hacer clic se ponga automáticamente ese valor»). `ColumnaVista.RecubrimientosRevit` lleva los recubrimientos que la columna tiene en Revit (el de la columna y el de cada tramo libre o nudo, sin el de contra zapata, redondeados al mm y sin repetir). Debajo del campo «Recubrimiento», la página muestra «En Revit: 2.5 cm» con cada valor distinto del elegido como enlace azul; el clic manda `cambiarRecubrimiento` con ese valor. Prueba: `RecubrimientosRevit_LosDeLaColumna`.
+16. **Varillas: las CQEING primero** (Luciano, 29-oct: «poner lo de los filtros a las varillas y que aparezcan las cqeing primero»). Las listas de varillas de la página siguen el orden de `ProveedorTiposReal.ListarBarras` (las «#N CQEING» primero y por número, después las demás por nombre), como la ventana vieja; antes la sesión las reordenaba por diámetro. El filtro del #64 (en estribos y grapas solo las barras aptas para estribo) se mantiene. Prueba: `Catalogos_CqeingPrimero`.
 
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 
@@ -222,8 +227,13 @@
 - Consume `SesionColumnas` (tarea 3).
 - Produce `VentanaColumnas.Enviar(string json)` y `event Action<string> MensajeRecibido`, igual que en vigas.
 
-- [ ] **Paso 1:** implementar la ventana y el puente. Si falta el runtime de WebView2, se muestra el mismo `TaskDialog` que en vigas.
-- [ ] **Paso 2:** `dotnet build addins/armado-columnas/practicacq.csproj -c Debug -p:RevitVersion=2027` → compila. `bin\Debug\2027\web\index.html` existe y **no** está `Microsoft.Web.WebView2.*.dll`. Repetir con `-p:RevitVersion=2026`.
+- [x] **Paso 1:** implementar la ventana y el puente. Si falta el runtime de WebView2, se muestra el mismo `TaskDialog` que en vigas (29-oct). Cambios respecto de lo de arriba:
+  - **Comando nuevo** `Tablero/ComandoColumnas.cs` en lugar de modificar `ComandoEstribos.cs`: el botón «Acero en columnas» de la cinta apunta a él, y `ComandoEstribos` queda entero para el botón «Columnas (vieja)» (solo en Debug). `ComandoEstribos.OfrecerVarillasPropias` pasó a `internal` para usarlo desde el nuevo.
+  - **Una sola cola** (`Tablero/ColaRevit.cs`, como `AccionesRevit` de vigas) en vez de un `ExternalEvent` por cosa: dentro de la cola la API ya es válida, así que generar, la vista 3D y guardar configuraciones llaman al `Execute` de sus manejadores de siempre ahí mismo. Por eso generar, 3D y configuraciones ya quedan conectados (eran de la tarea 7; se prueban en Revit con ella).
+  - «Seleccionar en Revit» usa la barra de vigas (`Tablero/BarraSeleccion.xaml`, con «Todas», «Terminar» y «Cancelar»).
+  - La vista 3D se vuelve a dibujar sola con cada cambio después de abrirla (`SesionColumnas.Pedido3D`, prueba `Ver3D_CadaCambioLoVuelveAPedir`).
+  - `CalculadoraZoom` es una copia de la de vigas: los add-ins no se referencian entre sí.
+- [x] **Paso 2:** (29-oct, los dos años compilan sin errores) `dotnet build addins/armado-columnas/practicacq.csproj -c Debug -p:RevitVersion=2027` → compila. `bin\Debug\2027\web\index.html` existe y **no** está `Microsoft.Web.WebView2.*.dll`. Repetir con `-p:RevitVersion=2026`.
 - [ ] **Paso 3:** `Get-Process -Name Revit -ErrorAction SilentlyContinue` → nada. Después, `powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado-columnas -Revit 2027`. Abrir Revit con el modelo de prueba y la ventana:
   - se ve la planta;
   - al elegir una columna, llega su sección;
@@ -231,7 +241,9 @@
   - cerrar y volver a abrir funciona, y pulsar el botón con la ventana abierta la trae al frente.
 
   Captura en `docs/planes/imagenes/2026-10-29-interfaz-columnas/`.
-- [ ] **Paso 4:** commit `Columnas: ventana web en Revit con WebView2 (#207)`.
+
+  **Primera prueba (Luciano, 29-oct, Revit 2027):** la ventana abre y «Ver en 3D» anda. «Seleccionar en Revit» no: la barra no contaba las columnas elegidas y «Terminar» quedaba gris (hallazgo 12, ya corregido). No se generó. De esa prueba salieron también las decisiones 15 y 16. Falta repetir la prueba con el arreglo (Revit seguía abierto y no se pudo desplegar) y las capturas.
+- [x] **Paso 4:** commit `Columnas: ventana web en Revit con WebView2 (#207)`, con los arreglos de la primera prueba. Pedido por Luciano el 29-oct, antes de repetir la prueba.
 
 ### Tarea 5: pasos Barras y Estribos conectados (#208, #209)
 

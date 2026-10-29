@@ -414,6 +414,8 @@
             cerrados: o.longitudinal.estribosMenores.filter((m) => m.forma === 'Cerrado').length,
             pisos: ctx.tramos.filter((t) => t.tipo === 'Libre').length,
           },
+          // Lo que trae la columna en Revit: en la maqueta, uno distinto de los 4 cm para que se vea el enlace.
+          recubrimientosRevit: [0.025],
         };
       }
       const comp = compatibles();

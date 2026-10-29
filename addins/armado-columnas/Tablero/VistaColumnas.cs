@@ -44,7 +44,7 @@ public sealed record ColumnaVista(
     string Id, string Marca, string Ubicacion, double BaseX, double BaseY, double Recubrimiento,
     double ZSuperior, double ZInferiorLongitudinal, ZapataVista? Zapata, IReadOnlyList<NivelVista> Niveles,
     IReadOnlyList<TramoVista> Tramos, SeccionVista Seccion, IReadOnlyList<ZonaVista> ZonasEstribos,
-    TraslaposVista Traslapos, IReadOnlyList<string> Avisos, ResumenVista Resumen);
+    TraslaposVista Traslapos, IReadOnlyList<string> Avisos, ResumenVista Resumen, IReadOnlyList<double> RecubrimientosRevit);
 
 /// <param name="Ancho">0 = no se conoce: la página dibuja una de ancho fijo.</param>
 public sealed record ZapataVista(double ZInf, double ZSup, double Ancho);

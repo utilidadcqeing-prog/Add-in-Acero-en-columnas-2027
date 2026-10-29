@@ -16,6 +16,12 @@ public static class ValoresPorDefecto
     /// <summary>Barra por defecto de la longitudinal, esquinas y caras: #4 ("todo número cuatro por defecto").</summary>
     public const int NumeroVarillaLongitudinal = 4;
 
+    /// <summary>
+    /// Recubrimiento con que arranca una columna en la interfaz web, en metros: 4 cm (Luciano, 29-oct), tenga lo que
+    /// tenga en Revit. Es el valor normal del equipo (William, 9-sep).
+    /// </summary>
+    public const double Recubrimiento = 0.04;
+
     /// <summary>Las barras aptas (o aptas con aviso) para estribo según el cuadro (#64).</summary>
     public static IReadOnlyList<TipoBarra> BarrasAptas(IEnumerable<TipoBarra> barras) => barras
         .Where(b => CuadroVarillas.EvaluarParaEstribo(b).Aptitud != AptitudEstribo.NoApta)

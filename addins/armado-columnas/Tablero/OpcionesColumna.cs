@@ -14,7 +14,7 @@ public sealed class OpcionesColumna
 
     public ConfigEstribosColumna Estribos { get; set; } = new();
 
-    /// <summary>null = el que trae la columna en Revit (<see cref="ColumnaContexto.Recubrimiento"/>).</summary>
+    /// <summary>null = el de por defecto, 4 cm (decisión 15 del plan), no el que trae la columna en Revit.</summary>
     public double? Recubrimiento { get; set; }
 
     public OpcionesColumna Copiar() => new()
@@ -24,11 +24,11 @@ public sealed class OpcionesColumna
         Recubrimiento = Recubrimiento,
     };
 
-    public double RecubrimientoDe(ColumnaContexto columna) => Recubrimiento ?? columna.Recubrimiento;
+    public double RecubrimientoElegido => Recubrimiento ?? ValoresPorDefecto.Recubrimiento;
 
     /// <summary>Como las edita la página: barras de cada cara y ángulos en grados.</summary>
     public OpcionesVista AVista(ColumnaContexto? columna) => new(
-        columna is null ? Recubrimiento ?? 0 : RecubrimientoDe(columna),
+        RecubrimientoElegido,
         new LongitudinalVista(
             Longitudinal.BarrasPorCaraX / 2, Longitudinal.BarrasPorCaraY / 2,
             Longitudinal.TipoBarraEsquinasNombre, Longitudinal.TipoBarraCaraXNombre, Longitudinal.TipoBarraCaraYNombre,

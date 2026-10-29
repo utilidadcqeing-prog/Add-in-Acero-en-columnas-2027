@@ -211,7 +211,7 @@ public class ComandoEstribos : IExternalCommand
     /// porque crear tipos necesita transacción, y en Execute ya estamos en
     /// contexto de API válido.
     /// </summary>
-    private static void OfrecerVarillasPropias(Document doc)
+    internal static void OfrecerVarillasPropias(Document doc)
     {
         List<practicacq.Modelo.CuadroVarillas.Varilla> faltantes = VarillasPropias.Faltantes(doc);
         if (faltantes.Count == 0) return;

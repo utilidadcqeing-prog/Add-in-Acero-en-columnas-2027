@@ -36,7 +36,7 @@ public static class ArmadorVistaColumnas
 
         bool conZapata = columna.IdZapata is not null || columna.ZInferiorLongitudinal < columna.ZInferior - 1e-6;
         return new ColumnaVista(
-            id, columna.Marca, ubicacion, columna.BaseX, columna.BaseY, opciones.RecubrimientoDe(columna),
+            id, columna.Marca, ubicacion, columna.BaseX, columna.BaseY, opciones.RecubrimientoElegido,
             M(columna.ZSuperior), M(columna.ZInferiorLongitudinal),
             conZapata ? new ZapataVista(M(columna.ZInferiorLongitudinal - SobreFondoZapata), M(columna.ZInferior), 0) : null,
             columna.Niveles.Select(n => new NivelVista(n.Nombre, M(n.Cota))).ToList(),
@@ -51,15 +51,30 @@ public static class ArmadorVistaColumnas
                 zonas.Sum(z => z.Cantidad),
                 menores.Count(p => p.Forma != FormaMenor.Cerrado),
                 menores.Count(p => p.Forma == FormaMenor.Cerrado),
-                columna.Tramos.Count(t => t.Tipo == TipoTramo.Libre)));
+                columna.Tramos.Count(t => t.Tipo == TipoTramo.Libre)),
+            RecubrimientosRevit(columna));
     }
+
+    /// <summary>
+    /// Los recubrimientos que la columna tiene en Revit, en metros: el de la columna y el de cada tramo libre o nudo
+    /// (el de contra zapata es el de la cimentación). La página los ofrece a un clic (decisión 15 del plan).
+    /// </summary>
+    public static IReadOnlyList<double> RecubrimientosRevit(ColumnaContexto columna) => columna.Tramos
+        .Where(t => t.Tipo != TipoTramo.ContraZapata)
+        .Select(t => t.Recubrimiento)
+        .Prepend(columna.Recubrimiento)
+        .Where(r => r > 0)
+        .Select(r => Math.Round(r, 3))
+        .Distinct()
+        .OrderBy(r => r)
+        .ToList();
 
     // ------------------------------------------------------------- sección
 
     private static SeccionVista Seccion(
         ColumnaContexto columna, OpcionesColumna opciones, List<ConfigTramo?> tramos, Func<string?, TipoBarra?> barraDe)
     {
-        double ladoX = columna.BaseX, ladoY = columna.BaseY, recubrimiento = opciones.RecubrimientoDe(columna);
+        double ladoX = columna.BaseX, ladoY = columna.BaseY, recubrimiento = opciones.RecubrimientoElegido;
         ConfigLongitudinal cfg = opciones.Longitudinal;
         ConfigTramo estribo = opciones.Estribos.TramosLibres;
 

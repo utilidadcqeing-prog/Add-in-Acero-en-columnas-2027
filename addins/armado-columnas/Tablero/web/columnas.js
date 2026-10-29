@@ -485,6 +485,10 @@
     pasoBarras(v, col, o) {
       const L = o.longitudinal, cat = v.catalogos.barrasLongitudinales, s = this.state;
       const cambiar = (c) => this.enviar({ tipo: 'cambiarLongitudinal', config: c });
+      // Lo que la columna tiene en Revit, a un clic (decisión 15 del plan): se arranca con 4 cm. Se ve aunque
+      // «Más opciones» esté cerrado, para que no pase desapercibido.
+      const enRevit = (col.recubrimientosRevit || []).filter((r) => Math.abs(r - o.recubrimiento) > 0.0005);
+      const notaRevit = enRevit.length ? html`<p class="nota" style="margin: 0">Recubrimiento de ${Math.round(o.recubrimiento * 1000) / 10} cm. En Revit esta columna tiene ${enRevit.map((r, i) => html`${i ? ' · ' : ''}<button type="button" class="enlace" title="Usar este recubrimiento" onClick=${() => this.enviar({ tipo: 'cambiarRecubrimiento', valor: r })}><b>${Math.round(r * 1000) / 10} cm</b></button>`)}.</p>` : null;
       return html`
         <div class="grupo">
           <h3>Esquinas <small>siempre 4</small></h3>
@@ -501,11 +505,13 @@
           <${Dato} para="b-y" etiqueta="Número de varilla"><${Varilla} id="b-y" valor=${L.tipoBarraCaraYNombre} opciones=${cat} onCambiar=${(n) => cambiar({ tipoBarraCaraYNombre: n })} /></${Dato}>
         </div>
         <p class="nota" style="margin: 0">En total, <b>${col.resumen.barras} barras</b>. Van de la zapata al remate, en toda la columna.</p>
+        ${s.mas ? null : notaRevit}
         <button type="button" class="enlace mas" aria-expanded=${s.mas ? 'true' : 'false'} onClick=${() => this.setState({ mas: !s.mas })}>${s.mas ? '− Menos opciones' : '+ Más opciones'}</button>
         ${s.mas ? html`<div class="grupo">
           <${Dato} para="rec" etiqueta="Recubrimiento" sub="Del borde de la columna al estribo">
             <${Medida} id="rec" valor=${o.recubrimiento * 100} paso=${0.5} unidad="cm" decimales=${1} min=${1} max=${10} onCambiar=${(cm) => this.enviar({ tipo: 'cambiarRecubrimiento', valor: Math.round(cm * 10) / 1000 })} />
           </${Dato}>
+          ${notaRevit}
           <p class="nota" style="margin: 0">Solo se usa para dibujar el acero. No cambia el recubrimiento de la columna en Revit.</p>
         </div>` : null}`;
     }

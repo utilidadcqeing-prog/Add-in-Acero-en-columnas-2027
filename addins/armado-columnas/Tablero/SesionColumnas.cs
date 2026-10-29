@@ -74,8 +74,18 @@ public sealed class SesionColumnas
     /// <summary>La página pidió «Seleccionar en Revit». La ventana lo atiende y lo vuelve a false.</summary>
     public bool SeleccionPedida { get; set; }
 
-    /// <summary>La vista 3D que pidió la página (mensaje <c>ver3D</c>). La ventana la abre y lo vuelve a null.</summary>
+    /// <summary>
+    /// La vista 3D que hay que dibujar, con <see cref="OpcionesPara3D"/>. La
+    /// pide la página (mensaje <c>ver3D</c>) y, desde ahí, cada cambio la
+    /// vuelve a pedir: «se actualiza sola». La ventana la dibuja y lo vuelve a null.
+    /// </summary>
     public FiltroPrevia3D? Pedido3D { get; set; }
+
+    /// <summary>El pedido 3D vino del menú «Ver en 3D»: además de dibujar, hay que abrir la vista. La ventana lo vuelve a false.</summary>
+    public bool Abrir3D { get; set; }
+
+    /// <summary>El último filtro del menú «Ver en 3D»; null si la vista 3D no se abrió.</summary>
+    private FiltroPrevia3D? _filtro3D;
 
     /// <summary>Lo que hay que generar, cuando la página pidió «Generar» y no hay choques sin confirmar. La ventana lo vuelve a null.</summary>
     public OpcionesArmado? GeneracionPedida { get; set; }
@@ -158,7 +168,8 @@ public sealed class SesionColumnas
                 break;
 
             case "ver3D":
-                Pedido3D = Filtro3D(Texto(m, "filtro"));
+                _filtro3D = Filtro3D(Texto(m, "filtro"));
+                Abrir3D = true;
                 break;
 
             case "aplicarConfiguracion":
@@ -190,16 +201,64 @@ public sealed class SesionColumnas
                 break;
         }
 
+        if (_filtro3D is not null && Activa is not null) Pedido3D = _filtro3D.Copiar();
         return Vista();
     }
 
-    /// <summary>Las columnas que el usuario eligió en Revit con «Seleccionar en Revit».</summary>
-    public VistaColumnas SincronizarDesdeRevit(IEnumerable<string> ids)
+    /// <summary>Un aviso que viene de Revit (algo falló al atender un pedido), con la vista entera.</summary>
+    public VistaColumnas Avisar(string texto)
     {
-        _elegidas = ids.Where(id => _columnas.Any(c => c.Id == id)).Distinct().ToList();
-        _configuracion = null;
+        _aviso = texto;
         return Vista();
     }
+
+    /// <summary>
+    /// La columna activa con sus opciones de ahora, listas o no: es solo para
+    /// mirar en 3D, no se genera nada. null sin columna elegida.
+    /// </summary>
+    public OpcionesArmado? OpcionesPara3D()
+    {
+        if (Activa is not string activa) return null;
+
+        ColumnaContexto columna = Leer(activa);
+        OpcionesColumna o = OpcionesDe(activa);
+        return new OpcionesArmado
+        {
+            Plan = new PlanArmado
+            {
+                Columnas =
+                {
+                    new ColumnaPlan
+                    {
+                        Id = activa, Contexto = columna, Tramos = o.Estribos.ATramos(columna),
+                        Longitudinal = o.Longitudinal.Copiar(), Recubrimiento = o.RecubrimientoElegido,
+                    },
+                },
+            },
+        };
+    }
+
+    /// <summary>
+    /// Las columnas que el usuario eligió en Revit con «Seleccionar en Revit». <paramref name="ids"/> son elementos de
+    /// Revit, de cualquier piso (hallazgo 12).
+    /// </summary>
+    public VistaColumnas SincronizarDesdeRevit(IEnumerable<string> ids)
+    {
+        _elegidas = ColumnasDe(ids);
+        _configuracion = null;
+        if (_filtro3D is not null && Activa is not null) Pedido3D = _filtro3D.Copiar();
+        return Vista();
+    }
+
+    /// <summary>Las columnas a las que pertenecen esos elementos de Revit, sin repetir (hallazgo 12).</summary>
+    public List<string> ColumnasDe(IEnumerable<string> elementos)
+    {
+        HashSet<string> buscados = elementos.ToHashSet();
+        return _columnas.Where(c => c.IdsEnRevit.Any(buscados.Contains)).Select(c => c.Id).ToList();
+    }
+
+    /// <summary>Los elementos de Revit de todas las columnas de la planta, de todos los pisos (para «Todas» en la barra de selección).</summary>
+    public IReadOnlyList<string> ElementosEnRevit => _columnas.SelectMany(c => c.IdsEnRevit).ToList();
 
     // ------------------------------------------------------------- cambios
 
@@ -390,7 +449,7 @@ public sealed class SesionColumnas
                 Contexto = columna,
                 Tramos = o.Estribos.ATramos(columna),
                 Longitudinal = o.Longitudinal.Copiar(),
-                Recubrimiento = o.Recubrimiento,
+                Recubrimiento = o.RecubrimientoElegido,
             });
         }
 
@@ -551,8 +610,8 @@ public sealed class SesionColumnas
     {
         VarillaVista Varilla(TipoBarra b) => new(b.Nombre, b.DiametroMm, ArmadorVistaColumnas.Color(b.DiametroMm));
         return new CatalogosVista(
-            _barras.OrderBy(b => b.DiametroMm).Select(Varilla).ToList(),
-            ValoresPorDefecto.BarrasAptas(_barras).OrderBy(b => b.DiametroMm).Select(Varilla).ToList(),
+            _barras.Select(Varilla).ToList(),
+            ValoresPorDefecto.BarrasAptas(_barras).Select(Varilla).ToList(),
             new[] { 6.0, 12.0 },
             PlanTraslapos.Redondeos,
             CuadroVarillas.Cuadro.Select(v => new FilaCuadroVista(
