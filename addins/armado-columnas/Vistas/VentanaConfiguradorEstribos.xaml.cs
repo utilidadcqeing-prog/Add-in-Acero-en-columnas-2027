@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using practicacq.Modelo;
+using practicacq.Tablero;
 
 /// <summary>
 /// L2: "Ventana Configurador de Estribos". Trabaja entera contra
@@ -838,9 +839,7 @@ public partial class VentanaConfiguradorEstribos : Window
     /// corta" (William, 11-sep). La diferencia de ALTURA no importa; la de
     /// cantidad y tipo de tramos sí, porque lo que se copia es tramo por tramo.
     /// </summary>
-    private static bool MismaEstructura(ColumnaContexto a, ColumnaContexto b) =>
-        a.Tramos.Count == b.Tramos.Count &&
-        a.Tramos.Select(t => t.Tipo).SequenceEqual(b.Tramos.Select(t => t.Tipo));
+    private static bool MismaEstructura(ColumnaContexto a, ColumnaContexto b) => CompatibilidadColumnas.MismaEstructura(a, b);
 
     /// <summary>
     /// Las columnas elegidas que comparten estructura con la activa, y las que
@@ -867,7 +866,7 @@ public partial class VentanaConfiguradorEstribos : Window
         return (compatibles, descartadas);
     }
 
-    private static string CuantosTramos(int cuantos) => cuantos == 1 ? "1 tramo" : $"{cuantos} tramos";
+    private static string CuantosTramos(int cuantos) => CompatibilidadColumnas.CuantosTramos(cuantos);
 
     /// <summary>
     /// Avisa apenas se eligen varias columnas que no comparten estructura, sin
@@ -1149,43 +1148,18 @@ public partial class VentanaConfiguradorEstribos : Window
             TextoEstado.Text = "Atención: " + string.Join("; ", faltan) + ".";
     }
 
-    /// <summary>Barra por defecto del estribo: #3 (William, 11-sep).</summary>
-    private const int NumeroVarillaEstribo = 3;
+    private const int NumeroVarillaEstribo = ValoresPorDefecto.NumeroVarillaEstribo;
 
-    /// <summary>Barra por defecto de la longitudinal, esquinas y caras: #4 ("todo número cuatro por defecto").</summary>
-    private const int NumeroVarillaLongitudinal = 4;
+    private const int NumeroVarillaLongitudinal = ValoresPorDefecto.NumeroVarillaLongitudinal;
 
     /// <summary>Opciones del combo «Solape mínimo»: <see cref="ConfigLongitudinal.SolapeMayorDeLosDos"/> false / true.</summary>
     private const string TextoSolapeCadaDiametro = "El de cada diámetro";
     private const string TextoSolapeMayor = "El mayor de la columna";
 
-    /// <summary>
-    /// El tipo de barra de esa varilla, o el primero de la lista si el
-    /// documento no la tiene -- que ese caso se avisa una vez al abrir, en
-    /// <see cref="AvisarSiFaltaAlgoPorDefecto"/>.
-    /// </summary>
-    private static string? BarraPorDefecto(IProveedorTipos tipos, int numeroVarilla)
-    {
-        IReadOnlyList<TipoBarra> barras = numeroVarilla == NumeroVarillaEstribo
-            ? BarrasAptas(tipos.ListarBarras())
-            : tipos.ListarBarras();
+    /// <summary>Ver <see cref="ValoresPorDefecto.BarraPorDefecto"/>: si falta, se avisa una vez al abrir, en <see cref="AvisarSiFaltaAlgoPorDefecto"/>.</summary>
+    private static string? BarraPorDefecto(IProveedorTipos tipos, int numeroVarilla) => ValoresPorDefecto.BarraPorDefecto(tipos, numeroVarilla);
 
-        return TipoBarra.PorDefecto(barras, numeroVarilla)?.Nombre ?? barras.FirstOrDefault()?.Nombre;
-    }
-
-    internal static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => new()
-    {
-        // Issue #60: por diámetro contra el cuadro de la empresa. Antes era "el
-        // primero alfabéticamente", que no es un criterio -- en el modelo de
-        // William daba la #10.
-        TipoBarraNombre = BarraPorDefecto(tipos, NumeroVarillaEstribo),
-        // Estribo/tirante de 135°, confirmado por William el 10-sep.
-        TipoGanchoNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estribo, 135)?.Nombre,
-        EspaciadoUniforme = 0.20,
-        LongitudConfinamiento = 0.50,
-        EspaciadoConfinado = 0.07,
-        EspaciadoNoConfinado = 0.14,
-    };
+    internal static ConfigTramo ConfigPorDefecto(IProveedorTipos tipos) => ValoresPorDefecto.Tramo(tipos);
 
     private void GuardarPanelEnTramoActivo()
     {
@@ -1428,9 +1402,7 @@ public partial class VentanaConfiguradorEstribos : Window
     private IReadOnlyList<string> BarrasAptasParaEstribo() => BarrasAptas(_barras).Select(b => b.Nombre).ToList();
 
     /// <summary>Las barras aptas (o aptas con aviso) para estribo según el cuadro (#64).</summary>
-    private static IReadOnlyList<TipoBarra> BarrasAptas(IEnumerable<TipoBarra> barras) => barras
-        .Where(b => CuadroVarillas.EvaluarParaEstribo(b).Aptitud != AptitudEstribo.NoApta)
-        .ToList();
+    private static IReadOnlyList<TipoBarra> BarrasAptas(IEnumerable<TipoBarra> barras) => ValoresPorDefecto.BarrasAptas(barras);
 
     /// <summary>
     /// Debajo del combo de barra de estribo (#64): una línea de resumen y, plegado,
@@ -1469,18 +1441,7 @@ public partial class VentanaConfiguradorEstribos : Window
         NotaBarrasEstribo.Visibility = conAviso.Count + fuera.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    internal static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => new()
-    {
-        BarrasPorCaraX = 2,
-        BarrasPorCaraY = 2,
-        // Issue #60: "todo número cuatro por defecto" (William, 11-sep).
-        TipoBarraCaraXNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
-        TipoBarraCaraYNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
-        TipoBarraEsquinasNombre = BarraPorDefecto(tipos, NumeroVarillaLongitudinal),
-        LongitudComercialBarra = 12.0,
-        // Anclaje en la zapata: estándar de 90°, también de la reunión del 10-sep.
-        TipoGanchoLongitudinalNombre = TipoGancho.PorDefecto(tipos.ListarGanchos(), EstiloGancho.Estandar, 90)?.Nombre,
-    };
+    internal static ConfigLongitudinal ConfigLongitudinalPorDefecto(IProveedorTipos tipos) => ValoresPorDefecto.Longitudinal(tipos);
 
     /// <summary>
     /// Lo del panel MÁS los estribos menores de la columna activa. Las

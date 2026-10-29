@@ -41,6 +41,35 @@ public sealed class ConfigEstribosColumna
         NudoEspaciado = tramo.Modo == ModoEstribo.Confinado ? tramo.EspaciadoNoConfinado : tramo.EspaciadoUniforme,
     };
 
+    /// <summary>
+    /// Al revés de <see cref="ATramos"/>: desde lo que se generó tramo por tramo
+    /// (<see cref="ColumnaGenerada.Tramos"/>, o la ventana vieja). Los tramos
+    /// libres toman el primer tramo libre, los nudos el espaciado del primer
+    /// nudo, y lo que no coincide con eso queda como excepción. Así
+    /// <c>DesdeTramos(c, t).ATramos(c)</c> devuelve <paramref name="tramos"/>
+    /// en todo tramo que no sea <c>null</c> ni el de la zapata.
+    /// </summary>
+    public static ConfigEstribosColumna DesdeTramos(ColumnaContexto contexto, IReadOnlyList<ConfigTramo?> tramos, ConfigTramo porDefecto)
+    {
+        ConfigTramo? DelTipo(TipoTramo tipo) => contexto.Tramos
+            .Where(t => t.Tipo == tipo && t.Indice < tramos.Count)
+            .Select(t => tramos[t.Indice])
+            .FirstOrDefault(c => c is not null);
+
+        ConfigEstribosColumna estribos = Desde(DelTipo(TipoTramo.Libre) ?? tramos.FirstOrDefault(c => c is not null) ?? porDefecto);
+        if (estribos.TramosLibres.Modo == ModoEstribo.Confinado && DelTipo(TipoTramo.DentroDeViga) is { } nudo)
+            estribos.NudoEspaciado = nudo.EspaciadoUniforme;
+
+        List<ConfigTramo?> traducidos = estribos.ATramos(contexto);
+        foreach (Tramo tramo in contexto.Tramos)
+        {
+            if (tramo.Tipo == TipoTramo.ContraZapata || tramo.Indice >= tramos.Count) continue;
+            if (tramos[tramo.Indice] is ConfigTramo real && !ComparadorConfig.Igual(real, traducidos[tramo.Indice]))
+                estribos.Excepciones[tramo.Indice] = Copiar(real);
+        }
+        return estribos;
+    }
+
     public ConfigEstribosColumna Copiar() => new()
     {
         TramosLibres = Copiar(TramosLibres),

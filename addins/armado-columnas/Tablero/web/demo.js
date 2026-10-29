@@ -38,7 +38,7 @@
     }
     agregar(3.20 - 0.45, 'Libre');
     return {
-      tramos, zSuperior: r2(z), zInferiorLongitudinal: -0.30, zapata: { zInf: -0.50, ancho: 1.20 },
+      tramos, zSuperior: r2(z), zInferiorLongitudinal: -0.30, zapata: { zInf: -0.50, zSup: 0, ancho: 1.20 },
       niveles: ['PB', 'P1', 'P2', 'P3', 'P4', 'Techo'].map((nombre, i) => ({ nombre, z: r2(i * 3.20) })),
       avisos: ['Arranca sobre la zapata: el acero longitudinal entra 0.30 m en ella.'],
     };

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using practicacq.Modelo;
+using practicacq.Tablero;
 
 int fallas = 0;
 
@@ -179,5 +180,253 @@ Probar("Validar_MismosMensajesQueLaVentana", () =>
     Cierto(errores.Count == 1 && errores[0].Contains("no queda zona central"), string.Join(" | ", errores));
 });
 
+Probar("DesdeTramos_VuelveATraducirIgual", () =>
+{
+    ConfigEstribosColumna original = ConfigEstribosColumna.Desde(Confinado());
+    original.NudoEspaciado = 0.10;
+    original.Excepciones[Indices(c12, TipoTramo.Libre).Last()] = Uniforme(0.25);
+    List<ConfigTramo?> tramos = original.ATramos(c12);
+    ConfigEstribosColumna vuelta = ConfigEstribosColumna.DesdeTramos(c12, tramos, Uniforme(0.20));
+    MismaLista(tramos, vuelta.ATramos(c12));
+    Cierto(vuelta.Excepciones.Count == 1, $"excepciones: esperado 1, real {vuelta.Excepciones.Count}");
+});
+
+// ---- Tarea 3: la sesión y la vista, sin Revit (#208-#211)
+
+var tipos = new ProveedorTiposFalso();
+
+VistaColumnas Mandar(SesionColumnas sesion, object mensaje) =>
+    sesion.Atender(JsonSerializer.Serialize(mensaje, VistaColumnas.Json));
+
+SesionColumnas ConC12(IProveedorContexto? contexto = null, IAlmacenConfiguraciones? almacen = null)
+{
+    var sesion = new SesionColumnas(contexto ?? new ProveedorContextoFalso(), tipos, almacen);
+    Mandar(sesion, new { tipo = "elegirColumnas", ids = new[] { "C-12" } });
+    return sesion;
+}
+
+string EstadoDe(VistaColumnas v, string id) => v.Planta.Columnas.Single(c => c.Id == id).Estado;
+
+Probar("ElegirColumna_LaVistaTraeSuSeccionYSusTramos", () =>
+{
+    VistaColumnas v = ConC12().Vista();
+    ColumnaVista col = v.Columna ?? throw new Exception("no vino la columna");
+    Cierto(col.Marca == "C-12", $"marca {col.Marca}");
+    Cierto(col.Tramos.Count == c12.Tramos.Count, $"tramos: esperado {c12.Tramos.Count}, real {col.Tramos.Count}");
+    Igual(40, col.Seccion.Ancho, "ancho de la sección (cm)");
+    Cierto(col.Seccion.Barras.Count == 8, $"barras: esperado 8 (4 esquinas y 1 por cara), real {col.Seccion.Barras.Count}");
+    Cierto(col.Seccion.Estribo.Puntos.Count > 10, "el estribo viene con su forma");
+    Cierto(v.Opciones.Longitudinal.BarrasPorCaraX == 1, $"la página ve las barras de CADA cara: {v.Opciones.Longitudinal.BarrasPorCaraX}");
+    Cierto(col.ZonasEstribos.Any(z => z.Zona == "zapata" && z.Indice == 0), "falta la zapata");
+    Cierto(col.ZonasEstribos.Any(z => z.Zona == "nudo"), "faltan los nudos");
+    Cierto(col.Zapata is not null, "C-12 arranca sobre zapata");
+    Cierto(col.Traslapos.Planes.Count > 0, "faltan los traslapos");
+});
+
+Probar("ArrancaConfinada_YLosNudosConElCentro", () =>
+{
+    VistaColumnas v = ConC12().Vista();
+    Cierto(v.Opciones.Estribos.TramosLibres.Modo == ModoEstribo.Confinado, "los tramos libres arrancan confinados");
+    Igual(0.14, v.Opciones.Estribos.NudoEspaciado, "los nudos arrancan con el espaciado del centro");
+    Cierto(v.Columna!.ZonasEstribos.Any(z => z.Zona == "confinada") && v.Columna.ZonasEstribos.Any(z => z.Zona == "central"), "zonas confinadas y centrales");
+});
+
+Probar("CambiarBarrasX_CambiaLasBarrasDeLaSeccion", () =>
+{
+    SesionColumnas sesion = ConC12();
+    VistaColumnas v = Mandar(sesion, new { tipo = "cambiarLongitudinal", config = new { barrasPorCaraX = 3 } });
+    Cierto(v.Columna!.Seccion.Barras.Count == 12, $"barras: esperado 12, real {v.Columna.Seccion.Barras.Count}");
+    Cierto(v.Opciones.Longitudinal.BarrasPorCaraX == 3, $"barras por cara: {v.Opciones.Longitudinal.BarrasPorCaraX}");
+    Cierto(sesion.OpcionesParaGenerar(false)!.Plan.Columnas[0].Longitudinal!.BarrasPorCaraX == 6, "en ConfigLongitudinal cuentan las dos caras");
+    Cierto(v.Columna.Seccion.Barras.Count(b => b.Posicion == "abajo") == 3, "3 barras en la cara de abajo");
+});
+
+Probar("CambiarEspaciado_CambiaLasZonas", () =>
+{
+    VistaColumnas v = Mandar(ConC12(), new { tipo = "cambiarEstribos", tramosLibres = new { modo = "Uniforme", espaciadoUniforme = 0.15 } });
+    List<ZonaVista> conEstribos = v.Columna!.ZonasEstribos.Where(z => z.Zona != "zapata").ToList();
+    Cierto(conEstribos.Count > 0, "sin zonas");
+    foreach (ZonaVista z in conEstribos) Igual(0.15, z.Cada!.Value, $"cada de la zona {z.Zona} del tramo {z.Indice}");
+    Cierto(conEstribos.All(z => z.Cantidad > 0), "una zona quedó sin estribos");
+});
+
+Probar("PrimerCambio_MarcaLaColumnaLista", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Cierto(EstadoDe(sesion.Vista(), "C-12") == "sinConfigurar", "antes de cambiar nada no está lista");
+    Cierto(sesion.OpcionesParaGenerar(false) is null, "sin listas no hay nada que generar");
+    VistaColumnas v = Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.05 });
+    Cierto(EstadoDe(v, "C-12") == "lista", $"estado {EstadoDe(v, "C-12")}");
+    Cierto(v.Generacion.Listas.SequenceEqual(new[] { "C-12" }), string.Join(",", v.Generacion.Listas));
+    Igual(0.05, v.Opciones.Recubrimiento, "recubrimiento");
+});
+
+Probar("QuitarDeLista_LaVuelveSinConfigurar", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.05 });
+    VistaColumnas v = Mandar(sesion, new { tipo = "quitarDeLista", id = "C-12" });
+    Cierto(EstadoDe(v, "C-12") == "sinConfigurar", $"estado {EstadoDe(v, "C-12")}");
+    Cierto(v.Generacion.Listas.Count == 0, "sigue en la lista");
+});
+
+Probar("VariasColumnas_SoloCambianLasCompatibles", () =>
+{
+    var sesion = new SesionColumnas(new ConCopiaDeC12(), tipos);
+    VistaColumnas v = Mandar(sesion, new { tipo = "elegirColumnas", ids = new[] { "C-12", "C-14", "C-1" } });
+    Cierto(v.Compatibles.SequenceEqual(new[] { "C-12", "C-14" }), "compatibles: " + string.Join(",", v.Compatibles));
+    Cierto(v.Descartadas.SequenceEqual(new[] { "C-1" }), "descartadas: " + string.Join(",", v.Descartadas));
+    v = Mandar(sesion, new { tipo = "cambiarEstribos", tramosLibres = new { espaciadoUniforme = 0.15 } });
+    Cierto(EstadoDe(v, "C-12") == "lista" && EstadoDe(v, "C-14") == "lista", "C-12 y C-14 tienen que quedar listas");
+    Cierto(EstadoDe(v, "C-1") == "sinConfigurar", "C-1 no es compatible y no tiene que cambiar");
+});
+
+Probar("Generar_ArmaElMismoPlanQueLaVentanaVieja", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "cambiarEstribos", tramosLibres = new { modo = "Uniforme", espaciadoUniforme = 0.15 } });
+    ColumnaPlan real = sesion.OpcionesParaGenerar(false)!.Plan.Columnas.Single();
+
+    // Lo que arma hoy la ventana vieja con 0.15 en el panel y «Aceptar y aplicar a toda la columna».
+    ConfigTramo cfg = ValoresPorDefecto.Tramo(tipos);
+    cfg.EspaciadoUniforme = 0.15;
+    var esperado = new ColumnaPlan
+    {
+        Id = "C-12", Tramos = ComoAceptarTodaLaColumna(cfg, c12), Longitudinal = ValoresPorDefecto.Longitudinal(tipos), Recubrimiento = null,
+    };
+    string Json(ColumnaPlan c) => JsonSerializer.Serialize(new { c.Id, c.Tramos, c.Longitudinal, c.Recubrimiento });
+    Cierto(Json(esperado) == Json(real), $"esperado {Json(esperado)}\n         real     {Json(real)}");
+});
+
+Probar("Generar_DejaElPedidoYLuegoLaMarcaGenerada", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.05 });
+    VistaColumnas v = Mandar(sesion, new { tipo = "generar", borrarAjeno = true });
+    Cierto(!v.Generacion.Pendiente, "no debería haber choques: " + string.Join(" | ", v.Generacion.Choques));
+    Cierto(sesion.GeneracionPedida is { BorrarArmadoAjeno: true }, "no quedó pedida la generación");
+    v = sesion.ResultadoGeneracion(new ResultadoArmado());
+    Cierto(EstadoDe(v, "C-12") == "generada", $"estado {EstadoDe(v, "C-12")}");
+    Cierto(v.Generacion.Resultado!.Detalles[0] == "Se armó la columna C-12.", v.Generacion.Resultado.Detalles[0]);
+    Cierto(v.Generacion.Listas.Count == 0, "sigue en la lista");
+});
+
+Probar("Generar_SinListas_Avisa", () =>
+{
+    SesionColumnas sesion = ConC12();
+    VistaColumnas v = Mandar(sesion, new { tipo = "generar", borrarAjeno = false });
+    Cierto(sesion.GeneracionPedida is null, "no hay nada que generar");
+    Cierto(v.Aviso?.Contains("No hay columnas listas") == true, v.Aviso ?? "sin aviso");
+});
+
+Probar("MenorInvalido_SaleMarcadoConSuMotivo", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "Cerrado", eje = "Columna", desde = 0, hasta = 0 });
+    VistaColumnas v = Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaC", eje = "Fila", desde = 4, hasta = 4 });
+    MenorVista cerrado = v.Columna!.Seccion.Menores[0], fuera = v.Columna.Seccion.Menores[1];
+    Cierto(!cerrado.Valida && cerrado.Motivo!.Contains("estribo cerrado"), $"cerrado angosto: {cerrado.Valida} {cerrado.Motivo}");
+    Cierto(cerrado.Puntos.Count > 0, "el cerrado inválido se dibuja igual, en rojo");
+    Cierto(!fuera.Valida && fuera.Motivo!.Contains("ya no existe"), $"grapa fuera de rango: {fuera.Valida} {fuera.Motivo}");
+});
+
+Probar("Grapa_TraeSuFormaYSusPuntas", () =>
+{
+    VistaColumnas v = Mandar(ConC12(), new { tipo = "menor", accion = "agregar", forma = "GrapaC", eje = "Fila", desde = 0, hasta = 0 });
+    MenorVista grapa = v.Columna!.Seccion.Menores.Single();
+    Cierto(grapa.Valida, grapa.Motivo ?? "");
+    Cierto(grapa.Puntas!.Count == 2 && grapa.Puntos.Count > 10, "la grapa viene con sus dos puntas y su forma");
+    Cierto(v.Opciones.Longitudinal.EstribosMenores.Single().AnguloInicio == 180, "los ángulos van en grados");
+});
+
+Probar("AplicarConfiguracionVieja_MarcaListaYTraduce", () =>
+{
+    var almacen = new AlmacenConfiguracionesEnMemoria();
+    ConfigTramo cfg = ValoresPorDefecto.Tramo(tipos);
+    cfg.Modo = ModoEstribo.Confinado;
+    almacen.Guardar(new ConfiguracionGuardada { Nombre = "vieja", Tramo = cfg, Longitudinal = ValoresPorDefecto.Longitudinal(tipos) });
+
+    SesionColumnas sesion = ConC12(almacen: almacen);
+    VistaColumnas v = Mandar(sesion, new { tipo = "aplicarConfiguracion", nombre = "vieja" });
+    Cierto(EstadoDe(v, "C-12") == "lista", $"estado {EstadoDe(v, "C-12")}");
+    Cierto(v.Configuracion == "vieja", $"configuración {v.Configuracion}");
+    Cierto(v.Opciones.Estribos.TramosLibres.Modo == ModoEstribo.Confinado, "tramos libres confinados");
+    Igual(0.14, v.Opciones.Estribos.NudoEspaciado, "los nudos arrancan con el espaciado del centro");
+    List<ConfigTramo?> tramos = sesion.OpcionesParaGenerar(false)!.Plan.Columnas[0].Tramos;
+    foreach (int i in Indices(c12, TipoTramo.DentroDeViga))
+        Cierto(tramos[i]!.Modo == ModoEstribo.Uniforme && Math.Abs(tramos[i]!.EspaciadoUniforme - 0.14) < 1e-9, $"nudo {i}");
+});
+
+Probar("GuardarConfiguracion_EscribeLosDosCampos", () =>
+{
+    var almacen = new AlmacenConfiguracionesEnMemoria();
+    SesionColumnas sesion = ConC12(almacen: almacen);
+    Mandar(sesion, new { tipo = "cambiarEstribos", nudoEspaciado = 0.11, tramosLibres = new { modo = "Confinado" } });
+    VistaColumnas v = Mandar(sesion, new { tipo = "guardarConfiguracion", nombre = "nueva", comoNueva = true });
+    ConfiguracionGuardada g = almacen.Listar().Single();
+    Cierto(g.Estribos is not null && Math.Abs(g.Estribos.NudoEspaciado - 0.11) < 1e-9, "Estribos con el espaciado de los nudos");
+    Cierto(g.Tramo.Modo == ModoEstribo.Confinado, "Tramo = los tramos libres, para la 1.4.1");
+    Cierto(v.Catalogos.Configuraciones.SequenceEqual(new[] { "nueva" }), "la lista de configuraciones");
+});
+
+Probar("Ver3D_DejaElPedido", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "ver3D", filtro = "Solo traslapos" });
+    Cierto(sesion.Pedido3D is { Partes: ModoPartes.SoloTraslapos }, "el filtro de traslapos");
+});
+
+Probar("Excepcion_SeMarcaEnElTramo", () =>
+{
+    int libre = Indices(c12, TipoTramo.Libre).Skip(1).First();
+    VistaColumnas v = Mandar(ConC12(), new { tipo = "cambiarEstribos", excepcion = new { indice = libre, config = Uniforme(0.10) } });
+    Cierto(v.Columna!.Tramos[libre].Excepcion, "el tramo tiene que venir marcado");
+    Cierto(v.Columna.ZonasEstribos.Where(z => z.Indice == libre).All(z => Math.Abs(z.Cada!.Value - 0.10) < 1e-9), "las zonas del tramo");
+    v = Mandar(ConC12(), new { tipo = "cambiarEstribos", excepcion = new { indice = libre, config = (ConfigTramo?)null } });
+    Cierto(!v.Columna!.Tramos[libre].Excepcion, "sin excepción");
+});
+
+Probar("VistaC12_SeGuardaParaLaMaqueta", () =>
+{
+    string json = ConC12().Vista().AJson();
+    Cierto(json.Contains("\"tipo\":\"ContraZapata\"") && json.Contains("\"barrasPorCaraX\":1"), "camelCase y enums por nombre");
+    string carpeta = Path.Combine(CarpetaDelProyecto(), "Datos");
+    Directory.CreateDirectory(carpeta);
+    File.WriteAllText(Path.Combine(carpeta, "vista-c12.json"),
+        JsonSerializer.Serialize(JsonDocument.Parse(json), new JsonSerializerOptions { WriteIndented = true }) + "\n");
+});
+
+static string CarpetaDelProyecto()
+{
+    for (DirectoryInfo? d = new(AppContext.BaseDirectory); d is not null; d = d.Parent)
+        if (File.Exists(Path.Combine(d.FullName, "PruebasTableroColumnas.csproj"))) return d.FullName;
+    throw new Exception("no se encontró la carpeta del proyecto de pruebas");
+}
+
 Console.WriteLine(fallas == 0 ? "Todas las pruebas pasaron." : $"{fallas} prueba(s) fallaron.");
 return fallas == 0 ? 0 : 1;
+
+/// <summary>El proveedor falso más C-14, una copia de C-12: dos columnas de la misma estructura (#63).</summary>
+sealed class ConCopiaDeC12 : IProveedorContexto
+{
+    private readonly ProveedorContextoFalso _falso = new();
+
+    public ColumnaContexto Leer(string idColumna)
+    {
+        if (idColumna != "C-14") return _falso.Leer(idColumna);
+        ColumnaContexto c12 = _falso.Leer("C-12");
+        return new ColumnaContexto
+        {
+            Marca = "C-14", BaseX = c12.BaseX, BaseY = c12.BaseY, Recubrimiento = c12.Recubrimiento,
+            ZInferior = c12.ZInferior, ZInferiorLongitudinal = c12.ZInferiorLongitudinal, ZSuperior = c12.ZSuperior,
+            Tramos = c12.Tramos, Niveles = c12.Niveles,
+        };
+    }
+
+    public IReadOnlyList<ColumnaResumen> ListarColumnas() =>
+        _falso.ListarColumnas().Append(new ColumnaResumen("C-14", "C-14", false, 10, 0, "C-1", 0.40, 0.40)).ToList();
+
+    public IReadOnlyList<Rejilla> ListarRejillas() => _falso.ListarRejillas();
+
+    public void InvalidarCache() { }
+}

@@ -23,4 +23,13 @@
     </Compile>
   </ItemGroup>
 
+  <!-- De Tablero/, solo lo que no toca WPF ni Revit (la sesión y la vista). -->
+  <ItemGroup>
+    <Compile Include="..\..\addins\armado-columnas\Tablero\VistaColumnas.cs" Link="Tablero\VistaColumnas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\OpcionesColumna.cs" Link="Tablero\OpcionesColumna.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\CompatibilidadColumnas.cs" Link="Tablero\CompatibilidadColumnas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\ArmadorVistaColumnas.cs" Link="Tablero\ArmadorVistaColumnas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\SesionColumnas.cs" Link="Tablero\SesionColumnas.cs" />
+  </ItemGroup>
+
 </Project>

@@ -142,7 +142,9 @@
   };
 
   function rango(col) {
-    const zMin = Math.min(col.zapata ? col.zapata.zInf : 0, col.zInferiorLongitudinal, 0);
+    // Desde abajo de la columna, no desde la cota 0: en Revit una columna puede arrancar en cualquier nivel.
+    const base = col.tramos.length ? col.tramos[0].zInf : 0;
+    const zMin = Math.min(col.zapata ? col.zapata.zInf : base, col.zInferiorLongitudinal, base);
     const zMax = Math.max(col.zSuperior, ...col.niveles.map((n) => n.z));
     return { zMin: zMin - 0.15, zMax: zMax + 0.15 };
   }
@@ -173,8 +175,8 @@
           <line x1="8" y1=${Z(n.z)} x2=${x0 - 6} y2=${Z(n.z)} stroke=${C.linea} stroke-dasharray="3 3"></line>
           <text x="8" y=${Z(n.z) - 4}>${n.nombre} · N+${f2(n.z)}</text>
         </g>`)}
-        ${col.zapata ? html`<rect x=${cx - Math.max(cw * 1.4, (col.zapata.ancho * k) / 2)} y=${Z(0)} width=${Math.max(cw * 2.8, col.zapata.ancho * k)} height=${(0 - col.zapata.zInf) * k} fill="url(#rayado)" stroke=${C.hormigonBorde}></rect>
-          <text x=${cx - Math.max(cw * 1.4, (col.zapata.ancho * k) / 2) - 8} y=${Z(col.zapata.zInf / 2) + 4} text-anchor="end" font-size="12" fill=${C.suave} font-family="IBM Plex Sans, sans-serif">Zapata</text>` : null}
+        ${col.zapata ? html`<rect x=${cx - Math.max(cw * 1.4, (col.zapata.ancho * k) / 2)} y=${Z(col.zapata.zSup)} width=${Math.max(cw * 2.8, col.zapata.ancho * k)} height=${(col.zapata.zSup - col.zapata.zInf) * k} fill="url(#rayado)" stroke=${C.hormigonBorde}></rect>
+          <text x=${cx - Math.max(cw * 1.4, (col.zapata.ancho * k) / 2) - 8} y=${Z((col.zapata.zSup + col.zapata.zInf) / 2) + 4} text-anchor="end" font-size="12" fill=${C.suave} font-family="IBM Plex Sans, sans-serif">Zapata</text>` : null}
         ${col.tramos.map((t) => {
           const y = Z(t.zSup), alto = (t.zSup - t.zInf) * k;
           if (t.tipo === 'DentroDeViga') return html`<g>
@@ -260,7 +262,7 @@
           <line x1="8" y1=${Z(n.z)} x2=${W - 8} y2=${Z(n.z)} stroke="#E4E8EC"></line>
           <text x="8" y=${Z(n.z) - 4}>${n.nombre} · N+${f2(n.z)}</text>
         </g>`)}
-        ${col.zapata ? html`<rect x=${cx - 40} y=${Z(0)} width="80" height=${(0 - col.zapata.zInf) * k} fill="#E9EDF1" stroke=${C.hormigonBorde}></rect>` : null}
+        ${col.zapata ? html`<rect x=${cx - 40} y=${Z(col.zapata.zSup)} width="80" height=${(col.zapata.zSup - col.zapata.zInf) * k} fill="#E9EDF1" stroke=${C.hormigonBorde}></rect>` : null}
         ${col.tramos.map((t) => html`<rect x=${t.tipo === 'DentroDeViga' ? x0 - 30 : x0} y=${Z(t.zSup)} width=${t.tipo === 'DentroDeViga' ? cw + 60 : cw} height=${(t.zSup - t.zInf) * k}
             fill=${t.tipo === 'DentroDeViga' ? C.viga : '#FFFFFF'} stroke=${t.tipo === 'DentroDeViga' ? C.vigaBorde : C.hormigonBorde}></rect>`)}
         ${T.planes.map(carril)}

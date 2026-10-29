@@ -681,7 +681,8 @@
       const L = o.longitudinal;
       // En qué se usa cada varilla en esta columna, como VentanaCuadroVarillas.MarcarUsos.
       const usos = {};
-      const usar = (nombre, en) => { if (!nombre) return; (usos[nombre] = usos[nombre] || []).includes(en) || usos[nombre].push(en); };
+      // Por número de varilla: en Revit los tipos se llaman «#3 COL» o «#3 CQEING», y el cuadro dice «#3».
+      const usar = (nombre, en) => { const n = nombre && '#' + String(nombre).replace(/\D/g, ''); if (!n || n === '#') return; (usos[n] = usos[n] || []).includes(en) || usos[n].push(en); };
       usar(L.tipoBarraEsquinasNombre, 'esquinas');
       if (L.barrasPorCaraX) usar(L.tipoBarraCaraXNombre, 'caras X');
       if (L.barrasPorCaraY) usar(L.tipoBarraCaraYNombre, 'caras Y');

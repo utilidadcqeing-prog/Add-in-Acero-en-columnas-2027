@@ -86,6 +86,8 @@
 12. **La maqueta es la página real** (Luciano, 28-oct: «primero visualmente en un artifact»): `index.html`, `columnas.js`, `dibujos.js` y `demo.js` se publican como artifact con sus archivos, y lo que Carlos apruebe es exactamente lo que después entra a Revit.
 13. **Maqueta aprobada** (Luciano, 29-oct: «carlos aprobó así que podemos seguir»). Carlos aprobó la versión 6 del artifact sin pedir cambios. Se sigue con la tarea 2.
 
+14. **Una columna nueva arranca confinada** (Luciano, 29-oct: «que abra con los confinados»): estribo #3 confinado con L1 0.50, 0.07 en las puntas y 0.14 en el centro, y los nudos cada 0.14; longitudinal #4 con 1 barra por cara. El resto sale de `ValoresPorDefecto` (los de la ventana vieja, que no cambia).
+
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 
 1. **Configuración guardada vieja** (1.4.1, sin `Estribos`): debe aplicarse sin error y dar los mismos `ConfigTramo` que antes. Prueba `ConfiguracionVieja_SeTraduceIgualQueAceptarTodaLaColumna`, en la tarea 2.
@@ -190,7 +192,7 @@
   - `public OpcionesArmado? OpcionesParaGenerar(bool borrarAjeno)`: el `PlanArmado` de las columnas listas, con `Tramos = Estribos.ATramos(ctx)`; `null` si no hay ninguna lista;
   - `public FiltroPrevia3D? Pedido3D`, que se llena con el mensaje `ver3D`.
 
-- [ ] **Paso 1:** pruebas que fallan (todas con `ProveedorContextoFalso`):
+- [x] **Paso 1:** pruebas (todas con `ProveedorContextoFalso`; 29-oct: se escribieron junto con el código, así que no se las vio fallar antes. Además de estas: `DesdeTramos_VuelveATraducirIgual`, `Generar_DejaElPedidoYLuegoLaMarcaGenerada`, `Generar_SinListas_Avisa`, `Grapa_TraeSuFormaYSusPuntas`, `GuardarConfiguracion_EscribeLosDosCampos`, `Ver3D_DejaElPedido`, `Excepcion_SeMarcaEnElTramo` y `VistaC12_SeGuardaParaLaMaqueta`):
   - `ElegirColumna_LaVistaTraeSuSeccionYSusTramos`;
   - `CambiarBarrasX_CambiaLasBarrasDeLaSeccion` (de 2 a 4 por cara: `seccion.barras` pasa de 8 a 12);
   - `CambiarEspaciado_CambiaLasZonas` (los `cada` de `zonasEstribos`);
@@ -199,9 +201,11 @@
   - `Generar_ArmaElMismoPlanQueLaVentanaVieja`: mismas opciones → mismo `PlanArmado` (comparado en JSON) que el que arma hoy la ventana al aceptar toda la columna;
   - `MenorInvalido_SaleMarcadoConSuMotivo`;
   - `AplicarConfiguracionVieja_MarcaListaYTraduce`.
-- [ ] **Paso 2:** `dotnet run --project tools/PruebasTableroColumnas` → FALLA.
-- [ ] **Paso 3:** implementar. El JSON de `Vista()` para C-12 se guarda como `tools/PruebasTableroColumnas/Datos/vista-c12.json`, y `demo.js` (tarea 1) pasa a cargar ese archivo para el estado `normal`. Así la maqueta y C# no se separan.
-- [ ] **Paso 4:** pruebas → todo `OK`. La página de la tarea 1 con el `vista-c12.json` nuevo se sigue viendo bien en Chrome.
+- [x] **Paso 2:** ~~`dotnet run --project tools/PruebasTableroColumnas` → FALLA~~ (ver paso 1).
+- [x] **Paso 3:** implementar. El JSON de `Vista()` para C-12 se guarda como `tools/PruebasTableroColumnas/Datos/vista-c12.json` (lo escribe la prueba `VistaC12_SeGuardaParaLaMaqueta`). **Cambio (29-oct):** `demo.js` no lo carga, porque la maqueta tiene que seguir respondiendo a los cambios y un JSON fijo no lo hace. En su lugar, `node tools/PruebasTableroColumnas/comparar-forma.js addins/armado-columnas/Tablero/web/demo.js tools/PruebasTableroColumnas/Datos/vista-c12.json` compara campo por campo la vista de la maqueta con la de C#: hoy C# solo trae campos de más (`motivo` de los traslapos, `nudoBarraNombre`, `tipoGanchoNombre`), ninguno de menos.
+  - También salieron de la ventana vieja `Modelo/ValoresPorDefecto.cs` (barra y gancho por defecto, barras aptas para estribo) y `ConfigEstribosColumna.DesdeTramos` (para que una columna ya generada abra con sus valores, #180). La ventana vieja llama a los dos y a `CompatibilidadColumnas`.
+- [x] **Paso 4:** pruebas → todo `OK` (28, 29-oct). En Chrome, la página con `vista-c12.json` en lugar de la maqueta recorre los cuatro pasos sin errores en la consola (8 barras, 86 estribos, traslapos A y B #4). No se pudieron sacar capturas: Chrome no respondía al pedido de captura, con el equipo corto de memoria.
+  - Arreglos en la página que salieron de esto: la zapata se dibuja desde su cota real (`zapata.zSup`) y no desde la cota 0, y el rango de la elevación arranca en el primer tramo; el cuadro de varillas marca lo usado por **número** (en Revit los tipos se llaman «#3 COL» o «#3 CQEING»).
 - [ ] **Paso 5:** commit `Columnas: sesión y vista de la interfaz web, sin Revit (#208-#211)`.
 
 ### Tarea 4: la ventana con WebView2 en Revit (#207)
