@@ -40,7 +40,7 @@ public static class PlanificadorAcero
                 // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
                 barras.AddRange(puestos.Select((s, k) => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
                     s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
-                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin),
+                    b.Hasta - b.Desde + r.LargoGanchoRedondeado(r.PorDiametro[s.Diametro], b.TipoInicio) + r.LargoGanchoRedondeado(r.PorDiametro[s.Diametro], b.TipoFin),
                     filas[k])));
             }
         }

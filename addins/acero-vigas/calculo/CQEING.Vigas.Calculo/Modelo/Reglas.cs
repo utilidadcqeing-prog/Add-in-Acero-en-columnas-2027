@@ -27,9 +27,17 @@ public sealed record ReglaDiametro(int? Traslapo, Gancho Gancho90, Gancho Gancho
 /// <param name="Varilla">Varilla comercial normal (6 m o 12 m, según el botón de Reglas).</param>
 /// <param name="VarillaLarga">La que se usa sola cuando un tramo no se resuelve con la normal.</param>
 /// <param name="DistanciaLibre">Separación libre mínima entre barras de una misma fila.</param>
+/// <param name="RedondeoGancho">
+/// A cuánto se redondea hacia arriba el largo total de los ganchos de barras y bastones (0, 50 o 100; 0 = sin redondeo),
+/// para cortarlos y doblarlos con una medida estándar: con 50, el #4 a 90° pasa de 0.222 a 0.25 (Carlos, reunión del
+/// 29-oct). Los estribos no se redondean.
+/// </param>
 public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro, int Modulo = 500, int Varilla = 6000,
-    int VarillaLarga = 12000, double DistanciaLibre = 25)
+    int VarillaLarga = 12000, double DistanciaLibre = 25, int RedondeoGancho = 50)
 {
+    /// <summary>Los valores que admite <see cref="RedondeoGancho"/>: sin redondeo, a 5 cm o a 10 cm.</summary>
+    public static IReadOnlyList<int> RedondeosGancho { get; } = [0, 50, 100];
+
     /// <summary>
     /// Los cuadros de Carlos (reunión del 16-oct-2026), los pesos y los diámetros estándar.
     /// El estribo de 135° del #6 al #8 sale del cuadro de traslapos: el de dimensiones no los trae, ni su E, D y A.
@@ -52,8 +60,10 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
     /// entera y Revit alargaba la cola, 256 en vez de 191 en el #5 a 90°). Sin E en el cuadro (135° del #6 al #8), la B.
     /// El de 135° sale del cuadro de estribos, el único 135° que mandó Carlos (decisión 5 del plan de #84; pregunta 1 en
     /// #79), con el doblado de gancho (<see cref="DobladoGancho"/>).
+    /// Con <paramref name="redondeo"/>, el largo total B sube al siguiente múltiplo y lo que crece va a la cola: el
+    /// doblez no cambia.
     /// </summary>
-    public static int LargoGancho(ReglaDiametro r, TipoGancho t)
+    public static int LargoGancho(ReglaDiametro r, TipoGancho t, int redondeo = 0)
     {
         (int grados, Gancho g) = t switch
         {
@@ -64,11 +74,18 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
         };
         if (grados == 0)
             return 0;
+        int crece = redondeo > 0 ? (g.B + redondeo - 1) / redondeo * redondeo - g.B : 0;
         if (g.E is not int cola)
-            return g.B;
+            return g.B + crece;
         double radio = DobladoGancho(r, t) / 2 + r.Diametro / 2;
-        return (int)Math.Round(radio * grados * Math.PI / 180 + cola - radio - r.Diametro / 2);
+        return (int)Math.Round(radio * grados * Math.PI / 180 + cola - radio - r.Diametro / 2) + crece;
     }
+
+    /// <summary>
+    /// Lo que el gancho suma a la barra con el redondeo de estas reglas. Es lo que usan el motor, la vista previa y los
+    /// tipos de gancho de Revit, para que el cálculo y el dibujo coincidan.
+    /// </summary>
+    public int LargoGanchoRedondeado(ReglaDiametro r, TipoGancho t) => LargoGancho(r, t, RedondeoGancho);
 
     /// <summary>
     /// Diámetro de doblado de un gancho de barra o bastón, en mm: el del cuadro de 90° (o de 180°), que es el de gancho
@@ -95,6 +112,7 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
         if (Varilla is not (6000 or 12000)) errores.Add("La varilla debe ser de 6 m o de 12 m.");
         if (VarillaLarga < Varilla) errores.Add("La varilla larga no puede ser más corta que la normal.");
         if (DistanciaLibre <= 0) errores.Add("La distancia libre entre barras debe ser mayor que 0.");
+        if (!RedondeosGancho.Contains(RedondeoGancho)) errores.Add("Los ganchos se redondean a 5 cm, a 10 cm o no se redondean.");
         foreach ((int d, ReglaDiametro r) in PorDiametro.OrderBy(par => par.Key))
         {
             if (r.Traslapo <= 0) errores.Add($"El traslapo del #{d} debe ser mayor que 0.");
@@ -110,6 +128,6 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
     /// <summary>Si tienen los mismos valores (el diccionario se compara por contenido, no por referencia).</summary>
     public bool Equivale(Reglas otra) =>
         Modulo == otra.Modulo && Varilla == otra.Varilla && VarillaLarga == otra.VarillaLarga
-        && DistanciaLibre.Equals(otra.DistanciaLibre) && PorDiametro.Count == otra.PorDiametro.Count
+        && DistanciaLibre.Equals(otra.DistanciaLibre) && RedondeoGancho == otra.RedondeoGancho && PorDiametro.Count == otra.PorDiametro.Count
         && PorDiametro.All(par => otra.PorDiametro.TryGetValue(par.Key, out ReglaDiametro? r) && r == par.Value);
 }

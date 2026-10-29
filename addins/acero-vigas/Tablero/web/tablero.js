@@ -208,7 +208,7 @@
     constructor(props) {
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
-        cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
+        cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, hookR: null, guardando: false,
         vw: window.innerWidth, vh: window.innerHeight, choqueAbierto: -1, arreglos: null, deshacer: null,
         // la barra izquierda: 'lista' o 'planta', el nivel elegido (null = el del pórtico abierto), lo que se muestra y el zoom
         barra: 'lista', plNivel: null, plVer: { viga: true, vigueta: true }, plZoom: 1, plPan: { x: 0, y: 0 } },
@@ -421,7 +421,7 @@
       if (prev.vista !== this.props.vista && !this.arrastrandoCorte && this.state.cutLive != null) this.setState({ cutLive: null });
       if (this.state.guardando && prev.vista !== this.props.vista) {
         this.say('Reglas guardadas para todos los proyectos');
-        this.setState({ guardando: false, locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null,
+        this.setState({ guardando: false, locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null, hookR: null,
           ...(this.salirDeReglas ? { step: 'barras' } : null) });
         this.salirDeReglas = false;
       }
@@ -455,7 +455,7 @@
       this.salirDeReglas = !!salir;
       this.setState({ guardando: true });
       this.props.enviar({ tipo: 'guardarReglas', reglas: { porDiametro: reglas.rules.map((r) => ({ d: r.d, t: r.t, g: r.g, g180: r.g180, e: r.e, k: r.k })),
-        multiplo: reglas.mult, distanciaLibreCm: reglas.gap, varilla12: reglas.bar12, problema: null } });
+        multiplo: reglas.mult, distanciaLibreCm: reglas.gap, varilla12: reglas.bar12, redondeoGanchoCm: reglas.hookR, problema: null } });
     }
 
     valores() {
@@ -483,7 +483,7 @@
       // reglas: las de la vista, o lo que se está escribiendo en la pantalla Reglas
       const R = vista.reglas;
       const rulesData = s.rules || R.porDiametro;
-      const mult = s.mult ?? R.multiplo, gap = s.gap ?? R.distanciaLibreCm, bar12 = s.bar12 ?? R.varilla12;
+      const mult = s.mult ?? R.multiplo, gap = s.gap ?? R.distanciaLibreCm, bar12 = s.bar12 ?? R.varilla12, hookR = s.hookR ?? R.redondeoGanchoCm ?? '5';
       const M = num(mult, 0.5);
 
       // capas (#88): el reparto en filas sale del motor
@@ -759,9 +759,9 @@
       const verT = TRAMOS.find((t) => t.id === s.ver);
       const faceName = isCim ? 'arriba' : 'abajo';
       const lockedNow = s.locked;
-      const rulesNow = { rules: rulesData, mult, gap, bar12 };
+      const rulesNow = { rules: rulesData, mult, gap, bar12, hookR };
       const rulesDirty = !s.locked && !!s.rulesSaved && JSON.stringify(rulesNow) !== JSON.stringify(s.rulesSaved);
-      const leaveRules = (extra) => this.setState({ step: 'barras', locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null, ...extra });
+      const leaveRules = (extra) => this.setState({ step: 'barras', locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null, hookR: null, ...extra });
       const bastD = (d, rows) => d || rows[0].d;
       const nEstAll = P ? P.estribos : 0;
       const avisoTexto = (avisoLargo || avisoOtro || { texto: '' }).texto;
@@ -837,6 +837,7 @@
           : 'border: 1px solid #C9CFD6; background: #FFFFFF; color: #5E6670',
         segHookNo: s.bastHook ? off : on, segHookYes: s.bastHook ? on : off,
         locked: lockedNow, mult, gap, seg6: bar12 ? off : on, seg12: bar12 ? on : off,
+        segHook0: hookR === '0' ? on : off, segHook5: hookR === '5' ? on : off, segHook10: hookR === '10' ? on : off,
         lockBg: lockedNow ? '#F4F6F8' : '#FDF6EA', lockText: lockedNow ? 'Bloqueadas para evitar cambios por error.' : 'Desbloqueadas: los cambios valen para todos los proyectos.',
         lockBtn: lockedNow ? 'Desbloquear' : 'Guardar y bloquear', lockPath: lockedNow ? 'M4.5 6V4.2a2.5 2.5 0 015 0V6' : 'M4.5 6V4.2a2.5 2.5 0 014.6-1.3',
         rules: rulesData.map((r, i) => {
@@ -923,6 +924,7 @@
         warnKeep: () => this.setState({ rulesWarn: false }),
         setMult: (e) => this.setState({ mult: e.target.value }), setGap: (e) => this.setState({ gap: e.target.value }),
         set6: () => this.setState({ bar12: false }), set12: () => this.setState({ bar12: true }),
+        setHook: (cm) => () => this.setState({ hookR: cm }),
         toggleLive: () => enviar({ tipo: 'cambiarEnVivo', activo: !vista.enVivo }),
         pickInRevit: () => enviar({ tipo: 'seleccionarEnRevit' }),
         showInRevit: () => { if (P) enviar({ tipo: 'verEnRevit', id: P.id }); },
@@ -1623,6 +1625,17 @@
                 <button type="button" onClick=${v.set6} disabled=${v.locked} style="height: 28px; padding: 0 12px; border: 0; font: inherit; cursor: pointer; ${v.seg6}">6 m</button>
                 <button type="button" onClick=${v.set12} disabled=${v.locked} style="height: 28px; padding: 0 12px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.seg12}">12 m</button>
               </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="flex: 1; color: #3F4A57">Redondear ganchos</span>
+                <div role="group" aria-label="Redondear ganchos" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                  <button type="button" onClick=${v.setHook('0')} disabled=${v.locked} style="height: 28px; padding: 0 10px; border: 0; font: inherit; cursor: pointer; ${v.segHook0}">No</button>
+                  <button type="button" onClick=${v.setHook('5')} disabled=${v.locked} style="height: 28px; padding: 0 10px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segHook5}">5 cm</button>
+                  <button type="button" onClick=${v.setHook('10')} disabled=${v.locked} style="height: 28px; padding: 0 10px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segHook10}">10 cm</button>
+                </div>
+              </div>
+              <span style="font-size: 11px; line-height: 1.4; color: #5E6670">El largo total del gancho de barras y bastones sube al siguiente múltiplo, para cortar y doblar con una medida estándar: #4 a 90° = 0.222 → 0.25 con 5 cm. Los estribos no cambian.</span>
             </div>            <div style="display: flex; flex-direction: column; gap: 6px">
               <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
                 <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Gancho 180°</span><span>Estribo 135°</span><span>kg/m</span>

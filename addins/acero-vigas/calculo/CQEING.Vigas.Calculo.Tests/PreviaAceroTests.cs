@@ -34,8 +34,8 @@ public class PreviaAceroTests
     [Fact]
     public void ElGanchoDeArribaDoblaHaciaAbajoConElRadioYLaColaDelTipo()
     {
-        // radio 64 / 2 + 16 / 2 = 40; cola = la extensión del gancho propio con lo que suma el gancho de 90° del #5 (215)
-        double cola = GanchoPropio.Extension(Reglas.LargoGancho(Reglas.Generales.PorDiametro[5], TipoGancho.De90), 16, 64, 90);
+        // radio 64 / 2 + 16 / 2 = 40; cola = la extensión del gancho propio con lo que suma el gancho de 90° del #5 (215 + 22 del redondeo a 5 cm: 278 → 300)
+        double cola = GanchoPropio.Extension(Reglas.Generales.LargoGanchoRedondeado(Reglas.Generales.PorDiametro[5], TipoGancho.De90), 16, 64, 90);
 
         Trazo t = Assert.Single(Trazos([Barra(inicio: TipoGancho.De90)]));
 

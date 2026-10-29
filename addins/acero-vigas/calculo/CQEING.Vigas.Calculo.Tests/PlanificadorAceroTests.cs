@@ -301,7 +301,7 @@ public class PlanificadorAceroTests
                 bool debajo = fila1.Any(f => Math.Abs(f.XCorte - p.XCorte) < (15.9 + 9.5) / 2);
                 int alInicio = debajo && b.TipoInicio != TipoGancho.Sin ? anidado : 0, alFin = debajo && b.TipoFin != TipoGancho.Sin ? anidado : 0;
                 ReglaDiametro r3 = Reglas.Generales.PorDiametro[3];
-                int largo = b.Hasta - alFin - (b.Desde + alInicio) + Reglas.LargoGancho(r3, b.TipoInicio) + Reglas.LargoGancho(r3, b.TipoFin);
+                int largo = b.Hasta - alFin - (b.Desde + alInicio) + Reglas.Generales.LargoGanchoRedondeado(r3, b.TipoInicio) + Reglas.Generales.LargoGanchoRedondeado(r3, b.TipoFin);
                 Assert.Equal((b.Desde + alInicio, b.Hasta - alFin, largo), (p.Desde, p.Hasta, p.Largo));
                 anidadas += alInicio + alFin > 0 ? 1 : 0;
             }
@@ -323,7 +323,7 @@ public class PlanificadorAceroTests
 
         Assert.NotEmpty(de4);
         Assert.Contains(de4, p => p.GanchoInicio != TipoGancho.Sin || p.GanchoFin != TipoGancho.Sin);
-        Assert.All(de4, p => Assert.Equal(p.Hasta - p.Desde + Reglas.LargoGancho(r4, p.GanchoInicio) + Reglas.LargoGancho(r4, p.GanchoFin), p.Largo));
+        Assert.All(de4, p => Assert.Equal(p.Hasta - p.Desde + Reglas.Generales.LargoGanchoRedondeado(r4, p.GanchoInicio) + Reglas.Generales.LargoGanchoRedondeado(r4, p.GanchoFin), p.Largo));
     }
 
     [Fact]

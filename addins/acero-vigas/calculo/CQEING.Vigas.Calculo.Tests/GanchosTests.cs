@@ -9,7 +9,7 @@ namespace CQEING.Vigas.Calculo.Tests;
 public class GanchosTests
 {
     private static EntradaVigas Entrada(Dictionary<string, TipoGancho>? ganchos = null, ArmadoBastones? bastones = null, Reglas? reglas = null) =>
-        new(Datos.PorticoMaqueta(), TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], reglas ?? Reglas.Generales,
+        new(Datos.PorticoMaqueta(), TipoViga.Aerea, [new GrupoBarras(3, 5)], [new GrupoBarras(3, 5)], reglas ?? Datos.ReglasSinRedondeo,
             Cambios: new CambiosManuales(Ganchos: ganchos), Bastones: bastones);
 
     private static Barra Barra(ResultadoVigas r, string id) => r.Barras.Single(b => b.Id == id);
@@ -27,6 +27,16 @@ public class GanchosTests
         Assert.Equal((TipoGancho.De90, 215), (Barra(r, "S1").TipoInicio, Barra(r, "S1").GanchoInicio));
         Assert.Equal((TipoGancho.De90, 215), (Barra(r, "S4").TipoFin, Barra(r, "S4").GanchoFin));
         Assert.Equal((TipoGancho.Sin, TipoGancho.Sin), (Barra(r, "S2").TipoInicio, Barra(r, "S2").TipoFin));
+    }
+
+    [Fact]
+    public void ConLasReglasDeBase_ElGanchoSeRedondeaYLaBarraSigueEnMultiplo()
+    {
+        // #5 a 90°: B 278 → 300 con el redondeo de 5 cm, así que el gancho suma 22 más (215 → 237).
+        ResultadoVigas r = MotorVigas.Calcular(Entrada(reglas: Reglas.Generales));
+
+        Assert.Equal((TipoGancho.De90, 237), (Barra(r, "S1").TipoInicio, Barra(r, "S1").GanchoInicio));
+        Assert.All(r.Barras, b => Assert.Equal(0, b.Largo % 500));
     }
 
     [Fact]
@@ -143,7 +153,7 @@ public class GanchosTests
     {
         // en los cuadros de Carlos el de 90° es el más largo; aquí el de 180° del #5 mide 0.80 para forzar el caso
         ReglaDiametro r5 = Reglas.Generales.PorDiametro[5];
-        var reglas = Reglas.Generales with { PorDiametro = new Dictionary<int, ReglaDiametro>(Reglas.Generales.PorDiametro) { [5] = r5 with { Gancho180 = new Gancho(800) } } };
+        var reglas = Datos.ReglasSinRedondeo with { PorDiametro = new Dictionary<int, ReglaDiametro>(Reglas.Generales.PorDiametro) { [5] = r5 with { Gancho180 = new Gancho(800) } } };
 
         ResultadoVigas r = MotorVigas.Calcular(Entrada(new() { ["I.inicio"] = TipoGancho.De180 }, reglas: reglas));
 

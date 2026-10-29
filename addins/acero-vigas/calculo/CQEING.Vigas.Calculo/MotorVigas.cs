@@ -161,7 +161,7 @@ public static class MotorVigas
         string prefijo = capa == Posicion.Superior ? "S" : "I";
         TipoGancho inicio = GanchoCorrida(e.Cambios, prefijo + ".inicio", avisos), fin = GanchoCorrida(e.Cambios, prefijo + ".fin", avisos);
         var parametros = new ParametrosCapa(GeometriaPortico.ReferenciaDe(e.Tipo, capa, cara), regla.Traslapo!.Value,
-            Reglas.LargoGancho(regla, inicio), Reglas.LargoGancho(regla, fin), e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga,
+            e.Reglas.LargoGanchoRedondeado(regla, inicio), e.Reglas.LargoGanchoRedondeado(regla, fin), e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga,
             inicio, fin);
 
         CapaResuelta? resuelta = ResolvedorCapa.Resolver(g, parametros);

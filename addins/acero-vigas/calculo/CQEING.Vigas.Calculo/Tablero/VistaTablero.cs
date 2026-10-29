@@ -206,9 +206,11 @@ public sealed record VistaPortico(
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).
-/// <paramref name="Problema"/> dice por qué se usan las de base, si pasó.
+/// <paramref name="Problema"/> dice por qué se usan las de base, si pasó. <paramref name="RedondeoGanchoCm"/>: "0", "5" o
+/// "10"; null (una página que no lo manda) deja el de las reglas guardadas.
 /// </summary>
-public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string Multiplo, string DistanciaLibreCm, bool Varilla12, string? Problema);
+public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string Multiplo, string DistanciaLibreCm, bool Varilla12, string? Problema,
+    string? RedondeoGanchoCm = null);
 
 /// <summary>
 /// Una fila de la tabla de reglas: traslapo, gancho de 90°, gancho de 180° (<paramref name="G180"/>, el de los estribos

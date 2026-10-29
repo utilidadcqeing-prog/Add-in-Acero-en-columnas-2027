@@ -7,7 +7,7 @@ namespace CQEING.Vigas.Calculo.Tests;
 public class MotorVigasTests
 {
     private static EntradaVigas Aerea() => new(Datos.PorticoMaqueta(), TipoViga.Aerea,
-        Superior: [new GrupoBarras(3, 5)], Inferior: [new GrupoBarras(3, 5)], Reglas.Generales);
+        Superior: [new GrupoBarras(3, 5)], Inferior: [new GrupoBarras(3, 5)], Datos.ReglasSinRedondeo);
 
     [Fact]
     public void LosIdsSiguenLaPosicionYVanDeIzquierdaADerecha()
