@@ -96,7 +96,7 @@ public sealed class GestorAddins(FuenteReleases fuente, ConstructorCatalogo cata
             .Where(addin => addin.Ultima.Manifiesto.PaqueteParaRevit(anio) is not null)
             .ToDictionary(addin => addin.Id, addin => addin.Ultima.Version.ToString());
         if (ultimoGestor is not null) ultimas[ActualizacionObligatoria.ClaveGestor] = ultimoGestor.Version.ToString();
-        ActualizacionObligatoria.Escribir(rutas.CarpetaCqeing, anio, ultimas);
+        ActualizacionObligatoria.Escribir(rutas.CarpetaCqeing, anio, ultimas, rutas.ClaveRegistro);
     }
 
     /// <summary>

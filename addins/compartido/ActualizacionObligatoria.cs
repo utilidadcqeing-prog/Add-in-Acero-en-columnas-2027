@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using Microsoft.Win32;
 
 namespace CQEING.Compartido;
 
@@ -46,9 +47,9 @@ internal static class ActualizacionObligatoria
     /// dañado). Primero el add-in; después el gestor: con el gestor desactualizado no se usa ningún add-in, porque es el
     /// que trae las versiones nuevas. <paramref name="carpetaAddinsRevit"/> es %APPDATA%\Autodesk\Revit\Addins\&lt;año&gt;.
     /// </summary>
-    public static string? Pendiente(InstalacionAddin instalacion, string carpeta, string carpetaAddinsRevit)
+    public static string? Pendiente(InstalacionAddin instalacion, string carpeta, string carpetaAddinsRevit, string? claveRegistro)
     {
-        IReadOnlyDictionary<string, string> ultimas = Leer(carpeta, instalacion.Anio);
+        IReadOnlyDictionary<string, string> ultimas = Leer(carpeta, instalacion.Anio, claveRegistro);
         if (ultimas.TryGetValue(instalacion.Id, out string? ultima) && EsMasNueva(ultima, instalacion.Version))
             return $"Hay una versión nueva de este add-in ({ultima}). Actualícela desde el gestor y reinicie Revit para seguir usándolo.";
         if (ultimas.TryGetValue(ClaveGestor, out string? gestor) && !GestorAlDia(carpetaAddinsRevit, gestor))
@@ -92,26 +93,26 @@ internal static class ActualizacionObligatoria
         return !EsMasNueva(ultima, Path.GetFileName(carpetaVersion));
     }
 
-    /// <summary>Id → última versión publicada para ese año. Vacío si no hay archivo o no se entiende.</summary>
-    public static IReadOnlyDictionary<string, string> Leer(string carpeta, string anio)
-    {
-        try
-        {
-            string archivo = Path.Combine(carpeta, NombreArchivo(anio));
-            if (!File.Exists(archivo)) return new Dictionary<string, string>();
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(archivo)) ?? new Dictionary<string, string>();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return new Dictionary<string, string>();
-        }
-    }
+    /// <summary>
+    /// Copia en el registro del usuario (HKCU), un valor por año, que nunca baja: guarda la versión más alta que se conoció
+    /// de cada uno. Borrar el archivo o volver a instalar un gestor viejo no desbloquea nada. Las pruebas pasan su propia
+    /// clave, o null para no tocar el registro.
+    /// </summary>
+    public const string ClaveRegistro = @"Software\CQEING\Gestor";
 
     /// <summary>
-    /// Lo escribe el gestor cada vez que conoce la lista de releases. Se escribe aparte y se reemplaza de una vez: un add-in
-    /// que lo lee a la vez nunca ve medio archivo. Si no se puede escribir, queda el anterior.
+    /// Id → última versión publicada para ese año: la más alta entre el archivo y el registro. Vacío si no hay nada o no
+    /// se entiende.
     /// </summary>
-    public static void Escribir(string carpeta, string anio, IReadOnlyDictionary<string, string> ultimas)
+    public static IReadOnlyDictionary<string, string> Leer(string carpeta, string anio, string? claveRegistro = null) =>
+        Mayores(LeerArchivo(carpeta, anio), LeerRegistro(claveRegistro, anio));
+
+    /// <summary>
+    /// Lo escribe el gestor cada vez que conoce la lista de releases. El archivo se escribe aparte y se reemplaza de una
+    /// vez: un add-in que lo lee a la vez nunca ve medio archivo. En el registro solo sube. Si no se puede escribir, queda
+    /// lo anterior.
+    /// </summary>
+    public static void Escribir(string carpeta, string anio, IReadOnlyDictionary<string, string> ultimas, string? claveRegistro = null)
     {
         try
         {
@@ -125,6 +126,72 @@ internal static class ActualizacionObligatoria
         {
             // La próxima consulta lo vuelve a intentar.
         }
+        EscribirRegistro(claveRegistro, anio, Mayores(LeerRegistro(claveRegistro, anio), ultimas));
+    }
+
+    private static Dictionary<string, string> LeerArchivo(string carpeta, string anio)
+    {
+        try
+        {
+            string archivo = Path.Combine(carpeta, NombreArchivo(anio));
+            return File.Exists(archivo) ? Interpretar(File.ReadAllText(archivo)) : [];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    private static Dictionary<string, string> LeerRegistro(string? claveRegistro, string anio)
+    {
+        if (claveRegistro is null || !OperatingSystem.IsWindows()) return [];
+        try
+        {
+            using RegistryKey? clave = Registry.CurrentUser.OpenSubKey(claveRegistro);
+            return clave?.GetValue(ValorRegistro(anio)) is string json ? Interpretar(json) : [];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return [];
+        }
+    }
+
+    private static void EscribirRegistro(string? claveRegistro, string anio, IReadOnlyDictionary<string, string> ultimas)
+    {
+        if (claveRegistro is null || !OperatingSystem.IsWindows()) return;
+        try
+        {
+            using RegistryKey clave = Registry.CurrentUser.CreateSubKey(claveRegistro);
+            clave.SetValue(ValorRegistro(anio), JsonSerializer.Serialize(ultimas));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // La próxima consulta lo vuelve a intentar.
+        }
+    }
+
+    private static string ValorRegistro(string anio) => $"u{anio}";
+
+    private static Dictionary<string, string> Interpretar(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Por cada id, la versión más alta de las dos listas.</summary>
+    private static Dictionary<string, string> Mayores(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b)
+    {
+        var mayores = new Dictionary<string, string>(a);
+        foreach ((string id, string version) in b)
+            if (!mayores.TryGetValue(id, out string? otra) || EsMasNueva(version, otra))
+                mayores[id] = version;
+        return mayores;
     }
 
     /// <summary>X.Y.Z con -rc.N opcional, como VersionAddin del gestor: la prerelease va antes que su versión estable.</summary>

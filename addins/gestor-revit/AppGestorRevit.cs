@@ -1,5 +1,6 @@
 using Autodesk.Revit.UI;
 using CQEING.Compartido;
+using CQEING.Gestor.Core;
 
 namespace CQEING.GestorRevit;
 
@@ -26,6 +27,8 @@ public class AppGestorRevit : IExternalApplication
             AvisoNovedades.AyudaBoton,
             "iconoGestor"));
 
+        // Lo viejo se borra también al abrir Revit, no solo al abrir el gestor: así no depende de que alguien lo abra.
+        Task.Run(() => LimpiezaVersionesViejas.Ejecutar(RutasGestor.DelUsuario()));
         AvisoNovedades.Empezar(app.ControlledApplication.VersionNumber, boton);
         AvisoLicencia.Empezar();
         _modeloActivo.Empezar(app);

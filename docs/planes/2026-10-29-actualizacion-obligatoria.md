@@ -35,6 +35,18 @@ desde ahora en `CQEING-releases`: las copias viejas no traen este código.
 10. **Versiones de la primera publicación** (Juan, 2026-10-29): la última de cada add-in, ya con licencia; como las
     etiquetas viejas ya existen en el repo del código, cada una sube la versión menor.
 
+11. **Gestor 0.3.1: se borra todo lo viejo y queda solo la última** (Juan, 2026-10-29). El repo del código queda
+    público unos 3 días para que los gestores viejos se actualicen con la release puente; antes se borraron allí todas
+    las releases viejas (etiquetas y código quedan), así que el gestor viejo no encuentra ningún add-in, solo su
+    actualización. Al abrir el gestor y al abrir Revit, `LimpiezaVersionesViejas` borra las versiones anteriores a la
+    primera con licencia (vigas 1.1.0, columnas 1.5.0, cuadro 1.9.0, imágenes 1.1.0) con su `.addin`, los `.addin` de
+    antes del gestor y toda versión que no esté activa. Una compilación de desarrollo no se toca.
+12. **Copia en el registro que nunca baja** (Juan, 2026-10-29). El gestor guarda las últimas versiones también en
+    `HKCU\Software\CQEING\Gestor` y los add-ins usan la más alta entre el archivo y el registro. Borrar el archivo o
+    instalar un `.exe` viejo del gestor no desbloquea nada: el componente viejo queda por debajo de lo anotado y ningún
+    add-in carga, y el gestor viejo no encuentra versiones viejas para instalar. Lo que no tiene arreglo: un equipo que
+    nunca abre el gestor nuevo conserva lo que ya tenía.
+
 ## Código
 
 - `addins/compartido/ActualizacionObligatoria.cs`: formato del archivo, carpeta de instalación y comparación de
