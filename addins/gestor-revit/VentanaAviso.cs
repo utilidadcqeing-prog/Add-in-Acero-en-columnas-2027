@@ -63,10 +63,14 @@ internal sealed class VentanaAviso : Window
         panel.Children.Add(new TextBlock { Text = Titulo(novedades.Count), FontWeight = FontWeights.SemiBold, FontSize = 13, Margin = new Thickness(0, 0, 0, 8) });
         foreach (Novedad novedad in novedades)
             panel.Children.Add(new TextBlock { Text = Linea(novedad), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 2) });
+        bool gestor = novedades.Any(n => n.Id == EtiquetaRelease.IdGestor);
         panel.Children.Add(new TextBlock
         {
-            Text = "Actualizar es obligatorio: hasta hacerlo, estos add-ins no se pueden usar. Se actualizan desde el gestor, " +
-                   "sin cerrar Revit, y vuelven a funcionar al reiniciar Revit.",
+            Text = gestor
+                ? "Actualizar es obligatorio: mientras el gestor no esté al día no se puede usar ningún add-in. Ábralo y pulse " +
+                  "«Actualizar y reiniciar»; los add-ins vuelven a funcionar al reiniciar Revit."
+                : "Actualizar es obligatorio: hasta hacerlo, estos add-ins no se pueden usar. Se actualizan desde el gestor, " +
+                  "sin cerrar Revit, y vuelven a funcionar al reiniciar Revit.",
             TextWrapping = TextWrapping.Wrap,
             Foreground = Brushes.DimGray,
             Margin = new Thickness(0, 8, 0, 12),

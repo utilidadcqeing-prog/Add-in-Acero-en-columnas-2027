@@ -27,6 +27,14 @@ desde ahora en `CQEING-releases`: las copias viejas no traen este código.
 8. **Volver a una versión anterior** desde el gestor deja ese add-in bloqueado mientras exista una más nueva publicada:
    es la consecuencia de que actualizar sea obligatorio. Para retirar una versión mala, se publica una corrección.
 
+9. **Con el gestor desactualizado no carga ningún add-in** (Juan, 2026-10-29). El archivo también anota la última
+   versión del gestor (clave `gestor`); cada add-in lee la versión del componente del gestor que carga Revit (la carpeta
+   a la que apunta `CQEING.zz-gestor-revit.addin`, `...\CQEING\Gestor\revit\<versión>\<año>\`). Sin componente tampoco
+   carga: borrarlo no sirve para esquivar la regla. Uno que apunta a otra carpeta es de desarrollo y no se juzga. El
+   aviso dentro de Revit muestra el gestor como una novedad más y dice que se actualiza con «Actualizar y reiniciar».
+10. **Versiones de la primera publicación** (Juan, 2026-10-29): la última de cada add-in, ya con licencia; como las
+    etiquetas viejas ya existen en el repo del código, cada una sube la versión menor.
+
 ## Código
 
 - `addins/compartido/ActualizacionObligatoria.cs`: formato del archivo, carpeta de instalación y comparación de

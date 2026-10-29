@@ -2,6 +2,8 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace CQEING.Compartido;
 
@@ -10,8 +12,8 @@ internal sealed record InstalacionAddin(string Id, string Version, string Anio);
 
 /// <summary>
 /// Actualización obligatoria (docs/planes/2026-10-29-actualizacion-obligatoria.md). El gestor anota, por año de Revit,
-/// la última versión publicada de cada add-in; un add-in instalado por el gestor con una versión más vieja no se deja
-/// usar. Se compila dentro de cada add-in y del núcleo del gestor: el formato del archivo tiene una sola fuente.
+/// la última versión publicada de cada add-in y del gestor; un add-in instalado por el gestor con una versión más vieja,
+/// o con el gestor desactualizado, no se deja usar. Se compila dentro de cada add-in y del núcleo del gestor: el formato del archivo tiene una sola fuente.
 /// </summary>
 internal static class ActualizacionObligatoria
 {
@@ -40,13 +42,55 @@ internal static class ActualizacionObligatoria
     }
 
     /// <summary>
-    /// La última versión publicada si es más nueva que la instalada; null si está al día o no se sabe (sin archivo, add-in
-    /// que no aparece, archivo dañado). Nunca lanza: corre en OnStartup.
+    /// Por qué no se deja usar el add-in, o null si está al día o no se sabe (sin archivo, add-in que no aparece, archivo
+    /// dañado). Primero el add-in; después el gestor: con el gestor desactualizado no se usa ningún add-in, porque es el
+    /// que trae las versiones nuevas. <paramref name="carpetaAddinsRevit"/> es %APPDATA%\Autodesk\Revit\Addins\&lt;año&gt;.
     /// </summary>
-    public static string? Pendiente(InstalacionAddin instalacion, string carpeta) =>
-        Leer(carpeta, instalacion.Anio).TryGetValue(instalacion.Id, out string? ultima) && EsMasNueva(ultima, instalacion.Version)
-            ? ultima
-            : null;
+    public static string? Pendiente(InstalacionAddin instalacion, string carpeta, string carpetaAddinsRevit)
+    {
+        IReadOnlyDictionary<string, string> ultimas = Leer(carpeta, instalacion.Anio);
+        if (ultimas.TryGetValue(instalacion.Id, out string? ultima) && EsMasNueva(ultima, instalacion.Version))
+            return $"Hay una versión nueva de este add-in ({ultima}). Actualícela desde el gestor y reinicie Revit para seguir usándolo.";
+        if (ultimas.TryGetValue(ClaveGestor, out string? gestor) && !GestorAlDia(carpetaAddinsRevit, gestor))
+            return $"Hay una versión nueva del gestor de add-ins ({gestor}). Ábralo, pulse «Actualizar y reiniciar» y reinicie Revit: " +
+                   "mientras tanto no se puede usar ningún add-in.";
+        return null;
+    }
+
+    /// <summary>Clave del gestor en el archivo de últimas versiones; es el id de sus etiquetas (gestor-vX.Y.Z).</summary>
+    public const string ClaveGestor = "gestor";
+
+    /// <summary>El .addin del componente del gestor en Revit; el «zz-» lo hace cargar el último (RutasGestor).</summary>
+    public const string ArchivoComplementoGestor = "CQEING.zz-gestor-revit.addin";
+
+    /// <summary>
+    /// El componente del gestor que carga este Revit es <paramref name="ultima"/> o más nuevo. Vive en
+    /// ...\CQEING\Gestor\revit\&lt;versión&gt;\&lt;año&gt;\. Sin componente no está al día (borrarlo no sirve para esquivar la
+    /// regla); uno que apunta a otra carpeta es de desarrollo y no se juzga.
+    /// </summary>
+    public static bool GestorAlDia(string carpetaAddinsRevit, string ultima)
+    {
+        string? dll;
+        try
+        {
+            string archivo = Path.Combine(carpetaAddinsRevit, ArchivoComplementoGestor);
+            if (!File.Exists(archivo)) return false;
+            dll = XDocument.Load(archivo).Descendants("Assembly").FirstOrDefault()?.Value.Trim();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or XmlException)
+        {
+            return true;
+        }
+        if (string.IsNullOrEmpty(dll) || dll.IndexOfAny(Path.GetInvalidPathChars()) >= 0) return true;
+
+        string? carpetaVersion = Path.GetDirectoryName(Path.GetDirectoryName(dll));
+        string? carpetaRevit = Path.GetDirectoryName(carpetaVersion);
+        if (carpetaVersion is null || carpetaRevit is null
+            || !string.Equals(Path.GetFileName(carpetaRevit), "revit", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(Path.GetFileName(Path.GetDirectoryName(carpetaRevit)), "Gestor", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return !EsMasNueva(ultima, Path.GetFileName(carpetaVersion));
+    }
 
     /// <summary>Id → última versión publicada para ese año. Vacío si no hay archivo o no se entiende.</summary>
     public static IReadOnlyDictionary<string, string> Leer(string carpeta, string anio)

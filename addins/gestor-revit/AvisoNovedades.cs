@@ -33,7 +33,7 @@ internal static class AvisoNovedades
             IReadOnlyList<Novedad> novedades;
             try
             {
-                novedades = await GestorAddins.Crear().NovedadesAsync(anio, Vigencia);
+                novedades = await GestorAddins.Crear().NovedadesAsync(anio, Vigencia, versionGestor: AvisoLicencia.VersionDelComponente());
                 Anotar(null);
             }
             catch (Exception e)

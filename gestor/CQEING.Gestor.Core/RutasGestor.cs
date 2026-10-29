@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using CQEING.Compartido;
 
 namespace CQEING.Gestor.Core;
 
@@ -49,7 +50,7 @@ public sealed class RutasGestor(string localAppData, string appData)
     /// pestaña CQEING al cargar. El prefijo «zz-» hace que el panel «Gestor» se cree el último y quede a la derecha de
     /// todos los de los add-ins (lo vigila una prueba contra addins/*/addin.json).
     /// </summary>
-    public const string NombreArchivoComplemento = "CQEING.zz-gestor-revit.addin";
+    public const string NombreArchivoComplemento = ActualizacionObligatoria.ArchivoComplementoGestor;
 
     public string ArchivoComplemento(string anio) => Path.Combine(CarpetaAddinsRevit(anio), NombreArchivoComplemento);
 

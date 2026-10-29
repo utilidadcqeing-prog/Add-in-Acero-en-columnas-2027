@@ -98,7 +98,7 @@ public class GestorAddinsTests : IDisposable
 
         await _gestor.ConsultarAsync();
 
-        Assert.Equal(new Dictionary<string, string> { ["armado-columnas"] = "1.1.0" }, ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2026"));
+        Assert.Equal(new Dictionary<string, string> { ["armado-columnas"] = "1.1.0", ["gestor"] = "0.2.0" }, ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2026"));
         Assert.Empty(ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2027")); // ese Revit no está instalado
     }
 
@@ -115,6 +115,17 @@ public class GestorAddinsTests : IDisposable
         await _gestor.NovedadesAsync("2026", TimeSpan.Zero);
 
         Assert.Equal("1.1.0", ActualizacionObligatoria.Leer(_rutas.CarpetaCqeing, "2026")["armado-columnas"]);
+    }
+
+    [Fact]
+    public async Task Un_gestor_nuevo_tambien_es_una_novedad_dentro_de_Revit()
+    {
+        Publicar("1.0.0");
+
+        Novedad gestor = Assert.Single(await _gestor.NovedadesAsync("2026", TimeSpan.Zero, versionGestor: "0.1.0"));
+        Assert.Equal(new Novedad("gestor", GestorAddins.NombreGestor, "0.1.0", "0.2.0"), gestor);
+        Assert.Empty(await _gestor.NovedadesAsync("2026", TimeSpan.Zero, versionGestor: "0.2.0"));
+        Assert.Empty(await _gestor.NovedadesAsync("2026", TimeSpan.Zero)); // sin saber la versión del componente, no se inventa
     }
 
     [Fact]

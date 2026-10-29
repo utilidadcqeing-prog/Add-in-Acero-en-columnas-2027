@@ -5,9 +5,10 @@ using Autodesk.Revit.UI;
 namespace CQEING.Compartido;
 
 /// <summary>
-/// La parte de <see cref="ActualizacionObligatoria"/> que toca Revit. Al abrir Revit, un add-in con una versión pendiente
-/// no crea sus botones; si la versión nueva aparece con Revit abierto (el gestor la anota en segundo plano), desactiva los
-/// que ya creó. El aviso con «Abrir el gestor» lo da el componente del gestor. Solo se compila en los add-ins.
+/// La parte de <see cref="ActualizacionObligatoria"/> que toca Revit. Al abrir Revit, un add-in desactualizado (o con el
+/// gestor desactualizado) no crea sus botones; si la versión nueva aparece con Revit abierto (el gestor la anota en
+/// segundo plano), desactiva los que ya creó. El aviso con «Abrir el gestor» lo da el componente del gestor. Solo se
+/// compila en los add-ins.
 /// </summary>
 internal static class BloqueoPorVersion
 {
@@ -25,10 +26,10 @@ internal static class BloqueoPorVersion
             string dll = typeof(BloqueoPorVersion).Assembly.Location;
             if (ActualizacionObligatoria.Instalacion(dll) is not { } instalacion) return true;
 
-            string carpeta = Licencia.CarpetaPorDefecto;
-            if (ActualizacionObligatoria.Pendiente(instalacion, carpeta) is not null) return false;
+            var revision = new Revision(instalacion, Licencia.CarpetaPorDefecto, CarpetaAddinsRevit(instalacion.Anio));
+            if (revision.Motivo() is not null) return false;
 
-            Vigilar(app, pestana, dll, instalacion, carpeta);
+            Vigilar(app, pestana, dll, revision);
             return true;
         }
         catch (Exception)
@@ -37,16 +38,25 @@ internal static class BloqueoPorVersion
         }
     }
 
-    private static void Vigilar(UIControlledApplication app, string pestana, string dll, InstalacionAddin instalacion, string carpeta)
+    /// <summary>Lo que hace falta para preguntar si el add-in sigue al día.</summary>
+    private sealed record Revision(InstalacionAddin Instalacion, string Carpeta, string CarpetaAddinsRevit)
     {
-        Directory.CreateDirectory(carpeta);
+        public string? Motivo() => ActualizacionObligatoria.Pendiente(Instalacion, Carpeta, CarpetaAddinsRevit);
+    }
+
+    private static string CarpetaAddinsRevit(string anio) =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Autodesk", "Revit", "Addins", anio);
+
+    private static void Vigilar(UIControlledApplication app, string pestana, string dll, Revision revision)
+    {
+        Directory.CreateDirectory(revision.Carpeta);
         Dispatcher hiloRevit = Dispatcher.CurrentDispatcher;
-        var vigia = new FileSystemWatcher(carpeta, ActualizacionObligatoria.NombreArchivo(instalacion.Anio))
+        var vigia = new FileSystemWatcher(revision.Carpeta, ActualizacionObligatoria.NombreArchivo(revision.Instalacion.Anio))
         {
             NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName,
         };
         // El gestor escribe aparte y reemplaza: llega como «Renamed»; «Changed» y «Created» cubren otras formas de escribir.
-        FileSystemEventHandler alCambiar = (_, _) => hiloRevit.InvokeAsync(() => Revisar(app, pestana, dll, instalacion, carpeta), DispatcherPriority.ApplicationIdle);
+        FileSystemEventHandler alCambiar = (_, _) => hiloRevit.InvokeAsync(() => Revisar(app, pestana, dll, revision), DispatcherPriority.ApplicationIdle);
         vigia.Changed += alCambiar;
         vigia.Created += alCambiar;
         vigia.Renamed += (o, e) => alCambiar(o, e);
@@ -54,15 +64,15 @@ internal static class BloqueoPorVersion
         _vigia = vigia;
     }
 
-    private static void Revisar(UIControlledApplication app, string pestana, string dll, InstalacionAddin instalacion, string carpeta)
+    private static void Revisar(UIControlledApplication app, string pestana, string dll, Revision revision)
     {
         // Corre dentro del bucle de mensajes de Revit: una excepción aquí cerraría Revit.
         try
         {
-            if (ActualizacionObligatoria.Pendiente(instalacion, carpeta) is not { } ultima) return;
+            if (revision.Motivo() is not { } motivo) return;
             _vigia?.Dispose();
             _vigia = null;
-            Desactivar(app, pestana, dll, ultima);
+            Desactivar(app, pestana, dll, motivo);
         }
         catch (Exception)
         {
@@ -71,15 +81,14 @@ internal static class BloqueoPorVersion
     }
 
     /// <summary>Desactiva los botones de esta DLL en la pestaña: cada uno sabe de qué DLL es su comando.</summary>
-    private static void Desactivar(UIControlledApplication app, string pestana, string dll, string ultima)
+    private static void Desactivar(UIControlledApplication app, string pestana, string dll, string motivo)
     {
-        string aviso = $"Hay una versión nueva ({ultima}). Actualícela desde el gestor y reinicie Revit para seguir usando este add-in.";
         foreach (RibbonPanel panel in app.GetRibbonPanels(pestana))
             foreach (RibbonItem item in panel.GetItems())
                 if (item is PushButton boton && string.Equals(boton.AssemblyName, dll, StringComparison.OrdinalIgnoreCase))
                 {
                     boton.Enabled = false;
-                    boton.ToolTip = aviso;
+                    boton.ToolTip = motivo;
                 }
     }
 }
