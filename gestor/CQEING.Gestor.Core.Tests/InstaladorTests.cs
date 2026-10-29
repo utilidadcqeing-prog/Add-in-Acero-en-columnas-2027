@@ -19,7 +19,8 @@ public class InstaladorTests : IDisposable
         _handler = new HandlerFalso(p => _servidor.TryGetValue(p.RequestUri!.ToString(), out Func<HttpResponseMessage>? r)
             ? r()
             : Respuestas.Estado(HttpStatusCode.NotFound));
-        _instalador = new Instalador(_handler.Cliente(), _rutas, TimeSpan.FromMilliseconds(300));
+        // Holgado: con 300 ms, un servidor de CI lento cortaba descargas sanas. El corte se prueba aparte, con su propio límite.
+        _instalador = new Instalador(_handler.Cliente(), _rutas, TimeSpan.FromSeconds(30));
     }
 
     public void Dispose() => _tmp.Dispose();
@@ -115,8 +116,9 @@ public class InstaladorTests : IDisposable
     {
         var (publicada, url, zip) = Datos.VersionConZip("1.0.0");
         _servidor[url] = () => FlujosFalsos.Colgada(zip, zip.Length / 2);
+        var instalador = new Instalador(_handler.Cliente(), _rutas, TimeSpan.FromMilliseconds(300));
 
-        var error = await Assert.ThrowsAsync<GestorException>(() => _instalador.InstalarAsync(publicada, "2026"));
+        var error = await Assert.ThrowsAsync<GestorException>(() => instalador.InstalarAsync(publicada, "2026"));
 
         Assert.Equal(TipoError.SinConexion, error.Tipo);
         AssertNoQuedoNada();
