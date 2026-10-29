@@ -45,6 +45,13 @@ internal sealed class PuenteTablero
     /// <summary>Atiende un mensaje en el hilo de Revit. <paramref name="desdeRevit"/>: no se devuelve la selección a Revit.</summary>
     private void Atender(UIApplication app, MensajeTablero mensaje, bool desdeRevit = false)
     {
+        // Solo cambia el dibujo de la vista 3D: la sesión no lo necesita.
+        if (mensaje is VerChoques3d(bool ver))
+        {
+            PreviaAcero3D.VerChoques(ver);
+            app.ActiveUIDocument?.RefreshActiveView();
+            return;
+        }
         foreach (Salida salida in sesion.Manejar(mensaje))
         {
             if (salida is AJs js)

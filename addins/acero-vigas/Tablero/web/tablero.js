@@ -931,7 +931,9 @@
         toggleLive: () => enviar({ tipo: 'cambiarEnVivo', activo: !vista.enVivo }),
         pickInRevit: () => enviar({ tipo: 'seleccionarEnRevit' }),
         showInRevit: () => { if (P) enviar({ tipo: 'verEnRevit', id: P.id }); },
-        open3d: () => { if (P) enviar({ tipo: 'abrir3d', id: P.id }); },
+        // la vista 3D sale con los rombos de choques solo si la capa "Choques" del alzado está prendida (Carlos, 29-oct)
+        open3d: () => { if (P) { enviar({ tipo: 'verChoques3d', ver: window.Alzado.verChoques() }); enviar({ tipo: 'abrir3d', id: P.id }); } },
+        onChoques: (ver) => enviar({ tipo: 'verChoques3d', ver }),
         // #85, tarea 10: primero la tarjeta de confirmación; "Generar" en ella manda los pórticos.
         generate: () => {
           const ids = elegidos ? enLista.map((p) => p.id) : P ? [P.id] : [];
@@ -1207,7 +1209,7 @@
 
         ${v.isAlzado ? html`
           <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
-            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} choqueAbierto=${v.choqueAbierto} arreglos=${v.arreglos} onChoque=${v.onChoque} onArreglo=${v.onArreglo} onCerrarChoque=${v.onCerrarChoque} />
+            <${Alzado} onChoques=${v.onChoques} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} choqueAbierto=${v.choqueAbierto} arreglos=${v.arreglos} onChoque=${v.onChoque} onArreglo=${v.onArreglo} onCerrarChoque=${v.onCerrarChoque} />
             ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
           </div>` : null}
         ${v.isCorte ? html`

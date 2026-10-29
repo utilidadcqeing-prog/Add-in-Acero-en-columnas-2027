@@ -17,6 +17,8 @@ public class ProtocoloTableroTests
         Assert.IsType<SeleccionarEnRevit>(ProtocoloTablero.Leer("""{"tipo":"seleccionarEnRevit"}"""));
         Assert.Equal(new VerEnRevit("P1"), ProtocoloTablero.Leer("""{"tipo":"verEnRevit","id":"P1"}"""));
         Assert.Equal(new Abrir3d("P1"), ProtocoloTablero.Leer("""{"tipo":"abrir3d","id":"P1"}"""));
+        Assert.Equal(new VerChoques3d(false), ProtocoloTablero.Leer("""{"tipo":"verChoques3d","ver":false}"""));
+        Assert.Equal(new VerChoques3d(true), ProtocoloTablero.Leer("""{"tipo":"verChoques3d"}"""));
         Assert.Equal(new CambiarEnVivo(false), ProtocoloTablero.Leer("""{"tipo":"cambiarEnVivo","activo":false}"""));
         Assert.IsType<VerTodos>(ProtocoloTablero.Leer("""{"tipo":"verTodos"}"""));
         Assert.Equal(new Desconocido("otro"), ProtocoloTablero.Leer("""{"tipo":"otro"}"""));

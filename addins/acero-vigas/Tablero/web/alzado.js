@@ -78,6 +78,8 @@
       const capas = { ...this.state.capas, ...cambio };
       guardarCapas(capas);
       this.setState({ capas });
+      // "Choques" también manda en los rombos de la vista 3D de Revit (Carlos, 29-oct)
+      if ('choques' in cambio && this.props.onChoques) this.props.onChoques(capas.choques);
     }
 
     // Termina el arrastre de un punto; con `aplicar`, avisa el salto donde quedó (si mueve algo).
@@ -593,4 +595,6 @@
   }
 
   window.Alzado = Alzado;
+  // Si la capa "Choques" está prendida (la vista 3D de Revit la usa al abrirse).
+  window.Alzado.verChoques = () => leerCapas().choques;
 })();

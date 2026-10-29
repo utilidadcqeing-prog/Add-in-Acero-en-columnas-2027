@@ -33,6 +33,12 @@ public sealed record VerEnRevit(string Id) : MensajeTablero;
 
 public sealed record Abrir3d(string Id) : MensajeTablero;
 
+/// <summary>
+/// La capa "Choques" del alzado (Carlos, 29-oct): con <paramref name="Ver"/> en false, la vista 3D de Revit no dibuja los
+/// rombos de los choques. La página lo manda al cambiar la capa y al abrir el 3D.
+/// </summary>
+public sealed record VerChoques3d(bool Ver) : MensajeTablero;
+
 public sealed record CambiarEnVivo(bool Activo) : MensajeTablero;
 
 /// <summary>"Ver todos": la lista vuelve a mostrar todos los pórticos después de elegir vigas en Revit.</summary>
@@ -111,6 +117,7 @@ public static class ProtocoloTablero
                 "seleccionarEnRevit" => new SeleccionarEnRevit(),
                 "verEnRevit" => new VerEnRevit(Texto(nodo, "id")),
                 "abrir3d" => new Abrir3d(Texto(nodo, "id")),
+                "verChoques3d" => new VerChoques3d(nodo["ver"]?.GetValue<bool>() ?? true),
                 "cambiarEnVivo" => new CambiarEnVivo(nodo["activo"]?.GetValue<bool>() ?? false),
                 "verTodos" => new VerTodos(),
                 "marcarTerminado" => new MarcarTerminado(Texto(nodo, "id"), nodo["terminado"]?.GetValue<bool>() ?? false),
