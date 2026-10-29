@@ -3,10 +3,10 @@ namespace CQEING.Gestor.Core;
 public static class Repositorio
 {
     /// <summary>
-    /// Repo público de los add-ins. Se usa el nombre actual: si se renombra (por ejemplo a CQEING-Addins), GitHub
-    /// redirige este nombre en la API y en las descargas (docs/planes/2026-10-17-gestor-prueba-final-76.md).
+    /// Repo público de descargas: solo releases, sin código, para que el repo del código pueda ser privado (issue #197).
+    /// Los workflows publican aquí (<c>REPO_RELEASES</c>); una prueba vigila que coincidan.
     /// </summary>
-    public const string Nombre = "utilidadcqeing-prog/Add-in-Acero-en-columnas-2027";
+    public const string Nombre = "utilidadcqeing-prog/CQEING-releases";
 
     public const string ArchivoManifiesto = "manifest.json";
 }
