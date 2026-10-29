@@ -22,6 +22,13 @@ public class AppVigas : IExternalApplication
             "Abre el tablero de acero en vigas: pórticos, barras, traslapos, bastones, estribos y kilos.",
             "vigas"));
 
+        panel.AddItem(CintaCqeing.CrearBoton(
+            "ComandoViguetas",
+            "Crear viguetas",
+            "CQEING.Vigas.Viguetas.ComandoViguetas",
+            "Muestra la planta del piso, reparte las viguetas del panel elegido con la fórmula del Excel y las crea en Revit.",
+            "vigas"));
+
         return Result.Succeeded;
     }
 

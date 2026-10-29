@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Vigas.Calculo.Porticos;
@@ -150,38 +148,24 @@ public static class AgrupadorPorticos
             primero.Ancho, primero.Alto, vigas);
     }
 
-    /// <summary>Ancho mínimo de una viga, en mm (Carlos, 24-oct, min 02:30): lo más angosto es vigueta.</summary>
-    private const double AnchoMinimoViga = 200;
-
     /// <summary>
-    /// Vigueta si no llega a columnas ni muros (sus apoyos son vigas) y todas sus vigas lo son por el tipo (VT, VB o
-    /// "vigueta", como en PROY_JULIO_BETO) o por medir menos de <see cref="AnchoMinimoViga"/>. Carlos (min 12:15): el
-    /// tamaño solo no alcanza, hay viguetas de 15 y 20 cm; si se equivoca, el usuario lo corrige en el tablero (#940).
+    /// Vigueta si no llega a columnas ni muros (sus apoyos son vigas) y todas sus vigas lo son según
+    /// <see cref="ReglaVigueta"/>. Carlos (min 12:15): el tamaño solo no alcanza, hay viguetas de 15 y 20 cm; si se
+    /// equivoca, el usuario lo corrige en el tablero (#940).
     /// </summary>
     private static Elemento ClaseDe(List<Tramo> cadena, List<Soporte> apoyos) =>
-        apoyos.All(s => s.Tipo == TipoApoyo.Viga) && cadena.All(t => NombreDeVigueta(t.Viga.NombreTipo) || Math.Round(t.Viga.Ancho) < AnchoMinimoViga)
+        apoyos.All(s => s.Tipo == TipoApoyo.Viga) && cadena.All(t => ReglaVigueta.Es(t.Viga.NombreTipo, t.Viga.Ancho))
             ? Elemento.Vigueta : Elemento.Viga;
-
-    private static bool NombreDeVigueta(string? tipo)
-    {
-        if (tipo is null)
-            return false;
-        string nombre = SinTildes(tipo).ToUpperInvariant();
-        return nombre.StartsWith("VT") || nombre.StartsWith("VB") || nombre.Contains("VIGUETA");
-    }
 
     /// <summary>Cimentación si la cota del nivel es ≤ 0 o su nombre dice cimentación o fundación (decisión 4).</summary>
     private static TipoViga TipoDe(NivelLeido? nivel)
     {
         if (nivel is null)
             return TipoViga.Aerea;
-        string nombre = SinTildes(nivel.Nombre).ToLowerInvariant();
+        string nombre = ReglaVigueta.SinTildes(nivel.Nombre).ToLowerInvariant();
         return nivel.Elevacion <= SolapeMinimoEnAlto || nombre.Contains("cimenta") || nombre.Contains("fundac")
             ? TipoViga.Cimentacion : TipoViga.Aerea;
     }
-
-    private static string SinTildes(string texto) =>
-        new(texto.Normalize(NormalizationForm.FormD).Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark).ToArray());
 
     /// <summary>Una viga sobre la línea, medida a lo largo de ella (Desde &lt; Hasta).</summary>
     private sealed record Tramo(VigaLeida Viga, double Desde, double Hasta);
