@@ -50,5 +50,8 @@ powershell -ExecutionPolicy Bypass -File tools/desplegar-local.ps1 -Addin armado
 - Agregar un add-in: crear `addins/<id>/` con su `.csproj`, su `.addin` (ClientId propio) y su
   `addin.json`, y sumarlo a `CQEING-Addins.sln`.
 
+**Cómo deben ser los add-ins** (licencia, actualización obligatoria, publicación y versiones):
+[`docs/guia-addins-cqeing.md`](docs/guia-addins-cqeing.md). Es lo que hay que leer antes de tocar o publicar un add-in.
+
 Diseño y plan: `docs/superpowers/specs/2026-10-15-gestor-addins-cqeing-design.md` y
 `docs/superpowers/plans/2026-10-15-gestor-addins.md`.

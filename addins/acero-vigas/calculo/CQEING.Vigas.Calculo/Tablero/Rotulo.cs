@@ -20,6 +20,19 @@ public static class Rotulo
     public static string EnPulgadas(IReadOnlyList<GrupoBarras> grupos, int recto, int total) =>
         Armar(string.Join("+", grupos.Select(g => $"{g.Cantidad}Ø{Pulgadas(g.Diametro)}")), recto, total);
 
+    /// <summary>
+    /// El rótulo de una barra corrida: si sus números miden distinto (Santiago, 29-oct: cada uno con su traslapo y su
+    /// gancho), uno por medida, separados por <c>" · "</c>: <c>"2#8L= 3.50/4.00 · 2#5L= 3.70/4.00"</c>.
+    /// </summary>
+    public static string De(Barra b) => PorMedida(b, g => $"{g.Cantidad}#{g.Diametro}");
+
+    /// <inheritdoc cref="De(Barra)"/>
+    public static string EnPulgadas(Barra b) => PorMedida(b, g => $"{g.Cantidad}Ø{Pulgadas(g.Diametro)}");
+
+    private static string PorMedida(Barra b, Func<GrupoBarras, string> grupo) =>
+        string.Join(" · ", b.Grupos.GroupBy(g => (b.Medida(g.Diametro).LargoRecto, b.Medida(g.Diametro).Largo))
+            .Select(m => Armar(string.Join("+", m.Select(grupo)), m.Key.LargoRecto, m.Key.Largo)));
+
     /// <summary>El #n en pulgadas (n/8"), simplificado: <c>"⅝\""</c>, <c>"1\""</c>, <c>"1¼\""</c>.</summary>
     public static string Pulgadas(int diametro)
     {

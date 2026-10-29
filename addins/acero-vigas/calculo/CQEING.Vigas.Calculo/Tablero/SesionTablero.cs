@@ -25,6 +25,9 @@ public sealed record AGenerar(IReadOnlyList<PorticoAGenerar> Porticos, IReadOnly
 /// </summary>
 public sealed record APrevia3d(PorticoAGenerar? Portico, Reglas Reglas) : Salida;
 
+/// <summary>Guardar en <paramref name="Vigas"/> la marca de terminado (punto 5 de Santiago, 28-oct), o quitarla.</summary>
+public sealed record ATerminado(IReadOnlyList<string> Vigas, bool Terminado) : Salida;
+
 /// <summary>
 /// Un pórtico para generar: <paramref name="Vigas"/> son las suyas, para borrar lo que el add-in creó antes en ellas.
 /// <paramref name="Configuracion"/> es lo que se guarda en cada viga (<see cref="ConfiguracionGuardada"/>); vacía en la
@@ -51,13 +54,17 @@ public enum AccionRevit
 /// reglas. <paramref name="configuracionDeViga"/> da lo que guardó una generación anterior en la viga con ese id
 /// (<see cref="ConfiguracionGuardada"/>), o null; sin ella no se recupera nada. <paramref name="dobladosDelModelo"/> da
 /// el diámetro y los doblados de los tipos de barra del modelo, para que los choques del alzado sean los de la vista
-/// previa 3D (H3 del plan de choques de 22-oct); null = los de las reglas.
+/// previa 3D (H3 del plan de choques de 22-oct); null = los de las reglas. <paramref name="terminadaViga"/> dice si la
+/// viga con ese id tiene la marca de terminado (punto 5 de Santiago, 28-oct); sin ella, ninguna.
 /// </summary>
 public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas almacen, string proyecto,
     Func<IEnumerable<double>>? nominalesDelModelo = null, Func<string, string?>? configuracionDeViga = null,
-    Func<Reglas, IReadOnlyDictionary<int, DobladoBarra>>? dobladosDelModelo = null)
+    Func<Reglas, IReadOnlyDictionary<int, DobladoBarra>>? dobladosDelModelo = null, Func<string, bool>? terminadaViga = null)
 {
     private readonly Dictionary<string, OpcionesTablero> opciones = [];
+
+    /// <summary>Los pórticos marcados como terminados: los leídos de sus vigas y los marcados en esta sesión.</summary>
+    private readonly HashSet<string> terminados = [];
 
     /// <summary>El estado de la página con que se generó cada pórtico (recuperado de sus vigas o mandado al generar).</summary>
     private readonly Dictionary<string, string> estados = [];
@@ -139,6 +146,16 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                     : [Vista()];
             case GuardarReglas(VistaReglas pantalla):
                 return Guardar(pantalla);
+            case MarcarTerminado(string id, bool terminado):
+                if (Buscar(id) is null)
+                    return [Vista()];
+                // un sistema de viguetas se marca entero, como su acero
+                IReadOnlyList<string> sistema = Miembros(id);
+                if (terminado)
+                    terminados.UnionWith(sistema);
+                else
+                    terminados.ExceptWith(sistema);
+                return [new ATerminado(sistema.SelectMany(m => Buscar(m)!.Vigas).ToList(), terminado), Vista()];
             case Generar(IReadOnlyList<string> ids, var estadosPagina, bool forzar):
                 AGenerar generar = AGenerar(ConSusSistemas(ids), EstadosDelSistema(ids, estadosPagina));
                 // Decisión 8 del plan de choques: avisa los choques de todos los que se generan, no solo del abierto. No
@@ -273,6 +290,10 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
                 if (estado is not null)
                     estados[p.Id] = estado;
             }
+        // la marca vive en las vigas de Revit: se vuelve a leer siempre, por si se deshizo allá
+        terminados.Clear();
+        if (terminadaViga is not null)
+            terminados.UnionWith(porticos.Where(p => p.Portico.Vigas.Any(terminadaViga)).Select(p => p.Id));
         if (actual is null || Buscar(actual) is null)
             actual = porticos.FirstOrDefault()?.Id;
         elegidos = elegidos?.Where(id => Buscar(id) is not null).ToList() is { Count: > 0 } siguen ? siguen : null;
@@ -353,7 +374,7 @@ public sealed class SesionTablero(Func<ResultadoLectura> leer, AlmacenReglas alm
             ? l with { Id = p.Id, Sub = $"{l.Sub} · {p.Nivel}", Grupo = GrupoDe(p.Id) }
             : l with { Id = p.Id, Grupo = GrupoDe(p.Id) }).ToList();
         return new AJs(ProtocoloTablero.Vista(new VistaTablero(proyecto, lista, vista, ArmadorVista.Reglas(reglas), enVivo, elegidos, Disponibles(),
-            planta)));
+            planta, porticos.Select(p => p.Id).Where(terminados.Contains).ToList())));
     }
 
     /// <summary>El texto del sistema de viguetas del pórtico en la planta; vacío si no está en ninguno.</summary>

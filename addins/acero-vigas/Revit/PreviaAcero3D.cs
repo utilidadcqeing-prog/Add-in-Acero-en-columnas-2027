@@ -53,6 +53,9 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
 
     private readonly string nombreVista;
     private Document? documento;
+    private List<Malla> barras = [];
+    private List<Malla> marcadores = [];
+    private static bool verChoques = true;
     private List<Malla> mallas = [];
     private List<Bloque>? bloques;
     private List<Bloque>? bloquesTransparentes;
@@ -63,8 +66,9 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
 
     /// <summary>
     /// Dibuja el pórtico en la vista <paramref name="nombreVista"/> de <paramref name="doc"/>, o quita lo dibujado si
-    /// <paramref name="p"/> es null. Cada punto donde las barras se meten una en la otra lleva un marcador rojo: los
-    /// mismos choques que marca el alzado del tablero, sobre los mismos trazos.
+    /// <paramref name="p"/> es null. Cada punto donde las barras se meten una en la otra lleva un marcador: los mismos
+    /// choques que marca el alzado del tablero, sobre los mismos trazos, si la capa "Choques" está prendida
+    /// (<see cref="VerChoques"/>).
     /// </summary>
     public static void Mostrar(Document doc, string nombreVista, PorticoAGenerar? p, Reglas reglas)
     {
@@ -76,12 +80,22 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
         }
         IReadOnlyList<Trazo> trazos = PreviaAcero.Trazos(p.Plan, p.Ubicacion, reglas, Doblados(doc, p.Plan.Diametros, reglas));
         s.documento = doc;
-        s.mallas = trazos.Select(Tubo).Concat(DetectorChoques.Detectar(trazos).Select(c => Marcador(c.Punto))).ToList();
+        s.barras = trazos.Select(Tubo).ToList();
+        s.marcadores = DetectorChoques.Detectar(trazos).Select(c => Marcador(c.Punto)).ToList();
         s.caja = Caja(trazos);
-        // se arman en el próximo dibujo, en el hilo de dibujo
-        s.bloques = null;
-        s.bloquesTransparentes = null;
-        s.bloquesContorno = null;
+        s.Rearmar();
+    }
+
+    /// <summary>
+    /// La capa "Choques" del alzado (Carlos, 29-oct: los rombos confunden al trabajar): apagada, la vista 3D dibuja solo
+    /// las barras. Se recuerda para los próximos pórticos mientras Revit esté abierto.
+    /// </summary>
+    public static void VerChoques(bool ver)
+    {
+        if (verChoques == ver)
+            return;
+        verChoques = ver;
+        servidor?.Rearmar();
     }
 
     /// <summary>Quita lo dibujado (al cerrar el tablero o cambiar de documento). No registra el servidor si no estaba.</summary>
@@ -90,8 +104,16 @@ internal sealed class PreviaAcero3D : IDirectContext3DServer
     private void Vaciar()
     {
         documento = null;
-        mallas = [];
+        barras = [];
+        marcadores = [];
         caja = null;
+        Rearmar();
+    }
+
+    /// <summary>Las mallas que se dibujan; los bloques se arman en el próximo dibujo, en el hilo de dibujo.</summary>
+    private void Rearmar()
+    {
+        mallas = verChoques ? [.. barras, .. marcadores] : [.. barras];
         bloques = null;
         bloquesTransparentes = null;
         bloquesContorno = null;

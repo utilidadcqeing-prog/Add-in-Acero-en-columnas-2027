@@ -103,7 +103,7 @@
     let actual = estado === 'vacio' ? null : (estado === 'cimentacion' ? 'Pórtico C1' : PORS[0].id);
     let enVivo = true;
     let elegidos = null;
-    let reglas = { porDiametro: RULES0, multiplo: '0.50', distanciaLibreCm: '2.5', varilla12: false, problema: null };
+    let reglas = { porDiametro: RULES0, multiplo: '0.50', distanciaLibreCm: '2.5', varilla12: false, redondeoGanchoCm: '5', problema: null };
     const opciones = {};
     const inicial = estado === 'reglas' ? { step: 'reglas' }
       : estado === 'varias' ? { step: 'estribos', tramosSel: ['A-B', 'B-C', 'C-D'] } : {};

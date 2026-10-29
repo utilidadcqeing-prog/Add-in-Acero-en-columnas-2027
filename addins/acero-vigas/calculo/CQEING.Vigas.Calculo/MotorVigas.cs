@@ -23,17 +23,19 @@ public static class MotorVigas
         CapaCalculada? centro = Resolver(entrada, gCentro, capaDelCentro, Cara.Inicio, avisos);
         CapaCalculada? inicio = Resolver(entrada, gCara, capaDeLaCara, Cara.Inicio, avisos);
         CapaCalculada? final = Resolver(entrada, gCara, capaDeLaCara, Cara.Final, avisos);
-        SolucionCapa? solucionInicio = inicio?.Convertir();
-        SolucionCapa? solucionFinal = final?.Convertir();
+        SolucionCapa? solucionInicio = inicio is null ? null : BarrasMenores.Agregar(inicio, gCara, inicio.Convertir());
+        SolucionCapa? solucionFinal = final is null ? null : BarrasMenores.Agregar(final, gCara, final.Convertir());
 
         Cara masEconomica = solucionFinal is not null && (solucionInicio is null || solucionFinal.Kg < solucionInicio.Kg)
             ? Cara.Final : Cara.Inicio;
         Cara usada = entrada.CaraElegida ?? masEconomica;
         Cara otra = usada == Cara.Inicio ? Cara.Final : Cara.Inicio;
 
-        SolucionCapa? capaCentro = centro is null ? null : AplicadorCambios.Aplicar(centro, gCentro, entrada.Cambios, avisos);
+        SolucionCapa? capaCentro = centro is null ? null
+            : BarrasMenores.Agregar(centro, gCentro, AplicadorCambios.Aplicar(centro, gCentro, entrada.Cambios, avisos));
         CapaCalculada? usadaCalculada = usada == Cara.Inicio ? inicio : final;
-        SolucionCapa? capaCara = usadaCalculada is null ? null : AplicadorCambios.Aplicar(usadaCalculada, gCara, entrada.Cambios, avisos);
+        SolucionCapa? capaCara = usadaCalculada is null ? null
+            : BarrasMenores.Agregar(usadaCalculada, gCara, AplicadorCambios.Aplicar(usadaCalculada, gCara, entrada.Cambios, avisos));
 
         int varilla = entrada.Reglas.Varilla;
         if (capaCentro is not null)
@@ -161,7 +163,7 @@ public static class MotorVigas
         string prefijo = capa == Posicion.Superior ? "S" : "I";
         TipoGancho inicio = GanchoCorrida(e.Cambios, prefijo + ".inicio", avisos), fin = GanchoCorrida(e.Cambios, prefijo + ".fin", avisos);
         var parametros = new ParametrosCapa(GeometriaPortico.ReferenciaDe(e.Tipo, capa, cara), regla.Traslapo!.Value,
-            Reglas.LargoGancho(regla, inicio), Reglas.LargoGancho(regla, fin), e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga,
+            e.Reglas.LargoGanchoRedondeado(regla, inicio), e.Reglas.LargoGanchoRedondeado(regla, fin), e.Reglas.Modulo, e.Reglas.Varilla, e.Reglas.VarillaLarga,
             inicio, fin);
 
         CapaResuelta? resuelta = ResolvedorCapa.Resolver(g, parametros);

@@ -8,9 +8,11 @@ namespace CQEING.Vigas.Calculo.Tablero;
 /// ids de los pórticos elegidos con "Seleccionar en Revit": la lista muestra solo esos (null = todos).
 /// <paramref name="DiametrosDisponibles"/> son los que tienen tipo de barra en el modelo (#85).
 /// <paramref name="Planta"/>: el dibujo en planta de cada nivel, para el modo "Planta" (planta, 27-oct).
+/// <paramref name="Terminados"/>: los ids de los pórticos marcados como terminados (punto 5 de Santiago, 28-oct).
 /// </summary>
 public sealed record VistaTablero(string Proyecto, IReadOnlyList<PorticoEnLista> Porticos, VistaPortico? Actual, VistaReglas Reglas, bool EnVivo,
-    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null, PlantaVista? Planta = null);
+    IReadOnlyList<string>? Elegidos = null, IReadOnlyList<int>? DiametrosDisponibles = null, PlantaVista? Planta = null,
+    IReadOnlyList<string>? Terminados = null);
 
 /// <summary>
 /// Un pórtico en la columna izquierda. <paramref name="Sub"/> es como <c>"Eje 1 · A a D + voladizo"</c>.
@@ -206,9 +208,11 @@ public sealed record VistaPortico(
 
 /// <summary>
 /// La pantalla Reglas, con los textos de sus campos (m y kg/m, como <c>RULES0</c> de la maqueta).
-/// <paramref name="Problema"/> dice por qué se usan las de base, si pasó.
+/// <paramref name="Problema"/> dice por qué se usan las de base, si pasó. <paramref name="RedondeoGanchoCm"/>: "0", "5" o
+/// "10"; null (una página que no lo manda) deja el de las reglas guardadas.
 /// </summary>
-public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string Multiplo, string DistanciaLibreCm, bool Varilla12, string? Problema);
+public sealed record VistaReglas(IReadOnlyList<ReglaVista> PorDiametro, string Multiplo, string DistanciaLibreCm, bool Varilla12, string? Problema,
+    string? RedondeoGanchoCm = null);
 
 /// <summary>
 /// Una fila de la tabla de reglas: traslapo, gancho de 90°, gancho de 180° (<paramref name="G180"/>, el de los estribos

@@ -36,16 +36,17 @@ public static class PlanificadorAcero
             {
                 Barra b = enOrden[i];
                 List<BarraEnSeccion> puestos = i % 2 == 1 ? alLado : corte;
-                // El largo de la barra del tablero lleva los ganchos del diámetro de la capa; una pieza de otro diámetro
-                // (otra fila) lleva los suyos, que en Revit miden distinto (aviso de largos con la fila 2 de #4, 21-oct).
-                barras.AddRange(puestos.Select((s, k) => new PiezaLongitudinal(b.Id, b.Capa, s.Diametro,
-                    s.X, s.Y, b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta),
-                    b.Hasta - b.Desde + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoInicio) + Reglas.LargoGancho(r.PorDiametro[s.Diametro], b.TipoFin),
-                    filas[k])));
+                // Una pieza de un número menor de la capa lleva su barra, con su traslapo y su gancho (Santiago, 29-oct): con
+                // la del mayor, en Revit su gancho medía distinto y su largo no daba la varilla.
+                barras.AddRange(puestos.Select((s, k) => (Puesto: s, Fila: filas[k], Medida: b.Medida(s.Diametro))).Select(x =>
+                    new PiezaLongitudinal(b.Id, b.Capa, x.Puesto.Diametro, x.Puesto.X, x.Puesto.Y, x.Medida.Desde, x.Medida.Hasta,
+                        b.TipoInicio, b.TipoFin, Host(u, x.Medida.Desde, x.Medida.Hasta), x.Medida.Largo, x.Fila)));
             }
         }
 
         var bastones = new List<PiezaLongitudinal>();
+        // de cada pieza de bastón, si sus puntas llegan al borde del pórtico (ahí no puede crecer)
+        var bordes = new List<(bool Inicio, bool Fin)>();
         var sinLugar = new List<string>();
         var montados = new List<string>();
         foreach (Baston b in c.Vigas.Bastones)
@@ -61,9 +62,15 @@ public static class PlanificadorAcero
                 montados.Add(b.Id);
             bastones.AddRange(enCorte.Barras.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Barra.Diametro, s.Barra.X, s.Barra.Y,
                 b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo, s.Fila)));
+            bordes.AddRange(enCorte.Barras.Select(_ => (b.PuntaInicioEnBorde, b.PuntaFinEnBorde)));
         }
 
-        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r);
+        // Una barra corrida crece por la punta del traslapo (la que no lleva gancho); un bastón, por la que no llega al borde.
+        int corridas = barras.Count;
+        bool PuedeCrecer(int i, bool alInicio) => i < corridas
+            ? (alInicio ? barras[i].GanchoInicio : barras[i].GanchoFin) == TipoGancho.Sin
+            : !(alInicio ? bordes[i - corridas].Inicio : bordes[i - corridas].Fin);
+        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r, PuedeCrecer);
         barras = anidadas.Take(barras.Count).ToList();
         bastones = anidadas.Skip(barras.Count).ToList();
 
@@ -96,8 +103,11 @@ public static class PlanificadorAcero
     /// dentro del arranque del de afuera (un radio de doblado más un diámetro), y su largo baja lo mismo. Una recta termina
     /// donde acaba el doblez de afuera. Se recorren de la cara hacia adentro, así una tercera fila se mete dentro de la
     /// segunda ya corrida.
+    /// Si la otra punta puede crecer (<paramref name="puedeCrecer"/>: índice de la pieza y si es la del inicio), sale por
+    /// ahí lo que se corrió y conserva su largo, en múltiplo del módulo (Juan, 29-oct: la #5 de la fila 2 quedaba de 3.436
+    /// en vez de 3.50, y un bastón con gancho de 1.246).
     /// </summary>
-    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r)
+    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r, Func<int, bool, bool> puedeCrecer)
     {
         const double tolerancia = 1e-6;
         PiezaLongitudinal[] p = piezas.ToArray();
@@ -132,8 +142,11 @@ public static class PlanificadorAcero
                             punta = minima;
                     }
                     int corrida = sentido * (punta - Punta(adentro));
-                    if (corrida > 0)
-                        p[capa[k]] = (inicio ? adentro with { Desde = punta } : adentro with { Hasta = punta }) with { Largo = adentro.Largo - corrida };
+                    if (corrida <= 0)
+                        continue;
+                    PiezaLongitudinal corta = inicio ? adentro with { Desde = punta } : adentro with { Hasta = punta };
+                    p[capa[k]] = !puedeCrecer(capa[k], !inicio) ? corta with { Largo = adentro.Largo - corrida }
+                        : inicio ? corta with { Hasta = adentro.Hasta + corrida } : corta with { Desde = adentro.Desde - corrida };
                 }
             }
         }

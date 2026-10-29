@@ -71,6 +71,15 @@ public sealed class AlmacenReglasTests : IDisposable
         Assert.Equal(600, reglas.Modulo);
         Assert.Equal(1000, reglas.PorDiametro[5].Traslapo);
         Assert.Equal(Reglas.Generales.PorDiametro[8], reglas.PorDiametro[8]);
+        Assert.Equal(50, reglas.RedondeoGancho); // un archivo de antes del redondeo toma el de base: 5 cm
+    }
+
+    [Fact]
+    public void ElRedondeoDeGanchosSeGuardaYSeVuelveALeer()
+    {
+        new AlmacenReglas(Ruta).Guardar(Reglas.Generales with { RedondeoGancho = 0 });
+
+        Assert.Equal(0, new AlmacenReglas(Ruta).Cargar().Reglas.RedondeoGancho);
     }
 
     [Fact]

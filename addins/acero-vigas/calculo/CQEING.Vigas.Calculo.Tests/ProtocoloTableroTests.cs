@@ -17,6 +17,8 @@ public class ProtocoloTableroTests
         Assert.IsType<SeleccionarEnRevit>(ProtocoloTablero.Leer("""{"tipo":"seleccionarEnRevit"}"""));
         Assert.Equal(new VerEnRevit("P1"), ProtocoloTablero.Leer("""{"tipo":"verEnRevit","id":"P1"}"""));
         Assert.Equal(new Abrir3d("P1"), ProtocoloTablero.Leer("""{"tipo":"abrir3d","id":"P1"}"""));
+        Assert.Equal(new VerChoques3d(false), ProtocoloTablero.Leer("""{"tipo":"verChoques3d","ver":false}"""));
+        Assert.Equal(new VerChoques3d(true), ProtocoloTablero.Leer("""{"tipo":"verChoques3d"}"""));
         Assert.Equal(new CambiarEnVivo(false), ProtocoloTablero.Leer("""{"tipo":"cambiarEnVivo","activo":false}"""));
         Assert.IsType<VerTodos>(ProtocoloTablero.Leer("""{"tipo":"verTodos"}"""));
         Assert.Equal(new Desconocido("otro"), ProtocoloTablero.Leer("""{"tipo":"otro"}"""));
@@ -30,6 +32,13 @@ public class ProtocoloTableroTests
         Assert.Equal(["P1", "P2"], m.Ids);
         Assert.Equal("P2", m.Abrir);
         Assert.Equal(new Desconocido("elegirVarios"), ProtocoloTablero.Leer("""{"tipo":"elegirVarios","abrir":"P2"}"""));
+    }
+
+    [Fact]
+    public void LeeMarcarTerminado()
+    {
+        Assert.Equal(new MarcarTerminado("P1", true), ProtocoloTablero.Leer("""{"tipo":"marcarTerminado","id":"P1","terminado":true}"""));
+        Assert.Equal(new MarcarTerminado("P1", false), ProtocoloTablero.Leer("""{"tipo":"marcarTerminado","id":"P1","terminado":false}"""));
     }
 
     [Fact]

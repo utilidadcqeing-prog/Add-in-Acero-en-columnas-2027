@@ -208,7 +208,7 @@
     constructor(props) {
       super(props);
       this.state = Object.assign({ tab: 'alzado', toast: '', q: '', ver: 'todo', listOpen: false, more: false, rulesWarn: false, rulesSaved: null,
-        cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, guardando: false,
+        cutLive: null, cutWin: false, cutWinPos: null, draft: '', locked: true, rules: null, mult: null, gap: null, bar12: null, hookR: null, guardando: false,
         vw: window.innerWidth, vh: window.innerHeight, choqueAbierto: -1, arreglos: null, deshacer: null,
         // la barra izquierda: 'lista' o 'planta', el nivel elegido (null = el del pórtico abierto), lo que se muestra y el zoom
         barra: 'lista', plNivel: null, plVer: { viga: true, vigueta: true }, plZoom: 1, plPan: { x: 0, y: 0 } },
@@ -421,7 +421,7 @@
       if (prev.vista !== this.props.vista && !this.arrastrandoCorte && this.state.cutLive != null) this.setState({ cutLive: null });
       if (this.state.guardando && prev.vista !== this.props.vista) {
         this.say('Reglas guardadas para todos los proyectos');
-        this.setState({ guardando: false, locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null,
+        this.setState({ guardando: false, locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null, hookR: null,
           ...(this.salirDeReglas ? { step: 'barras' } : null) });
         this.salirDeReglas = false;
       }
@@ -455,7 +455,7 @@
       this.salirDeReglas = !!salir;
       this.setState({ guardando: true });
       this.props.enviar({ tipo: 'guardarReglas', reglas: { porDiametro: reglas.rules.map((r) => ({ d: r.d, t: r.t, g: r.g, g180: r.g180, e: r.e, k: r.k })),
-        multiplo: reglas.mult, distanciaLibreCm: reglas.gap, varilla12: reglas.bar12, problema: null } });
+        multiplo: reglas.mult, distanciaLibreCm: reglas.gap, varilla12: reglas.bar12, redondeoGanchoCm: reglas.hookR, problema: null } });
     }
 
     valores() {
@@ -483,7 +483,7 @@
       // reglas: las de la vista, o lo que se está escribiendo en la pantalla Reglas
       const R = vista.reglas;
       const rulesData = s.rules || R.porDiametro;
-      const mult = s.mult ?? R.multiplo, gap = s.gap ?? R.distanciaLibreCm, bar12 = s.bar12 ?? R.varilla12;
+      const mult = s.mult ?? R.multiplo, gap = s.gap ?? R.distanciaLibreCm, bar12 = s.bar12 ?? R.varilla12, hookR = s.hookR ?? R.redondeoGanchoCm ?? '5';
       const M = num(mult, 0.5);
 
       // capas (#88): el reparto en filas sale del motor
@@ -759,14 +759,17 @@
       const verT = TRAMOS.find((t) => t.id === s.ver);
       const faceName = isCim ? 'arriba' : 'abajo';
       const lockedNow = s.locked;
-      const rulesNow = { rules: rulesData, mult, gap, bar12 };
+      const rulesNow = { rules: rulesData, mult, gap, bar12, hookR };
       const rulesDirty = !s.locked && !!s.rulesSaved && JSON.stringify(rulesNow) !== JSON.stringify(s.rulesSaved);
-      const leaveRules = (extra) => this.setState({ step: 'barras', locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null, ...extra });
+      const leaveRules = (extra) => this.setState({ step: 'barras', locked: true, rulesWarn: false, rulesSaved: null, rules: null, mult: null, gap: null, bar12: null, hookR: null, ...extra });
       const bastD = (d, rows) => d || rows[0].d;
       const nEstAll = P ? P.estribos : 0;
       const avisoTexto = (avisoLargo || avisoOtro || { texto: '' }).texto;
       const corte = avisoTexto.indexOf('. ');
+      // la palomita de terminado junto al nombre (punto 5 de Santiago, 28-oct); la marca vive en las vigas de Revit
+      const terminado = !!P && (vista.terminados || []).includes(P.id);
       return {
+        terminado, toggleTerminado: () => { if (P) enviar({ tipo: 'marcarTerminado', id: P.id, terminado: !terminado }); },
         pors, porCount: elegidos ? enLista.length + ' de ' + PORS.length : PORS.length + ' en el modelo', filtrado: !!elegidos,
         verTodos: () => enviar({ tipo: 'verTodos' }), q: s.q, proyecto: vista.proyecto, por: por ? { name: por.nombre, sub: por.sub } : { name: '', sub: '' }, hasPor: !!P, noPor: !P,
         tipo, isCim, isAviso, summary: (bars.length + BAST.length) + ' barras · ' + nEstAll + ' estribos · ' + lapsAll.length + ' traslapos · ' + (P ? P.kg : 0).toFixed(1) + ' kg',
@@ -837,6 +840,7 @@
           : 'border: 1px solid #C9CFD6; background: #FFFFFF; color: #5E6670',
         segHookNo: s.bastHook ? off : on, segHookYes: s.bastHook ? on : off,
         locked: lockedNow, mult, gap, seg6: bar12 ? off : on, seg12: bar12 ? on : off,
+        segHook0: hookR === '0' ? on : off, segHook5: hookR === '5' ? on : off, segHook10: hookR === '10' ? on : off,
         lockBg: lockedNow ? '#F4F6F8' : '#FDF6EA', lockText: lockedNow ? 'Bloqueadas para evitar cambios por error.' : 'Desbloqueadas: los cambios valen para todos los proyectos.',
         lockBtn: lockedNow ? 'Desbloquear' : 'Guardar y bloquear', lockPath: lockedNow ? 'M4.5 6V4.2a2.5 2.5 0 015 0V6' : 'M4.5 6V4.2a2.5 2.5 0 014.6-1.3',
         rules: rulesData.map((r, i) => {
@@ -923,10 +927,13 @@
         warnKeep: () => this.setState({ rulesWarn: false }),
         setMult: (e) => this.setState({ mult: e.target.value }), setGap: (e) => this.setState({ gap: e.target.value }),
         set6: () => this.setState({ bar12: false }), set12: () => this.setState({ bar12: true }),
+        setHook: (cm) => () => this.setState({ hookR: cm }),
         toggleLive: () => enviar({ tipo: 'cambiarEnVivo', activo: !vista.enVivo }),
         pickInRevit: () => enviar({ tipo: 'seleccionarEnRevit' }),
         showInRevit: () => { if (P) enviar({ tipo: 'verEnRevit', id: P.id }); },
-        open3d: () => { if (P) enviar({ tipo: 'abrir3d', id: P.id }); },
+        // la vista 3D sale con los rombos de choques solo si la capa "Choques" del alzado está prendida (Carlos, 29-oct)
+        open3d: () => { if (P) { enviar({ tipo: 'verChoques3d', ver: window.Alzado.verChoques() }); enviar({ tipo: 'abrir3d', id: P.id }); } },
+        onChoques: (ver) => enviar({ tipo: 'verChoques3d', ver }),
         // #85, tarea 10: primero la tarjeta de confirmación; "Generar" en ella manda los pórticos.
         generate: () => {
           const ids = elegidos ? enLista.map((p) => p.id) : P ? [P.id] : [];
@@ -991,6 +998,8 @@
       // o más quedan como los elegidos de "Seleccionar en Revit": la lista muestra esos y "Generar en Revit" los crea todos.
       const seleccion = vista.elegidos ? vista.elegidos : idP != null ? [idP] : [];
       const delGrupo = (e) => e.tipo === 'vigueta' && e.grupo ? (nivel.elementos || []).filter((o) => o.grupo === e.grupo).map((o) => o.portico) : [e.portico];
+      // los terminados salen en verde (punto 5 de Santiago, 28-oct); el abierto y los seleccionados van encima
+      const terminados = new Set(vista.terminados || []);
       const enSeleccion = new Set(seleccion.flatMap((id) => {
         const e = (nivel.elementos || []).find((o) => o.portico === id);
         return e ? delGrupo(e) : [id];
@@ -1011,7 +1020,7 @@
       // Cada viga o vigueta es su rectángulo real en planta (ancho del modelo, con un mínimo para que se vea).
       const items = esc ? (nivel.elementos || []).filter(fin).map((e, i) => {
         const vig = e.tipo === 'vigueta', off = !ver[vig ? 'vigueta' : 'viga'], abierto = elegidos.includes(e);
-        const on = abierto || enSeleccion.has(e.portico);
+        const on = abierto || enSeleccion.has(e.portico), listo = terminados.has(e.portico);
         const ax = esc.X(e.x1), ay = esc.Y(e.y1), bx = esc.X(e.x2), by = esc.Y(e.y2);
         const L = Math.hypot(bx - ax, by - ay) || 1, nx = -(by - ay) / L, ny = (bx - ax) / L;
         const t = Math.max(vig ? 2.5 : 3.5, (e.ancho > 0 ? e.ancho : vig ? 0.1 : 0.3) * esc.s) / 2;
@@ -1021,8 +1030,8 @@
           tecla: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.plArrastro = false; abrir(e, ev); } },
           a: [ax, ay], b: [bx, by],
           pts: [[ax + nx * t, ay + ny * t], [bx + nx * t, by + ny * t], [bx - nx * t, by - ny * t], [ax - nx * t, ay - ny * t]].map((p) => f(p[0]) + ',' + f(p[1])).join(' '),
-          fill: off ? '#F1F3F5' : abierto ? '#1F5FAF' : on ? '#9DBBE3' : vig ? '#E4E7EB' : '#C9CFD6',
-          stroke: off ? '#D9DDE2' : on ? '#174A8A' : vig ? '#7C8692' : '#5E6670' };
+          fill: off ? '#F1F3F5' : abierto ? '#1F5FAF' : on ? '#9DBBE3' : listo ? '#CDEBD5' : vig ? '#E4E7EB' : '#C9CFD6',
+          stroke: off ? '#D9DDE2' : on ? '#174A8A' : listo ? '#3B8A57' : vig ? '#7C8692' : '#5E6670' };
       }) : [];
       // los elegidos encima, para que no los tape otro
       items.sort((p, q) => (p.on ? 1 : 0) - (q.on ? 1 : 0) || (p.vig ? 1 : 0) - (q.vig ? 1 : 0));
@@ -1091,6 +1100,7 @@
           <span style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; background: #3F4A57"></span>Columna</span>
           <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #1F5FAF"></span>Abierto</span>
           <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #9DBBE3"></span>Seleccionado</span>
+          <span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 6px; background: #CDEBD5; border: 1px solid #3B8A57; box-sizing: border-box"></span>Terminado</span>
         </div>
         <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #1F5FAF; border-radius: 6px; background: #F3F7FC">
           <span style="width: 10px; height: 10px; flex-shrink: 0; background: #1F5FAF"></span>
@@ -1168,7 +1178,15 @@
       <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px">
         <div style="display: flex; align-items: center; gap: 12px; white-space: nowrap">
           <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-            <span style="font-size: 18px; font-weight: 600">${v.por.name}</span>
+            <span style="display: flex; align-items: center; gap: 8px">
+              <span style="font-size: 18px; font-weight: 600">${v.por.name}</span>
+              <button type="button" onClick=${v.toggleTerminado} aria-pressed=${v.terminado ? 'true' : 'false'} title=${v.terminado ? 'Quitar la marca de terminado' : 'Marcar como terminado'} style="display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 4px; border: 0; border-radius: 11px; background: transparent; font: inherit; font-size: 11px; font-weight: 600; color: #3B8A57; cursor: pointer">
+                <span style="width: 16px; height: 16px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid ${v.terminado ? '#3B8A57' : '#B5BCC4'}; background: ${v.terminado ? '#3B8A57' : 'transparent'}; display: grid; place-items: center; transition: background 120ms ease-out, border-color 120ms ease-out">
+                  ${v.terminado ? html`<svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5.2l2.2 2.2L8.5 2.6" stroke="#FFFFFF" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>` : null}
+                </span>
+                ${v.terminado ? 'Terminado' : null}
+              </button>
+            </span>
             <span style="font-size: 12px; color: #5E6670; overflow: hidden; text-overflow: ellipsis">${v.por.sub} · ${v.tipo} · ${v.summary}</span>
           </div>
           <label for="ver-main" style="color: #5E6670; font-size: 12px">Ver</label>
@@ -1191,7 +1209,7 @@
 
         ${v.isAlzado ? html`
           <div style="position: relative; width: ${m.dibujoW}px; height: ${m.dibujoH}px">
-            <${Alzado} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} choqueAbierto=${v.choqueAbierto} arreglos=${v.arreglos} onChoque=${v.onChoque} onArreglo=${v.onArreglo} onCerrarChoque=${v.onCerrarChoque} />
+            <${Alzado} onChoques=${v.onChoques} portico=${P} w=${m.dibujoW} h=${m.dibujoH} sel=${v.barSel} selLap=${v.lapSel} lapsManual=${v.lapsManual} invert=${v.isCim} warn=${v.isAviso} warnLap=${v.warnLap} showStirrups=${true} corte=${v.corte} cutLive=${v.cutLive} onCut=${v.onCut} rangeFrom=${v.rangeFrom} rangeTo=${v.rangeTo} onPick=${v.pickEl} onPickLap=${v.pickLap} onHook=${v.onHook} arrastre=${v.arrastre} onDrop=${v.onDrop} choqueAbierto=${v.choqueAbierto} arreglos=${v.arreglos} onChoque=${v.onChoque} onArreglo=${v.onArreglo} onCerrarChoque=${v.onCerrarChoque} />
             ${v.cutWin ? html`<${VentanaCorte} v=${v} W=${m.dibujoW} H=${m.dibujoH} />` : null}
           </div>` : null}
         ${v.isCorte ? html`
@@ -1623,6 +1641,17 @@
                 <button type="button" onClick=${v.set6} disabled=${v.locked} style="height: 28px; padding: 0 12px; border: 0; font: inherit; cursor: pointer; ${v.seg6}">6 m</button>
                 <button type="button" onClick=${v.set12} disabled=${v.locked} style="height: 28px; padding: 0 12px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.seg12}">12 m</button>
               </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span style="flex: 1; color: #3F4A57">Redondear ganchos</span>
+                <div role="group" aria-label="Redondear ganchos" style="display: flex; border: 1px solid #C9CFD6; border-radius: 6px; overflow: hidden">
+                  <button type="button" onClick=${v.setHook('0')} disabled=${v.locked} style="height: 28px; padding: 0 10px; border: 0; font: inherit; cursor: pointer; ${v.segHook0}">No</button>
+                  <button type="button" onClick=${v.setHook('5')} disabled=${v.locked} style="height: 28px; padding: 0 10px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segHook5}">5 cm</button>
+                  <button type="button" onClick=${v.setHook('10')} disabled=${v.locked} style="height: 28px; padding: 0 10px; border: 0; border-left: 1px solid #C9CFD6; font: inherit; cursor: pointer; ${v.segHook10}">10 cm</button>
+                </div>
+              </div>
+              <span style="font-size: 11px; line-height: 1.4; color: #5E6670">El largo total del gancho de barras y bastones sube al siguiente múltiplo, para cortar y doblar con una medida estándar: #4 a 90° = 0.222 → 0.25 con 5 cm. Los estribos no cambian.</span>
             </div>            <div style="display: flex; flex-direction: column; gap: 6px">
               <div style="display: grid; grid-template-columns: 30px repeat(5, minmax(0, 1fr)); gap: 5px; font-size: 11px; color: #5E6670">
                 <span></span><span>Traslapo</span><span>Gancho 90°</span><span>Gancho 180°</span><span>Estribo 135°</span><span>kg/m</span>
@@ -1635,7 +1664,9 @@
                   <input type="text" aria-label=${ru.labG180} value=${ru.g180} onInput=${ru.setG180} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labE} value=${ru.e} onInput=${ru.setE} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labK} value=${ru.k} onInput=${ru.setK} disabled=${v.locked} style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 6px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
-                </div>`)}            </div>
+                </div>`)}
+              <span style="font-size: 11px; line-height: 1.4; color: #5E6670">Gancho y estribo: largo total del gancho (curva + tramo recto), el que se suma a la barra. En el dibujo de Revit la cota es solo la pata, por eso sale menor: #5 a 90° = 0.28 aquí y 0.25 en el dibujo.</span>
+            </div>
           </div>` : null}
       </div>
     </div>

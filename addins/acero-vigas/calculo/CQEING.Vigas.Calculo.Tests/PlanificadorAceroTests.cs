@@ -93,7 +93,32 @@ public class PlanificadorAceroTests
         PiezaLongitudinal baston = plan.Bastones.Single(b => b.Pieza == "BS1");
         Assert.Equal(TipoGancho.De90, corrida.GanchoInicio);
         Assert.Equal(enElCalculo.Desde, corrida.Desde);
-        Assert.Equal((corrida.Desde + 51, enElCalculo.Largo - 51), (baston.Desde, baston.Largo));
+        // sale por la punta de adentro lo mismo y conserva su largo (Juan, 29-oct)
+        Assert.Equal((corrida.Desde + 51, enElCalculo.Hasta + 51, enElCalculo.Largo), (baston.Desde, baston.Hasta, baston.Largo));
+    }
+
+    /// <summary>
+    /// Juan (29-oct, VIG_25X35 #392698): el bastón con gancho en el borde, anidado dentro del gancho de la corrida, quedaba
+    /// de 1.246. Su gancho sigue por dentro, pero sale por la punta de adentro y su largo queda en múltiplo del módulo.
+    /// </summary>
+    [Fact]
+    public void UnBastonConGanchoAnidado_ConservaSuLargoEnMultiploDelModulo()
+    {
+        PorticoLeido vigueta = Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Bastones = new ArmadoBastones(new GrupoBarras(1, 4), ConGancho: true) };
+        Baston enElCalculo = CalculoPortico.Calcular(vigueta, o, Reglas.Generales)!.Vigas.Bastones.First(b => b.Id == "BS1");
+
+        PiezaLongitudinal baston = PlanificadorAcero.Planificar("Vigueta 1", vigueta, o, Reglas.Generales)!.Bastones.Single(b => b.Pieza == "BS1");
+
+        Assert.Equal(TipoGancho.De90, baston.GanchoInicio);
+        Assert.True(baston.Desde > enElCalculo.Desde, "el gancho va por dentro del de la corrida");
+        Assert.Equal((baston.Desde - enElCalculo.Desde, enElCalculo.Largo), (baston.Hasta - enElCalculo.Hasta, baston.Largo));
+        Assert.Equal(0, baston.Largo % Reglas.Generales.Modulo);
     }
 
     [Fact]
@@ -300,9 +325,16 @@ public class PlanificadorAceroTests
                 // ganchos van en planos distintos y no se cruzan.
                 bool debajo = fila1.Any(f => Math.Abs(f.XCorte - p.XCorte) < (15.9 + 9.5) / 2);
                 int alInicio = debajo && b.TipoInicio != TipoGancho.Sin ? anidado : 0, alFin = debajo && b.TipoFin != TipoGancho.Sin ? anidado : 0;
-                ReglaDiametro r3 = Reglas.Generales.PorDiametro[3];
-                int largo = b.Hasta - alFin - (b.Desde + alInicio) + Reglas.LargoGancho(r3, b.TipoInicio) + Reglas.LargoGancho(r3, b.TipoFin);
-                Assert.Equal((b.Desde + alInicio, b.Hasta - alFin, largo), (p.Desde, p.Hasta, p.Largo));
+                MedidaBarra m = b.Medida(3);
+                // con la otra punta en un traslapo, sale por ahí lo mismo y conserva su largo (Juan, 29-oct)
+                (int desde, int hasta, int largo) esperada = (b.TipoInicio, b.TipoFin) switch
+                {
+                    (not TipoGancho.Sin, TipoGancho.Sin) => (m.Desde + alInicio, m.Hasta + alInicio, m.Largo),
+                    (TipoGancho.Sin, not TipoGancho.Sin) => (m.Desde - alFin, m.Hasta - alFin, m.Largo),
+                    _ => (m.Desde + alInicio, m.Hasta - alFin, m.Largo - alInicio - alFin),
+                };
+                Assert.Equal(esperada, (p.Desde, p.Hasta, p.Largo));
+                Assert.Equal(0, p.Largo % Reglas.Generales.Modulo);
                 anidadas += alInicio + alFin > 0 ? 1 : 0;
             }
         }
@@ -311,19 +343,23 @@ public class PlanificadorAceroTests
 
     /// <summary>
     /// Con dos diámetros en la capa, cada pieza lleva el largo con los ganchos de su diámetro: con el de la barra del
-    /// tablero (#5), las #4 de la fila 2 salían "0.06 m más cortas en Revit" (21-oct).
+    /// tablero (#5), las #4 de la fila 2 salían "0.06 m más cortas en Revit" (21-oct). Y su propia barra, con su traslapo
+    /// (Santiago, 29-oct): su largo queda en múltiplo del módulo, no "3.10 en vez de 3.00".
     /// </summary>
     [Fact]
     public void DosDiametros_CadaPiezaConElLargoDeSusGanchos()
     {
         var o = OpcionesTablero.PorDefecto with { Superior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] };
         ReglaDiametro r4 = Reglas.Generales.PorDiametro[4];
+        PorticoCalculado c = Calcular(o);
 
         List<PiezaLongitudinal> de4 = Planificar(o).Barras.Where(p => p.Capa == Posicion.Superior && p.Diametro == 4).ToList();
 
         Assert.NotEmpty(de4);
         Assert.Contains(de4, p => p.GanchoInicio != TipoGancho.Sin || p.GanchoFin != TipoGancho.Sin);
-        Assert.All(de4, p => Assert.Equal(p.Hasta - p.Desde + Reglas.LargoGancho(r4, p.GanchoInicio) + Reglas.LargoGancho(r4, p.GanchoFin), p.Largo));
+        Assert.All(de4, p => Assert.Equal(p.Hasta - p.Desde + Reglas.Generales.LargoGanchoRedondeado(r4, p.GanchoInicio) + Reglas.Generales.LargoGanchoRedondeado(r4, p.GanchoFin), p.Largo));
+        Assert.All(de4, p => Assert.Equal(0, p.Largo % Reglas.Generales.Modulo));
+        Assert.All(de4, p => Assert.Equal(c.Vigas.Barras.Single(b => b.Id == p.Pieza).Medida(4) is var m ? (m.Desde, m.Hasta) : default, (p.Desde, p.Hasta)));
     }
 
     [Fact]

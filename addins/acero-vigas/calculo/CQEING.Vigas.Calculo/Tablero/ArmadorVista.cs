@@ -66,8 +66,7 @@ public static class ArmadorVista
         var barras = rv.Barras.Select(b => new BarraVista(b.Id, Capa(b.Capa), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg,
             Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin,
-            ColoresDiametro.De(b.Grupos.Max(g => g.Diametro)), Rotulo.De(b.Grupos, b.LargoRecto, b.Largo),
-            Rotulo.EnPulgadas(b.Grupos, b.LargoRecto, b.Largo))).ToList();
+            ColoresDiametro.De(b.Grupos.Max(g => g.Diametro)), Rotulo.De(b), Rotulo.EnPulgadas(b))).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
             M(t.Minimo), $"#{t.Diametro}", t.Manual, F(M(t.Hasta - t.Desde), "0.00"))).ToList();
         var bastones = rv.Bastones.Select(ComoEnRevit).Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
@@ -76,14 +75,15 @@ public static class ArmadorVista
             Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde, ColoresDiametro.De(b.Grupo.Diametro),
             Rotulo.De([b.Grupo], b.LargoRecto, b.Largo), Rotulo.EnPulgadas([b.Grupo], b.LargoRecto, b.Largo))).ToList();
 
-        // el bastón con las puntas del plan; si sus barras quedaron distintas, el más corto
+        // el bastón con las puntas del plan (anidado, se corre o se acorta); si sus barras quedaron distintas, la más corta
+        // y, a igual largo, la más corrida
         Baston ComoEnRevit(Baston b)
         {
-            List<PiezaLongitudinal> piezas = plan?.Bastones.Where(x => x.Pieza == b.Id).ToList() ?? [];
-            if (piezas.Count == 0 || piezas.Min(x => x.Largo) == b.Largo)
+            PiezaLongitudinal? pieza = plan?.Bastones.Where(x => x.Pieza == b.Id)
+                .OrderBy(x => x.Largo).ThenByDescending(x => Math.Abs(x.Desde - b.Desde) + Math.Abs(x.Hasta - b.Hasta)).FirstOrDefault();
+            if (pieza is null || (pieza.Desde, pieza.Hasta, pieza.Largo) == (b.Desde, b.Hasta, b.Largo))
                 return b;
-            int largo = piezas.Min(x => x.Largo);
-            return b with { Desde = piezas.Max(x => x.Desde), Hasta = piezas.Min(x => x.Hasta), Largo = largo, Kg = b.Kg * largo / b.Largo };
+            return b with { Desde = pieza.Desde, Hasta = pieza.Hasta, Largo = pieza.Largo, Kg = b.Kg * pieza.Largo / b.Largo };
         }
         var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
             .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d), Rotulo.Pulgadas(d))).ToList();
@@ -121,7 +121,8 @@ public static class ArmadorVista
             return new ReglaVista($"#{d}", x.Traslapo is int t ? F(t / 1000.0, "0.00") : "", F(x.Gancho90.B / 1000.0, "0.000"),
                 F(x.Gancho180.B / 1000.0, "0.000"), F(x.Estribo135.B / 1000.0, "0.000"), F(x.KgPorMetro, "0.000"));
         }).ToList();
-        return new VistaReglas(filas, F(r.Modulo / 1000.0, "0.00"), F(r.DistanciaLibre / 10, "0.##"), r.Varilla == 12000, c.Problema);
+        return new VistaReglas(filas, F(r.Modulo / 1000.0, "0.00"), F(r.DistanciaLibre / 10, "0.##"), r.Varilla == 12000, c.Problema,
+            F(r.RedondeoGancho / 10.0, "0"));
     }
 
     /// <summary>
@@ -151,6 +152,7 @@ public static class ArmadorVista
             Modulo = Mm(v.Multiplo),
             DistanciaLibre = (Numero(v.DistanciaLibreCm) ?? 0) * 10,
             Varilla = v.Varilla12 ? 12000 : 6000,
+            RedondeoGancho = v.RedondeoGanchoCm is null ? @base.RedondeoGancho : (int)Math.Round((Numero(v.RedondeoGanchoCm) ?? -1) * 10),
         };
     }
 
