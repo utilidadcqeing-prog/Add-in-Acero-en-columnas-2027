@@ -22,7 +22,7 @@
 
 ## Criterios de aceptación
 
-- [ ] Carlos aprueba la maqueta (#206).
+- [x] Carlos aprueba la maqueta (#206). Aprobada el 29-oct (versión 6 del artifact).
 - [ ] La ventana tiene tres franjas: columnas a la izquierda (planta, buscador y «Seleccionar en Revit»), dibujo al centro y pasos 1 Barras, 2 Estribos, 3 Grapas y 4 Traslapos a la derecha. Arriba van «Configuraciones», «Cuadro de varillas» y «Generar en Revit».
 - [ ] Cada dato que se cambia se ve dibujado en el momento, en el dibujo del centro.
 - [ ] Los estribos se configuran una vez para toda la columna: en los tramos libres, en los nudos y en la zapata. Un tramo distinto es una excepción que se marca en el dibujo.
@@ -50,6 +50,10 @@
    - usa el host virtual `tablero.cqeing`, los datos de usuario en `%LocalAppData%\CQEING\vigas\WebView2`, `web\**` copiado junto a la DLL y `PackageReference Microsoft.Web.WebView2` con `ExcludeAssets="runtime;native;build;buildTransitive"`;
    - fuera de Revit, `tablero.js` carga `demo.js` (`?estado=…`), y así la página se puede ver en un navegador cualquiera.
 7. **Vista sin Revit:** `tools/PreviewUI` abre la ventana actual con `ProveedorContextoFalso` y `ProveedorTiposFalso` (las columnas C-1, C-7 y C-12). Las capturas de la ventana de hoy, para comparar, salen de ahí.
+8. **Barras por cara** (29-oct, maqueta): en `ConfigLongitudinal`, `BarrasPorCaraX` e `BarrasPorCaraY` cuentan las barras de las **dos** caras juntas («4 (2 + 2)», `Anillo()` las divide por 2). La página muestra y manda las de **cada** cara. `SesionColumnas` (tarea 3) tiene que multiplicar por 2 al recibir y dividir al armar la vista. Prueba: `CambiarBarrasX_CambiaLasBarrasDeLaSeccion`.
+9. **Traslapos por número de varilla** (29-oct, pedido de Luciano): `PlanTraslapos` da un `PlanTipo` por grupo (A o B, según la alternancia del anillo) **y** por diámetro, y el panel de hoy dibuja todos («A · #5», «A · #4», «B · #5»…). La vista lleva un plan por cada uno, con `cantidad` de barras y su `solape`; la página dibuja un carril por plan, con desplazamiento horizontal si no entran.
+10. **Formas reales en la sección** (29-oct, pedido de Luciano): grapas, estribos cerrados y el estribo principal se dibujan con `PlantaArmado` (`Menor`, `EstriboCerrado`), como hoy en la vista previa. La vista manda los `puntos` de cada pieza ya calculados por C#; `demo.js` tiene un port de esas funciones solo para la maqueta.
+11. **Cuadro de varillas** (29-oct, pedido de Luciano): en el gancho de 90° se muestra **solo la B** (`CuadroVarillas.Varilla.Gancho90`), sin la D.
 
 ## Decisiones
 
@@ -68,7 +72,7 @@
 
    La barra de los nudos es la de la columna. No hay un bloque «En los nudos» separado: el nudo se configura dentro de «Tramos libres».
 6. **Zapata** (mi decisión): en el traductor recibe la misma config que los nudos (uniforme). El generador se la salta igual (hallazgo 2), y no queda `null` porque `null` quiere decir «no se genera» y podría afectar al longitudinal.
-7. **«Lista» en lugar de ✓** (Luciano, 28-oct). Una columna está **lista** cuando el usuario cambió algún dato con ella elegida o le aplicó una configuración guardada. «Generar en Revit» arma todas las listas. Cada columna lista tiene una ✕ en la planta para sacarla. *Mi decisión, a confirmar con Carlos en la maqueta.*
+7. **«Lista» en lugar de ✓** (Luciano, 28-oct). Una columna está **lista** cuando el usuario cambió algún dato con ella elegida o le aplicó una configuración guardada. «Generar en Revit» arma todas las listas. Cada columna lista tiene una ✕ en la planta para sacarla. Confirmada: Carlos aprobó la maqueta tal cual (29-oct).
 8. **Varias columnas elegidas** (lo que se acordó en la conversación): lo que se cambia cae en todas las **compatibles** (misma estructura, regla #63). Las otras se nombran en un aviso, como hoy.
 9. **Configuraciones guardadas** (mi decisión): `ConfiguracionGuardada` suma `Estribos` (`ConfigEstribosColumna?`). Si viene `null`, porque se guardó con la 1.4.1 o antes, se arma desde `Tramo` con los valores por defecto de la decisión 5. Al guardar se escriben los dos campos (`Tramo = TramosLibres`), para que una 1.4.1 que lea el modelo siga funcionando.
 10. **Grapas fieles a `VentanaEstribosMenores`** (Luciano, 28-oct):
@@ -80,6 +84,7 @@
     La validación de cada pieza (`CajaMenor`, `EstriboMenor`, `ChoquesSeccion`) la hace C#, y la página muestra el resultado.
 11. **Pruebas sin Revit:** una consola nueva, `tools/PruebasTableroColumnas`, con el molde de `tools/PruebasVistaPrevia` (enlaza archivos y devuelve código 1 si algo falla). La agrega `CQEING-Addins.sln` **solo si** ya lo están las otras consolas de pruebas. Si no, se corre a mano (ver «Cómo probarlo»).
 12. **La maqueta es la página real** (Luciano, 28-oct: «primero visualmente en un artifact»): `index.html`, `columnas.js`, `dibujos.js` y `demo.js` se publican como artifact con sus archivos, y lo que Carlos apruebe es exactamente lo que después entra a Revit.
+13. **Maqueta aprobada** (Luciano, 29-oct: «carlos aprobó así que podemos seguir»). Carlos aprobó la versión 6 del artifact sin pedir cambios. Se sigue con la tarea 2.
 
 ## Lo que más puede fallar y ninguna prueba "normal" toca
 
@@ -132,8 +137,11 @@
   - Centro: el dibujo del paso abierto (decisión 2). Pasos 1 y 3: la sección grande. Paso 2: la elevación con las zonas y «cada 0.07», más la sección chica al lado. Paso 4: la columna con las varillas A y B. Además, el botón «3D» con el menú de filtros.
   - Derecha: los pasos 1 a 4, con pocos datos por paso y botones +/−. En el paso 2: el bloque «Tramos libres» (con «En los nudos, cada ___» cuando está en confinado, decisión 5), «En la zapata (sin estribos)» y «Este tramo distinto» al hacer clic en un tramo. Al lado va el dibujo de la columna de costado, con las vigas, los nudos y la zapata rotulados, para que se entienda qué es cada parte. El paso 3 sigue la decisión 10.
 - [ ] **Paso 4:** verlo en Chrome sirviendo la carpeta (`python -m http.server` dentro de `web/`) en los tres estados, a 1440 × 900 y a 1280 × 720. No debe haber textos cortados ni errores en la consola.
-- [ ] **Paso 5:** publicarlo como artifact (`index.html` como página; `columnas.js`, `dibujos.js`, `demo.js`, `vendor/**` y `fonts/**` en `files`), con la descripción «Maqueta de la nueva interfaz de Acero en columnas, para aprobar». Pasarle el enlace a Luciano para que se lo mande a Carlos.
-- [ ] **Paso 6:** anotar los comentarios de Carlos en «Decisiones», con fecha, corregir y volver a publicar en el mismo artifact hasta que la apruebe. **Sin la aprobación no se sigue con la tarea 2.** Commit: `Columnas: maqueta de la interfaz web (#206)`.
+- [x] **Paso 5:** publicarlo como artifact y pasarle el enlace a Luciano para que se lo mande a Carlos.
+  - Publicado el 29-oct: https://claude.ai/artifact/Xt9USpbA2zMh9z8C3DfoAa (privado: Luciano tiene que compartirlo con Carlos desde «Compartir»).
+  - **Cambio respecto de lo planeado:** se publica **un solo HTML** con el CSS y los cuatro scripts adentro, armado desde `web/` con un script de Python (en el artifact, las hojas de estilo solo pueden venir de Google Fonts). Las fuentes salen de Google Fonts y no de `fonts/`. El código es el mismo de `web/`, sin cambios.
+  - Probado en Chrome (servido con `python -m http.server`), en una ventana de 1536 × 639: los cuatro pasos, clic en un tramo, grapa en C, estribo cerrado con dos clics, tiritas de ángulo, los ejemplos «Varias elegidas» (C-7 descartada) y «Generar». Sin errores en la consola. **Falta** probar a 1440 × 900 y a 1280 × 720 (paso 4).
+- [x] **Paso 6:** anotar los comentarios de Carlos en «Decisiones», con fecha, corregir y volver a publicar en el mismo artifact hasta que la apruebe. **Sin la aprobación no se sigue con la tarea 2.** Commit: `Columnas: maqueta de la interfaz web (#206)`.
 
 ### Tarea 2: estribos por columna y su traducción a tramos (#209, parte sin Revit)
 
@@ -292,8 +300,8 @@ En Revit, con el modelo de prueba:
 
 ## Estado
 
-- [ ] Plan revisado con Luciano.
-- [ ] Tarea 1: maqueta publicada y **aprobada por Carlos**.
+- [x] Plan revisado con Luciano.
+- [x] Tarea 1: maqueta publicada y **aprobada por Carlos** (29-oct). Queda pendiente probarla a 1440 × 900 y 1280 × 720 (paso 4).
 - [ ] Tareas 2 a 7 implementadas.
 - [ ] Tarea 8: probado en Revit, ventana vieja retirada y publicado.
 
