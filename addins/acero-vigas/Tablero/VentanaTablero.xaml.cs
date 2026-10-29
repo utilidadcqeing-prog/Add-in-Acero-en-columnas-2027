@@ -32,9 +32,15 @@ internal sealed partial class VentanaTablero : Window
         DefaultBackgroundColor = System.Drawing.Color.FromArgb(0xEE, 0xF0, 0xF2),
     };
 
-    public VentanaTablero(IntPtr duenio)
+    /// <summary>La página de <see cref="CarpetaWeb"/> que se abre: el tablero o «Crear viguetas» (#947).</summary>
+    private readonly string pagina;
+
+    public VentanaTablero(IntPtr duenio, string pagina = "index.html", string? titulo = null)
     {
         InitializeComponent();
+        this.pagina = pagina;
+        if (titulo is not null)
+            Title = titulo;
         Content = navegador;
         new WindowInteropHelper(this).Owner = duenio;
         Loaded += async (_, _) =>
@@ -189,7 +195,7 @@ internal sealed partial class VentanaTablero : Window
         // Para anotar en la tarea 6 del plan qué WebView2 cargó Revit.
         Title += " · " + Diagnostico;
 #endif
-        core.Navigate($"https://{Host}/index.html");
+        core.Navigate($"https://{Host}/{pagina}");
     }
 
     private static bool EsDelTablero(string? uri) => uri?.StartsWith($"https://{Host}/", StringComparison.OrdinalIgnoreCase) == true;
