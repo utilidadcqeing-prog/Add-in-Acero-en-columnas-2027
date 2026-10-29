@@ -8,8 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- La misma verificación de licencia que compila cada add-in (addins/compartido): una sola fuente. Issue #189. -->
-    <Compile Include="..\..\addins\compartido\Licencia.cs;..\..\addins\compartido\CodigoEquipo.cs" Link="Compartido\%(Filename)%(Extension)" />
+    <!--
+      La misma verificación de licencia (issue #189) y el mismo archivo de últimas versiones (actualización obligatoria)
+      que compila cada add-in (addins/compartido): una sola fuente.
+    -->
+    <Compile Include="..\..\addins\compartido\Licencia.cs;..\..\addins\compartido\CodigoEquipo.cs;..\..\addins\compartido\ActualizacionObligatoria.cs" Link="Compartido\%(Filename)%(Extension)" />
     <InternalsVisibleTo Include="CQEING.Gestor.Core.Tests" />
   </ItemGroup>
 

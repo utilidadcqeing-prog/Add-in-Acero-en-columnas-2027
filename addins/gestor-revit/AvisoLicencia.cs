@@ -55,7 +55,7 @@ internal static class AvisoLicencia
     }
 
     /// <summary>La versión X.Y.Z con que el gestor compiló este componente; queda en la hoja («Versión gestor»).</summary>
-    private static string VersionDelComponente()
+    internal static string VersionDelComponente()
     {
         string? version = typeof(AvisoLicencia).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         return (version ?? "0.0.0").Split('+')[0];

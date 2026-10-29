@@ -1,3 +1,5 @@
+using CQEING.Compartido;
+
 namespace CQEING.Gestor.Core;
 
 /// <param name="InstaladaPorAnio">Año de Revit → versión que el .addin de ese año tiene activa.</param>
@@ -52,22 +54,49 @@ public sealed class GestorAddins(FuenteReleases fuente, ConstructorCatalogo cata
         ResultadoCatalogo resultado = await catalogo.ConstruirAsync(releases.Releases, ct);
         IReadOnlyList<string> anios = DetectorRevit.AniosInstalados(programFiles);
 
+        EtiquetaRelease? ultimoGestor = ConstructorCatalogo.UltimoGestor(releases.Releases);
+        foreach (string anio in anios) AnotarUltimas(resultado.Addins, ultimoGestor, anio);
+
         var avisos = new List<string>();
         if (releases.Aviso is not null) avisos.Add(releases.Aviso);
         avisos.AddRange(resultado.Avisos);
 
-        return new ResumenGestor(anios, LeerEstados(resultado.Addins, anios), avisos, ConstructorCatalogo.UltimoGestor(releases.Releases), releases.DesdeCache);
+        return new ResumenGestor(anios, LeerEstados(resultado.Addins, anios), avisos, ultimoGestor, releases.DesdeCache);
     }
 
     /// <summary>
     /// Novedades para el aviso dentro de Revit, solo del año de ese Revit. Si la lista se consultó hace menos de
     /// <paramref name="vigencia"/> se usa la guardada: abrir Revit varias veces seguidas no gasta el cupo de GitHub.
+    /// Con <paramref name="versionGestor"/> (la del componente que pregunta), un gestor nuevo también es una novedad.
     /// </summary>
-    public async Task<IReadOnlyList<Novedad>> NovedadesAsync(string anio, TimeSpan vigencia, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Novedad>> NovedadesAsync(string anio, TimeSpan vigencia, CancellationToken ct = default, string? versionGestor = null)
     {
         ResultadoReleases releases = await fuente.ObtenerRecienteAsync(vigencia, ct);
         ResultadoCatalogo resultado = await catalogo.ConstruirAsync(releases.Releases, ct);
-        return NovedadesRevit.De(LeerEstados(resultado.Addins, [anio]), anio);
+        EtiquetaRelease? ultimoGestor = ConstructorCatalogo.UltimoGestor(releases.Releases);
+        AnotarUltimas(resultado.Addins, ultimoGestor, anio);
+
+        var novedades = new List<Novedad>();
+        if (ultimoGestor is not null && VersionAddin.Interpretar(versionGestor) is { } actual && ultimoGestor.Version.CompareTo(actual) > 0)
+            novedades.Add(new Novedad(EtiquetaRelease.IdGestor, NombreGestor, versionGestor!, ultimoGestor.Version.ToString()));
+        novedades.AddRange(NovedadesRevit.De(LeerEstados(resultado.Addins, [anio]), anio));
+        return novedades;
+    }
+
+    public const string NombreGestor = "Gestor de add-ins";
+
+    /// <summary>
+    /// Anota la última versión de cada add-in con paquete para ese año y la del gestor: un add-in más viejo, o con el
+    /// gestor más viejo, no se deja usar al abrir Revit (actualización obligatoria). También con la lista guardada: lo
+    /// que ya se supo sigue valiendo sin red.
+    /// </summary>
+    private void AnotarUltimas(IReadOnlyList<EntradaCatalogo> catalogo, EtiquetaRelease? ultimoGestor, string anio)
+    {
+        Dictionary<string, string> ultimas = catalogo
+            .Where(addin => addin.Ultima.Manifiesto.PaqueteParaRevit(anio) is not null)
+            .ToDictionary(addin => addin.Id, addin => addin.Ultima.Version.ToString());
+        if (ultimoGestor is not null) ultimas[ActualizacionObligatoria.ClaveGestor] = ultimoGestor.Version.ToString();
+        ActualizacionObligatoria.Escribir(rutas.CarpetaCqeing, anio, ultimas);
     }
 
     /// <summary>
