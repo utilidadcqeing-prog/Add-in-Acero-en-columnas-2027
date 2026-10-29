@@ -449,6 +449,19 @@ public class ArmadorVistaTests
         Assert.Equal(["#3", "#4", "#5", "#6", "#7", "#8"], v.PorDiametro.Select(d => d.D));
         Assert.Equal(new ReglaVista("#3", "0.55", "0.166", "0.142", "0.113", "0.560"), v.PorDiametro[0]);
         Assert.Equal(("0.50", "2.5", false, (string?)null), (v.Multiplo, v.DistanciaLibreCm, v.Varilla12, v.Problema));
+        Assert.Equal("5", v.RedondeoGanchoCm);
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("5", 50)]
+    [InlineData("10", 100)]
+    [InlineData(null, 50)] // una página que no lo manda deja el de las reglas
+    public void ElRedondeoDeGanchosDeLaPantallaPasaAMm(string? cm, int mm)
+    {
+        VistaReglas pantalla = ArmadorVista.Reglas(new ReglasCargadas(Reglas.Generales, null)) with { RedondeoGanchoCm = cm };
+
+        Assert.Equal(mm, ArmadorVista.ReglasDe(pantalla, Reglas.Generales).RedondeoGancho);
     }
 
     [Fact]

@@ -121,7 +121,8 @@ public static class ArmadorVista
             return new ReglaVista($"#{d}", x.Traslapo is int t ? F(t / 1000.0, "0.00") : "", F(x.Gancho90.B / 1000.0, "0.000"),
                 F(x.Gancho180.B / 1000.0, "0.000"), F(x.Estribo135.B / 1000.0, "0.000"), F(x.KgPorMetro, "0.000"));
         }).ToList();
-        return new VistaReglas(filas, F(r.Modulo / 1000.0, "0.00"), F(r.DistanciaLibre / 10, "0.##"), r.Varilla == 12000, c.Problema);
+        return new VistaReglas(filas, F(r.Modulo / 1000.0, "0.00"), F(r.DistanciaLibre / 10, "0.##"), r.Varilla == 12000, c.Problema,
+            F(r.RedondeoGancho / 10.0, "0"));
     }
 
     /// <summary>
@@ -151,6 +152,7 @@ public static class ArmadorVista
             Modulo = Mm(v.Multiplo),
             DistanciaLibre = (Numero(v.DistanciaLibreCm) ?? 0) * 10,
             Varilla = v.Varilla12 ? 12000 : 6000,
+            RedondeoGancho = v.RedondeoGanchoCm is null ? @base.RedondeoGancho : (int)Math.Round((Numero(v.RedondeoGanchoCm) ?? -1) * 10),
         };
     }
 

@@ -58,7 +58,7 @@ internal sealed class TiposAcero
             return null;
 
         double d = LectorModelo.Mm(barra.BarNominalDiameter);
-        double extension = GanchoPropio.Extension(Reglas.LargoGancho(reglas.PorDiametro[numero], t), d,
+        double extension = GanchoPropio.Extension(reglas.LargoGanchoRedondeado(reglas.PorDiametro[numero], t), d,
             LectorModelo.Mm(barra.StandardHookBendDiameter), grados);
         return Propio(GanchoPropio.Nombre(grados, numero), RebarStyle.Standard, grados, extension / d);
     }

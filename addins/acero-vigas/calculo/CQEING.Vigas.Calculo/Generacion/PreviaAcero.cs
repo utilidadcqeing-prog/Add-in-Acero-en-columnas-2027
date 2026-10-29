@@ -49,9 +49,9 @@ public static class PreviaAcero
     {
         var trazos = new List<Trazo>();
         foreach (PiezaLongitudinal p in plan.Barras)
-            trazos.Add(Longitudinal(p, TipoTrazo.Barra, u, r.PorDiametro[p.Diametro], Doblado(r, p.Diametro, doblados)));
+            trazos.Add(Longitudinal(p, TipoTrazo.Barra, u, r, Doblado(r, p.Diametro, doblados)));
         foreach (PiezaLongitudinal p in plan.Bastones)
-            trazos.Add(Longitudinal(p, TipoTrazo.Baston, u, r.PorDiametro[p.Diametro], Doblado(r, p.Diametro, doblados)));
+            trazos.Add(Longitudinal(p, TipoTrazo.Baston, u, r, Doblado(r, p.Diametro, doblados)));
         foreach (GrupoEstribos g in plan.Estribos)
         {
             DobladoBarra d = Doblado(r, g.Diametro, doblados);
@@ -85,7 +85,7 @@ public static class PreviaAcero
             : new DobladoBarra(r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro, 4 * r.PorDiametro[n].Diametro);
 
     /// <summary>La parte recta en (XCorte, YCorte), con un gancho en cada punta que lo lleve, doblando hacia adentro.</summary>
-    private static Trazo Longitudinal(PiezaLongitudinal p, TipoTrazo tipo, UbicacionPortico u, ReglaDiametro regla, DobladoBarra d)
+    private static Trazo Longitudinal(PiezaLongitudinal p, TipoTrazo tipo, UbicacionPortico u, Reglas r, DobladoBarra d)
     {
         // En el plano (x a lo largo, y del corte). s: hacia dónde dobla el gancho (abajo en la capa superior).
         double s = p.Capa == Posicion.Superior ? -1 : 1;
@@ -103,7 +103,7 @@ public static class PreviaAcero
             if (grados == 0)
                 return [];
             double radio = d.Gancho / 2 + d.Diametro / 2;
-            double cola = GanchoPropio.Extension(Reglas.LargoGancho(regla, tipo), d.Diametro, d.Gancho, grados);
+            double cola = GanchoPropio.Extension(r.LargoGanchoRedondeado(r.PorDiametro[p.Diametro], tipo), d.Diametro, d.Gancho, grados);
             var gancho = new List<(double, double)>();
             foreach (double phi in Angulos(grados).Skip(1))
                 gancho.Add((punta + afuera * radio * Math.Sin(phi), p.YCorte + s * radio * (1 - Math.Cos(phi))));

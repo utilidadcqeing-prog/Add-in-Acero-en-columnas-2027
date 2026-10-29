@@ -92,7 +92,7 @@ internal static class CalculadorBastones
         // una punta arrastrada se pega justo en el borde, y desde ahí también lleva gancho
         bool bordeInicio = desde <= g.InicioBarras, bordeFin = hasta >= g.FinBarras;
         TipoGancho tipoInicio = Punta(id + ".inicio", bordeInicio), tipoFin = Punta(id + ".fin", bordeFin);
-        int ganchoInicio = Reglas.LargoGancho(regla, tipoInicio), ganchoFin = Reglas.LargoGancho(regla, tipoFin);
+        int ganchoInicio = e.Reglas.LargoGanchoRedondeado(regla, tipoInicio), ganchoFin = e.Reglas.LargoGanchoRedondeado(regla, tipoFin);
         desde = Math.Max(desde, g.InicioBarras);
         hasta = Math.Min(hasta, g.FinBarras);
         int total = hasta - desde + ganchoInicio + ganchoFin;

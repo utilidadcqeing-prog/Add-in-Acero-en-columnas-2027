@@ -11,7 +11,7 @@ public class BastonesTests
     private static EntradaVigas Entrada(ArmadoBastones? bastones = null, TipoViga tipo = TipoViga.Aerea,
         Portico? portico = null, IReadOnlyList<GrupoBarras>? inferior = null) =>
         new(portico ?? Datos.PorticoMaqueta(), tipo, [new GrupoBarras(3, 5)], inferior ?? [new GrupoBarras(3, 5)],
-            Reglas.Generales, Bastones: bastones);
+            Datos.ReglasSinRedondeo, Bastones: bastones);
 
     private static Baston De(ResultadoVigas r, string id) => r.Bastones.Single(b => b.Id == id);
 

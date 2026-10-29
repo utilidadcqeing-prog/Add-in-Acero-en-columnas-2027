@@ -156,8 +156,8 @@ public static class EditorArrastre
     private static int Ganchos(EntradaVigas e, GeometriaPortico g, Baston b, int desde, int hasta)
     {
         ReglaDiametro regla = e.Reglas.PorDiametro[b.Grupo.Diametro];
-        return Reglas.LargoGancho(regla, CalculadorBastones.GanchoDe(e, b.Id + ".inicio", desde <= g.InicioBarras))
-            + Reglas.LargoGancho(regla, CalculadorBastones.GanchoDe(e, b.Id + ".fin", hasta >= g.FinBarras));
+        return e.Reglas.LargoGanchoRedondeado(regla, CalculadorBastones.GanchoDe(e, b.Id + ".inicio", desde <= g.InicioBarras))
+            + e.Reglas.LargoGanchoRedondeado(regla, CalculadorBastones.GanchoDe(e, b.Id + ".fin", hasta >= g.FinBarras));
     }
 
     private static double M(int mm) => mm / 1000.0;
