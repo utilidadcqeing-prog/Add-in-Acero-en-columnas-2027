@@ -301,7 +301,15 @@ public class PlanificadorAceroTests
                 bool debajo = fila1.Any(f => Math.Abs(f.XCorte - p.XCorte) < (15.9 + 9.5) / 2);
                 int alInicio = debajo && b.TipoInicio != TipoGancho.Sin ? anidado : 0, alFin = debajo && b.TipoFin != TipoGancho.Sin ? anidado : 0;
                 MedidaBarra m = b.Medida(3);
-                Assert.Equal((m.Desde + alInicio, m.Hasta - alFin, m.Largo - alInicio - alFin), (p.Desde, p.Hasta, p.Largo));
+                // con la otra punta en un traslapo, sale por ahí lo mismo y conserva su largo (Juan, 29-oct)
+                (int desde, int hasta, int largo) esperada = (b.TipoInicio, b.TipoFin) switch
+                {
+                    (not TipoGancho.Sin, TipoGancho.Sin) => (m.Desde + alInicio, m.Hasta + alInicio, m.Largo),
+                    (TipoGancho.Sin, not TipoGancho.Sin) => (m.Desde - alFin, m.Hasta - alFin, m.Largo),
+                    _ => (m.Desde + alInicio, m.Hasta - alFin, m.Largo - alInicio - alFin),
+                };
+                Assert.Equal(esperada, (p.Desde, p.Hasta, p.Largo));
+                Assert.Equal(0, p.Largo % Reglas.Generales.Modulo);
                 anidadas += alInicio + alFin > 0 ? 1 : 0;
             }
         }

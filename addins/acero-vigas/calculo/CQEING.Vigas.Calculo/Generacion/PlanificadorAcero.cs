@@ -62,7 +62,7 @@ public static class PlanificadorAcero
                 b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo, s.Fila)));
         }
 
-        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r);
+        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r, barras.Count);
         barras = anidadas.Take(barras.Count).ToList();
         bastones = anidadas.Skip(barras.Count).ToList();
 
@@ -95,8 +95,11 @@ public static class PlanificadorAcero
     /// dentro del arranque del de afuera (un radio de doblado más un diámetro), y su largo baja lo mismo. Una recta termina
     /// donde acaba el doblez de afuera. Se recorren de la cara hacia adentro, así una tercera fila se mete dentro de la
     /// segunda ya corrida.
+    /// Una barra corrida (las primeras <paramref name="corridas"/> piezas) con la otra punta en un traslapo (sin gancho)
+    /// sale por ahí lo que se corrió y conserva su largo, en múltiplo del módulo (Juan, 29-oct: la #5 de la fila 2 quedaba
+    /// de 3.436 en vez de 3.50); su traslapo crece eso.
     /// </summary>
-    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r)
+    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r, int corridas)
     {
         const double tolerancia = 1e-6;
         PiezaLongitudinal[] p = piezas.ToArray();
@@ -131,8 +134,12 @@ public static class PlanificadorAcero
                             punta = minima;
                     }
                     int corrida = sentido * (punta - Punta(adentro));
-                    if (corrida > 0)
-                        p[capa[k]] = (inicio ? adentro with { Desde = punta } : adentro with { Hasta = punta }) with { Largo = adentro.Largo - corrida };
+                    if (corrida <= 0)
+                        continue;
+                    PiezaLongitudinal corta = inicio ? adentro with { Desde = punta } : adentro with { Hasta = punta };
+                    bool alTraslapo = capa[k] < corridas && (inicio ? adentro.GanchoFin : adentro.GanchoInicio) == TipoGancho.Sin;
+                    p[capa[k]] = !alTraslapo ? corta with { Largo = adentro.Largo - corrida }
+                        : inicio ? corta with { Hasta = adentro.Hasta + corrida } : corta with { Desde = adentro.Desde - corrida };
                 }
             }
         }
