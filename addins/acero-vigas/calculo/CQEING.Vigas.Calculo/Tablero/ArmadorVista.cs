@@ -66,8 +66,7 @@ public static class ArmadorVista
         var barras = rv.Barras.Select(b => new BarraVista(b.Id, Capa(b.Capa), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,
             M(b.Largo), Recta(b), b.Manual, b.LlegaAlVoladizo, Cantidad(b.Grupos), b.Kg,
             Grados(b.TipoInicio), Grados(b.TipoFin), b.TipoInicio != TipoGancho.Sin, b.TipoFin != TipoGancho.Sin,
-            ColoresDiametro.De(b.Grupos.Max(g => g.Diametro)), Rotulo.De(b.Grupos, b.LargoRecto, b.Largo),
-            Rotulo.EnPulgadas(b.Grupos, b.LargoRecto, b.Largo))).ToList();
+            ColoresDiametro.De(b.Grupos.Max(g => g.Diametro)), Rotulo.De(b), Rotulo.EnPulgadas(b))).ToList();
         var traslapos = rv.Traslapos.Select(t => new TraslapoVista(t.Id, t.BarraIzquierda, t.BarraDerecha, Capa(t.Capa), M(t.Desde), M(t.Hasta),
             M(t.Minimo), $"#{t.Diametro}", t.Manual, F(M(t.Hasta - t.Desde), "0.00"))).ToList();
         var bastones = rv.Bastones.Select(ComoEnRevit).Select(b => new BastonVista(b.Id, M(b.Eje), M(b.Desde), M(b.Hasta), b.GanchoInicio > 0, b.GanchoFin > 0,

@@ -1,5 +1,6 @@
 ﻿using CQEING.Vigas.Calculo.Modelo;
 using CQEING.Vigas.Calculo.Nucleo;
+using CQEING.Vigas.Calculo.Vigas;
 
 namespace CQEING.Vigas.Calculo.Tests;
 
@@ -81,7 +82,60 @@ public class MotorVigasTests
 
         Assert.All(r.Inferior!.Traslapos, t => Assert.Equal((900, 5), (t.Minimo, t.Diametro)));
         Assert.Equal(215, r.Inferior.Barras[0].GanchoInicio);
-        Assert.All(r.Inferior.Barras, b => Assert.Equal(b.Largo / 1000.0 * (3 * 1.552 + 2 * 0.994), b.Kg, precision: 6));
+        Assert.All(r.Inferior.Barras, b => Assert.Equal(b.Largo / 1000.0 * 3 * 1.552 + b.Medida(4).Largo / 1000.0 * 2 * 0.994, b.Kg, precision: 6));
+    }
+
+    /// <summary>
+    /// Santiago (29-oct): con dos números en la capa, la barra menor no puede llevar el traslapo ni el gancho de la mayor:
+    /// en Revit lleva el suyo y su largo ya no daba la varilla (3.10 en vez de 3.00). Traslapa en la misma luz, con su
+    /// traslapo mínimo y su gancho, y su largo queda en múltiplo del módulo.
+    /// </summary>
+    [Theory]
+    [InlineData(5, 4)]
+    [InlineData(7, 5)]
+    [InlineData(8, 5)]
+    public void ConDosDiametros_LaBarraMenorLlevaSuTraslapoYSuGanchoEnLaMismaLuz(int mayor, int menor)
+    {
+        Reglas reglas = Reglas.Generales;
+        ResultadoVigas r = MotorVigas.Calcular(Aerea() with
+        {
+            Reglas = reglas, Superior = [new GrupoBarras(2, mayor), new GrupoBarras(2, menor)],
+        });
+
+        SolucionCapa capa = r.Superior!;
+        List<MedidaBarra> menores = capa.Barras.Select(b => b.Medida(menor)).ToList();
+        ReglaDiametro regla = reglas.PorDiametro[menor];
+        Assert.Equal(reglas.LargoGanchoRedondeado(regla, TipoGancho.De90), menores[0].GanchoInicio);
+        Assert.Equal(reglas.LargoGanchoRedondeado(regla, TipoGancho.De90), menores[^1].GanchoFin);
+        Assert.All(menores, m => Assert.Equal((menor, 0), (m.Diametro, m.Largo % reglas.Modulo)));
+        Assert.All(menores, m => Assert.Equal(m.LargoRecto + m.GanchoInicio + m.GanchoFin, m.Largo));
+        for (int i = 0; i < capa.Traslapos.Count; i++)
+        {
+            int desde = menores[i + 1].Desde, hasta = menores[i].Hasta;
+            // al menos su mínimo; puede pasarlo, para que el largo cierre en el módulo
+            Assert.True(hasta - desde >= regla.Traslapo!.Value);
+            Luz luz = new GeometriaPortico(Datos.PorticoMaqueta(), 50).Luces.Single(l => l.Nombre == capa.Traslapos[i].Luz);
+            Assert.InRange(desde, luz.CaraIzquierda, luz.CaraDerecha);
+        }
+    }
+
+    [Fact]
+    public void ConUnSoloDiametro_LaBarraNoTraeMenores()
+    {
+        ResultadoVigas r = MotorVigas.Calcular(Aerea());
+
+        Assert.All(r.Barras, b => Assert.Null(b.Menores));
+        Assert.All(r.Barras, b => Assert.Equal((b.Desde, b.Hasta, b.Largo), (b.Medida(5).Desde, b.Medida(5).Hasta, b.Medida(5).Largo)));
+    }
+
+    [Fact]
+    public void LasZonasDeTraslapoIncluyenLasDeLaBarraMenor()
+    {
+        ResultadoVigas r = MotorVigas.Calcular(Aerea() with { Superior = [new GrupoBarras(2, 8), new GrupoBarras(2, 5)] });
+
+        List<Barra> barras = r.Superior!.Barras.ToList();
+        for (int i = 0; i + 1 < barras.Count; i++)
+            Assert.Contains((barras[i + 1].Medida(5).Desde, barras[i].Medida(5).Hasta), r.ZonasTraslapo);
     }
 
     [Fact]

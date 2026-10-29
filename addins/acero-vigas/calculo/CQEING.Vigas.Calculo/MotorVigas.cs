@@ -23,17 +23,19 @@ public static class MotorVigas
         CapaCalculada? centro = Resolver(entrada, gCentro, capaDelCentro, Cara.Inicio, avisos);
         CapaCalculada? inicio = Resolver(entrada, gCara, capaDeLaCara, Cara.Inicio, avisos);
         CapaCalculada? final = Resolver(entrada, gCara, capaDeLaCara, Cara.Final, avisos);
-        SolucionCapa? solucionInicio = inicio?.Convertir();
-        SolucionCapa? solucionFinal = final?.Convertir();
+        SolucionCapa? solucionInicio = inicio is null ? null : BarrasMenores.Agregar(inicio, gCara, inicio.Convertir());
+        SolucionCapa? solucionFinal = final is null ? null : BarrasMenores.Agregar(final, gCara, final.Convertir());
 
         Cara masEconomica = solucionFinal is not null && (solucionInicio is null || solucionFinal.Kg < solucionInicio.Kg)
             ? Cara.Final : Cara.Inicio;
         Cara usada = entrada.CaraElegida ?? masEconomica;
         Cara otra = usada == Cara.Inicio ? Cara.Final : Cara.Inicio;
 
-        SolucionCapa? capaCentro = centro is null ? null : AplicadorCambios.Aplicar(centro, gCentro, entrada.Cambios, avisos);
+        SolucionCapa? capaCentro = centro is null ? null
+            : BarrasMenores.Agregar(centro, gCentro, AplicadorCambios.Aplicar(centro, gCentro, entrada.Cambios, avisos));
         CapaCalculada? usadaCalculada = usada == Cara.Inicio ? inicio : final;
-        SolucionCapa? capaCara = usadaCalculada is null ? null : AplicadorCambios.Aplicar(usadaCalculada, gCara, entrada.Cambios, avisos);
+        SolucionCapa? capaCara = usadaCalculada is null ? null
+            : BarrasMenores.Agregar(usadaCalculada, gCara, AplicadorCambios.Aplicar(usadaCalculada, gCara, entrada.Cambios, avisos));
 
         int varilla = entrada.Reglas.Varilla;
         if (capaCentro is not null)

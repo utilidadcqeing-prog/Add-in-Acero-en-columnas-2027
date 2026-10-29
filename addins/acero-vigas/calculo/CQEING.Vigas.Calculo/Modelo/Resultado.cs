@@ -6,7 +6,8 @@ namespace CQEING.Vigas.Calculo.Modelo;
 /// Una barra corrida, tal como la pinta el tablero. <paramref name="Desde"/> y <paramref name="Hasta"/> son las
 /// puntas de su parte recta, en mm desde el eje A; <paramref name="Largo"/> incluye los ganchos.
 /// <paramref name="TipoInicio"/> y <paramref name="TipoFin"/> (#84) son los ganchos de las puntas del borde; las
-/// demás puntas, <see cref="TipoGancho.Sin"/>.
+/// demás puntas, <see cref="TipoGancho.Sin"/>. Las medidas son las del número mayor de la capa; las de los menores,
+/// en <paramref name="Menores"/> (null si la capa es de un solo número).
 /// </summary>
 public sealed record Barra(
     string Id,
@@ -22,7 +23,22 @@ public sealed record Barra(
     IReadOnlyList<GrupoBarras> Grupos,
     double Kg,
     TipoGancho TipoInicio = TipoGancho.Sin,
-    TipoGancho TipoFin = TipoGancho.Sin)
+    TipoGancho TipoFin = TipoGancho.Sin,
+    IReadOnlyList<MedidaBarra>? Menores = null)
+{
+    public int LargoRecto => Hasta - Desde;
+
+    /// <summary>Cómo queda la barra del número <paramref name="diametro"/>: la de un menor, o la del mayor (esta).</summary>
+    public MedidaBarra Medida(int diametro) =>
+        Menores?.FirstOrDefault(m => m.Diametro == diametro) ?? new MedidaBarra(diametro, Desde, Hasta, GanchoInicio, GanchoFin, Largo, Varilla);
+}
+
+/// <summary>
+/// La barra de un número de la capa, en mm desde el eje A como <see cref="Barra"/>. Santiago (29-oct): la de un número
+/// menor traslapa en la misma luz que la del mayor, pero con su traslapo mínimo y su gancho, y su largo también queda en
+/// múltiplo del módulo; con los del mayor, en Revit no daba la varilla (3.10 en vez de 3.00).
+/// </summary>
+public sealed record MedidaBarra(int Diametro, int Desde, int Hasta, int GanchoInicio, int GanchoFin, int Largo, int Varilla)
 {
     public int LargoRecto => Hasta - Desde;
 }
@@ -48,6 +64,11 @@ public sealed record Traslapo(
 public sealed record SolucionCapa(Posicion Capa, Referencia Referencia, IReadOnlyList<Barra> Barras, IReadOnlyList<Traslapo> Traslapos)
 {
     public double Kg => Barras.Sum(b => b.Kg);
+
+    /// <summary>Los tramos con traslapo: los de la capa y los de las barras de sus números menores.</summary>
+    public IEnumerable<(int Desde, int Hasta)> ZonasTraslapo =>
+        Traslapos.Select(t => (t.Desde, t.Hasta)).Concat(Barras.Zip(Barras.Skip(1), (izquierda, derecha) =>
+            (izquierda.Menores ?? []).Select(m => (derecha.Medida(m.Diametro).Desde, m.Hasta))).SelectMany(z => z));
 }
 
 public enum TipoAviso
@@ -140,7 +161,7 @@ public sealed record ResultadoVigas(
     public double Kg => Capas.Sum(c => c.Kg) + Bastones.Sum(b => b.Kg);
 
     /// <summary>Tramos con traslapo (de las dos capas en uso), donde el corte 1-1 no se puede ubicar (#91).</summary>
-    public IReadOnlyList<(int Desde, int Hasta)> ZonasTraslapo => Traslapos.Select(t => (t.Desde, t.Hasta)).ToList();
+    public IReadOnlyList<(int Desde, int Hasta)> ZonasTraslapo => Capas.SelectMany(c => c.ZonasTraslapo).ToList();
 
     private IEnumerable<SolucionCapa> Capas => new[] { Superior, Inferior }.OfType<SolucionCapa>();
 }
