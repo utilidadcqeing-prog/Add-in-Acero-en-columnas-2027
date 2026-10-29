@@ -50,6 +50,10 @@ public class ManejadorGeneracionArmado : IExternalEventHandler
             int vistas = ColoresEnVistas.Aplicar(doc, columnas, res.Avisos);
             res.Detalles.Add($"Colores por diámetro aplicados en {vistas} vistas.");
 
+            // #180: con qué se generó cada columna, para mostrarlo al volver a elegirla.
+            if (RegistroGeneradosRevit.Registrar(doc, Opciones.Plan) is string motivo)
+                res.Avisos.Add($"No se pudo guardar en el modelo con qué se generó cada columna ({motivo}); el acero sí se generó.");
+
             t.Commit();
             AlTerminar?.Invoke(res);
         }

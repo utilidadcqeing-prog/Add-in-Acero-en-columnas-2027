@@ -69,6 +69,15 @@ public class App : IExternalApplication
             "practicacq.ComandoDiagnosticoPrevia3D",
             "TEMPORAL: mide cuánto tarda la vista previa 3D en generar de prueba una columna y deshacerlo, y comprueba que no queda nada.",
             "iconoCQ"));
+
+        // TEMPORAL -- ver comentario de ComandoDiagnosticoDetallePlegado.cs.
+        // Sacar este botón (y el comando) una vez cerrado el #176.
+        panelHerramientas.AddItem(CintaCqeing.CrearBoton(
+            "ComandoDiagnosticoDetallePlegado",
+            "Diagnóstico\ndetalle plegado",
+            "practicacq.ComandoDiagnosticoDetallePlegado",
+            "TEMPORAL: compara los tipos de detalle de plegado del modelo (si acotan los ganchos) y qué barra representa cada detalle. Solo lee.",
+            "iconoCQ"));
 #endif
 
         return Result.Succeeded;

@@ -24,6 +24,11 @@
     <Compile Include="..\..\addins\armado-columnas\Modelo\EstriboMenor.cs" Link="Modelo\EstriboMenor.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\AnguloGancho.cs" Link="Modelo\AnguloGancho.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\GanchoGrapa.cs" Link="Modelo\GanchoGrapa.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ColumnaGenerada.cs" Link="Modelo\ColumnaGenerada.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\PlanArmado.cs" Link="Modelo\PlanArmado.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\ConfigTramo.cs" Link="Modelo\ConfigTramo.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\GanchosLongitudinales.cs" Link="Modelo\GanchosLongitudinales.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Modelo\SeccionPlanta.cs" Link="Modelo\SeccionPlanta.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\AcomodoTraslapos.cs" Link="Modelo\AcomodoTraslapos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\PaqueteEstribos.cs" Link="Modelo\PaqueteEstribos.cs" />
     <Compile Include="..\..\addins\armado-columnas\Modelo\TipoBarra.cs" Link="Modelo\TipoBarra.cs" />
