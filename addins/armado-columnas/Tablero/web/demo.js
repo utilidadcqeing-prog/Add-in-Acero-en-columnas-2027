@@ -483,7 +483,7 @@
             resultado: { detalles: [
               marcas.length === 1 ? `Se armó la columna ${marcas[0]}.` : `Se armaron ${marcas.length} columnas: ${marcas.join(', ')}.`,
               m.borrarAjeno ? 'Se reemplazó todo el acero que había en esas columnas.' : 'Se reemplazó el acero que el add-in había generado antes en esas columnas.',
-            ] },
+            ], avisos: [] },
           };
           break;
         }

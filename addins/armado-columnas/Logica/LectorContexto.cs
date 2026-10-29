@@ -814,10 +814,16 @@ public sealed class LectorContexto : IProveedorContexto
             .ToList();
     }
 
+    /// <summary>
+    /// La «Marca» de Revit; sin ella, la marca de ubicación («A-1»), que es como el equipo nombra las columnas, y
+    /// solo al final el Id (#205, hallazgo 13 del plan de la interfaz web). Solo se usa en textos.
+    /// </summary>
     private static string Marca(FamilyInstance columna) =>
         columna.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } marca
             ? marca
-            : $"[{columna.Id}]";
+            : MarcaUbicacion(columna) is { Length: > 0 } ubicacion
+                ? ubicacion
+                : $"[{columna.Id}]";
 
     /// <summary>
     /// La "marca de ubicación del pilar": la coordenada de rejilla que Revit ya

@@ -45,6 +45,7 @@ public sealed class SesionColumnas
     private List<string> _choques = new();
     private bool _pendiente;
     private List<string>? _resultado;
+    private List<string> _avisosResultado = new();
     private string? _error;
     private PlanArmado? _planEnviado;
 
@@ -121,7 +122,7 @@ public sealed class SesionColumnas
             _configuracion,
             new GeneracionVista(
                 _choques.ToList(), _pendiente,
-                _resultado is null ? null : new ResultadoVista(_resultado.ToList()),
+                _resultado is null ? null : new ResultadoVista(_resultado.ToList(), _avisosResultado.ToList()),
                 _error,
                 _columnas.Where(c => _listas.Contains(c.Id)).Select(c => c.Marca).ToList()),
             _aviso);
@@ -540,12 +541,13 @@ public sealed class SesionColumnas
 
             _resultado = new List<string>
             {
-                marcas.Count == 1 ? $"Se armó la columna {marcas[0]}." : $"Se armaron {marcas.Count} columnas: {string.Join(", ", marcas)}.",
+                (marcas.Count == 1 ? $"Se armó la columna {marcas[0]}" : $"Se armaron {marcas.Count} columnas: {string.Join(", ", marcas)}")
+                    + (resultado.Avisos.Count > 0 ? ", pero con avisos: revísalos abajo." : "."),
                 resultado.Eliminados > 0
                     ? $"Se reemplazaron {resultado.Eliminados} elemento(s) de acero que había antes."
                     : "No había acero anterior en esas columnas.",
             };
-            _resultado.AddRange(resultado.Avisos);
+            _avisosResultado = resultado.Avisos.ToList();
         }
         _planEnviado = null;
         return Vista();

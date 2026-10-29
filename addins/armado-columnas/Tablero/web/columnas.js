@@ -93,7 +93,7 @@
       this.state = {
         vista: null, paso: 1, tramo: null, herramienta: null, primero: null, encima: null, pieza: null,
         ocultarEsquinas: false, zonaTraslapo: false, busqueda: '', menu: null, nombreNueva: '', borrar: null,
-        borrarAjeno: false, cuadro: false, mas: false, avisoVisto: null, tam: { w: 700, h: 560 },
+        borrarAjeno: false, cuadro: false, avisos: false, mas: false, avisoVisto: null, tam: { w: 700, h: 560 },
       };
       this.medida = null;
       this.onTecla = this.onTecla.bind(this);
@@ -124,7 +124,7 @@
 
     onTecla(e) {
       if (e.target.closest && e.target.closest('input, select')) return;
-      if (e.key === 'Escape') this.setState({ herramienta: null, primero: null, menu: null, cuadro: false });
+      if (e.key === 'Escape') this.setState({ herramienta: null, primero: null, menu: null, cuadro: false, avisos: false });
       if ((e.key === 'Delete' || e.key === 'Supr') && this.state.paso === 3 && this.state.pieza != null) this.eliminarPieza();
     }
 
@@ -207,6 +207,7 @@
         ${aviso ? html`<div class="aviso-flotante" role="status">${aviso}</div>` : null}
         ${v.generacion.pendiente ? this.dialogoChoques(v) : null}
         ${s.cuadro ? this.dialogoCuadro(v, o) : null}
+        ${s.avisos && v.generacion.resultado ? this.dialogoAvisos(v.generacion.resultado.avisos) : null}
       </div>`;
     }
 
@@ -299,7 +300,7 @@
         </div>
         ${q ? html`<div class="resultados">
           ${coincide.length ? coincide.map((c) => html`<button type="button" onClick=${() => { this.elegir(c.id, false); this.setState({ busqueda: '' }); }}>
-            <b>${c.marca}</b><span style="color: #5E6670">${c.ubicacion}</span></button>`) : html`<span class="vacio">Ninguna columna se llama así. Prueba con la marca (C-12) o con el cruce de ejes (A-1).</span>`}
+            <b>${c.marca}</b><span style="color: #5E6670">${c.ubicacion !== c.marca ? c.ubicacion : ''}</span></button>`) : html`<span class="vacio">Ninguna columna se llama así. Prueba con la marca (C-12) o con el cruce de ejes (A-1).</span>`}
         </div>` : null}
         <div class="planta">
           <${Planta} planta=${v.planta} elegidas=${v.elegidas} compatibles=${v.compatibles} coincide=${coincide.map((c) => c.id)} w=${270} h=${230} onElegir=${(id, sumar) => this.elegir(id, sumar)} />
@@ -329,10 +330,14 @@
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style="flex-shrink: 0; margin-top: 2px"><path d="M3 8.5l3 3 7-7.5" stroke="#1E7A46" stroke-width="1.8" fill="none" stroke-linecap="round"></path></svg>
           <span style="flex: 1">${v.generacion.resultado.detalles.map((d) => html`<span style="display: block">${d}</span>`)}</span>
         </div>` : null}
+        ${v.generacion.resultado && v.generacion.resultado.avisos.length ? html`<div class="aviso" role="alert">
+          <span style="flex: 1"><b>${v.generacion.resultado.avisos.length === 1 ? 'Hay 1 aviso' : `Hay ${v.generacion.resultado.avisos.length} avisos`} de la generación.</b>
+          <button type="button" class="enlace" onClick=${() => this.setState({ avisos: true })}>Ver los avisos</button></span>
+        </div>` : null}
         <div class="cabeza-centro">
           <div class="nombre">
             <b>${col.marca}${otras > 0 ? html`<span style="font-weight: 400; color: #5E6670"> + ${otras} ${otras === 1 ? 'igual' : 'iguales'}</span>` : null}</b>
-            <span>Eje ${col.ubicacion} · ${Math.round(col.baseX * 100)} × ${Math.round(col.baseY * 100)} cm · ${R.pisos} ${R.pisos === 1 ? 'tramo libre' : 'tramos libres'}${col.zapata ? ' · arranca sobre zapata' : ''}</span>
+            <span>${col.ubicacion && col.ubicacion !== col.marca ? `Eje ${col.ubicacion} · ` : ''}${Math.round(col.baseX * 100)} × ${Math.round(col.baseY * 100)} cm · ${R.pisos} ${R.pisos === 1 ? 'tramo libre' : 'tramos libres'}${col.zapata ? ' · arranca sobre zapata' : ''}</span>
           </div>
           <span class=${'estado ' + estado}>${ESTADO[estado].texto}</span>
           <div class="menu-ancla">
@@ -679,6 +684,18 @@
             <button type="button" class="boton" onClick=${() => { this.enviar({ tipo: 'cancelarGenerar' }); this.setState({ paso: 3 }); }}>Volver a revisar</button>
             <button type="button" class="boton primario" onClick=${() => this.enviar({ tipo: 'generar', borrarAjeno: this.state.borrarAjeno, aunConChoques: true })}>Generar igual</button>
           </div>
+        </div>
+      </div>`;
+    }
+
+    // Los avisos de la generación, en una ventana aparte: en el centro ocupaban demasiado (Luciano, 29-oct).
+    dialogoAvisos(avisos) {
+      const cerrar = () => this.setState({ avisos: false });
+      return html`<div class="velo" role="dialog" aria-modal="true" aria-labelledby="avisos-titulo" onClick=${(e) => { if (e.target === e.currentTarget) cerrar(); }}>
+        <div class="dialogo ancho">
+          <h2 id="avisos-titulo">Avisos de la generación</h2>
+          <ul>${avisos.map((a) => html`<li>${a}</li>`)}</ul>
+          <div class="pie"><button type="button" class="boton" onClick=${cerrar}>Cerrar</button></div>
         </div>
       </div>`;
     }

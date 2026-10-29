@@ -121,4 +121,5 @@ public sealed record FilaCuadroVista(
 public sealed record GeneracionVista(
     IReadOnlyList<string> Choques, bool Pendiente, ResultadoVista? Resultado, string? Error, IReadOnlyList<string> Listas);
 
-public sealed record ResultadoVista(IReadOnlyList<string> Detalles);
+/// <param name="Avisos">Lo que salió mal o a medias al generar: la página lo muestra aparte, en naranja, y no como parte del «Se armó».</param>
+public sealed record ResultadoVista(IReadOnlyList<string> Detalles, IReadOnlyList<string> Avisos);

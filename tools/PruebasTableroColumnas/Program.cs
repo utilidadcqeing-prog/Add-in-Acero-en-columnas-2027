@@ -354,6 +354,22 @@ Probar("Generar_DejaElPedidoYLuegoLaMarcaGenerada", () =>
     Cierto(EstadoDe(v, "C-12") == "generada", $"estado {EstadoDe(v, "C-12")}");
     Cierto(v.Generacion.Resultado!.Detalles[0] == "Se armó la columna C-12.", v.Generacion.Resultado.Detalles[0]);
     Cierto(v.Generacion.Listas.Count == 0, "sigue en la lista");
+    Cierto(v.Generacion.Resultado.Avisos.Count == 0, "sin avisos");
+});
+
+Probar("Generar_ConAvisos_NoLosMezclaConElExito", () =>
+{
+    // 29-oct: un aviso de traslapos salía en el mismo recuadro verde que «Se armó la columna».
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "cambiarRecubrimiento", valor = 0.05 });
+    Mandar(sesion, new { tipo = "generar", borrarAjeno = false });
+    var resultado = new ResultadoArmado();
+    resultado.Avisos.Add("Traslapos: las formas «CQ Recta 0-90» las usan barras de otras columnas.");
+    VistaColumnas v = sesion.ResultadoGeneracion(resultado);
+    ResultadoVista r = v.Generacion.Resultado!;
+    Cierto(r.Avisos.SequenceEqual(resultado.Avisos), "los avisos van aparte");
+    Cierto(r.Detalles.All(d => !d.StartsWith("Traslapos")), "no van entre los detalles del éxito");
+    Cierto(r.Detalles[0] == "Se armó la columna C-12, pero con avisos: revísalos abajo.", r.Detalles[0]);
 });
 
 Probar("Generar_SinListas_Avisa", () =>

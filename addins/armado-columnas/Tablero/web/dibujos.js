@@ -39,14 +39,14 @@
           const e = ESTADO[c.estado], el = elegidas.includes(c.id), fuera = el && !compatibles.includes(c.id);
           const lx = Math.max(16, c.ladoX * k * 2.2), ly = Math.max(16, c.ladoY * k * 2.2);
           return html`<g class="planta-col" tabindex="0" role="button" aria-pressed=${el ? 'true' : 'false'}
-              aria-label=${`${c.marca} (${c.ubicacion}): ${e.texto}`}
+              aria-label=${`${c.marca}${c.ubicacion && c.ubicacion !== c.marca ? ` (${c.ubicacion})` : ''}: ${e.texto}`}
               onClick=${(ev) => onElegir(c.id, ev.ctrlKey || ev.shiftKey || ev.metaKey)}
               onKeyDown=${(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onElegir(c.id, ev.ctrlKey || ev.shiftKey); } }}>
             ${coincide && coincide.includes(c.id) ? html`<rect x=${X(c.x) - lx / 2 - 7} y=${Y(c.y) - ly / 2 - 7} width=${lx + 14} height=${ly + 14} rx="5" fill="#FFE9A8"></rect>` : null}
             ${el ? html`<rect x=${X(c.x) - lx / 2 - 4} y=${Y(c.y) - ly / 2 - 4} width=${lx + 8} height=${ly + 8} rx="3" fill="none" stroke=${fuera ? C.naranja : C.tinta} stroke-width="2" stroke-dasharray=${fuera ? '4 3' : null}></rect>` : null}
             <rect x=${X(c.x) - lx / 2} y=${Y(c.y) - ly / 2} width=${lx} height=${ly} fill=${e.relleno} stroke=${e.borde} stroke-width="1.6"></rect>
             ${c.estado === 'generada' ? html`<path d="M${X(c.x) - 4} ${Y(c.y)}l3 3 5-6" stroke=${C.verde} stroke-width="1.8" fill="none" stroke-linecap="round"></path>` : null}
-            <text x=${X(c.x)} y=${Y(c.y) + ly / 2 + 15} text-anchor="middle" font-size="11" font-weight=${el ? 600 : 400} fill=${C.tinta} font-family="IBM Plex Sans, sans-serif">${c.marca}</text>
+            <text x=${X(c.x)} y=${Y(c.y) + ly / 2 + 15} text-anchor="middle" font-size="11" font-weight=${el ? 600 : 400} fill=${C.tinta} font-family="IBM Plex Sans, sans-serif">${c.ubicacion || c.marca}</text>
           </g>`;
         })}
       </svg>`;
