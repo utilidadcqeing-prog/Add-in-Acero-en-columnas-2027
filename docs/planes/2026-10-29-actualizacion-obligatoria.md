@@ -47,5 +47,11 @@ desde ahora en `CQEING-releases`: las copias viejas no traen este código.
 ## Estado
 
 - [x] Código y pruebas (2026-10-29): 1340 pruebas pasan; compila para 2026 y 2027.
-- [ ] Prueba en Revit.
+- [x] Prueba en Revit 2026 (2026-10-29, con Juan): vigas instalado como lo deja el gestor en `0.0.1`.
+  1. Con `0.0.2` anotada, al abrir Revit no se crea «Acero en vigas» (journal: carga la DLL de `0.0.1`, sin botón).
+  2. Con `0.0.1` anotada, al reabrir Revit el botón vuelve.
+  3. Con Revit abierto, al anotar `0.0.2` el botón queda gris al momento.
+  Hallazgo: abrir el gestor durante la prueba actualizó vigas a `1.0.1` y apartó la `0.0.1`: es el camino normal para
+  salir del bloqueo. El aviso «obligatorio» del componente del gestor no se pudo ver: el instalado es el `0.2.2` y
+  `CQEING-releases` aún no tiene releases. Se verá al publicar.
 - [ ] Publicar las etiquetas de los add-ins y del gestor (Tarea 8 de `2026-10-28-licencias-hoja-google.md`).
