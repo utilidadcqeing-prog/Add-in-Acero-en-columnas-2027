@@ -41,7 +41,7 @@ internal static class BloqueoPorVersion
     /// <summary>Lo que hace falta para preguntar si el add-in sigue al día.</summary>
     private sealed record Revision(InstalacionAddin Instalacion, string Carpeta, string CarpetaAddinsRevit)
     {
-        public string? Motivo() => ActualizacionObligatoria.Pendiente(Instalacion, Carpeta, CarpetaAddinsRevit);
+        public string? Motivo() => ActualizacionObligatoria.Pendiente(Instalacion, Carpeta, CarpetaAddinsRevit, ActualizacionObligatoria.ClaveRegistro);
     }
 
     private static string CarpetaAddinsRevit(string anio) =>

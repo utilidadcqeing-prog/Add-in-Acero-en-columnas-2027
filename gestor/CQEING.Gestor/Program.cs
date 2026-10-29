@@ -27,12 +27,14 @@ public static class Program
         }
 
         // En segundo plano y sin esperar: si falla no afecta al gestor (queda anotado y se reintenta al abrirlo otra vez).
-        // Después de autoactualizarse, reabre los Revit que cerró para eso, ya con el componente nuevo registrado.
+        // Borra las versiones viejas (sin licencia o inactivas) y, después de autoactualizarse, reabre los Revit que cerró
+        // para eso, ya con el componente nuevo registrado.
         ReinicioRevit reinicio = ReinicioRevit.Crear();
         _ = Task.Run(() =>
         {
             try
             {
+                LimpiezaVersionesViejas.Ejecutar(rutas);
                 ComplementoEnRevit.Registrar(rutas);
             }
             finally

@@ -8,9 +8,43 @@ public class ActualizacionObligatoriaTests : IDisposable
     private readonly CarpetaTemporal _tmp = new();
     private readonly string _revit;
 
+    /// <summary>Clave propia de cada prueba: nunca la del usuario real, que bloquearía sus add-ins.</summary>
+    private readonly string _registro = $@"Software\CQEING-Pruebas-{Guid.NewGuid():N}";
+
     public ActualizacionObligatoriaTests() => _revit = _tmp.Combinar("roaming", "Autodesk", "Revit", "Addins", "2026");
 
-    public void Dispose() => _tmp.Dispose();
+    public void Dispose()
+    {
+        _tmp.Dispose();
+        if (OperatingSystem.IsWindows())
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(_registro, throwOnMissingSubKey: false);
+    }
+
+    [Fact]
+    public void El_registro_guarda_la_version_mas_alta_y_borrar_el_archivo_no_desbloquea()
+    {
+        string carpeta = _tmp.Combinar("CQEING");
+        var vigas = new InstalacionAddin("acero-vigas", "1.1.0", "2026");
+        ActualizacionObligatoria.Escribir(carpeta, "2026", new Dictionary<string, string> { ["acero-vigas"] = "1.2.0" }, _registro);
+
+        File.Delete(Path.Combine(carpeta, ActualizacionObligatoria.NombreArchivo("2026")));
+
+        Assert.Contains("(1.2.0)", ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit, _registro));
+    }
+
+    [Fact]
+    public void En_el_registro_la_version_nunca_baja()
+    {
+        string carpeta = _tmp.Combinar("CQEING");
+        ActualizacionObligatoria.Escribir(carpeta, "2026", new Dictionary<string, string> { ["acero-vigas"] = "1.2.0", ["gestor"] = "0.3.1" }, _registro);
+        ActualizacionObligatoria.Escribir(carpeta, "2026", new Dictionary<string, string> { ["acero-vigas"] = "1.1.0" }, _registro);
+
+        IReadOnlyDictionary<string, string> ultimas = ActualizacionObligatoria.Leer(carpeta, "2026", _registro);
+
+        Assert.Equal("1.2.0", ultimas["acero-vigas"]);
+        Assert.Equal("0.3.1", ultimas["gestor"]); // volver a un gestor viejo no lo borra
+        Assert.Equal("1.1.0", ActualizacionObligatoria.Leer(carpeta, "2026")["acero-vigas"]); // sin registro, solo el archivo
+    }
 
     private static string Dll(string id, string version, string anio) =>
         Path.Combine(@"C:\Users\u\AppData\Local\CQEING\Addins", id, version, anio, "addin.dll");
@@ -43,7 +77,7 @@ public class ActualizacionObligatoriaTests : IDisposable
         string carpeta = _tmp.Combinar("CQEING");
         ActualizacionObligatoria.Escribir(carpeta, "2026", new Dictionary<string, string> { ["acero-vigas"] = publicada });
 
-        string? motivo = ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", instalada, "2026"), carpeta, _revit);
+        string? motivo = ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", instalada, "2026"), carpeta, _revit, null);
 
         if (esperada is null) Assert.Null(motivo);
         else Assert.Contains($"versión nueva de este add-in ({esperada})", motivo);
@@ -54,13 +88,13 @@ public class ActualizacionObligatoriaTests : IDisposable
     {
         string carpeta = _tmp.Combinar("CQEING");
         var vigas = new InstalacionAddin("acero-vigas", "1.0.0", "2026");
-        Assert.Null(ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit)); // sin archivo
+        Assert.Null(ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit, null)); // sin archivo
 
         ActualizacionObligatoria.Escribir(carpeta, "2026", new Dictionary<string, string> { ["armado-columnas"] = "9.0.0" });
-        Assert.Null(ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit)); // no aparece en la lista
+        Assert.Null(ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit, null)); // no aparece en la lista
 
         File.WriteAllText(Path.Combine(carpeta, ActualizacionObligatoria.NombreArchivo("2026")), "{ dañado");
-        Assert.Null(ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit)); // archivo dañado
+        Assert.Null(ActualizacionObligatoria.Pendiente(vigas, carpeta, _revit, null)); // archivo dañado
     }
 
     [Fact]
@@ -69,8 +103,8 @@ public class ActualizacionObligatoriaTests : IDisposable
         string carpeta = _tmp.Combinar("CQEING");
         ActualizacionObligatoria.Escribir(carpeta, "2027", new Dictionary<string, string> { ["acero-vigas"] = "2.0.0" });
 
-        Assert.Null(ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", "1.0.0", "2026"), carpeta, _revit));
-        Assert.Contains("(2.0.0)", ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", "1.0.0", "2027"), carpeta, _revit));
+        Assert.Null(ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", "1.0.0", "2026"), carpeta, _revit, null));
+        Assert.Contains("(2.0.0)", ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", "1.0.0", "2027"), carpeta, _revit, null));
     }
 
     /// <summary>Escribe el .addin del componente del gestor apuntando a <paramref name="dll"/>.</summary>
@@ -94,7 +128,7 @@ public class ActualizacionObligatoriaTests : IDisposable
         ActualizacionObligatoria.Escribir(carpeta, "2026", new Dictionary<string, string> { ["acero-vigas"] = "1.0.0", ["gestor"] = "0.3.0" });
         ComplementoGestor(DllGestor(gestorInstalado));
 
-        string? motivo = ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", "1.0.0", "2026"), carpeta, _revit);
+        string? motivo = ActualizacionObligatoria.Pendiente(new InstalacionAddin("acero-vigas", "1.0.0", "2026"), carpeta, _revit, null);
 
         if (bloquea) Assert.Contains("versión nueva del gestor de add-ins (0.3.0)", motivo);
         else Assert.Null(motivo);

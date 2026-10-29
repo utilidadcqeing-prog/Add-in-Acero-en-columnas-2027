@@ -8,16 +8,23 @@ namespace CQEING.Gestor.Core;
 /// El id, la versión y el año terminan en carpetas que el gestor crea y BORRA, así que solo se aceptan con su
 /// formato exacto (sin barras ni «..»); cualquier otro valor es un error de programación y lanza ArgumentException.
 /// </summary>
-public sealed class RutasGestor(string localAppData, string appData)
+public sealed class RutasGestor(string localAppData, string appData, string? claveRegistro = null)
 {
     private static readonly Regex IdValido = new(@"^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.CultureInvariant);
     private static readonly Regex AnioValido = new(@"^[0-9]{4}$", RegexOptions.CultureInvariant);
 
     public static RutasGestor DelUsuario() => new(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        ActualizacionObligatoria.ClaveRegistro);
 
     public string CarpetaAddins => Path.Combine(localAppData, "CQEING", "Addins");
+
+    /// <summary>
+    /// Copia en el registro de las últimas versiones (ActualizacionObligatoria). Solo la del usuario real la tiene: las
+    /// rutas de prueba no tocan el registro.
+    /// </summary>
+    public string? ClaveRegistro => claveRegistro;
 
     /// <summary>%LOCALAPPDATA%\CQEING: la licencia y las últimas versiones, lo que leen los add-ins al abrir Revit.</summary>
     public string CarpetaCqeing => Path.Combine(localAppData, "CQEING");
