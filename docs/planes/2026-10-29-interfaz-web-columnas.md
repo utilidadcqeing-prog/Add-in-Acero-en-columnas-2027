@@ -156,9 +156,10 @@
   - `public sealed class ConfigEstribosColumna { ConfigTramo TramosLibres; double NudoEspaciado; string? NudoBarraNombre; Dictionary<int, ConfigTramo> Excepciones; ConfigEstribosColumna Copiar(); }`;
   - `public static ConfigEstribosColumna ConfigEstribosColumna.Desde(ConfigTramo tramo)` (valores por defecto de la decisión 5);
   - `public List<ConfigTramo?> ATramos(ColumnaContexto contexto)`: un elemento por tramo, nunca `null`;
-  - `public static List<string> ValidacionTramo.Validar(ConfigTramo config, Tramo tramo)`.
+  - `public static List<string> ValidacionTramo.Validar(ConfigTramo config, Tramo? tramo)`;
+  - `public ConfigEstribosColumna ConfiguracionGuardada.EstribosDeLaColumna()`: `Estribos` (copia) o, si es `null`, `Desde(Tramo)` (decisión 9).
 
-- [ ] **Paso 1:** escribir las pruebas que fallan:
+- [x] **Paso 1:** escribir las pruebas que fallan (29-oct; además de estas, `ExcepcionEnNudo_SiempreUniforme`, `Copiar_NoComparteNada` y `Validar_MismosMensajesQueLaVentana`):
   - `TodaLaColumna_DaLoMismoQueAceptarTodaLaColumna`: para C-12 y un `cfg` **uniforme** (#3, cada 0.20), `Desde(cfg).ATramos(ctx)` es igual, tramo por tramo (`ConfiguracionGuardada.Igual`), a lo que produce hoy «Aceptar y aplicar a toda la columna» con `cfg` en un tramo libre. Esa lista se calcula a mano en la prueba, siguiendo `Aceptar` (`VentanaConfiguradorEstribos.xaml.cs:1757`).
   - `Nudos_SinConfinamiento`: con `TramosLibres` confinado (L1 0.50, confinado 0.07, no confinado 0.14), todo índice `DentroDeViga` sale `Modo == Uniforme` con `EspaciadoUniforme == 0.14`, nunca 0.07 (decisión 5).
   - `Nudos_CambiadosAMano`: confinado con `NudoEspaciado = 0.10`, todo nudo sale uniforme cada 0.10.
@@ -167,9 +168,9 @@
   - `ExcepcionFueraDeRango_SeDescarta`: `Excepciones[99]` no lanza y no agrega elementos.
   - `ColumnaDeUnTramo_SinNudosNiZapata`: para C-1, la lista tiene 1 elemento.
   - `ConfiguracionVieja_SeTraduceIgualQueAceptarTodaLaColumna`: un JSON de `ConfiguracionGuardada` sin `Estribos`, con el mismo `cfg` uniforme, se lee y da lo mismo que `TodaLaColumna_…`.
-- [ ] **Paso 2:** `dotnet run --project tools/PruebasTableroColumnas` → FALLA (no compila: falta `ConfigEstribosColumna`).
-- [ ] **Paso 3:** implementar `ConfigEstribosColumna`, `ValidacionTramo` y el campo `Estribos` de `ConfiguracionGuardada`.
-- [ ] **Paso 4:** `dotnet run --project tools/PruebasTableroColumnas` → todo `OK`, código 0. `dotnet build addins/armado-columnas/practicacq.csproj -c Debug -p:RevitVersion=2027` → compila, y la ventana vieja sigue andando en `tools/PreviewUI`.
+- [x] **Paso 2:** `dotnet run --project tools/PruebasTableroColumnas` → FALLA (no compila: falta `ConfigEstribosColumna`).
+- [x] **Paso 3:** implementar `ConfigEstribosColumna`, `ValidacionTramo` y el campo `Estribos` de `ConfiguracionGuardada`.
+- [x] **Paso 4:** `dotnet run --project tools/PruebasTableroColumnas` → todo `OK`, código 0 (11 pruebas, 29-oct). `CQEING-Addins.sln` no incluye las otras consolas de pruebas, así que esta tampoco (decisión 11). `dotnet build addins/armado-columnas/practicacq.csproj -c Debug -p:RevitVersion=2027` → compila, y la ventana vieja sigue andando en `tools/PreviewUI`.
 - [ ] **Paso 5:** commit `Columnas: estribos configurados por columna, con su traducción a tramos (#209)`.
 
 ### Tarea 3: la sesión y la vista, sin Revit (#208–#211, datos)
