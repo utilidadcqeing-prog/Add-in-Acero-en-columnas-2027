@@ -96,9 +96,10 @@ internal static class CalculadorBastones
         desde = Math.Max(desde, g.InicioBarras);
         hasta = Math.Min(hasta, g.FinBarras);
         int total = hasta - desde + ganchoInicio + ganchoFin;
-        // con un gancho elegido con los botones, el total sube al múltiplo y el sobrante va a la otra punta (decisión 9
-        // del plan de #84, Carlos 17-oct: "1.95… va a aumentar cinco para afuera"); el escrito sin gancho no se redondea
-        if ((bordeInicio && Elegido(id + ".inicio")) || (bordeFin && Elegido(id + ".fin")))
+        // con gancho, el total sube al múltiplo y el sobrante va a la otra punta (decisión 9 del plan de #84, Carlos 17-oct:
+        // "1.95… va a aumentar cinco para afuera"), venga de los botones o del "con gancho" general (Juan, 29-oct: quedaban
+        // de 1.31); el escrito sin gancho no se redondea
+        if ((bordeInicio && tipoInicio != TipoGancho.Sin) || (bordeFin && tipoFin != TipoGancho.Sin))
         {
             int modulo = e.Reglas.Modulo, sobra = (total + modulo - 1) / modulo * modulo - total;
             if (bordeInicio && !bordeFin)
@@ -117,7 +118,5 @@ internal static class CalculadorBastones
                 avisos.Add(new Aviso(TipoAviso.CambioNoAplicado, clave, Motivo: MotivoBloqueo.NoLlegaAlBorde));
             return GanchoDe(e, clave, enBorde);
         }
-
-        bool Elegido(string clave) => e.Cambios?.Ganchos?.TryGetValue(clave, out TipoGancho tipo) == true && tipo != TipoGancho.Sin;
     }
 }

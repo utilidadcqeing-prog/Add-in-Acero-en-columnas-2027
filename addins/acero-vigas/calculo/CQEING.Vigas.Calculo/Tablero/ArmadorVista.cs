@@ -75,14 +75,15 @@ public static class ArmadorVista
             Grados(b.TipoInicio), Grados(b.TipoFin), b.PuntaInicioEnBorde, b.PuntaFinEnBorde, ColoresDiametro.De(b.Grupo.Diametro),
             Rotulo.De([b.Grupo], b.LargoRecto, b.Largo), Rotulo.EnPulgadas([b.Grupo], b.LargoRecto, b.Largo))).ToList();
 
-        // el bastón con las puntas del plan; si sus barras quedaron distintas, el más corto
+        // el bastón con las puntas del plan (anidado, se corre o se acorta); si sus barras quedaron distintas, la más corta
+        // y, a igual largo, la más corrida
         Baston ComoEnRevit(Baston b)
         {
-            List<PiezaLongitudinal> piezas = plan?.Bastones.Where(x => x.Pieza == b.Id).ToList() ?? [];
-            if (piezas.Count == 0 || piezas.Min(x => x.Largo) == b.Largo)
+            PiezaLongitudinal? pieza = plan?.Bastones.Where(x => x.Pieza == b.Id)
+                .OrderBy(x => x.Largo).ThenByDescending(x => Math.Abs(x.Desde - b.Desde) + Math.Abs(x.Hasta - b.Hasta)).FirstOrDefault();
+            if (pieza is null || (pieza.Desde, pieza.Hasta, pieza.Largo) == (b.Desde, b.Hasta, b.Largo))
                 return b;
-            int largo = piezas.Min(x => x.Largo);
-            return b with { Desde = piezas.Max(x => x.Desde), Hasta = piezas.Min(x => x.Hasta), Largo = largo, Kg = b.Kg * largo / b.Largo };
+            return b with { Desde = pieza.Desde, Hasta = pieza.Hasta, Largo = pieza.Largo, Kg = b.Kg * pieza.Largo / b.Largo };
         }
         var diametros = rv.Barras.SelectMany(b => b.Grupos).Concat(rv.Bastones.Select(b => b.Grupo)).Select(g => g.Diametro)
             .Distinct().OrderDescending().Select(d => new DiametroVista($"#{d}", ColoresDiametro.De(d), Rotulo.Pulgadas(d))).ToList();

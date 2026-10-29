@@ -45,6 +45,8 @@ public static class PlanificadorAcero
         }
 
         var bastones = new List<PiezaLongitudinal>();
+        // de cada pieza de bastón, si sus puntas llegan al borde del pórtico (ahí no puede crecer)
+        var bordes = new List<(bool Inicio, bool Fin)>();
         var sinLugar = new List<string>();
         var montados = new List<string>();
         foreach (Baston b in c.Vigas.Bastones)
@@ -60,9 +62,15 @@ public static class PlanificadorAcero
                 montados.Add(b.Id);
             bastones.AddRange(enCorte.Barras.Select(s => new PiezaLongitudinal(b.Id, b.Capa, s.Barra.Diametro, s.Barra.X, s.Barra.Y,
                 b.Desde, b.Hasta, b.TipoInicio, b.TipoFin, Host(u, b.Desde, b.Hasta), b.Largo, s.Fila)));
+            bordes.AddRange(enCorte.Barras.Select(_ => (b.PuntaInicioEnBorde, b.PuntaFinEnBorde)));
         }
 
-        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r, barras.Count);
+        // Una barra corrida crece por la punta del traslapo (la que no lleva gancho); un bastón, por la que no llega al borde.
+        int corridas = barras.Count;
+        bool PuedeCrecer(int i, bool alInicio) => i < corridas
+            ? (alInicio ? barras[i].GanchoInicio : barras[i].GanchoFin) == TipoGancho.Sin
+            : !(alInicio ? bordes[i - corridas].Inicio : bordes[i - corridas].Fin);
+        List<PiezaLongitudinal> anidadas = AnidarGanchos(barras.Concat(bastones).ToList(), r, PuedeCrecer);
         barras = anidadas.Take(barras.Count).ToList();
         bastones = anidadas.Skip(barras.Count).ToList();
 
@@ -95,11 +103,11 @@ public static class PlanificadorAcero
     /// dentro del arranque del de afuera (un radio de doblado más un diámetro), y su largo baja lo mismo. Una recta termina
     /// donde acaba el doblez de afuera. Se recorren de la cara hacia adentro, así una tercera fila se mete dentro de la
     /// segunda ya corrida.
-    /// Una barra corrida (las primeras <paramref name="corridas"/> piezas) con la otra punta en un traslapo (sin gancho)
-    /// sale por ahí lo que se corrió y conserva su largo, en múltiplo del módulo (Juan, 29-oct: la #5 de la fila 2 quedaba
-    /// de 3.436 en vez de 3.50); su traslapo crece eso.
+    /// Si la otra punta puede crecer (<paramref name="puedeCrecer"/>: índice de la pieza y si es la del inicio), sale por
+    /// ahí lo que se corrió y conserva su largo, en múltiplo del módulo (Juan, 29-oct: la #5 de la fila 2 quedaba de 3.436
+    /// en vez de 3.50, y un bastón con gancho de 1.246).
     /// </summary>
-    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r, int corridas)
+    private static List<PiezaLongitudinal> AnidarGanchos(List<PiezaLongitudinal> piezas, Reglas r, Func<int, bool, bool> puedeCrecer)
     {
         const double tolerancia = 1e-6;
         PiezaLongitudinal[] p = piezas.ToArray();
@@ -137,8 +145,7 @@ public static class PlanificadorAcero
                     if (corrida <= 0)
                         continue;
                     PiezaLongitudinal corta = inicio ? adentro with { Desde = punta } : adentro with { Hasta = punta };
-                    bool alTraslapo = capa[k] < corridas && (inicio ? adentro.GanchoFin : adentro.GanchoInicio) == TipoGancho.Sin;
-                    p[capa[k]] = !alTraslapo ? corta with { Largo = adentro.Largo - corrida }
+                    p[capa[k]] = !puedeCrecer(capa[k], !inicio) ? corta with { Largo = adentro.Largo - corrida }
                         : inicio ? corta with { Hasta = adentro.Hasta + corrida } : corta with { Desde = adentro.Desde - corrida };
                 }
             }

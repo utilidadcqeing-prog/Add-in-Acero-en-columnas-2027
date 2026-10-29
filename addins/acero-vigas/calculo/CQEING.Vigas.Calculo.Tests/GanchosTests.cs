@@ -124,12 +124,14 @@ public class GanchosTests
     }
 
     [Fact]
-    public void BastonConElGanchoGeneralNoSeRedondea()
+    public void BastonConElGanchoGeneralTambienSeRedondea()
     {
-        // "Con gancho" del paso 2 (#89) sigue igual: 1.15 + 0.215, sin redondear
+        // "Con gancho" del paso 2 (#89) redondea igual que el de los botones (Juan, 29-oct: en Revit quedaban de 1.31):
+        // 1.15 + 0.215 = 1.365 sube a 1.50 y la punta de adentro crece 135 mm
         Baston bs1 = Baston(MotorVigas.Calcular(Entrada(bastones: new ArmadoBastones(ConGancho: true))), "BS1");
 
-        Assert.Equal((TipoGancho.De90, 1365), (bs1.TipoInicio, bs1.Largo));
+        Assert.Equal((TipoGancho.De90, 1500), (bs1.TipoInicio, bs1.Largo));
+        Assert.Equal((-150, 1135), (bs1.Desde, bs1.Hasta));
     }
 
     [Fact]

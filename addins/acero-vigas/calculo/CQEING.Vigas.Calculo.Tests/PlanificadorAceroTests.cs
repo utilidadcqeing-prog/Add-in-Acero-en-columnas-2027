@@ -93,7 +93,32 @@ public class PlanificadorAceroTests
         PiezaLongitudinal baston = plan.Bastones.Single(b => b.Pieza == "BS1");
         Assert.Equal(TipoGancho.De90, corrida.GanchoInicio);
         Assert.Equal(enElCalculo.Desde, corrida.Desde);
-        Assert.Equal((corrida.Desde + 51, enElCalculo.Largo - 51), (baston.Desde, baston.Largo));
+        // sale por la punta de adentro lo mismo y conserva su largo (Juan, 29-oct)
+        Assert.Equal((corrida.Desde + 51, enElCalculo.Hasta + 51, enElCalculo.Largo), (baston.Desde, baston.Hasta, baston.Largo));
+    }
+
+    /// <summary>
+    /// Juan (29-oct, VIG_25X35 #392698): el bastón con gancho en el borde, anidado dentro del gancho de la corrida, quedaba
+    /// de 1.246. Su gancho sigue por dentro, pero sale por la punta de adentro y su largo queda en múltiplo del módulo.
+    /// </summary>
+    [Fact]
+    public void UnBastonConGanchoAnidado_ConservaSuLargoEnMultiploDelModulo()
+    {
+        PorticoLeido vigueta = Portico() with
+        {
+            Elemento = Elemento.Vigueta,
+            Tramos = Portico().Tramos.Select(t => t with { Ancho = 100, Alto = 350 }).ToList(),
+            Ubicacion = Portico().Ubicacion! with { Ancho = 100, Alto = 350, ZAbajo = 3150 },
+        };
+        OpcionesTablero o = OpcionesTablero.DeVigueta with { Bastones = new ArmadoBastones(new GrupoBarras(1, 4), ConGancho: true) };
+        Baston enElCalculo = CalculoPortico.Calcular(vigueta, o, Reglas.Generales)!.Vigas.Bastones.First(b => b.Id == "BS1");
+
+        PiezaLongitudinal baston = PlanificadorAcero.Planificar("Vigueta 1", vigueta, o, Reglas.Generales)!.Bastones.Single(b => b.Pieza == "BS1");
+
+        Assert.Equal(TipoGancho.De90, baston.GanchoInicio);
+        Assert.True(baston.Desde > enElCalculo.Desde, "el gancho va por dentro del de la corrida");
+        Assert.Equal((baston.Desde - enElCalculo.Desde, enElCalculo.Largo), (baston.Hasta - enElCalculo.Hasta, baston.Largo));
+        Assert.Equal(0, baston.Largo % Reglas.Generales.Modulo);
     }
 
     [Fact]
