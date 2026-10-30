@@ -1,10 +1,14 @@
 namespace practicacq.Tablero;
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Microsoft.Web.WebView2.Core;
+using practicacq.Logica;
+using practicacq.Modelo;
 
 /// <summary>
 /// Abre la ventana web de columnas (#205, #207): una sola ventana sin modo; si
@@ -54,7 +58,7 @@ public sealed class ComandoColumnas : IExternalCommand
             return Result.Cancelled;
         }
 
-        ComandoEstribos.OfrecerVarillasPropias(documento);
+        OfrecerVarillasPropias(documento);
 
         VentanaColumnas ventana;
         try
@@ -81,5 +85,33 @@ public sealed class ComandoColumnas : IExternalCommand
         documentoAbierta = documento;
         ventana.Show();
         return Result.Succeeded;
+    }
+
+    /// <summary>
+    /// Si al modelo le falta alguna de las varillas "#N CQEING", pregunta si
+    /// agregarlas. La respuesta no se guarda a propósito: si dice que no, se
+    /// vuelve a preguntar cada vez que se abre la ventana hasta que diga que sí
+    /// (pedido de Luciano, 19-oct). Corre acá y no desde la ventana porque crear
+    /// tipos necesita transacción, y en Execute ya estamos en contexto de API
+    /// válido. Venía de <c>ComandoEstribos</c>, que se borró con la ventana vieja (#212).
+    /// </summary>
+    private static void OfrecerVarillasPropias(Document doc)
+    {
+        List<CuadroVarillas.Varilla> faltantes = VarillasPropias.Faltantes(doc);
+        if (faltantes.Count == 0) return;
+
+        string lista = string.Join(", ", faltantes.Select(v => CuadroVarillas.NombrePropio(v.Numero)));
+        var pregunta = new TaskDialog("CQEING")
+        {
+            MainInstruction = "Este modelo no tiene las varillas CQEING. ¿Agregarlas?",
+            MainContent = $"Faltan: {lista}.\n\nSe agregan con los diámetros del cuadro de la empresa. " +
+                "Las barras que ya tiene el modelo no se tocan.",
+            CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+            DefaultButton = TaskDialogResult.Yes,
+        };
+        if (pregunta.Show() != TaskDialogResult.Yes) return;
+
+        if (VarillasPropias.Crear(doc, faltantes) is string motivo)
+            TaskDialog.Show("CQEING", $"No se pudieron agregar las varillas CQEING: {motivo}");
     }
 }

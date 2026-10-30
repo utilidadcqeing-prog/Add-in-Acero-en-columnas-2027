@@ -30,15 +30,6 @@ public class App : IExternalApplication
             "iconoColumnetas"));
 
 #if DEBUG
-        // La ventana de antes (WPF), hasta que la web la reemplace del todo (tarea 8 de
-        // docs/planes/2026-10-29-interfaz-web-columnas.md).
-        panelEstructural.AddItem(CintaCqeing.CrearBoton(
-            "ComandoEstribosVieja",
-            "Columnas\n(vieja)",
-            "practicacq.ComandoEstribos",
-            "TEMPORAL: la ventana de columnas de antes, para comparar con la nueva.",
-            "icono"));
-
         // Herramientas de diagnóstico: solo en las compilaciones de desarrollo
         // (Debug). El paquete que se publica (Release) no las trae -- ver el
         // comentario de practicacq.csproj.

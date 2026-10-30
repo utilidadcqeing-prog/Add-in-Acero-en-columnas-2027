@@ -331,10 +331,17 @@
 - Borrar `Vistas/VentanaConfiguradorEstribos.*`, `VentanaEstribosMenores.*`, `VentanaChoques.*`, `VentanaCuadroVarillas.*`, `PanelPlantaColumnas.*`, `PanelTraslapos.*`, `PanelVistaPrevia.*` y `PanelFiltros3D.*`, solo si nada más los usa (comprobar con grep). También el botón «Columnas (vieja)».
 - Actualizar `tools/PreviewUI` para que abra la página nueva o, si no, borrarlo y anotarlo.
 
+- **Orden cambiado (Luciano, 30-oct: «Borra la ventana vieja y abre el PR»):** los pasos 3 y 4 van antes que el 1 y el 2. La prueba completa en Revit y la de alguien que nunca usó el add-in se hacen con el PR abierto y antes de publicar; si sale algo, se arregla en la misma rama.
+- **Qué se borra de verdad** (grep del 30-oct, fuera de comentarios):
+  - los ocho de arriba, más `Vistas/Cotas.cs`, `DibujoArmado.cs` y `ConvertidorBarrasPorCara.cs`, que solo usaba la ventana vieja;
+  - `ComandoEstribos.cs` (el comando de «Columnas (vieja)»). Su `OfrecerVarillasPropias` pasa a `Tablero/ComandoColumnas.cs`, que es quien lo usa;
+  - `tools/PreviewUI` entero: solo abría la ventana vieja. La página nueva se ve fuera de Revit con la maqueta (`python -m http.server`, ver «Cómo probarlo»), así que no se reemplaza.
+- **Qué se queda:** `Vistas/Paleta.cs` y `Estilos.xaml` (los usa `VentanaColumnetas`, que no se toca, decisión 3). `ComandoDiagnosticoPrevia3D` (Debug) tomaba los valores por defecto de la ventana vieja; pasa a `ValoresPorDefecto.Tramo` y `.Longitudinal`, que es lo que la vieja llamaba por dentro.
+
 - [ ] **Paso 1:** la lista de «Cómo probarlo», completa en Revit 2027, con capturas.
 - [ ] **Paso 2:** una persona que nunca usó el add-in (a elegir con Luciano) arma una columna sin ayuda. Anotar dónde dudó.
-- [ ] **Paso 3:** borrar la ventana vieja, compilar 2026 y 2027 y repetir el punto 1 de «Cómo probarlo».
-- [ ] **Paso 4:** completar «Estado». Commit `Columnas: se retira la ventana WPF vieja (#212)`. PR a `main`, y publicar con la skill `publicar-version-addin-cqeing` cuando Luciano lo pida.
+- [x] **Paso 3:** borrar la ventana vieja, compilar 2026 y 2027 y repetir el punto 1 de «Cómo probarlo». 30-oct: borrado; 2026 y 2027 (Debug) y 2027 (Release) compilan con 0 advertencias y 0 errores. `dotnet test CQEING-Addins.sln`: 1 352 pruebas, ninguna falla. `PruebasTableroColumnas` y `PruebasTraslapos`: todo OK. `PruebasVistaPrevia`: falla `lindero_alcance_gancho_90` (esperado 0.25375, real 0.22835), **igual en `origin/main`** (comprobado en un worktree aparte), así que no es de este trabajo: viene del cambio del gancho del cuadro (#177). El punto 1 de «Cómo probarlo» en Revit queda con el paso 1.
+- [x] **Paso 4:** completar «Estado». Commit `Columnas: se retira la ventana WPF vieja (#212)`. PR a `main` (30-oct). Publicar con la skill `publicar-version-addin-cqeing` cuando Luciano lo pida, después de los pasos 1 y 2.
 
 ## Cómo probarlo
 
@@ -364,8 +371,8 @@ En Revit, con el modelo de prueba:
 
 - [x] Plan revisado con Luciano.
 - [x] Tarea 1: maqueta publicada y **aprobada por Carlos** (29-oct). Queda pendiente probarla a 1440 × 900 y 1280 × 720 (paso 4).
-- [ ] Tareas 2 a 7 implementadas.
-- [ ] Tarea 8: probado en Revit, ventana vieja retirada y publicado.
+- [x] Tareas 2 a 7 implementadas y probadas en Revit 2027 por Luciano (29 y 30-oct).
+- [ ] Tarea 8: ventana vieja retirada y PR abierto (30-oct). Falta: la lista completa de «Cómo probarlo» en Revit (con la configuración guardada con la 1.4.1 y la escala al 150 %), la prueba con alguien que nunca usó el add-in y publicar.
 
 | Tarea | Sub-issue |
 |---|---|
