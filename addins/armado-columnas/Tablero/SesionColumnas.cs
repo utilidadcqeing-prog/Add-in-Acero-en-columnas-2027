@@ -72,8 +72,17 @@ public sealed class SesionColumnas
 
     // ------------------------------------------------------------- pedidos a Revit
 
+    /// <summary>El nombre del modelo abierto, para la barra de arriba (decisión 20). Lo pone la ventana.</summary>
+    public string Modelo { get; set; } = "";
+
     /// <summary>La página pidió «Seleccionar en Revit». La ventana lo atiende y lo vuelve a false.</summary>
     public bool SeleccionPedida { get; set; }
+
+    /// <summary>
+    /// Los elementos de Revit a seleccionar (y acercar) porque se eligieron columnas en la planta, como la ventana vieja
+    /// con <c>ManejadorSeleccionElemento</c> (decisión 19): todos los de la pila, zapata incluida. La ventana lo vuelve a null.
+    /// </summary>
+    public IReadOnlyList<string>? SeleccionEnModelo { get; set; }
 
     /// <summary>
     /// La vista 3D que hay que dibujar, con <see cref="OpcionesPara3D"/>. La
@@ -85,8 +94,19 @@ public sealed class SesionColumnas
     /// <summary>El pedido 3D vino del menú «Ver en 3D»: además de dibujar, hay que abrir la vista. La ventana lo vuelve a false.</summary>
     public bool Abrir3D { get; set; }
 
-    /// <summary>El último filtro del menú «Ver en 3D»; null si la vista 3D no se abrió.</summary>
-    private FiltroPrevia3D? _filtro3D;
+    /// <summary>Lo marcado en el panel «Ver en 3D» (decisión 18), sin la altura: esa sale de <see cref="_soloTramo3D"/>.</summary>
+    private FiltroPrevia3D _filtro3D = FiltroPrevia3D.Todo();
+
+    /// <summary>«Solo el tramo elegido»: el índice del tramo de la columna activa, o null.</summary>
+    private int? _soloTramo3D;
+
+    /// <summary>La vista 3D se abrió con «Ver en 3D»: desde ahí cada cambio la redibuja.</summary>
+    private bool _abierta3D;
+
+    /// <summary>Lo que dijo el manejador la última vez (<see cref="Resultado3D"/>).</summary>
+    private IReadOnlyList<int> _numeros3D = Array.Empty<int>();
+    private string? _estado3D;
+    private bool _fallo3D;
 
     /// <summary>Lo que hay que generar, cuando la página pidió «Generar» y no hay choques sin confirmar. La ventana lo vuelve a null.</summary>
     public OpcionesArmado? GeneracionPedida { get; set; }
@@ -110,6 +130,7 @@ public sealed class SesionColumnas
         }
 
         return new VistaColumnas(
+            Modelo,
             new PlantaVista(
                 _contexto.ListarRejillas(),
                 _columnas.Select(c => new ColumnaEnPlanta(c.Id, c.Marca, c.MarcaUbicacion, c.X, c.Y, c.LadoX, c.LadoY, Estado(c.Id))).ToList()),
@@ -125,6 +146,13 @@ public sealed class SesionColumnas
                 _resultado is null ? null : new ResultadoVista(_resultado.ToList(), _avisosResultado.ToList()),
                 _error,
                 _columnas.Where(c => _listas.Contains(c.Id)).Select(c => c.Marca).ToList()),
+            new Vista3DVista(
+                _abierta3D,
+                new Filtro3DVista(
+                    _filtro3D.Clases.OrderBy(x => x).ToList(), _filtro3D.Grupos.OrderBy(x => x).ToList(),
+                    _filtro3D.Posiciones.OrderBy(x => x).ToList(), _filtro3D.Zonas.OrderBy(x => x).ToList(),
+                    _filtro3D.NumerosOcultos.OrderBy(x => x).ToList(), _filtro3D.Partes, _soloTramo3D),
+                _numeros3D, _estado3D, _fallo3D),
             _aviso);
     }
 
@@ -142,6 +170,8 @@ public sealed class SesionColumnas
                 _elegidas = m.GetProperty("ids").EnumerateArray().Select(e => e.GetString() ?? "")
                     .Where(id => _columnas.Any(c => c.Id == id)).Distinct().ToList();
                 _configuracion = null;
+                _soloTramo3D = null;
+                SeleccionEnModelo = _columnas.Where(c => _elegidas.Contains(c.Id)).SelectMany(c => c.IdsEnRevit).ToList();
                 break;
 
             case "quitarDeLista":
@@ -173,8 +203,20 @@ public sealed class SesionColumnas
                 break;
 
             case "ver3D":
-                _filtro3D = Filtro3D(Texto(m, "filtro"));
+                // Sin «filtro» es el botón «Ver en 3D» del panel: abre con lo marcado. Con «filtro», un atajo.
+                if (Texto(m, "filtro") is string atajo)
+                {
+                    _filtro3D = Filtro3D(atajo);
+                    _soloTramo3D = null;
+                }
+                _abierta3D = true;
                 Abrir3D = true;
+                _estado3D = "Actualizando la vista 3D…";
+                _fallo3D = false;
+                break;
+
+            case "filtro3D":
+                LeerFiltro3D(m.GetProperty("filtro"));
                 break;
 
             case "aplicarConfiguracion":
@@ -206,8 +248,55 @@ public sealed class SesionColumnas
                 break;
         }
 
-        if (_filtro3D is not null && Activa is not null) Pedido3D = _filtro3D.Copiar();
+        PedirSiHay3D();
         return Vista();
+    }
+
+    /// <summary>Lo que dejó la vista 3D (el manejador): el estado y los números de varilla que se dibujaron.</summary>
+    public VistaColumnas Resultado3D(ResumenPrevia3D resumen)
+    {
+        _estado3D = resumen.Texto;
+        _fallo3D = resumen.Fallo;
+        // Un fallo no trae números: se quedan las casillas que había, como en PanelFiltros3D.
+        if (resumen.Numeros.Count > 0) _numeros3D = resumen.Numeros.OrderBy(n => n).ToList();
+        if (resumen.Fallo) _aviso = resumen.Texto;
+        return Vista();
+    }
+
+    /// <summary>Con la vista 3D abierta, cada cambio la vuelve a pedir («se actualiza sola»).</summary>
+    private void PedirSiHay3D()
+    {
+        if (!_abierta3D || Activa is not string activa) return;
+
+        FiltroPrevia3D filtro = _filtro3D.Copiar();
+        if (_soloTramo3D is int i && Leer(activa).Tramos.ElementAtOrDefault(i) is Tramo tramo)
+            filtro.SoloAltura = (tramo.ZInferior, tramo.ZSuperior);
+        Pedido3D = filtro;
+    }
+
+    /// <summary>Lo marcado en el panel 3D. Lo que no se entiende se deja como estaba; un tramo que no existe, sin recorte.</summary>
+    private void LeerFiltro3D(JsonElement f)
+    {
+        static HashSet<T>? Enums<T>(JsonElement f, string campo) where T : struct, Enum =>
+            f.TryGetProperty(campo, out JsonElement lista) && lista.ValueKind == JsonValueKind.Array
+                ? lista.EnumerateArray().Select(e => Enum.TryParse(e.GetString(), out T v) ? (T?)v : null).OfType<T>().ToHashSet()
+                : null;
+
+        var nuevo = _filtro3D.Copiar();
+        nuevo.Clases = Enums<ClasePieza>(f, "clases") ?? nuevo.Clases;
+        nuevo.Grupos = Enums<GrupoTraslapo>(f, "grupos") ?? nuevo.Grupos;
+        nuevo.Posiciones = Enums<PosicionBarra>(f, "posiciones") ?? nuevo.Posiciones;
+        nuevo.Zonas = Enums<ZonaEstribo>(f, "zonas") ?? nuevo.Zonas;
+        if (f.TryGetProperty("numerosOcultos", out JsonElement ocultos) && ocultos.ValueKind == JsonValueKind.Array)
+            nuevo.NumerosOcultos = ocultos.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Number).Select(e => e.GetInt32()).ToHashSet();
+        if (Texto(f, "partes") is string partes && Enum.TryParse(partes, out ModoPartes modo)) nuevo.Partes = modo;
+        nuevo.SoloAltura = null;
+        _filtro3D = nuevo;
+
+        _soloTramo3D = f.TryGetProperty("soloTramo", out JsonElement t) && t.ValueKind == JsonValueKind.Number
+                       && Activa is string activa && t.GetInt32() is int i && i >= 0 && i < Leer(activa).Tramos.Count
+            ? i
+            : null;
     }
 
     /// <summary>Un aviso que viene de Revit (algo falló al atender un pedido), con la vista entera.</summary>
@@ -251,7 +340,8 @@ public sealed class SesionColumnas
     {
         _elegidas = ColumnasDe(ids);
         _configuracion = null;
-        if (_filtro3D is not null && Activa is not null) Pedido3D = _filtro3D.Copiar();
+        _soloTramo3D = null;
+        PedirSiHay3D();
         return Vista();
     }
 

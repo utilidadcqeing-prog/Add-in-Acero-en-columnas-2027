@@ -365,6 +365,20 @@
     return [...new Set(out)];
   }
 
+  // ---- La vista 3D: lo mismo que FiltroPrevia3D y sus atajos (decisión 18 del plan)
+
+  const FILTRO_TODO = {
+    clases: ['Longitudinal', 'Estribo', 'EstriboMenor'], grupos: ['A', 'B'], posiciones: ['Esquina', 'CaraX', 'CaraY'],
+    zonas: ['Confinada', 'NoConfinada'], numerosOcultos: [], partes: 'Todo', soloTramo: null,
+  };
+  const ATAJOS_3D = {
+    'Todo': {},
+    'Solo longitudinales': { clases: ['Longitudinal'] },
+    'Solo estribos (con grapas)': { clases: ['Estribo', 'EstriboMenor'] },
+    'Solo ganchos': { partes: 'SoloGanchos' },
+    'Solo traslapos': { clases: ['Longitudinal'], partes: 'SoloTraslapos' },
+  };
+
   // ---- La sesión
 
   function crear(estado) {
@@ -376,6 +390,7 @@
       guardadas: copia(GUARDADAS0),
       configuracion: null,
       generacion: { choques: [], pendiente: false, resultado: null, error: null },
+      vista3D: { abierta: false, filtro: copia(FILTRO_TODO), numeros: [], estado: null, fallo: false },
       aviso: null,
     };
     if (estado === 'simple') s.elegidas = ['C-1'];
@@ -420,6 +435,7 @@
       }
       const comp = compatibles();
       return {
+        modelo: 'Edificio de ejemplo',
         planta: {
           rejillas: REJILLAS,
           columnas: COLUMNAS.map((c) => ({ id: c.id, marca: c.marca, ubicacion: c.ubicacion, x: c.x, y: c.y, ladoX: c.ladoX, ladoY: c.ladoY, estado: s.estados[c.id] || 'sinConfigurar' })),
@@ -438,6 +454,7 @@
         },
         configuracion: s.configuracion,
         generacion: { ...s.generacion, listas: Object.keys(s.estados).filter((k) => s.estados[k] === 'lista').map((k) => contexto(k).marca) },
+        vista3D: copia(s.vista3D),
         aviso: s.aviso,
       };
     }
@@ -468,7 +485,18 @@
           if (m.accion === 'varilla') lista[m.indice].tipoBarraNombre = m.nombre || null;
           if (m.accion === 'angulo') lista[m.indice][m.punta === 'inicio' ? 'anguloInicio' : 'anguloFin'] = m.angulo;
         }); break;
-        case 'ver3D': s.aviso = `En Revit se abre la vista 3D «CQEING Columnas 3D» mostrando: ${m.filtro}. Se actualiza sola con cada cambio.`; break;
+        case 'ver3D': {
+          const V = s.vista3D;
+          if (m.filtro) V.filtro = { ...copia(FILTRO_TODO), ...copia(ATAJOS_3D[m.filtro] || {}) };
+          // En Revit los números salen de lo que de verdad se dibujó; acá, de las varillas de la columna.
+          const o = opcionesDe(activa()), L = o.longitudinal;
+          V.numeros = [...new Set([L.tipoBarraEsquinasNombre, L.tipoBarraCaraXNombre, L.tipoBarraCaraYNombre, o.estribos.tramosLibres.tipoBarraNombre]
+            .filter(Boolean).map((n) => parseInt(String(n).replace(/\D/g, ''), 10)).filter((n) => n > 0))].sort((a, b) => a - b);
+          V.abierta = true;
+          V.estado = 'En Revit se abre la vista 3D «CQEING Columnas 3D». Se actualiza sola con cada cambio.';
+          break;
+        }
+        case 'filtro3D': s.vista3D.filtro = { ...copia(FILTRO_TODO), ...copia(m.filtro) }; break;
         case 'aplicarConfiguracion': { const g = s.guardadas[m.nombre]; if (g) { cambiar((o) => Object.assign(o, copia(g))); s.configuracion = m.nombre; s.aviso = `Se aplicó «${m.nombre}».`; } break; }
         case 'guardarConfiguracion': { const id = activa(); s.guardadas[m.nombre] = copia(opcionesDe(id)); s.configuracion = m.nombre; s.aviso = m.comoNueva ? `Se guardó «${m.nombre}» en el modelo.` : `Se guardaron los cambios de «${m.nombre}».`; break; }
         case 'borrarConfiguracion': delete s.guardadas[m.nombre]; if (s.configuracion === m.nombre) s.configuracion = null; s.aviso = `Se eliminó «${m.nombre}» del modelo.`; break;

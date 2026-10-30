@@ -1,4 +1,5 @@
 {
+  "modelo": "",
   "planta": {
     "rejillas": [
       {
@@ -1025,6 +1026,35 @@
     "resultado": null,
     "error": null,
     "listas": []
+  },
+  "vista3D": {
+    "abierta": false,
+    "filtro": {
+      "clases": [
+        "Longitudinal",
+        "Estribo",
+        "EstriboMenor"
+      ],
+      "grupos": [
+        "A",
+        "B"
+      ],
+      "posiciones": [
+        "Esquina",
+        "CaraX",
+        "CaraY"
+      ],
+      "zonas": [
+        "Confinada",
+        "NoConfinada"
+      ],
+      "numerosOcultos": [],
+      "partes": "Todo",
+      "soloTramo": null
+    },
+    "numeros": [],
+    "estado": null,
+    "fallo": false
   },
   "aviso": null
 }

@@ -14,7 +14,9 @@ using practicacq.Modelo;
 /// Unidades: la sección va en CENTÍMETROS (como la dibuja la página) y todo
 /// lo demás en metros.
 /// </summary>
+/// <param name="Modelo">El nombre del modelo de Revit (decisión 20), para la barra de arriba.</param>
 public sealed record VistaColumnas(
+    string Modelo,
     PlantaVista Planta,
     IReadOnlyList<string> Elegidas,
     IReadOnlyList<string> Compatibles,
@@ -24,6 +26,7 @@ public sealed record VistaColumnas(
     CatalogosVista Catalogos,
     string? Configuracion,
     GeneracionVista Generacion,
+    Vista3DVista Vista3D,
     string? Aviso)
 {
     /// <summary>camelCase y los enums por nombre («GrapaC», «Fila»), como los espera la página.</summary>
@@ -120,6 +123,20 @@ public sealed record FilaCuadroVista(
 /// <param name="Listas">Las marcas de las columnas que se van a generar.</param>
 public sealed record GeneracionVista(
     IReadOnlyList<string> Choques, bool Pendiente, ResultadoVista? Resultado, string? Error, IReadOnlyList<string> Listas);
+
+/// <summary>
+/// La vista 3D en Revit y sus filtros, como <c>Vistas/PanelFiltros3D</c> (decisión 18 del plan).
+/// </summary>
+/// <param name="Abierta">Se abrió con «Ver en 3D»: desde ahí, cada cambio la redibuja.</param>
+/// <param name="Numeros">Los números de varilla que se dibujaron la última vez (-1 = fuera de la tabla); vacío antes de verla.</param>
+/// <param name="Estado">Lo que dijo la última vista, o null.</param>
+public sealed record Vista3DVista(bool Abierta, Filtro3DVista Filtro, IReadOnlyList<int> Numeros, string? Estado, bool Fallo);
+
+/// <summary>Un <see cref="FiltroPrevia3D"/> como lo marca la página.</summary>
+/// <param name="SoloTramo">El índice del tramo al que se recorta todo, o null para la columna entera.</param>
+public sealed record Filtro3DVista(
+    IReadOnlyList<ClasePieza> Clases, IReadOnlyList<GrupoTraslapo> Grupos, IReadOnlyList<PosicionBarra> Posiciones,
+    IReadOnlyList<ZonaEstribo> Zonas, IReadOnlyList<int> NumerosOcultos, ModoPartes Partes, int? SoloTramo);
 
 /// <param name="Avisos">Lo que salió mal o a medias al generar: la página lo muestra aparte, en naranja, y no como parte del «Se armó».</param>
 public sealed record ResultadoVista(IReadOnlyList<string> Detalles, IReadOnlyList<string> Avisos);

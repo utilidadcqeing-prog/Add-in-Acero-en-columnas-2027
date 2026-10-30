@@ -543,6 +543,82 @@ Probar("Ver3D_CadaCambioLoVuelveAPedir", () =>
     Igual(0.045, sesion.OpcionesPara3D()!.Plan.Columnas[0].Recubrimiento!.Value, "la 3D usa lo de ahora");
 });
 
+object Marcado(string[]? clases = null, string[]? grupos = null, int[]? ocultos = null, string partes = "Todo", int? soloTramo = null) => new
+{
+    clases = clases ?? new[] { "Longitudinal", "Estribo", "EstriboMenor" },
+    grupos = grupos ?? new[] { "A", "B" },
+    posiciones = new[] { "Esquina", "CaraX", "CaraY" },
+    zonas = new[] { "Confinada", "NoConfinada" },
+    numerosOcultos = ocultos ?? Array.Empty<int>(),
+    partes,
+    soloTramo,
+};
+
+Probar("Filtro3D_LasCasillasLleganAlPedido", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "ver3D", filtro = "Todo" });
+    sesion.Pedido3D = null;
+    Mandar(sesion, new { tipo = "filtro3D", filtro = Marcado(new[] { "Longitudinal" }, new[] { "A" }, new[] { 4 }, "SoloGanchos") });
+    FiltroPrevia3D? f = sesion.Pedido3D;
+    Cierto(f is not null, "con la 3D abierta, cada cambio la redibuja");
+    Cierto(f!.Clases.SetEquals(new[] { ClasePieza.Longitudinal }), "solo longitudinales");
+    Cierto(f.Grupos.SetEquals(new[] { GrupoTraslapo.A }), "solo el grupo A");
+    Cierto(f.NumerosOcultos.SetEquals(new[] { 4 }), "la #4 oculta");
+    Cierto(f.Partes == ModoPartes.SoloGanchos && f.SoloAltura is null, "solo ganchos, en toda la columna");
+});
+
+Probar("Filtro3D_SinAbrir_NoPide", () =>
+{
+    SesionColumnas sesion = ConC12();
+    VistaColumnas v = Mandar(sesion, new { tipo = "filtro3D", filtro = Marcado(new[] { "Estribo" }) });
+    Cierto(sesion.Pedido3D is null, "sin abrir la 3D no se pide nada");
+    Cierto(!v.Vista3D.Abierta && v.Vista3D.Filtro.Clases.SequenceEqual(new[] { ClasePieza.Estribo }), "la vista trae lo marcado");
+});
+
+Probar("Filtro3D_SoloTramoElegido_RecortaASuAltura", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "ver3D", filtro = "Todo" });
+    Tramo t = c12.Tramos[2];
+    Mandar(sesion, new { tipo = "filtro3D", filtro = Marcado(soloTramo: 2) });
+    Cierto(sesion.Pedido3D?.SoloAltura is { } r && Math.Abs(r.ZDesde - t.ZInferior) < 1e-9 && Math.Abs(r.ZHasta - t.ZSuperior) < 1e-9,
+        $"la altura del tramo 2: {sesion.Pedido3D?.SoloAltura}");
+    VistaColumnas v = Mandar(sesion, new { tipo = "filtro3D", filtro = Marcado(soloTramo: 99) });
+    Cierto(sesion.Pedido3D is { SoloAltura: null } && v.Vista3D.Filtro.SoloTramo is null, "un tramo que no existe se ignora");
+});
+
+Probar("Ver3D_Atajo_PoneLasCasillas", () =>
+{
+    VistaColumnas v = Mandar(ConC12(), new { tipo = "ver3D", filtro = "Solo traslapos" });
+    Cierto(v.Vista3D.Abierta, "abre la vista");
+    Cierto(v.Vista3D.Filtro.Clases.SequenceEqual(new[] { ClasePieza.Longitudinal }), "solo longitudinales");
+    Cierto(v.Vista3D.Filtro.Partes == ModoPartes.SoloTraslapos, "solo traslapos");
+});
+
+Probar("ElegirColumna_LaSeleccionaEnElModelo", () =>
+{
+    SesionColumnas sesion = ConC12();
+    sesion.SeleccionEnModelo = null;
+    Mandar(sesion, new { tipo = "elegirColumnas", ids = new[] { "C-12" } });
+    ColumnaResumen c = proveedor.ListarColumnas().Single(x => x.Id == "C-12");
+    Cierto(sesion.SeleccionEnModelo is { } ids && ids.SequenceEqual(c.IdsEnRevit), "todos los elementos de la pila de C-12");
+    sesion.SeleccionEnModelo = null;
+    sesion.SincronizarDesdeRevit(c.IdsEnRevit);
+    Cierto(sesion.SeleccionEnModelo is null, "lo elegido en Revit ya está seleccionado: no se vuelve a pedir");
+});
+
+Probar("Resultado3D_TraeLosNumerosYElEstado", () =>
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "ver3D", filtro = "Todo" });
+    VistaColumnas v = sesion.Resultado3D(new ResumenPrevia3D("Se ven 12 barras.", new[] { 3, 4 }));
+    Cierto(v.Vista3D.Numeros.SequenceEqual(new[] { 3, 4 }), "los números de varilla dibujados");
+    Cierto(v.Vista3D.Estado == "Se ven 12 barras." && !v.Vista3D.Fallo, "el estado");
+    v = sesion.Resultado3D(new ResumenPrevia3D("No se pudo.", Array.Empty<int>(), Fallo: true));
+    Cierto(v.Vista3D.Fallo && v.Vista3D.Numeros.SequenceEqual(new[] { 3, 4 }), "un fallo no borra las casillas de antes");
+});
+
 Probar("Excepcion_SeMarcaEnElTramo", () =>
 {
     int libre = Indices(c12, TipoTramo.Libre).Skip(1).First();
@@ -551,6 +627,13 @@ Probar("Excepcion_SeMarcaEnElTramo", () =>
     Cierto(v.Columna.ZonasEstribos.Where(z => z.Indice == libre).All(z => Math.Abs(z.Cada!.Value - 0.10) < 1e-9), "las zonas del tramo");
     v = Mandar(ConC12(), new { tipo = "cambiarEstribos", excepcion = new { indice = libre, config = (ConfigTramo?)null } });
     Cierto(!v.Columna!.Tramos[libre].Excepcion, "sin excepción");
+});
+
+Probar("Vista_TraeElNombreDelModelo", () =>
+{
+    SesionColumnas sesion = ConC12();
+    sesion.Modelo = "Edificio Norte";
+    Cierto(sesion.Vista().Modelo == "Edificio Norte", "el nombre del modelo");
 });
 
 Probar("VistaC12_SeGuardaParaLaMaqueta", () =>

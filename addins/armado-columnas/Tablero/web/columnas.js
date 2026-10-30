@@ -189,6 +189,13 @@
       this.setState({ primero: null, pieza: nueva });
     }
 
+    // Con «Solo el tramo elegido» marcado en el panel 3D, el recorte sigue al tramo que se elige.
+    elegirTramo(i) {
+      this.setState({ tramo: i });
+      const F = this.state.vista.vista3D.filtro;
+      if (F.soloTramo != null && F.soloTramo !== i) this.enviar({ tipo: 'filtro3D', filtro: { ...F, soloTramo: i } });
+    }
+
     eliminarPieza() {
       this.enviar({ tipo: 'menor', accion: 'eliminar', indice: this.state.pieza });
       this.setState({ pieza: null });
@@ -221,7 +228,7 @@
       return html`<header class="barra">
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="4.5" y="1.5" width="9" height="15" rx="1" stroke="#1F5FAF" stroke-width="1.6" fill="none"></rect><path d="M4.5 6h9M4.5 12h9" stroke="#1F5FAF" stroke-width="1.6"></path></svg>
         <span class="titulo">Acero en columnas</span>
-        <span class="proyecto">Edificio de ejemplo</span>
+        <span class="proyecto">${v.modelo}</span>
         ${enRevit ? null : html`<span class="maqueta" aria-label="Ejemplos de la maqueta">Maqueta ·
           ${[['normal', 'Edificio'], ['simple', 'Una columna'], ['varias', 'Varias elegidas']].map(([h, t]) => html`<a href=${'#' + h} aria-current=${s.ejemplo === h ? 'true' : 'false'}>${t}</a>`)}
         </span>`}
@@ -350,11 +357,7 @@
               <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l5.5 3v7L8 14.5l-5.5-3v-7zM8 8l5.5-3.5M8 8v6.5M8 8L2.5 4.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"></path></svg>
               Ver en 3D
             </button>
-            ${s.menu === '3d' ? html`<div class="menu" role="menu">
-              <div class="titulo-menu">Vista 3D en Revit</div>
-              ${FILTROS_3D.map((f) => html`<button type="button" role="menuitem" class="item" onClick=${() => { this.setState({ menu: null }); this.enviar({ tipo: 'ver3D', filtro: f }); }}>${f}</button>`)}
-              <div class="nota">Se actualiza sola con cada cambio. No crea nada en el modelo.</div>
-            </div>` : null}
+            ${s.menu === '3d' ? this.panel3D(v, col) : null}
           </div>
         </div>
         ${v.descartadas.length ? html`<div class="aviso" role="status">
@@ -375,6 +378,46 @@
       </main>`;
     }
 
+    // Los filtros de la vista 3D, los mismos que PanelFiltros3D de la ventana vieja (decisión 18 del plan). La página no
+    // guarda el filtro: pinta el que trae la vista y manda cada cambio.
+    panel3D(v, col) {
+      const s = this.state, V = v.vista3D, F = V.filtro;
+      const mandar = (cambio) => this.enviar({ tipo: 'filtro3D', filtro: { ...F, ...cambio } });
+      const casilla = (grupo, valor, texto) => html`<label class="casilla-3d">
+        <input type="checkbox" checked=${F[grupo].includes(valor)}
+          onChange=${(e) => mandar({ [grupo]: e.target.checked ? [...F[grupo], valor] : F[grupo].filter((x) => x !== valor) })} /> ${texto}</label>`;
+      const partes = (valor, texto) => html`<label class="casilla-3d">
+        <input type="radio" name="partes-3d" checked=${F.partes === valor} onChange=${() => mandar({ partes: valor })} /> ${texto}</label>`;
+      const colorDe = (n) => { const r = v.catalogos.cuadro.find((x) => x.n === n); return r ? r.color : '#9AA3AD'; };
+      const tramo = s.tramo != null ? col.tramos[s.tramo] : null;
+      return html`<div class="menu panel-3d" role="dialog" aria-label="Vista 3D en Revit">
+        <div class="titulo-menu">Vista 3D en Revit</div>
+        <div class="fila" style="flex-wrap: wrap">
+          ${FILTROS_3D.map((f) => html`<button type="button" class="boton chico" onClick=${() => this.enviar({ tipo: 'ver3D', filtro: f })}>${f}</button>`)}
+        </div>
+        <div class="separador"></div>
+        <div class="grupo-3d"><b>Mostrar</b>${casilla('clases', 'Longitudinal', 'Longitudinales')}${casilla('clases', 'Estribo', 'Estribos')}${casilla('clases', 'EstriboMenor', 'Estribos menores')}</div>
+        <div class="grupo-3d"><b>Partes</b>${partes('Todo', 'Barras enteras')}${partes('SoloGanchos', 'Solo ganchos')}${partes('SoloTraslapos', 'Solo traslapos')}</div>
+        <div class="grupo-3d"><b>Grupo</b>${casilla('grupos', 'A', 'A')}${casilla('grupos', 'B', 'B')}</div>
+        <div class="grupo-3d"><b>Posición</b>${casilla('posiciones', 'Esquina', 'Esquinas')}${casilla('posiciones', 'CaraX', 'Cara X')}${casilla('posiciones', 'CaraY', 'Cara Y')}</div>
+        <div class="grupo-3d"><b>Diámetro</b>${V.numeros.length ? V.numeros.map((n) => html`<label class="casilla-3d">
+          <input type="checkbox" checked=${!F.numerosOcultos.includes(n)}
+            onChange=${(e) => mandar({ numerosOcultos: e.target.checked ? F.numerosOcultos.filter((x) => x !== n) : [...F.numerosOcultos, n] })} />
+          <i class="muestra" style=${`background: ${colorDe(n)}`}></i>${n > 0 ? '#' + n : 'otro'}</label>`) : html`<span class="nota" style="padding: 0">aparecen al ver en 3D</span>`}</div>
+        <div class="grupo-3d"><b>Zona</b>${casilla('zonas', 'Confinada', 'Confinada')}${casilla('zonas', 'NoConfinada', 'No confinada')}</div>
+        <label class="casilla-3d" style="padding: 2px 8px" title=${tramo ? '' : 'Elige un tramo en el dibujo del paso 2 Estribos'}>
+          <input type="checkbox" disabled=${!tramo && F.soloTramo == null} checked=${F.soloTramo != null}
+            onChange=${(e) => mandar({ soloTramo: e.target.checked ? s.tramo : null })} />
+          Solo el tramo elegido${tramo ? html`<span class="nota" style="padding: 0">: ${nombreTramo(col, tramo)}</span>` : html`<span class="nota" style="padding: 0"> (elige uno en el paso 2)</span>`}
+        </label>
+        <div class="separador"></div>
+        <div class="fila" style="align-items: center">
+          <span class="nota" style=${'flex: 1; padding: 0' + (V.fallo ? '; color: #92400E' : '')}>${V.estado || (V.abierta ? '' : 'Se actualiza sola con cada cambio. No crea nada en el modelo.')}</span>
+          <button type="button" class="boton primario chico" onClick=${() => this.enviar({ tipo: 'ver3D' })}>${V.abierta ? 'Volver a la vista 3D' : 'Ver en 3D'}</button>
+        </div>
+      </div>`;
+    }
+
     lienzoBarras(col) {
       const { w, h } = this.state.tam;
       return html`<div class="lienzo"><div class="medida" ref=${(el) => this.medir(el)}>
@@ -389,7 +432,7 @@
       const ZN = { confinada: ['#1F5FAF', 'Puntas (confinado)'], central: ['#86A9D6', 'Centro del tramo'], uniforme: ['#4F7FBF', 'Uniforme'], nudo: ['#7D8A99', 'Nudo (cruce con la viga)'], zapata: ['#B9C2CC', 'Sin estribos'] };
       return html`<div class="lienzo">
         <div class="medida" ref=${(el) => this.medir(el)}>
-          <${Elevacion} col=${col} w=${w} h=${h} conEstribos=${true} seleccionado=${s.tramo} onTramo=${(i) => this.setState({ tramo: s.tramo === i ? null : i })} />
+          <${Elevacion} col=${col} w=${w} h=${h} conEstribos=${true} seleccionado=${s.tramo} onTramo=${(i) => this.elegirTramo(s.tramo === i ? null : i)} />
         </div>
         <div class="lado-lienzo der">
           <h3 style="align-self: flex-start">Sección</h3>

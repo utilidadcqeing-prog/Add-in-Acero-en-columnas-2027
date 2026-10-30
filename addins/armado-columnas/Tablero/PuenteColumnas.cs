@@ -28,6 +28,7 @@ internal sealed class PuenteColumnas
 
     private readonly ManejadorGeneracionArmado generar = new();
     private readonly ManejadorVistaPrevia3D previa3D = new();
+    private readonly ManejadorSeleccionElemento seleccionar = new() { CentrarVista = true };
     private readonly ManejadorPersistirConfiguraciones persistir = new();
     private BarraSeleccion? barra;
 
@@ -44,15 +45,16 @@ internal sealed class PuenteColumnas
         persistir.AlFallar = motivo => Enviar(sesion!.Avisar($"No se pudieron guardar las configuraciones en el modelo: {motivo}"));
         almacen.CambiosPendientes += () => cola.Encolar(persistir.Execute);
 
-        sesion = new SesionColumnas(new LectorContexto(documento), new ProveedorTiposReal(documento), almacen, new RegistroGeneradosRevit(documento));
+        sesion = new SesionColumnas(new LectorContexto(documento), new ProveedorTiposReal(documento), almacen, new RegistroGeneradosRevit(documento))
+        {
+            Modelo = documento.Title,
+        };
 
         generar.AlTerminar = resultado => Enviar(sesion.ResultadoGeneracion(resultado));
         generar.AlFallar = mensaje => Enviar(sesion.ErrorGeneracion(mensaje));
         previa3D.Documento = documento;
-        previa3D.AlTerminar = resumen =>
-        {
-            if (resumen.Fallo) Enviar(sesion.Avisar(resumen.Texto));
-        };
+        // El estado y los números de varilla dibujados van al panel 3D de la página (decisión 18).
+        previa3D.AlTerminar = resumen => Enviar(sesion.Resultado3D(resumen));
 
         ventana.MensajeRecibido += json => cola.Encolar(app => Atender(app, json));
         cola.Fallo += texto => Enviar(sesion.Avisar($"No se pudo hacer en Revit: {texto}"));
@@ -75,6 +77,13 @@ internal sealed class PuenteColumnas
         {
             sesion.SeleccionPedida = false;
             EmpezarSeleccion(app);
+        }
+
+        if (sesion.SeleccionEnModelo is IReadOnlyList<string> elementos)
+        {
+            sesion.SeleccionEnModelo = null;
+            seleccionar.Objetivos = elementos.Select(id => long.TryParse(id, out long n) ? new ElementId(n) : null).OfType<ElementId>().ToList();
+            seleccionar.Execute(app);
         }
 
         if (sesion.Pedido3D is FiltroPrevia3D filtro)
