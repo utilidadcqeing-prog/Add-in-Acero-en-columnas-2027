@@ -54,8 +54,8 @@ public class ComandoDiagnosticoPrevia3D : IExternalCommand
                     {
                         Id = idColumna,
                         Contexto = contexto,
-                        Tramos = contexto.Tramos.Select(_ => (ConfigTramo?)VentanaConfiguradorEstribos.ConfigPorDefecto(tipos)).ToList(),
-                        Longitudinal = VentanaConfiguradorEstribos.ConfigLongitudinalPorDefecto(tipos),
+                        Tramos = contexto.Tramos.Select(_ => (ConfigTramo?)ValoresPorDefecto.Tramo(tipos)).ToList(),
+                        Longitudinal = ValoresPorDefecto.Longitudinal(tipos),
                     },
                 },
             },

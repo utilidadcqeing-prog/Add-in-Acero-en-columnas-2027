@@ -78,9 +78,17 @@ public interface IProveedorContexto
 /// </summary>
 /// <param name="LadoX">Lado de la sección en X, en metros, para dibujarla a escala en la planta (#133). 0 si no se conoce.</param>
 /// <param name="LadoY">Lado de la sección en Y, en metros. 0 si no se conoce.</param>
+/// <param name="Elementos">
+/// Los ids de todos los elementos de Revit de la pila, uno por piso (<see cref="Id"/> es el de abajo). Al seleccionar en
+/// una planta de arriba se elige el elemento de ese piso, y con esto se sabe de qué columna es. null = solo <see cref="Id"/>.
+/// </param>
 public sealed record ColumnaResumen(
-    string Id, string Marca, bool EsColumneta, double X, double Y, string MarcaUbicacion = "", double LadoX = 0, double LadoY = 0)
+    string Id, string Marca, bool EsColumneta, double X, double Y, string MarcaUbicacion = "", double LadoX = 0, double LadoY = 0,
+    IReadOnlyList<string>? Elementos = null)
 {
+    /// <summary>Los ids de Revit de la columna: todos los de la pila.</summary>
+    public IReadOnlyList<string> IdsEnRevit => Elementos is { Count: > 0 } ? Elementos : new[] { Id };
+
     /// <summary>
     /// Umbral de "columneta", en metros -- issue #33: confirmado por William
     /// en la reunión del 4-sep. Si la base O la altura de la sección es menor

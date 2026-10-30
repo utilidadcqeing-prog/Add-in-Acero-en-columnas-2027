@@ -16,7 +16,7 @@ public class App : IExternalApplication
         panelEstructural.AddItem(CintaCqeing.CrearBoton(
             "ComandoEstribos",
             "Acero en\ncolumnas",
-            "practicacq.ComandoEstribos",
+            "practicacq.Tablero.ComandoColumnas",
             "Genera el acero de las columnas seleccionadas: barras longitudinales con sus traslapos, estribos y estribos menores.",
             "icono"));
 

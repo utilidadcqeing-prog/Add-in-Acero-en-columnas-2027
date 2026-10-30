@@ -236,10 +236,21 @@ public static class BarraContinua
 
         Alinear(doc, piezas, p);
 
-        // Con la varilla dibujada al revés, en cada pieza el extremo 0 es el de
-        // arriba.
-        ReponerGancho(piezas[0], p.DeArribaAAbajo ? 1 : 0, p.GanchoAbajo, Orientacion(p, p.OrientacionAbajo));
-        ReponerGancho(piezas[^1], p.DeArribaAAbajo ? 0 : 1, p.GanchoArriba, Orientacion(p, p.OrientacionArriba));
+        // Al partir, Revit puede dar vuelta una pieza: 29-oct, la de abajo quedó
+        // con el extremo 0 en el traslapo y el gancho de abajo se repuso ahí
+        // (docs/planes/2026-10-29-gancho-en-traslapo.md). El extremo y la
+        // orientación se leen de cada pieza, no del sentido de la varilla entera.
+        List<Rebar> porAltura = piezas.OrderBy(r => Extremos(r).Abajo.Z).ToList();
+        for (int i = 0; i < porAltura.Count; i++)
+        {
+            Rebar pieza = porAltura[i];
+            bool alReves = AlReves(pieza);
+            int abajo = alReves ? 1 : 0, arriba = 1 - abajo;
+            if (i == 0) ReponerGancho(pieza, abajo, p.GanchoAbajo, Orientacion(alReves, p.OrientacionAbajo));
+            else QuitarGancho(pieza, abajo);
+            if (i == porAltura.Count - 1) ReponerGancho(pieza, arriba, p.GanchoArriba, Orientacion(alReves, p.OrientacionArriba));
+            else QuitarGancho(pieza, arriba);
+        }
 
         if (Traza is not null)
         {
@@ -566,7 +577,11 @@ public static class BarraContinua
     /// que el gancho mire al mismo lado hay que pedir el opuesto.
     /// </summary>
     private static RebarTerminationOrientation Orientacion(Pedido p, RebarTerminationOrientation haciaArriba) =>
-        !p.DeArribaAAbajo ? haciaArriba
+        Orientacion(p.DeArribaAAbajo, haciaArriba);
+
+    /// <summary><paramref name="haciaArriba"/> es la de una barra dibujada de abajo hacia arriba; dada vuelta, se invierte.</summary>
+    private static RebarTerminationOrientation Orientacion(bool deArribaAAbajo, RebarTerminationOrientation haciaArriba) =>
+        !deArribaAAbajo ? haciaArriba
         : haciaArriba == RebarTerminationOrientation.Left ? RebarTerminationOrientation.Right
         : RebarTerminationOrientation.Left;
 
@@ -912,6 +927,24 @@ public static class BarraContinua
 
         try { pieza.SetHookTypeId(extremo, gancho.Id); } catch { /* best-effort */ }
         try { pieza.SetTerminationOrientation(extremo, orientacion); } catch { /* best-effort */ }
+    }
+
+    /// <summary>En un extremo de traslapo no va gancho; si Revit dejó uno, se saca.</summary>
+    private static void QuitarGancho(Rebar pieza, int extremo)
+    {
+        try
+        {
+            if (pieza.GetHookTypeId(extremo) != ElementId.InvalidElementId)
+                pieza.SetHookTypeId(extremo, ElementId.InvalidElementId);
+        }
+        catch { /* best-effort */ }
+    }
+
+    /// <summary>La pieza está dibujada de arriba hacia abajo: su extremo 0 (sin ganchos) está más alto que el 1.</summary>
+    private static bool AlReves(Rebar rebar)
+    {
+        IList<Curve> curvas = rebar.GetCenterlineCurves(false, true, true, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
+        return curvas[0].GetEndPoint(0).Z > curvas[^1].GetEndPoint(1).Z;
     }
 
     /// <summary>Extremos inferior y superior de la línea central, sin ganchos ni radios.</summary>

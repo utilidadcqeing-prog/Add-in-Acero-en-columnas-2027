@@ -21,6 +21,17 @@ public sealed class ConfiguracionGuardada
     public ConfigTramo Tramo { get; set; } = new();
 
     public ConfigLongitudinal Longitudinal { get; set; } = new();
+
+    /// <summary>
+    /// Los estribos de toda la columna (interfaz web, #209). <c>null</c> en las
+    /// guardadas con la 1.4.1 o antes: ver <see cref="EstribosDeLaColumna"/>.
+    /// Al guardar se escribe también <see cref="Tramo"/> (= <c>TramosLibres</c>),
+    /// para que una 1.4.1 que lea el modelo siga funcionando.
+    /// </summary>
+    public ConfigEstribosColumna? Estribos { get; set; }
+
+    /// <summary><see cref="Estribos"/>, o si no lo trae, armado desde <see cref="Tramo"/>.</summary>
+    public ConfigEstribosColumna EstribosDeLaColumna() => Estribos?.Copiar() ?? ConfigEstribosColumna.Desde(Tramo);
 }
 
 /// <summary>

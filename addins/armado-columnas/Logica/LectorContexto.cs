@@ -106,7 +106,9 @@ public sealed class LectorContexto : IProveedorContexto
                 MarcaUbicacion(p.pila[0].Instancia),
                 // Los lados, para dibujarla a escala en el selector (#133).
                 p.LadoX,
-                p.LadoY))
+                p.LadoY,
+                // Todos los pisos: al elegir en una planta de arriba se selecciona ese elemento, no el de abajo.
+                p.pila.Select(e => IdTexto(e.Instancia.Id)).ToList()))
             .ToList();
 
     /// <summary>
@@ -775,8 +777,10 @@ public sealed class LectorContexto : IProveedorContexto
 
             if (Math.Abs(recubrimientoMetros - RecubrimientoNormalMetros) > 0.001)
                 avisos.Add(
-                    $"Recubrimiento lateral de {recubrimientoMetros * 100:0.#} cm -- distinto del valor normal " +
-                    $"({RecubrimientoNormalMetros * 100:0} cm). Se usa igual, solo para que lo revisen.");
+                    // Vale para las dos ventanas: la nueva arranca con 4 cm y la vieja con el de Revit (decisión 15 de
+                    // docs/planes/2026-10-29-interfaz-web-columnas.md); en las dos manda el campo «Recubrimiento».
+                    $"En Revit tiene un recubrimiento lateral de {recubrimientoMetros * 100:0.#} cm, distinto del valor " +
+                    $"normal ({RecubrimientoNormalMetros * 100:0} cm). Revisa cuál corresponde: se usa el de «Recubrimiento».");
 
             return recubrimientoPies;
         }
@@ -812,10 +816,16 @@ public sealed class LectorContexto : IProveedorContexto
             .ToList();
     }
 
+    /// <summary>
+    /// La «Marca» de Revit; sin ella, la marca de ubicación («A-1»), que es como el equipo nombra las columnas, y
+    /// solo al final el Id (#205, hallazgo 13 del plan de la interfaz web). Solo se usa en textos.
+    /// </summary>
     private static string Marca(FamilyInstance columna) =>
         columna.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } marca
             ? marca
-            : $"[{columna.Id}]";
+            : MarcaUbicacion(columna) is { Length: > 0 } ubicacion
+                ? ubicacion
+                : $"[{columna.Id}]";
 
     /// <summary>
     /// La "marca de ubicación del pilar": la coordenada de rejilla que Revit ya

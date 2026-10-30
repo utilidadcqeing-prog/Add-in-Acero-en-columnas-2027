@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pruebas sin Revit de la interfaz web de columnas
+    (docs/planes/2026-10-29-interfaz-web-columnas.md). Mismo molde que
+    tools/PruebasVistaPrevia: consola sin dependencias, "dotnet run" y código 1
+    si alguna falla. Los archivos se enlazan, no se copian.
+
+    Del Modelo entra todo MENOS lo que sí referencia Revit (la misma exclusión
+    que tools/PreviewUI).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\addins\armado-columnas\Modelo\*.cs"
+             Exclude="..\..\addins\armado-columnas\Modelo\EstandarCQ.cs;..\..\addins\armado-columnas\Modelo\MuroSeleccionado.cs;..\..\addins\armado-columnas\Modelo\OpcionesGeneracion.cs;..\..\addins\armado-columnas\Modelo\TipoFamilia.cs">
+      <Link>Modelo\%(Filename)%(Extension)</Link>
+    </Compile>
+  </ItemGroup>
+
+  <!-- De Tablero/, solo lo que no toca WPF ni Revit (la sesión y la vista). -->
+  <ItemGroup>
+    <Compile Include="..\..\addins\armado-columnas\Tablero\VistaColumnas.cs" Link="Tablero\VistaColumnas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\OpcionesColumna.cs" Link="Tablero\OpcionesColumna.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\CompatibilidadColumnas.cs" Link="Tablero\CompatibilidadColumnas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\ArmadorVistaColumnas.cs" Link="Tablero\ArmadorVistaColumnas.cs" />
+    <Compile Include="..\..\addins\armado-columnas\Tablero\SesionColumnas.cs" Link="Tablero\SesionColumnas.cs" />
+  </ItemGroup>
+
+</Project>
