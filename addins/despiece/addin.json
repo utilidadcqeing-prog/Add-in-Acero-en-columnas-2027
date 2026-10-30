@@ -3,5 +3,6 @@
   "nombre": "Despiece",
   "descripcion": "Vistas de despiece de vigas y columnas, listas para llevar al plano.",
   "proyecto": "CQEING.Despiece.csproj",
-  "revit": ["2026", "2027"]
+  "revit": ["2026", "2027"],
+  "heredados": []
 }
