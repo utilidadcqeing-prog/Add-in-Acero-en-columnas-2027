@@ -86,43 +86,28 @@
     const ejes = [];
     ['1', '2', '3'].forEach((t, i) => { const q = p(i, -0.45, 0); ejes.push({ t, x: q[0], y: q[1] }); });
     ['A', 'B', 'C'].forEach((t, i) => { const q = p(-0.45, i, 0); ejes.push({ t, x: q[0], y: q[1] }); });
-    const hojaW = Math.min(w - 270, Math.round((svgH - 40) / 0.54));
     return {
-      w, h, svgH, tipo, aplica, lines, hits, ejes, tags, hojaW, hojaH: Math.round(hojaW * 0.54),
-      esHoja: modo === 'hoja', esElegir: modo === 'elegir', esPrevia: modo === 'previa', el,
-      vistaNombre: modo === 'hoja' ? 'Sección: ' + aplica : modo === 'previa' ? 'Vista 3D · previa de ' + aplica : 'Vista 3D · estructura',
+      w, h, svgH, aplica, lines, hits, ejes, tags,
+      esElegir: modo === 'elegir', esPrevia: modo === 'previa',
+      vistaNombre: modo === 'previa' ? 'Vista 3D · previa de ' + aplica : 'Vista 3D · estructura',
       queElegir: tipo === 'viga' ? 'una viga del modelo' : 'una columna del modelo'
     };
   };
 
   window.EnRevit = (props) => {
     const v = calcular(props);
-    const Despiece = window.Despiece;
     return html`
       <div style="position: relative; width: ${v.w}px; height: ${v.h}px; display: flex; flex-direction: column; background: #E9ECEF; border: 1px solid #AEB5BD; box-sizing: border-box; overflow: hidden; font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif; font-size: 13px; color: #16191D">
         <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: #3B4450; color: #FFFFFF; font-size: 12px">
           <span style="font-weight: 600">Revit</span><span>${v.vistaNombre}</span>
         </div>
         <div style="position: relative; flex: 1; min-height: 0; background: #FFFFFF">
-          ${v.esHoja ? html`
-            <div style="position: absolute; inset: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr)">
-              <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; background: #2F3640; color: #FFFFFF; font-size: 12px">
-                <span style="font-weight: 600">Navegador de proyectos</span>
-                <span style="color: #C9CFD6">Secciones</span>
-                <span style="padding: 6px 8px; background: #1F5FAF; border-radius: 4px">${v.aplica}</span>
-                <span style="padding: 6px 8px; background: #1F5FAF; border-radius: 4px">Sección ${v.aplica}</span>
-                <span style="color: #C9CFD6; margin-top: 6px">Arrastra estas vistas a tu plano</span>
-              </div>
-              <div style="display: grid; place-items: center; min-width: 0; padding: 8px">
-                <${Despiece} tipo=${v.tipo} el=${v.el} aplica=${v.aplica} w=${v.hojaW} h=${v.hojaH} />
-              </div>
-            </div>` : html`
-            <svg width=${v.w} height=${v.svgH} style="display: block" role="img" aria-label="Modelo en Revit con el elemento resaltado">
-              ${v.lines.map((l) => html`<path d=${l.d} fill="none" stroke=${l.c} stroke-width=${l.w} stroke-linecap="round" stroke-dasharray=${l.dash}></path>`)}
-              ${v.ejes.map((e) => html`<circle cx=${e.x} cy=${e.y} r="13" fill="#FFFFFF" stroke="#5E6670"></circle>`)}
-              ${v.hits.map((l) => html`<path d=${l.d} fill="none" stroke="#000000" stroke-opacity="0" stroke-width="16" style="cursor: pointer" onClick=${l.pick}></path>`)}
-            </svg>
-            ${v.ejes.map((e) => html`<span style="position: absolute; left: ${e.x}px; top: ${e.y}px; transform: translate(-50%, -50%); font-size: 12px; line-height: 1; pointer-events: none">${e.t}</span>`)}`}
+          <svg width=${v.w} height=${v.svgH} style="display: block" role="img" aria-label="Modelo en Revit con el elemento resaltado">
+            ${v.lines.map((l) => html`<path d=${l.d} fill="none" stroke=${l.c} stroke-width=${l.w} stroke-linecap="round" stroke-dasharray=${l.dash}></path>`)}
+            ${v.ejes.map((e) => html`<circle cx=${e.x} cy=${e.y} r="13" fill="#FFFFFF" stroke="#5E6670"></circle>`)}
+            ${v.hits.map((l) => html`<path d=${l.d} fill="none" stroke="#000000" stroke-opacity="0" stroke-width="16" style="cursor: pointer" onClick=${l.pick}></path>`)}
+          </svg>
+          ${v.ejes.map((e) => html`<span style="position: absolute; left: ${e.x}px; top: ${e.y}px; transform: translate(-50%, -50%); font-size: 12px; line-height: 1; pointer-events: none">${e.t}</span>`)}
           ${v.esElegir ? html`
             <div style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; background: #FFFFFF; border: 1px solid #C9CFD6; border-radius: 6px; box-shadow: 0 2px 8px rgba(22,25,29,.2); white-space: nowrap">
               <span>Haz clic en ${v.queElegir}</span>

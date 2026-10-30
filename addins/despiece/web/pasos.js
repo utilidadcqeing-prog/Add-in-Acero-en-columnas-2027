@@ -24,7 +24,7 @@
       const ancho = window.innerWidth, alto = window.innerHeight;
       const altoCuerpo = alto - 64 - 68 - 40 - 66; // encabezado, pie, márgenes y título del paso
       const anchoModelo = ancho - 48 - 360 - 16;
-      const anchoDibujo = Math.min(ancho - 48 - 320 - 16 - 2, Math.round((altoCuerpo - 60) / 0.54));
+      const anchoDibujo = Math.min(ancho - 48 - 320 - 16 - 2, Math.round((altoCuerpo - 2) / 0.54));
       const { elementos: DATA, filas: FILAS } = window.DATOS_EJEMPLO;
       const Despiece = window.Despiece, EnRevit = window.EnRevit;
       const lista = DATA[tipo];
@@ -48,7 +48,7 @@
       const T = {
         1: ['¿Qué vas a despiezar?', 'Elige en la lista o haz clic en el modelo. Los que llevan el mismo acero salen juntos.'],
         2: ['Revisa el despiece', 'Haz clic en una barra del dibujo o de la lista para resaltarla.'],
-        3: ['Estas vistas se crearán', 'Quedan en el navegador de Revit, con etiquetas y colores. Tú las arrastras a tu plano.']
+        3: ['Vista previa', 'Las vistas quedan en el navegador de Revit, con etiquetas y colores. Tú las arrastras a tu plano.']
       };
       const titulo = T[paso][0], ayuda = T[paso][1];
       const textoAtras = paso === 1 ? 'Cerrar' : 'Atrás';
@@ -110,14 +110,8 @@
 
             ${paso === 2 ? html`
               <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px">
-                <div style="display: flex; flex-direction: column; min-width: 0; background: #FFFFFF; border: 1px solid #AEB5BD">
-                  <div style="height: 30px; flex-shrink: 0; display: flex; align-items: center; padding: 0 10px; background: #3B4450; color: #FFFFFF; font-size: 12px">Revit · Sección: ${aplica}</div>
-                  <div style="flex: 1; min-height: 0; display: grid; place-items: center">
-                    <${Despiece} tipo=${tipo} el=${act.id} sel=${sel} onPick=${pickBar} aplica=${aplica} w=${anchoDibujo} h=${Math.round(anchoDibujo * 0.54)} />
-                  </div>
-                  <div style="height: 28px; flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 10px; background: #E9ECEF; border-top: 1px solid #AEB5BD; font-size: 12px; color: #3F4A57">
-                    <span>1 : 50</span><span>Detalle medio</span><span>Estructura alámbrica</span>
-                  </div>
+                <div style="display: grid; place-items: center; min-width: 0; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px">
+                  <${Despiece} tipo=${tipo} el=${act.id} sel=${sel} onPick=${pickBar} aplica=${aplica} w=${anchoDibujo} h=${Math.round(anchoDibujo * 0.54)} />
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: auto">
                   <span style="font-weight: 600">Barras de ${aplica}</span>
@@ -132,7 +126,15 @@
               </div>` : null}
 
             ${paso === 3 ? html`
-              <${EnRevit} tipo=${tipo} modo="hoja" el=${act.id} aplica=${aplica} w=${ancho - 48} h=${altoCuerpo} />` : null}
+              <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px">
+                <div style="display: grid; place-items: center; min-width: 0; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px">
+                  <${Despiece} tipo=${tipo} el=${act.id} aplica=${aplica} w=${anchoDibujo} h=${Math.round(anchoDibujo * 0.54)} />
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px; min-height: 0">
+                  <span style="font-weight: 600">Vistas que se crearán</span>
+                  ${[aplica, 'Sección ' + aplica].map((n) => html`<div style="padding: 10px; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px">${n}</div>`)}
+                </div>
+              </div>` : null}
           </div>
 
           <div style="height: 68px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: #FFFFFF; border-top: 1px solid #D9DDE2">

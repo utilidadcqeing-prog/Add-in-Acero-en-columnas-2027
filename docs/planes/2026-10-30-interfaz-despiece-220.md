@@ -55,6 +55,8 @@
 
 10. **La página llena la ventana** (2026-10-30, Juan, probando en Revit: "no se está usando el 100% de la página, parece que fuera una ventana dentro de otra"): cambia la restricción de 1440 × 900 fijos. En ventanas más grandes, el paso 1 agranda el modelo, el 2 el dibujo y el 3 ocupa todo el ancho. En más chicas se sigue achicando con el zoom. Lo demás de las vistas no cambia.
 
+11. **Los pasos 2 y 3 dejan de imitar a Revit** (2026-10-30, Juan, al ver el paso 3): se quitan la barra "Revit", la barra inferior y el navegador falso. El paso 3 muestra una vista previa y la lista de las dos vistas que se crearán. Las vistas reales aparecen en el navegador de Revit con #222. El modelo simulado del paso 1 se resuelve en #221, y "Ver en Revit" del paso 2 sigue simulado hasta entonces.
+
 ## Pruebas: lo que no se automatiza
 
 Este repo no tiene pruebas para el JS de los tableros, y esta issue solo agrega pantalla, sin lógica de cálculo. La comprobación es compilar, abrir en Revit y comparar con la maqueta (memoria del proyecto: se prueba en Revit, no con la demostración en Chrome).
