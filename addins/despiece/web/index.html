@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Despiece</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+body{margin:0}
+/* Página fija, como el tablero de vigas: solo las listas con scroll propio se mueven, y sin rebote. */
+html,body{overflow:hidden}
+*{overscroll-behavior:none}
+a{color:#1F5FAF}a:hover{color:#174A8A}
+button:focus-visible,select:focus-visible{outline:2px solid #1F5FAF;outline-offset:1px}
+button:disabled{cursor:not-allowed}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="vendor/htm-preact-standalone.umd.js"></script>
+<script src="datos-ejemplo.js"></script>
+<script src="despiece.js"></script>
+<script src="en-revit.js"></script>
+<script src="pasos.js"></script>
+</body>
+</html>

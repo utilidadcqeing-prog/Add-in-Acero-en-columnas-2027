@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Año de Revit, framework, API por NuGet y salida bin/<config>/<año>/: addins/Directory.Build.props. -->
+  <PropertyGroup>
+    <AssemblyName>CQEING.Despiece</AssemblyName>
+    <RootNamespace>CQEING.Despiece</RootNamespace>
+    <Company>CQEING</Company>
+    <Product>CQEING - Despiece</Product>
+    <Copyright>© CQEING</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Solo para compilar: Revit ya trae WebView2 (Core, Wpf y WebView2Loader); no se copian a la salida. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" ExcludeAssets="runtime;native;build;buildTransitive" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Enlazado, no copiado (decisión 2 del plan de #220): el zoom y el encaje son los del tablero de vigas. -->
+    <Compile Include="..\acero-vigas\calculo\CQEING.Vigas.Calculo\Tablero\CalculadoraZoom.cs" Link="Interfaz\CalculadoraZoom.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="CQEING.Despiece.addin" CopyToOutputDirectory="PreserveNewest" />
+    <!-- La página: se sirve desde bin\...\web con un host virtual de WebView2. -->
+    <Content Include="web\**" CopyToOutputDirectory="PreserveNewest" Link="web\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>CQEING - Despiece</Name>
+    <!-- El gestor reescribe esta ruta como absoluta a la carpeta de la versión instalada. -->
+    <Assembly>CQEING.Despiece.dll</Assembly>
+    <FullClassName>CQEING.Despiece.AppDespiece</FullClassName>
+    <ClientId>5c1f3e72-8a4d-4b6e-9d21-7f0c3ae6b814</ClientId>
+    <VendorId>CQEING</VendorId>
+    <VendorDescription>CQEING</VendorDescription>
+  </AddIn>
+</RevitAddIns>
