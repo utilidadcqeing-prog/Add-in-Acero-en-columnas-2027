@@ -408,13 +408,79 @@ Probar("Generar_SinListas_Avisa", () =>
 
 Probar("MenorInvalido_SaleMarcadoConSuMotivo", () =>
 {
+    // Con 6 barras por cara, el cerrado de dos vecinas con una #8 no se puede doblar: queda más angosto que su mínimo. (Hasta la
+    // tarea 6 se armaba en una sola barra, desde = hasta, que ahora no se deja poner.)
     SesionColumnas sesion = ConC12();
-    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "Cerrado", eje = "Columna", desde = 0, hasta = 0 });
+    Mandar(sesion, new { tipo = "cambiarLongitudinal", config = new { barrasPorCaraX = 6, barrasPorCaraY = 3 } });
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "Cerrado", eje = "Columna", desde = 0, hasta = 1 });
+    Mandar(sesion, new { tipo = "menor", accion = "varilla", indice = 0, nombre = "#8 COL" });
     VistaColumnas v = Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaC", eje = "Fila", desde = 4, hasta = 4 });
     MenorVista cerrado = v.Columna!.Seccion.Menores[0], fuera = v.Columna.Seccion.Menores[1];
     Cierto(!cerrado.Valida && cerrado.Motivo!.Contains("estribo cerrado"), $"cerrado angosto: {cerrado.Valida} {cerrado.Motivo}");
     Cierto(cerrado.Puntos.Count > 0, "el cerrado inválido se dibuja igual, en rojo");
     Cierto(!fuera.Valida && fuera.Motivo!.Contains("ya no existe"), $"grapa fuera de rango: {fuera.Valida} {fuera.Motivo}");
+});
+
+// ---- Tarea 6: paso Grapas (#210), las reglas de VentanaEstribosMenores (PiezaPropuesta, BotonVoltear_Click, Eliminar)
+
+SesionColumnas ConTresPorCara()
+{
+    SesionColumnas sesion = ConC12();
+    Mandar(sesion, new { tipo = "cambiarLongitudinal", config = new { barrasPorCaraX = 3, barrasPorCaraY = 3 } });
+    return sesion;
+}
+
+List<EstriboMenor> Menores(SesionColumnas sesion) => sesion.OpcionesParaGenerar(false)!.Plan.Columnas[0].Longitudinal!.EstribosMenores;
+
+string Describir(IEnumerable<EstriboMenor> piezas) =>
+    string.Join(" | ", piezas.Select(p => $"{p.Forma} {p.Eje} {p.Desde}-{p.Hasta}{(p.Volteado ? " volteada" : "")}"));
+
+Probar("Menores_MismosGestosMismoResultado", () =>
+{
+    // Grapa C en la barra 1 de la izquierda/derecha, voltearla, estribo cerrado de la 0 a la 2 de abajo/arriba,
+    // eliminar la grapa: en la ventana vieja queda solo el cerrado.
+    SesionColumnas sesion = ConTresPorCara();
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaC", eje = "Fila", desde = 1, hasta = 1 });
+    Mandar(sesion, new { tipo = "menor", accion = "voltear", indice = 0 });
+    Cierto(Menores(sesion)[0].Volteado, "la grapa tiene que quedar volteada");
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "Cerrado", eje = "Columna", desde = 2, hasta = 0 });
+    Mandar(sesion, new { tipo = "menor", accion = "eliminar", indice = 0 });
+    Cierto(Describir(Menores(sesion)) == "Cerrado Columna 0-2", Describir(Menores(sesion)));
+});
+
+Probar("Grapa_UnaPorFilaOColumna", () =>
+{
+    // PiezaPropuesta: «una sola grapa por fila o columna, sea C o S».
+    SesionColumnas sesion = ConTresPorCara();
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaC", eje = "Fila", desde = 1, hasta = 1 });
+    VistaColumnas v = Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaS", eje = "Fila", desde = 1, hasta = 1 });
+    Cierto(Describir(Menores(sesion)) == "GrapaC Fila 1-1", Describir(Menores(sesion)));
+    Cierto(v.Aviso is not null, "tiene que avisar por qué no se puso");
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaS", eje = "Columna", desde = 1, hasta = 1 });
+    Cierto(Menores(sesion).Count == 2, "en la otra cara sí se puede");
+});
+
+Probar("Grapa_VaEnUnaSolaBarra", () =>
+{
+    SesionColumnas sesion = ConTresPorCara();
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "GrapaC", eje = "Fila", desde = 2, hasta = 0 });
+    Cierto(Describir(Menores(sesion)) == "GrapaC Fila 2-2", Describir(Menores(sesion)));
+});
+
+Probar("Cerrado_EnLaMismaBarra_NoSePone", () =>
+{
+    SesionColumnas sesion = ConTresPorCara();
+    VistaColumnas v = Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "Cerrado", eje = "Columna", desde = 1, hasta = 1 });
+    Cierto(Menores(sesion).Count == 0, Describir(Menores(sesion)));
+    Cierto(v.Aviso is not null, "tiene que avisar por qué no se puso");
+});
+
+Probar("VoltearCerrado_NoHaceNada", () =>
+{
+    SesionColumnas sesion = ConTresPorCara();
+    Mandar(sesion, new { tipo = "menor", accion = "agregar", forma = "Cerrado", eje = "Columna", desde = 0, hasta = 2 });
+    Mandar(sesion, new { tipo = "menor", accion = "voltear", indice = 0 });
+    Cierto(!Menores(sesion)[0].Volteado, "un cerrado no se voltea");
 });
 
 Probar("Grapa_TraeSuFormaYSusPuntas", () =>

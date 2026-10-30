@@ -285,11 +285,14 @@
 
 **Archivos:** `Tablero/web/columnas.js` y `dibujos.js` (paso 3), y `SesionColumnas.cs` (mensaje `menor`), reusando la lógica de `Vistas/VentanaEstribosMenores.xaml.cs` que no sea de dibujo (sacarla a `Modelo/` si hace falta, sin cambiarla).
 
-- [ ] **Paso 1:** escribir la prueba que falla, `Menores_MismosGestosMismoResultado`: la secuencia «grapa C entre barras 1 y 2, voltear, estribo cerrado 0–3, eliminar el primero» deja la misma `ConfigLongitudinal.EstribosMenores` que la ventana vieja con esos mismos pasos (escrita a mano desde su código).
-- [ ] **Paso 2:** `dotnet run --project tools/PruebasTableroColumnas` → FALLA.
-- [ ] **Paso 3:** implementar los mensajes de `menor` y el paso 3 de la página (decisión 10).
-- [ ] **Paso 4:** pruebas → `OK`. En Revit, armar las grapas de una columna con la ventana nueva y con la vieja y comparar lo generado.
-- [ ] **Paso 5:** commit `Columnas: paso Grapas en la ventana web (#210)`.
+- **Lo que ya había (29-oct):** la página del paso 3 y los mensajes `menor` (agregar, eliminar, voltear, varilla, ángulo) se hicieron en la tarea 3. Comparando con `VentanaEstribosMenores` faltaban sus reglas, y la página tenía dos errores:
+  - en C#: una sola grapa (C o S) por fila o columna (`PiezaPropuesta`); una grapa va en una sola barra; un cerrado va entre dos barras distintas; un cerrado no se voltea (`BotonVoltear_Click`). Lo que no se puede poner no se pone y sale un aviso que dice por qué;
+  - en la página: al poner una pieza quedaba elegida la anterior (`largo - 1` de la lista vieja; ahora es `largo`), y el segundo clic de un cerrado en la misma barra se mandaba igual (ahora se sigue esperando, como en la vieja).
+- [x] **Paso 1:** escribir la prueba que falla, `Menores_MismosGestosMismoResultado`: la secuencia «grapa C entre barras 1 y 2, voltear, estribo cerrado 0–3, eliminar el primero» deja la misma `ConfigLongitudinal.EstribosMenores` que la ventana vieja con esos mismos pasos (escrita a mano desde su código).
+- [x] **Paso 2:** `dotnet run --project tools/PruebasTableroColumnas` → `Menores_MismosGestosMismoResultado` pasó a la primera (esos gestos ya andaban). Fallaron las cuatro de las reglas, escritas junto con ella: `Grapa_UnaPorFilaOColumna`, `Grapa_VaEnUnaSolaBarra`, `Cerrado_EnLaMismaBarra_NoSePone` y `VoltearCerrado_NoHaceNada`.
+- [x] **Paso 3:** implementar los mensajes de `menor` y el paso 3 de la página (decisión 10). `SesionColumnas.MenorRechazado` y el `voltear` de `CambiarMenor`; `poner` de `columnas.js`. `MenorInvalido_SaleMarcadoConSuMotivo` armaba un cerrado en una sola barra para probar el dibujo en rojo; ahora usa uno de dos barras vecinas con una #8 y 6 barras por cara, que no se puede doblar.
+- [x] **Paso 4:** pruebas → `OK` (44). En Revit (30-oct, Luciano: «Todo bien»): grapa C, grapa en S y estribo cerrado; segunda grapa en la misma barra → aviso; voltear y eliminar con el botón y con Supr. Comparado con el MCP: 5-7 (ventana vieja) y 1-6 (nueva) llevan en cada estribo un cerrado (CQ Estribo), una CQ Grapa en S y una CQ Grapa C, #3 CQEING, en la misma posición dentro de la sección (diferencia < 1 mm). Las dos ventanas ponen las grapas en cada estribo del tramo libre (ni en el tramo contra zapata ni en los grupos del nudo); la cantidad difiere solo porque los estribos se configuraron distinto (5-7: 3 · 16 · 3 · 16 · 3; 1-6: 3 · 8+15+9 · 3 · 8+15+9 · 3). Un armado que apareció en la A-1 salió en la misma corrida que la 5-7 (ids 816908-816915 seguidos), o sea de la ventana vieja con las dos columnas elegidas; no es un error de la nueva.
+- [x] **Paso 5:** commit `Columnas: paso Grapas en la ventana web (#210)`.
 
 ### Tarea 7: Traslapos, 3D, configuraciones, cuadro, choques y generar (#211)
 

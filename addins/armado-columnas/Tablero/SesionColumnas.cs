@@ -165,7 +165,11 @@ public sealed class SesionColumnas
                 break;
 
             case "menor":
-                Cambiar(o => CambiarMenor(o.Longitudinal.EstribosMenores, m));
+                // Lo que la ventana vieja no deja poner, no se pone, y se dice por qué (tarea 6).
+                if (Activa is string activa && MenorRechazado(OpcionesDe(activa).Longitudinal.EstribosMenores, m) is string motivo)
+                    _aviso = motivo;
+                else
+                    Cambiar(o => CambiarMenor(o.Longitudinal.EstribosMenores, m));
                 break;
 
             case "ver3D":
@@ -347,16 +351,42 @@ public sealed class SesionColumnas
         }
     }
 
+    /// <summary>
+    /// Por qué no se puede agregar la pieza que pide <paramref name="m"/>, o null si se puede. Las mismas reglas que
+    /// <c>VentanaEstribosMenores.PiezaPropuesta</c>: una sola grapa (C o S) por fila o columna, y un estribo cerrado
+    /// va entre dos barras distintas de la misma cara.
+    /// </summary>
+    private static string? MenorRechazado(List<EstriboMenor> piezas, JsonElement m)
+    {
+        if (Texto(m, "accion") != "agregar") return null;
+        FormaMenor forma = Forma(m);
+        EjeCaja eje = Eje(m);
+        int desde = m.GetProperty("desde").GetInt32(), hasta = m.GetProperty("hasta").GetInt32();
+        if (forma != FormaMenor.Cerrado)
+            return piezas.Any(o => o.Forma != FormaMenor.Cerrado && o.Eje == eje && o.Desde == desde)
+                ? "Esa barra ya tiene una grapa. Va una sola por barra: elimina la que está si quieres cambiarla."
+                : null;
+        return desde == hasta ? "Un estribo cerrado va entre dos barras distintas de la misma cara: haz clic en otra barra." : null;
+    }
+
+    private static FormaMenor Forma(JsonElement m) => Enum.Parse<FormaMenor>(Texto(m, "forma") ?? nameof(FormaMenor.GrapaC));
+
+    private static EjeCaja Eje(JsonElement m) => Enum.Parse<EjeCaja>(Texto(m, "eje") ?? nameof(EjeCaja.Fila));
+
     private static void CambiarMenor(List<EstriboMenor> piezas, JsonElement m)
     {
         string? accion = Texto(m, "accion");
         if (accion == "agregar")
         {
+            if (MenorRechazado(piezas, m) is not null) return; // en otra columna compatible ya estaba
+            FormaMenor forma = Forma(m);
             int desde = m.GetProperty("desde").GetInt32(), hasta = m.GetProperty("hasta").GetInt32();
+            // Una grapa va en una sola barra (la del clic); un cerrado, de la menor a la mayor.
+            if (forma != FormaMenor.Cerrado) hasta = desde;
             piezas.Add(new EstriboMenor
             {
-                Forma = Enum.Parse<FormaMenor>(Texto(m, "forma") ?? nameof(FormaMenor.GrapaC)),
-                Eje = Enum.Parse<EjeCaja>(Texto(m, "eje") ?? nameof(EjeCaja.Fila)),
+                Forma = forma,
+                Eje = Eje(m),
                 Desde = Math.Min(desde, hasta),
                 Hasta = Math.Max(desde, hasta),
             });
@@ -369,7 +399,8 @@ public sealed class SesionColumnas
         switch (accion)
         {
             case "eliminar": piezas.RemoveAt(indice); break;
-            case "voltear": pieza.Volteado = !pieza.Volteado; break;
+            // Un cerrado no tiene lado: no se voltea (BotonVoltear_Click de la ventana vieja).
+            case "voltear": if (pieza.Forma != FormaMenor.Cerrado) pieza.Volteado = !pieza.Volteado; break;
             case "varilla": pieza.TipoBarraNombre = Texto(m, "nombre") is { Length: > 0 } nombre ? nombre : null; break;
             case "angulo":
                 var angulo = (AnguloGancho)m.GetProperty("angulo").GetInt32();

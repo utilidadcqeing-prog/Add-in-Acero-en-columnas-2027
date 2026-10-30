@@ -177,11 +177,16 @@
 
     poner(forma, b) {
       if (!forma || !b) return;
-      if (forma !== 'Cerrado') { this.enviar({ tipo: 'menor', accion: 'agregar', forma, eje: b.eje, desde: b.indice, hasta: b.indice }); this.setState({ pieza: this.state.vista.opciones.longitudinal.estribosMenores.length - 1 }); return; }
+      // La pieza nueva queda al final de la lista: su índice es el largo de ahora, antes de que llegue la vista nueva
+      // (con «largo - 1» quedaba elegida la anterior). Si C# no la pone, la selección no apunta a nada y no se muestra.
+      const nueva = this.state.vista.opciones.longitudinal.estribosMenores.length;
+      if (forma !== 'Cerrado') { this.enviar({ tipo: 'menor', accion: 'agregar', forma, eje: b.eje, desde: b.indice, hasta: b.indice }); this.setState({ pieza: nueva }); return; }
       const p = this.state.primero;
       if (!p || p.eje !== b.eje) { this.setState({ primero: { eje: b.eje, indice: b.indice } }); return; }
+      // La misma barra otra vez: se sigue esperando la segunda, como en la ventana vieja.
+      if (p.indice === b.indice) return;
       this.enviar({ tipo: 'menor', accion: 'agregar', forma, eje: b.eje, desde: p.indice, hasta: b.indice });
-      this.setState({ primero: null, pieza: this.state.vista.opciones.longitudinal.estribosMenores.length - 1 });
+      this.setState({ primero: null, pieza: nueva });
     }
 
     eliminarPieza() {
