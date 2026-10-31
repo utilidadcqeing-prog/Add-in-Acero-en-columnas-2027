@@ -81,8 +81,8 @@ public class BastonesTests
     {
         ResultadoVigas r = MotorVigas.Calcular(Entrada(new ArmadoBastones(ConGancho: true)));
 
-        // 1.15 + 0.215, redondeado a 1.50 (Carlos: siempre en número cerrado)
-        Assert.Equal((215, 0, 1500), (De(r, "BS1").GanchoInicio, De(r, "BS1").GanchoFin, De(r, "BS1").Largo));
+        // 1.15 + 0.278, redondeado a 1.50 (Carlos: siempre en número cerrado)
+        Assert.Equal((278, 0, 1500), (De(r, "BS1").GanchoInicio, De(r, "BS1").GanchoFin, De(r, "BS1").Largo));
         Assert.Equal((0, 0, 2000), (De(r, "BS2").GanchoInicio, De(r, "BS2").GanchoFin, De(r, "BS2").Largo));
     }
 
@@ -93,8 +93,8 @@ public class BastonesTests
 
         Baston bs4 = De(MotorVigas.Calcular(Entrada(new ArmadoBastones(ConGancho: true), portico: corto)), "BS4");
 
-        // 1.65 + 0.215 = 1.865 sube a 2.00: la punta de adentro crece 135 mm
-        Assert.Equal((11165, 12950, 215), (bs4.Desde, bs4.Hasta, bs4.GanchoFin));
+        // 1.65 + 0.278 = 1.928 sube a 2.00: la punta de adentro crece 72 mm
+        Assert.Equal((11228, 12950, 278), (bs4.Desde, bs4.Hasta, bs4.GanchoFin));
     }
 
     [Fact]

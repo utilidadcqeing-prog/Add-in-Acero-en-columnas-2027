@@ -10,12 +10,22 @@ public class GanchoPropioTests
     public void ConLaBarraDelModeloDePrueba_DaElGanchoQueMidioRevit()
     {
         // "16 B 400 S": d = 16, doblado del gancho 64. Con el gancho del proyecto (extensión 80) Revit dio 4317 para una
-        // línea de 4222: 4222 − (40 + 8) + 62.8 + 80. Con la extensión calculada tiene que dar 4222 + 278.
-        double ext = GanchoPropio.Extension(278, 16, 64, 90);
+        // línea de 4222: 4222 − (40 + 8) + 62.8 + 80. A 135° la extensión calculada da 4222 + 278.
+        double ext = GanchoPropio.Extension(278, 16, 64, 135);
 
-        Assert.Equal(278 + 40 + 8 - 40 * Math.PI / 2, ext, 6);
-        Assert.Equal(4222 + 278, 4222 - (40 + 8) + 40 * Math.PI / 2 + ext, 6);
+        Assert.Equal(4222 + 278, 4222 - (40 + 8) + 40 * 3 * Math.PI / 4 + ext, 6);
         Assert.Equal(4317, Math.Round(4222 - (40 + 8) + 40 * Math.PI / 2 + 80));
+    }
+
+    /// <summary>Juan, 30-oct: a 90° la pata por fuera mide la B, para que las cotas sumen el largo del tablero.</summary>
+    [Fact]
+    public void A90_LaPataPorFueraMideLaB()
+    {
+        double ext = GanchoPropio.Extension(300, 16, 64, 90);
+
+        Assert.Equal(300, ext + 40 + 8, 6);
+        // cotas 2700 + 300; por el eje: 2700 − 48 + 62.8 + 252
+        Assert.Equal(3000, 2700 - 48 + 40 * Math.PI / 2 + ext + GanchoPropio.DiferenciaCotas(16, 64), 6);
     }
 
     [Fact]

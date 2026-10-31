@@ -183,7 +183,17 @@ internal static class CreadorBarras
         NoSePudo,
     }
 
-    /// <summary>El largo de una barra en Revit (con los ganchos), en mm.</summary>
-    public static int LargoEnRevit(Rebar r) =>
-        (int)Math.Round(LectorModelo.Mm(r.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? r.TotalLength / Math.Max(1, r.Quantity)));
+    /// <summary>
+    /// El largo de una barra en Revit, en mm, medido como el tablero: los ganchos de 90° por sus cotas
+    /// (<see cref="GanchoPropio.DiferenciaCotas"/>).
+    /// </summary>
+    public static int LargoEnRevit(Rebar r)
+    {
+        double largo = LectorModelo.Mm(r.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? r.TotalLength / Math.Max(1, r.Quantity));
+        if (r.Document.GetElement(r.GetTypeId()) is RebarBarType barra)
+            foreach (int punta in new[] { 0, 1 })
+                if (r.Document.GetElement(r.GetHookTypeId(punta)) is RebarHookType gancho && Math.Abs(gancho.HookAngle - Math.PI / 2) < 1e-3)
+                    largo += GanchoPropio.DiferenciaCotas(LectorModelo.Mm(barra.BarNominalDiameter), LectorModelo.Mm(barra.StandardHookBendDiameter));
+        return (int)Math.Round(largo);
+    }
 }

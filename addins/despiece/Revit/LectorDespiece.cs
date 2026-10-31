@@ -90,8 +90,22 @@ internal static class LectorDespiece
         return new VigaContinua(elemento, tramo.Select(v => v.Id).ToList(), origen, dir);
     }
 
-    /// <summary>El largo de una barra del conjunto, con ganchos (ver #217: no sirve el total del conjunto).</summary>
-    public static double LargoBarra(Rebar b) => b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;
+    /// <summary>
+    /// El largo de una barra del conjunto, con ganchos (ver #217: no sirve el total del conjunto), como lo dicen sus
+    /// cotas: cada gancho de 90° suma lo que Revit no cuenta en la esquina, <c>2 (R + d/2) − R·π/2</c> (la misma cuenta
+    /// de <c>GanchoPropio.DiferenciaCotas</c> en acero de vigas).
+    /// </summary>
+    public static double LargoBarra(Rebar b)
+    {
+        double largo = b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;
+        if (b.Document.GetElement(b.GetTypeId()) is not RebarBarType barra)
+            return largo;
+        double d = barra.BarNominalDiameter, radio = barra.StandardHookBendDiameter / 2 + d / 2;
+        foreach (int punta in new[] { 0, 1 })
+            if (b.Document.GetElement(b.GetHookTypeId(punta)) is RebarHookType gancho && Math.Abs(gancho.HookAngle - Math.PI / 2) < 1e-3)
+                largo += 2 * (radio + d / 2) - radio * Math.PI / 2;
+        return largo;
+    }
 
     /// <summary>El número de barra, del nombre de su tipo ("#5 CQEING" da 5); 0 si el nombre no lo dice.</summary>
     public static int Numero(string tipo)

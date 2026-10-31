@@ -10,7 +10,8 @@ namespace CQEING.Vigas.Calculo.Generacion;
 /// Cómo cuenta Revit (medido en la primera prueba): la línea que se le pasa termina en la cara exterior del doblez; la
 /// parte recta llega hasta <c>R + d/2</c> antes, sigue el arco de radio <c>R</c> (al eje de la barra, con
 /// <c>R = D/2 + d/2</c> y <c>D</c> el diámetro de doblado del gancho) y luego la extensión recta. Para que el gancho sume
-/// <c>B</c> al largo: <c>extensión = B + R + d/2 − R·θ</c>.
+/// <c>B</c> al largo: <c>extensión = B + R + d/2 − R·θ</c>. A 90° la pata por fuera mide <c>B</c>:
+/// <c>extensión = B − R − d/2</c>, y el largo de Revit queda <see cref="DiferenciaCotas"/> por debajo de la suma de las cotas.
 /// </para>
 /// </summary>
 public static class GanchoPropio
@@ -23,7 +24,18 @@ public static class GanchoPropio
     public static double Extension(double b, double diametro, double doblado, int grados)
     {
         double radio = doblado / 2 + diametro / 2;
-        return Math.Max(diametro, b + radio + diametro / 2 - radio * grados * Math.PI / 180);
+        double extension = grados == 90 ? b - radio - diametro / 2 : b + radio + diametro / 2 - radio * grados * Math.PI / 180;
+        return Math.Max(diametro, extension);
+    }
+
+    /// <summary>
+    /// Cuánto más suman las cotas de un gancho de 90° que el largo por el eje que da Revit, en mm: las dos cotas llegan a
+    /// la esquina exterior y el eje va por el arco. <c>2 (R + d/2) − R·π/2</c>; 33 mm en la barra de 16 con doblado de 64.
+    /// </summary>
+    public static double DiferenciaCotas(double diametro, double doblado)
+    {
+        double radio = doblado / 2 + diametro / 2;
+        return 2 * (radio + diametro / 2) - radio * Math.PI / 2;
     }
 
     /// <summary>

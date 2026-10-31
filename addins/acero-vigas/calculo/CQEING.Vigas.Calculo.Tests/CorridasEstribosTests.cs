@@ -47,8 +47,8 @@ public class CorridasEstribosTests
 
         Assert.Equal([2, 16, 2], corridas.Select(x => x.Cantidad));
         Assert.Equal((7684.75, 100), (corridas[0].Primero, corridas[0].Separacion));
-        Assert.Equal(7784.75 + 3370.5 / 17, corridas[1].Primero, 6);
-        Assert.Equal(3370.5 / 17, corridas[1].Separacion, 6);
+        Assert.Equal(7784.75 + 200, corridas[1].Primero, 6);
+        Assert.Equal(200, corridas[1].Separacion, 6);
         Assert.Equal((11155.25, 100), (corridas[2].Primero, Math.Round(corridas[2].Separacion, 6)));
     }
 
