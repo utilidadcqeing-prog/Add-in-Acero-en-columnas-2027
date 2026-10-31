@@ -1,3 +1,4 @@
+using System.Globalization;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
 using CQEING.Vigas.Calculo.Modelo;
@@ -31,6 +32,7 @@ internal static class GeneradorPrevia
     private const double AltoTexto = 0.11 * M;
     private const double EspacioCotas = 0.15 * M;
     private const double MinimoGancho = 0.05 * M;
+    private const double MinimoTraslapo = 0.01 * M;
     private const double MedioAnchoEtiqueta = 0.65 * M * Proporcion;
     private const double HuecoFilas = 0.15 * M * Proporcion;
     private const double HuecoEnFila = 0.20 * M * Proporcion;
@@ -209,7 +211,7 @@ internal static class GeneradorPrevia
             double z = desde;
             foreach (IGrouping<int, Sacada> diametro in lado.Where(s => MarcaVigas.Serie(s.Barra) == serie)
                 .GroupBy(s => LectorDespiece.Numero(doc.GetElement(s.Barra.GetTypeId()).Name)).OrderByDescending(g => g.Key))
-                z = AcomodarLinea(doc, vista, diametro.ToList(), z, haciaArriba, tipos);
+                z = AcomodarLinea(doc, vista, diametro.ToList(), derecha, z, haciaArriba, tipos);
             return Acomodar(doc, vista, lado.Where(s => MarcaVigas.Serie(s.Barra) != serie).ToList(), z, haciaArriba, tipos);
         }
         double tope = Lineas(deArriba, "S", max.Z + SeparacionViga, true);
@@ -298,11 +300,13 @@ internal static class GeneradorPrevia
     /// Santiago: las que se traslapan quedan en la misma fila y una se corre <see cref="DesfaseTraslapo"/> para que se vea
     /// el traslapo (#223). La fila más cercana a la viga es esta; los bastones van más afuera.
     /// </summary>
-    private static double AcomodarLinea(Document doc, View vista, List<Sacada> sacadas, double desde, bool haciaArriba, TiposPropios tipos)
+    private static double AcomodarLinea(Document doc, View vista, List<Sacada> sacadas, XYZ derecha, double desde, bool haciaArriba, TiposPropios tipos)
     {
         if (sacadas.Count == 0)
             return desde;
         var fila = new List<(Sacada, double)>();
+        var traslapos = new List<Traslapo>();
+        (double Desde, double Hasta)? anterior = null;
         double hasta = double.MinValue;
         int escalon = 0;
         foreach (Sacada s in sacadas.OrderBy(s => s.Izquierda))
@@ -310,12 +314,26 @@ internal static class GeneradorPrevia
             escalon = s.Izquierda < hasta ? escalon + 1 : 0;
             hasta = Math.Max(hasta, s.Derecha);
             fila.Add((s, escalon * DesfaseTraslapo));
+
+            // El traslapo sale de los tramos rectos reales de las dos piezas, no de lo que ocupan sus detalles.
+            Curve mayor = Mayor(s.Barra);
+            double a = mayor.GetEndPoint(0).DotProduct(derecha), e = mayor.GetEndPoint(1).DotProduct(derecha);
+            (double Desde, double Hasta) tramo = (Math.Min(a, e), Math.Max(a, e));
+            if (anterior is { } previo && Math.Min(previo.Hasta, tramo.Hasta) - Math.Max(previo.Desde, tramo.Desde) > MinimoTraslapo)
+            {
+                double inicio = Math.Max(previo.Desde, tramo.Desde), fin = Math.Min(previo.Hasta, tramo.Hasta);
+                traslapos.Add(new Traslapo(s, (inicio + fin) / 2, fin - inicio));
+            }
+            anterior = tramo;
         }
-        return ColocarFilas(doc, vista, [fila], desde, haciaArriba, tipos);
+        return ColocarFilas(doc, vista, [fila], desde, haciaArriba, tipos, derecha, traslapos);
     }
 
+    /// <summary>Un traslapo de una fila: su centro a lo largo de la vista y su largo, en pies.</summary>
+    private sealed record Traslapo(Sacada Pieza, double Centro, double Largo);
+
     /// <summary>Coloca las filas de la viga hacia afuera. Cada pieza puede ir corrida un desfase; la etiqueta va a la altura de la más alta de su fila.</summary>
-    private static double ColocarFilas(Document doc, View vista, List<List<(Sacada S, double Desfase)>> filas, double desde, bool haciaArriba, TiposPropios tipos)
+    private static double ColocarFilas(Document doc, View vista, List<List<(Sacada S, double Desfase)>> filas, double desde, bool haciaArriba, TiposPropios tipos, XYZ? derecha = null, List<Traslapo>? traslapos = null)
     {
         double z = desde;
         foreach (List<(Sacada S, double Desfase)> fila in filas)
@@ -332,6 +350,16 @@ internal static class GeneradorPrevia
                 RebarBendingDetail.SetPosition(s.Detalle, new XYZ(s.Posicion.X, s.Posicion.Y, linea - s.Linea - s.Abajo + desfase));
                 TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(s.Posicion.X, s.Posicion.Y, linea + etiqueta), LectorDespiece.Etiqueta(doc.GetElement(s.Barra.GetTypeId()).Name, s.Cantidad, LectorDespiece.LargoBarra(s.Barra)), tipos.Nota(HorizontalTextAlignment.Center));
                 Pintar(vista, nota.Id, s.Barra, null);
+            }
+            // La medida de cada traslapo, sobre él (#223). Es texto: un detalle de plegado no da referencias para una cota
+            // de Revit (probado el 30-oct). Si le cae encima a una etiqueta de la fila, sube al espacio libre.
+            foreach (Traslapo t in derecha is null ? [] : traslapos ?? [])
+            {
+                bool choca = fila.Any(f => Math.Abs(f.S.Posicion.DotProduct(derecha!) - t.Centro) < MedioAnchoEtiqueta);
+                XYZ punto = t.Pieza.Posicion + derecha! * (t.Centro - t.Pieza.Posicion.DotProduct(derecha!));
+                double alto = linea + etiqueta + (choca ? AltoTexto : 0);
+                TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(punto.X, punto.Y, alto), (t.Largo * 0.3048).ToString("0.00", CultureInfo.InvariantCulture), tipos.Nota(HorizontalTextAlignment.Center));
+                Pintar(vista, nota.Id, t.Pieza.Barra, null);
             }
             z = haciaArriba ? z + altoFila + HuecoFilas : z - altoFila - HuecoFilas;
         }
