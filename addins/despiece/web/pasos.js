@@ -358,6 +358,14 @@
                     <span><span style="display: inline-block; width: 10px; height: 10px; background: ${AZUL}; margin-right: 4px"></span>Elegida</span>
                     <span><span style="display: inline-block; width: 10px; height: 10px; background: ${VERDE}; margin-right: 4px"></span>Ya tiene despiece (${hechas})</span>
                   </div>
+                  ${g && (g.vistaCreada || hechos[g.indice]) ? html`
+                    <div style="flex-shrink: 0; margin-top: auto; display: flex; flex-direction: column; gap: 6px">
+                      <span style="font-weight: 600">Ver en Revit</span>
+                      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+                        ${[['Vista larga', false], ['Sección', true]].map(([n, seccion]) => html`
+                          <button type="button" onClick=${() => enviar({ tipo: 'irAVista', grupo: g.indice, seccion })} style="height: 36px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; color: #16191D; font: inherit; cursor: pointer">${n}</button>`)}
+                      </div>
+                    </div>` : null}
                 </div>
                 <div style="position: relative; min-width: 0; min-height: 0; display: grid; place-items: center; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
                   ${this.planta()}

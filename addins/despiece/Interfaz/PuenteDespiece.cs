@@ -83,6 +83,9 @@ internal sealed class PuenteDespiece
             case "crearVistas":
                 CrearVistas(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
                 break;
+            case "irAVista":
+                IrAVista(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("seccion").GetBoolean());
+                break;
         }
     }
 
@@ -93,6 +96,20 @@ internal sealed class PuenteDespiece
         GrupoIguales g = grupos[grupo];
         VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre, negros);
         Enviar(new { tipo = "vistas", grupo, longitudinal = v.Longitudinal, seccion = v.Seccion, yaExistian = v.YaExistian });
+    }
+
+    /// <summary>Abre en Revit la vista larga o la sección del grupo. La ventana se minimiza porque queda encima de Revit y taparía la vista.</summary>
+    private void IrAVista(int grupo, bool seccion)
+    {
+        if (doc is null || grupo >= grupos.Count)
+            return;
+        if (GeneradorPrevia.VistaCreada(doc, grupos[grupo].Nombre, seccion) is not { } vista)
+        {
+            Enviar(new { tipo = "error", texto = "Esa vista ya no existe en el proyecto." });
+            return;
+        }
+        uiapp.ActiveUIDocument.RequestViewChange(vista);
+        ventana.WindowState = System.Windows.WindowState.Minimized;
     }
 
     /// <summary>Lee el modelo una vez, al abrir: las plantas, las vigas y cuáles son iguales.</summary>
@@ -139,6 +156,7 @@ internal sealed class PuenteDespiece
                 indice = i,
                 nombre = g.Nombre,
                 tieneAcero = g.TieneAcero,
+                vistaCreada = GeneradorPrevia.VistaCreada(doc!, g.Nombre) is not null,
                 vigas = g.Elementos.SelectMany(e => Continua(e).Vigas).Select(id => id.ToString()),
                 cantidad = g.Elementos.Count,
                 filas = Filas(g),

@@ -133,6 +133,13 @@ internal static class GeneradorPrevia
         }
     }
 
+    /// <summary>Una de las vistas que dejó <see cref="Crear"/> para este nombre: la larga o la sección. Null si no existe.</summary>
+    public static View? VistaCreada(Document doc, string nombre, bool seccion = false)
+    {
+        string buscado = seccion ? "Sección " + nombre : nombre;
+        return new FilteredElementCollector(doc).OfClass(typeof(ViewSection)).Cast<View>().FirstOrDefault(v => !v.IsTemplate && v.Name == buscado);
+    }
+
     private static (View Longitudinal, View Seccion) Construir(Document doc, VigaContinua viga, TiposPropios tipos)
     {
         ViewFamilyType tipoSeccion = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
