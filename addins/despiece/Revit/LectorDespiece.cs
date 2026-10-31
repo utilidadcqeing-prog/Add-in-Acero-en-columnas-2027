@@ -80,7 +80,8 @@ internal static class LectorDespiece
             BoundingBoxXYZ caja = b.get_BoundingBox(null);
             double centro = ((caja.Min + caja.Max) / 2).DotProduct(dir) - inicio;
             lista.Add(new BarraLeida(doc.GetElement(b.GetTypeId()).Name, doc.GetElement(b.GetShapeId())?.Name ?? "", b.Quantity,
-                (int)Math.Round(Mm(LargoBarra(b))), (int)Math.Round(Mm(centro))));
+                (int)Math.Round(Mm(LargoBarra(b))), (int)Math.Round(Mm(centro)),
+                (int)Math.Round(Mm(b.GetCenterlineCurves(false, true, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0).Sum(c => c.Length)))));
         }
         BoundingBoxXYZ cv = tramo[0].get_BoundingBox(null);
         XYZ perp = XYZ.BasisZ.CrossProduct(dir);
@@ -89,7 +90,7 @@ internal static class LectorDespiece
         string eje = ejes.FirstOrDefault(g => Direccion((Line)g.Curve).IsAlmostEqualTo(dir) && Fuera(g.Curve.GetEndPoint(0), punto, dir) < Cercania)?.Name ?? "";
         // Por la altura de la viga: en estas vigas el nivel del elemento viene vacío (PROY_JULIO_BETO, 30-oct).
         string nivel = niveles.OrderBy(n => Math.Abs(n.Elevation - punto.Z)).FirstOrDefault()?.Name ?? "";
-        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista, nivel);
+        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista, nivel, TipoElemento.EsVigueta(tramo[0].Symbol.Name, ancho));
         return new VigaContinua(elemento, tramo.Select(v => v.Id).ToList(), origen, dir);
     }
 
@@ -103,32 +104,18 @@ internal static class LectorDespiece
         double largo = b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;
         if (b.Document.GetElement(b.GetTypeId()) is not RebarBarType barra)
             return largo;
-        double d = barra.BarNominalDiameter, radio = barra.StandardHookBendDiameter / 2 + d / 2;
-        foreach (int punta in new[] { 0, 1 })
-            if (b.Document.GetElement(b.GetHookTypeId(punta)) is RebarHookType gancho && Math.Abs(gancho.HookAngle - Math.PI / 2) < 1e-3)
-                largo += 2 * (radio + d / 2) - radio * Math.PI / 2;
-        return largo;
+        int ganchos = new[] { 0, 1 }.Count(punta => b.Document.GetElement(b.GetHookTypeId(punta)) is RebarHookType gancho && Math.Abs(gancho.HookAngle - Math.PI / 2) < 1e-3);
+        double d = barra.BarNominalDiameter;
+        return TextosDespiece.LargoPorCotas(largo, barra.StandardHookBendDiameter / 2 + d / 2, d, ganchos);
     }
 
     /// <summary>El número de barra, del nombre de su tipo ("#5 CQEING" da 5); 0 si el nombre no lo dice.</summary>
-    public static int Numero(string tipo)
-    {
-        int i = tipo.IndexOf('#');
-        if (i < 0)
-            return 0;
-        string digitos = new(tipo.Skip(i + 1).TakeWhile(char.IsDigit).ToArray());
-        return int.TryParse(digitos, out int n) ? n : 0;
-    }
+    public static int Numero(string tipo) => TextosDespiece.Numero(tipo);
 
     public static string Color(string tipo) => ColoresDiametro.De(Numero(tipo));
 
-    /// <summary>La etiqueta de los planos de Santiago: <c>3 #5 L= 6.00</c>.</summary>
-    public static string Etiqueta(string tipo, int cantidad, double largoPies)
-    {
-        int n = Numero(tipo);
-        string nombre = n > 0 ? "#" + n : tipo;
-        return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1} L= {2:0.00}", cantidad, nombre, largoPies * 0.3048);
-    }
+    /// <summary>La etiqueta de una barra: <c>3 #5 L= 6.00</c>, o <c>3 #5 L= 5.50/6.00</c> si se da su tramo recto.</summary>
+    public static string Etiqueta(string tipo, int cantidad, double largoPies, double? rectoPies = null) => TextosDespiece.Barra(tipo, cantidad, largoPies * 0.3048, rectoPies * 0.3048);
 
     /// <summary>La separación de un conjunto de estribos, en pies; 0 si es uno solo.</summary>
     public static double Separacion(Rebar b) => b.Quantity > 1 ? b.get_Parameter(BuiltInParameter.REBAR_ELEM_BAR_SPACING)?.AsDouble() ?? 0 : 0;

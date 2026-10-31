@@ -78,21 +78,57 @@ internal sealed class PuenteDespiece
                 VerPlanta(raiz.GetProperty("id").GetString()!);
                 break;
             case "previa":
-                VerPrevia(raiz.GetProperty("grupo").GetInt32());
+                VerPrevia(raiz);
                 break;
             case "crearVistas":
-                CrearVistas(raiz.GetProperty("grupo").GetInt32());
+                CrearVistas(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean(), Movimientos(raiz));
+                break;
+            case "ver3d":
+                Ver3D(raiz.GetProperty("grupo").GetInt32());
+                break;
+            case "irAVista":
+                IrAVista(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("seccion").GetBoolean());
                 break;
         }
     }
 
-    private void CrearVistas(int grupo)
+    /// <summary>Lo que la página dice que se movió: <c>{ "397193": { dz, tx, tz } }</c>, en metros.</summary>
+    private static Dictionary<string, Movimiento> Movimientos(JsonElement raiz)
+    {
+        var movimientos = new Dictionary<string, Movimiento>();
+        foreach (JsonProperty p in raiz.GetProperty("movimientos").EnumerateObject())
+            movimientos[p.Name] = new Movimiento(p.Value.GetProperty("dz").GetDouble(), p.Value.GetProperty("tx").GetDouble(), p.Value.GetProperty("tz").GetDouble());
+        return movimientos;
+    }
+
+    private void CrearVistas(int grupo, bool negros, Dictionary<string, Movimiento> movimientos)
     {
         if (doc is null)
             return;
         GrupoIguales g = grupos[grupo];
-        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre);
+        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre, negros, new DespieceMovible(movimientos, false));
         Enviar(new { tipo = "vistas", grupo, longitudinal = v.Longitudinal, seccion = v.Seccion, yaExistian = v.YaExistian });
+    }
+
+    private void Ver3D(int grupo)
+    {
+        if (doc is null || grupo >= grupos.Count)
+            return;
+        Enviar(new { tipo = "modelo3d", grupo, modelo = Modelo3D.Leer(doc, Continua(grupos[grupo].Elementos[0])) });
+    }
+
+    /// <summary>Abre en Revit la vista larga o la sección del grupo. La ventana se minimiza porque queda encima de Revit y taparía la vista.</summary>
+    private void IrAVista(int grupo, bool seccion)
+    {
+        if (doc is null || grupo >= grupos.Count)
+            return;
+        if (GeneradorPrevia.VistaCreada(doc, grupos[grupo].Nombre, seccion) is not { } vista)
+        {
+            Enviar(new { tipo = "error", texto = "Esa vista ya no existe en el proyecto." });
+            return;
+        }
+        uiapp.ActiveUIDocument.RequestViewChange(vista);
+        ventana.WindowState = System.Windows.WindowState.Minimized;
     }
 
     /// <summary>Lee el modelo una vez, al abrir: las plantas, las vigas y cuáles son iguales.</summary>
@@ -139,6 +175,8 @@ internal sealed class PuenteDespiece
                 indice = i,
                 nombre = g.Nombre,
                 tieneAcero = g.TieneAcero,
+                esVigueta = g.Elementos[0].EsVigueta,
+                vistaCreada = GeneradorPrevia.VistaCreada(doc!, g.Nombre) is not null,
                 vigas = g.Elementos.SelectMany(e => Continua(e).Vigas).Select(id => id.ToString()),
                 cantidad = g.Elementos.Count,
                 filas = Filas(g),
@@ -150,12 +188,12 @@ internal sealed class PuenteDespiece
     private VigaContinua Continua(ElementoLeido e) => vigas.First(v => v.Elemento == e);
 
     private static IEnumerable<object> Filas(GrupoIguales g) => g.Elementos[0].Barras
-        .GroupBy(b => (b.Tipo, b.Cantidad, b.LargoMm))
+        .GroupBy(b => (b.Tipo, b.Cantidad, b.LargoMm, b.RectoMm))
         .OrderByDescending(f => f.Key.LargoMm)
         .Select(f => new
         {
             c = LectorDespiece.Color(f.Key.Tipo),
-            et = LectorDespiece.Etiqueta(f.Key.Tipo, f.Key.Cantidad, f.Key.LargoMm / 304.8),
+            et = LectorDespiece.Etiqueta(f.Key.Tipo, f.Key.Cantidad, f.Key.LargoMm / 304.8, f.Key.RectoMm / 304.8),
             d = f.Count() == 1 ? "1 pieza" : $"{f.Count()} piezas",
         });
 
@@ -215,15 +253,21 @@ internal sealed class PuenteDespiece
         return listo;
     }
 
-    private void VerPrevia(int grupo)
+    /// <summary>
+    /// La vista previa que pide la página. <c>separar</c>: la del paso 2, con lo movible aparte para arrastrarlo; si no, la
+    /// imagen real con los movimientos aplicados. La clave la pone la página, y dice todo lo que distingue una imagen de otra.
+    /// </summary>
+    private void VerPrevia(JsonElement raiz)
     {
+        int grupo = raiz.GetProperty("grupo").GetInt32();
         if (doc is null || grupo >= grupos.Count)
             return;
-        string clave = grupo.ToString();
+        string clave = raiz.GetProperty("clave").GetString()!;
         if (!previas.TryGetValue(clave, out object? listo))
         {
-            PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia);
-            listo = new { tipo = "previa", grupo, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
+            var movible = new DespieceMovible(Movimientos(raiz), raiz.GetProperty("separar").GetBoolean());
+            PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia, raiz.GetProperty("negros").GetBoolean(), movible);
+            listo = new { tipo = "previa", grupo, clave, capa = p.Capa, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
             previas[clave] = listo;
         }
         Enviar(listo);
