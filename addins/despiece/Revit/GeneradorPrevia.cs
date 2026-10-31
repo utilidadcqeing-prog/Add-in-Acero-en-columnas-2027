@@ -444,6 +444,17 @@ internal static class GeneradorPrevia
         vista.DisplayStyle = DisplayStyle.FlatColors;
         doc.Regenerate();
 
+        // La vista tiene fondo para alcanzar un estribo: se veían barras que terminan detrás del corte, sin etiqueta y como si
+        // fueran del corte (viga 388501: 10 puntos #4 y 5 etiquetas). Solo se deja lo que el corte atraviesa.
+        List<ElementId> detras = barras.Where(b => EsLongitudinal(b, dir)).Where(b =>
+        {
+            Curve mayor = Mayor(b);
+            double pa = mayor.GetEndPoint(0).DotProduct(dir), pe = mayor.GetEndPoint(1).DotProduct(dir);
+            return aLoLargo < Math.Min(pa, pe) || aLoLargo > Math.Max(pa, pe);
+        }).Select(b => b.Id).Where(id => doc.GetElement(id).CanBeHidden(vista)).ToList();
+        if (detras.Count > 0)
+            vista.HideElements(detras);
+
         // Una etiqueta con flecha por cada barra que pasa por el corte. El bastón no se etiqueta (Santiago, 30-oct).
         var cortadas = new List<(Rebar Barra, XYZ Punto)>();
         foreach (Rebar b in barras.Where(b => EsLongitudinal(b, dir) && !MarcaVigas.EsBaston(b)))
@@ -547,7 +558,10 @@ internal static class GeneradorPrevia
             return;
         // Por la cara exterior del estribo: su eje más medio diámetro, igual que la medida del detalle.
         double d = ((RebarBarType)doc.GetElement(estribo.GetTypeId())).BarNominalDiameter;
-        List<XYZ> puntos = Curvas(estribo, true).Select(c => c.GetEndPoint(0)).ToList();
+        // Por sus esquinas: el tramo donde arranca el gancho se pasa del lado contrario (6 mm en la viga 388501, y daba 0.18 · 0.03).
+        IList<Curve> tramos = Curvas(estribo, true);
+        List<Curve> esquinas = tramos.Where(c => c is Arc).ToList();
+        List<XYZ> puntos = (esquinas.Count > 0 ? esquinas : tramos).SelectMany(c => new[] { c.GetEndPoint(0), c.GetEndPoint(1) }).ToList();
         double desdeEje = puntos.Min(p => p.DotProduct(derecha)) - d / 2, hastaEje = puntos.Max(p => p.DotProduct(derecha)) + d / 2;
         double bajoEje = puntos.Min(p => p.Z) - d / 2, altoEje = puntos.Max(p => p.Z) + d / 2;
         XYZ medioAncho = esquina + derecha * (ancho / 2);
