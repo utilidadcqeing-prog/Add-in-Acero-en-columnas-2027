@@ -149,8 +149,11 @@
         this.setState((s) => ({ plantas: { ...s.plantas, [m.id]: m }, error: null }));
       } else if (m.tipo === 'previa') {
         this.setState((s) => ({ previas: { ...s.previas, [m.grupo]: m }, error: null }));
+      } else if (m.tipo === 'vistas') {
+        // En verde solo cuando Revit ya las tiene.
+        this.setState((s) => ({ creando: false, hecho: m.yaExistian ? 'Esas vistas ya existen: no se duplicaron.' : `Vistas creadas: ${m.longitudinal} y ${m.seccion}. Arrástralas a tu plano.`, hechos: { ...s.hechos, [m.grupo]: true }, error: null }));
       } else if (m.tipo === 'error') {
-        this.setState({ error: m.texto });
+        this.setState({ error: m.texto, creando: false });
       }
     }
 
@@ -211,7 +214,7 @@
     }
 
     render() {
-      const { paso, modelo, plantaId, plantas, hechos, error, hecho } = this.state;
+      const { paso, modelo, plantaId, plantas, hechos, error, hecho, creando } = this.state;
       const g = this.grupoElegido();
       const ancho = window.innerWidth, alto = window.innerHeight;
       const set = (o) => this.setState(o);
@@ -223,7 +226,7 @@
       const titulo = TEXTOS[paso][0], ayuda = TEXTOS[paso][1];
       const enEstaPlanta = g ? g.vigas.filter((v) => plantas[plantaId]?.cajas.some((c) => c.viga === v)).length : 0;
       const hechas = modelo ? modelo.grupos.filter((x) => hechos[x.indice]).length : 0;
-      const puedeSeguir = paso === 3 || !!g?.tieneAcero;
+      const puedeSeguir = !creando && (paso === 3 || !!g?.tieneAcero);
       const back = () => {
         if (paso > 1) set({ paso: paso - 1, hecho: false });
         else enviar({ tipo: 'cerrar' });
@@ -231,7 +234,8 @@
       const next = () => {
         if (paso < 3) return this.irA(paso + 1);
         if (hecho) return set({ paso: 1, hecho: false, grupo: null });
-        set({ hecho: true, hechos: { ...hechos, [g.indice]: true } });
+        set({ creando: true, error: null });
+        enviar({ tipo: 'crearVistas', grupo: g.indice });
       };
 
       return html`
@@ -309,7 +313,7 @@
           <div style="height: 68px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 24px; background: #FFFFFF; border-top: 1px solid #D9DDE2">
             <button type="button" onClick=${back} style="height: 44px; padding: 0 20px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">${paso === 1 ? 'Cerrar' : 'Atrás'}</button>
             ${error ? html`<span style="color: #B3261E; font-weight: 500">${error}</span>` : null}
-            ${hecho && !error ? html`<span style="color: #1E7A3C; font-weight: 500">Marcada en verde. Crear las vistas de verdad llega con #222.</span>` : null}
+            ${hecho && !error ? html`<span style="color: #1E7A3C; font-weight: 500">${hecho}</span>` : null}
             <button type="button" disabled=${!puedeSeguir} onClick=${next} style="height: 44px; padding: 0 24px; border: 0; border-radius: 6px; background: ${puedeSeguir ? AZUL : '#AEB5BD'}; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">${paso === 3 ? (hecho ? 'Despiezar otro' : 'Crear vistas') : 'Siguiente'}</button>
           </div>
         </div>`;

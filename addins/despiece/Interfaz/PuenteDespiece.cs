@@ -54,7 +54,19 @@ internal sealed class PuenteDespiece
             case "previa":
                 VerPrevia(raiz.GetProperty("grupo").GetInt32());
                 break;
+            case "crearVistas":
+                CrearVistas(raiz.GetProperty("grupo").GetInt32());
+                break;
         }
+    }
+
+    private void CrearVistas(int grupo)
+    {
+        if (doc is null)
+            return;
+        GrupoIguales g = grupos[grupo];
+        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre);
+        Enviar(new { tipo = "vistas", grupo, longitudinal = v.Longitudinal, seccion = v.Seccion, yaExistian = v.YaExistian });
     }
 
     /// <summary>Lee el modelo una vez, al abrir: las plantas, las vigas y cuáles son iguales.</summary>

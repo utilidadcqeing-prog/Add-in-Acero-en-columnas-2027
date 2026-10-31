@@ -7,6 +7,9 @@ namespace CQEING.Despiece.Revit;
 /// <summary>Las dos imágenes de la vista previa.</summary>
 internal sealed record PreviaGenerada(string Longitudinal, string Seccion);
 
+/// <summary>Las vistas del navegador de Revit. <paramref name="YaExistian"/>: no se creó nada porque ya estaban.</summary>
+internal sealed record VistasCreadas(string Longitudinal, string Seccion, bool YaExistian);
+
 /// <summary>
 /// La vista previa real (#221): crea en Revit la vista longitudinal y la sección de una viga como lo hace Santiago, las
 /// exporta y deshace todo. Los pasos y sus motivos están en "Cómo se hace" de #217. No usa nombres de parámetros ni de
@@ -27,6 +30,14 @@ internal static class GeneradorPrevia
     private const double HuecoFilas = 0.15 * M;
     private const double HuecoEnFila = 0.20 * M;
 
+    // La vista es solo de la viga (Juan, 30-oct): sin columnas, ni ocultas con otro dibujo. El recorte va justo a su alto;
+    // las barras sacadas se ven por fuera de él. Donde había una columna, Revit deja la viga cortada: es su geometría real.
+    private const double HolguraRecorte = 0.005 * M;
+    private const double ColaEje = 0.3 * M;
+    private const double CabezaEje = 0.8 * M;
+    private const double CotaLuces = 0.35 * M;
+    private const double CotaTotal = 0.75 * M;
+
     public static PreviaGenerada Generar(Document doc, VigaContinua viga, string carpeta)
     {
         Registro.Paso("previa: empieza " + viga.Elemento.Id);
@@ -34,18 +45,7 @@ internal static class GeneradorPrevia
         t.Start();
         try
         {
-            ViewFamilyType tipoSeccion = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
-                .First(v => v.ViewFamily == ViewFamily.Section);
-            List<Rebar> barras = new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>()
-                .Where(b => viga.Vigas.Contains(b.GetHostId())).ToList();
-            Registro.Paso($"previa: {barras.Count} barras; creando tipos propios");
-            var tipos = TiposPropios.Crear(doc);
-
-            Registro.Paso("previa: vista longitudinal");
-            View longitudinal = Longitudinal(doc, tipoSeccion, viga, barras, tipos);
-            Registro.Paso("previa: sección");
-            View seccion = Seccion(doc, tipoSeccion, viga, barras, tipos);
-            doc.Regenerate();
+            (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, false));
             Registro.Paso("previa: exportando la longitudinal");
             string a = ExportadorImagen.Exportar(doc, longitudinal, carpeta);
             Registro.Paso("previa: exportando la sección");
@@ -58,6 +58,49 @@ internal static class GeneradorPrevia
             t.RollBack();
             Registro.Paso("previa: deshecho");
         }
+    }
+
+    /// <summary>
+    /// Deja las dos vistas en el navegador de Revit (#222), iguales a la vista previa. No coloca nada en las hojas. Si ya
+    /// existe alguna, no crea nada: reemplazarla podría borrar lo que se haya cambiado a mano.
+    /// </summary>
+    public static VistasCreadas Crear(Document doc, VigaContinua viga, string nombre)
+    {
+        string nombreSeccion = "Sección " + nombre;
+        bool yaExisten = new FilteredElementCollector(doc).OfClass(typeof(ViewSection)).Any(v => v.Name == nombre || v.Name == nombreSeccion);
+        if (yaExisten)
+            return new VistasCreadas(nombre, nombreSeccion, true);
+
+        using var t = new Transaction(doc, "Crear vistas de despiece");
+        t.Start();
+        try
+        {
+            (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, true));
+            longitudinal.Name = nombre;
+            seccion.Name = nombreSeccion;
+            if (t.Commit() != TransactionStatus.Committed)
+                throw new InvalidOperationException("Revit no aceptó las vistas.");
+            return new VistasCreadas(nombre, nombreSeccion, false);
+        }
+        finally
+        {
+            if (t.HasStarted() && !t.HasEnded())
+                t.RollBack();
+        }
+    }
+
+    private static (View Longitudinal, View Seccion) Construir(Document doc, VigaContinua viga, TiposPropios tipos)
+    {
+        ViewFamilyType tipoSeccion = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
+            .First(v => v.ViewFamily == ViewFamily.Section);
+        List<Rebar> barras = new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>()
+            .Where(b => viga.Vigas.Contains(b.GetHostId())).ToList();
+        Registro.Paso($"vistas: {barras.Count} barras; vista longitudinal");
+        View longitudinal = Longitudinal(doc, tipoSeccion, viga, barras, tipos);
+        Registro.Paso("vistas: sección");
+        View seccion = Seccion(doc, tipoSeccion, viga, barras, tipos);
+        doc.Regenerate();
+        return (longitudinal, seccion);
     }
 
     private static (XYZ Min, XYZ Max) Caja(Document doc, VigaContinua viga)
@@ -77,7 +120,9 @@ internal static class GeneradorPrevia
     {
         (XYZ min, XYZ max) = Caja(doc, viga);
         XYZ derecha = SentidoDeLectura(doc, viga);
-        XYZ haciaElQueMira = derecha.CrossProduct(XYZ.BasisZ);
+        // Al crear la sección, la derecha de la vista sale contraria al BasisX pedido (medido el 30-oct: con +X salió C-B-A).
+        XYZ basisX = derecha.Negate();
+        XYZ haciaElQueMira = basisX.CrossProduct(XYZ.BasisZ);
         XYZ centro = (min + max) / 2;
         double largo = Math.Abs((max - min).DotProduct(derecha));
         double ancho = Math.Abs((max - min).DotProduct(haciaElQueMira));
@@ -85,7 +130,7 @@ internal static class GeneradorPrevia
         XYZ enPlano = centro + haciaElQueMira * (ancho / 2 + 0.3 * M);
 
         Transform t = Transform.Identity;
-        t.BasisX = derecha;
+        t.BasisX = basisX;
         t.BasisY = XYZ.BasisZ;
         t.BasisZ = haciaElQueMira;
         t.Origin = enPlano;
@@ -127,10 +172,54 @@ internal static class GeneradorPrevia
         double tope = Acomodar(doc, vista, sacadas.Where(s => Centro(s.Barra).Z > mitad).ToList(), max.Z + SeparacionViga, true, tipos);
         double fondo = Acomodar(doc, vista, sacadas.Where(s => Centro(s.Barra).Z <= mitad).ToList(), min.Z - SeparacionViga, false, tipos);
 
-        // El recorte, justo a lo que quedó: así la imagen no se llena de vacío y todo se ve más grande.
-        Recortar(vista, centro, largo / 2 + 1.0 * M, largo / 2 + 1.0 * M, centro.Z - Math.Min(fondo, min.Z) + 0.4 * M, Math.Max(tope, max.Z) - centro.Z + 0.4 * M);
+        Recortar(vista, centro, largo / 2 + 1.0 * M, largo / 2 + 1.0 * M, alto / 2 + HolguraRecorte, alto / 2 + HolguraRecorte);
+        vista.SetCategoryHidden(new ElementId(BuiltInCategory.OST_Levels), true);
+        doc.Regenerate();
+        AjustarEjes(doc, vista, Math.Max(tope, max.Z) + CabezaEje, Math.Min(fondo, min.Z) - CotaTotal - ColaEje);
+        Cotar(doc, vista, centro, derecha, largo, min, max, Math.Min(fondo, min.Z), tipos);
         vista.DisplayStyle = DisplayStyle.FlatColors;
         return vista;
+    }
+
+    /// <summary>Lleva los círculos de los ejes por encima de las filas de barras, para que no choquen, solo en esta vista.</summary>
+    private static void AjustarEjes(Document doc, View vista, double arriba, double abajo)
+    {
+        foreach (Grid g in new FilteredElementCollector(doc, vista.Id).OfClass(typeof(Grid)).Cast<Grid>())
+        {
+            Curve actual = g.GetCurvesInView(DatumExtentType.ViewSpecific, vista)[0];
+            XYZ a = actual.GetEndPoint(0), e = actual.GetEndPoint(1);
+            g.SetDatumExtentType(DatumEnds.End0, vista, DatumExtentType.ViewSpecific);
+            g.SetDatumExtentType(DatumEnds.End1, vista, DatumExtentType.ViewSpecific);
+            bool subeElPrimero = a.Z > e.Z;
+            g.SetCurveInView(DatumExtentType.ViewSpecific, vista, Line.CreateBound(new XYZ(a.X, a.Y, subeElPrimero ? arriba : abajo), new XYZ(e.X, e.Y, subeElPrimero ? abajo : arriba)));
+        }
+    }
+
+    /// <summary>Las luces entre ejes y el total, debajo de todo. Son cotas de Revit, ligadas a los ejes (#222). Con menos de dos ejes no hay qué acotar.</summary>
+    private static void Cotar(Document doc, View vista, XYZ centro, XYZ derecha, double largo, XYZ min, XYZ max, double fondo, TiposPropios tipos)
+    {
+        double desde = Math.Min(min.DotProduct(derecha), max.DotProduct(derecha)), hasta = Math.Max(min.DotProduct(derecha), max.DotProduct(derecha));
+        List<Grid> ejes = new FilteredElementCollector(doc, vista.Id).OfClass(typeof(Grid)).Cast<Grid>()
+            .Where(g => g.Curve is Line l && Math.Abs(l.Direction.DotProduct(derecha)) < 0.01)
+            .Where(g => g.Curve.GetEndPoint(0).DotProduct(derecha) >= desde - 0.5 * M && g.Curve.GetEndPoint(0).DotProduct(derecha) <= hasta + 0.5 * M)
+            .OrderBy(g => g.Curve.GetEndPoint(0).DotProduct(derecha)).ToList();
+        if (ejes.Count < 2)
+            return;
+
+        void Cota(IEnumerable<Grid> entre, double z)
+        {
+            var referencias = new ReferenceArray();
+            foreach (Grid g in entre)
+                referencias.Append(new Reference(g));
+            XYZ medio = new(centro.X, centro.Y, z);
+            Dimension cota = doc.Create.NewDimension(vista, Line.CreateBound(medio - derecha * (largo / 2), medio + derecha * (largo / 2)), referencias);
+            if (tipos.Cota is { } tipo)
+                cota.DimensionType = tipo;
+        }
+
+        Cota(ejes, fondo - CotaLuces);
+        if (ejes.Count > 2)
+            Cota([ejes[0], ejes[^1]], fondo - CotaTotal);
     }
 
     /// <summary>
@@ -182,9 +271,7 @@ internal static class GeneradorPrevia
         double ancho = Math.Abs((max - min).DotProduct(base_));
         double alto = max.Z - min.Z;
         XYZ medio = (min + max) / 2;
-        // En el centro de la primera viga: en plena luz, no sobre un apoyo.
-        XYZ enLuz = ((LocationCurve)doc.GetElement(viga.Vigas[0]).Location).Curve.Evaluate(0.5, true);
-        double aLoLargo = enLuz.DotProduct(dir);
+        double aLoLargo = PuntoDeCorte(doc, viga, barras, dir);
         XYZ corte = medio + dir * (aLoLargo - medio.DotProduct(dir));
 
         Transform t = Transform.Identity;
@@ -210,9 +297,9 @@ internal static class GeneradorPrevia
         vista.DisplayStyle = DisplayStyle.FlatColors;
         doc.Regenerate();
 
-        // Una etiqueta con flecha por cada barra que pasa por el corte. El bastón (barra suelta) no se etiqueta (Santiago, 30-oct).
+        // Una etiqueta con flecha por cada barra que pasa por el corte. El bastón no se etiqueta (Santiago, 30-oct).
         var cortadas = new List<(Rebar Barra, XYZ Punto)>();
-        foreach (Rebar b in barras.Where(b => EsLongitudinal(b, dir) && b.Quantity > 1))
+        foreach (Rebar b in barras.Where(b => EsLongitudinal(b, dir) && !MarcaVigas.EsBaston(b)))
         {
             Curve mayor = Mayor(b);
             RebarShapeDrivenAccessor acceso = b.GetShapeDrivenAccessor();
@@ -251,6 +338,26 @@ internal static class GeneradorPrevia
         return vista;
     }
 
+    /// <summary>
+    /// Dónde cortar la primera viga: lo más cerca de su centro sin caer en un traslapo, donde las barras salen dobles y la
+    /// sección dejaría de parecerse a la del plano. Se evitan los extremos, que están sobre los apoyos.
+    /// </summary>
+    private static double PuntoDeCorte(Document doc, VigaContinua viga, List<Rebar> barras, XYZ dir)
+    {
+        Curve eje = ((LocationCurve)doc.GetElement(viga.Vigas[0]).Location).Curve;
+        double centro = eje.Evaluate(0.5, true).DotProduct(dir);
+        List<(double Desde, double Hasta, int Cantidad)> corridas = barras.Where(b => EsLongitudinal(b, dir) && !MarcaVigas.EsBaston(b)).Select(b =>
+        {
+            Curve mayor = Mayor(b);
+            double a = mayor.GetEndPoint(0).DotProduct(dir), e = mayor.GetEndPoint(1).DotProduct(dir);
+            return (Math.Min(a, e), Math.Max(a, e), b.Quantity);
+        }).ToList();
+        return Enumerable.Range(10, 81).Select(i => eje.Evaluate(i / 100.0, true).DotProduct(dir))
+            .OrderBy(p => corridas.Where(c => p >= c.Desde && p <= c.Hasta).Sum(c => c.Cantidad))
+            .ThenBy(p => Math.Abs(p - centro))
+            .First();
+    }
+
     private static ViewSection Preparar(Document doc, ViewFamilyType tipo, BoundingBoxXYZ caja, string prefijo, int escala)
     {
         ViewSection vista = ViewSection.CreateSection(doc, tipo.Id, caja);
@@ -278,7 +385,7 @@ internal static class GeneradorPrevia
         vista.CropBox = recorte;
     }
 
-    /// <summary>Solo la viga y su acero (#217): sin rellenos ni dibujos que imiten otra cosa.</summary>
+    /// <summary>Solo la viga y su acero (#217): sin columnas, rellenos ni dibujos que imiten otra cosa.</summary>
     private static void Limpiar(Document doc, View vista, VigaContinua viga, List<Rebar> barras)
     {
         var deja = new HashSet<ElementId>(barras.Select(b => b.Id).Concat(viga.Vigas));
@@ -362,23 +469,32 @@ internal sealed class TiposPropios
 {
     private readonly ElementId notaId;
 
-    private TiposPropios(RebarBendingDetailType barra, ElementId notaId)
+    private TiposPropios(RebarBendingDetailType barra, DimensionType? cota, ElementId notaId)
     {
         Barra = barra;
+        Cota = cota;
         this.notaId = notaId;
     }
 
     public RebarBendingDetailType Barra { get; }
 
+    public DimensionType? Cota { get; }
+
     public TextNoteOptions Nota(HorizontalTextAlignment alineacion) => new(notaId) { HorizontalAlignment = alineacion };
 
-    public static TiposPropios Crear(Document doc)
+    /// <summary>
+    /// <paramref name="definitivos"/>: para vistas que se quedan en el proyecto, con nombre fijo y sin repetirlos si ya
+    /// están. Si no, con nombre único, porque la vista previa los deshace.
+    /// </summary>
+    public static TiposPropios Crear(Document doc, bool definitivos)
     {
         string sufijo = Guid.NewGuid().ToString("N");
+        string Nombre(string fijo) => definitivos ? fijo : "CQEING temporal " + sufijo;
         List<RebarBendingDetailType> todos = new FilteredElementCollector(doc).OfClass(typeof(RebarBendingDetailType)).Cast<RebarBendingDetailType>().ToList();
         // El que no trae etiqueta: la del proyecto dice "#5 CQEING - 34", y borrarla después borra también el detalle.
         RebarBendingDetailType original = todos.FirstOrDefault(t => !TieneEtiqueta(doc, t)) ?? todos.First();
-        var barra = (RebarBendingDetailType)original.Duplicate("CQEING temporal " + sufijo);
+        string nombreBarra = Nombre("CQ Despiece sin etiqueta");
+        var barra = todos.FirstOrDefault(t => t.Name == nombreBarra) ?? (RebarBendingDetailType)original.Duplicate(nombreBarra);
         DimensionType? metros = null;
         foreach (Parameter p in barra.Parameters)
         {
@@ -387,24 +503,33 @@ internal sealed class TiposPropios
             if (doc.GetElement(p.AsElementId()) is DimensionType { StyleType: DimensionStyleType.Linear } lineal)
             {
                 Registro.Paso("tipos: cota en metros " + p.Definition.Name);
-                metros ??= EnMetros(lineal, sufijo);
+                metros ??= EnMetros(doc, lineal, Nombre("CQ Despiece - metros"));
                 p.Set(metros.Id);
             }
         }
         Registro.Paso("tipos: nota de texto");
-        TextNoteType base_ = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>().First();
-        var nota = (TextNoteType)base_.Duplicate("CQEING temporal " + sufijo);
-        nota.get_Parameter(BuiltInParameter.TEXT_SIZE).Set(0.0025 / 0.3048);
-        nota.get_Parameter(BuiltInParameter.TEXT_BACKGROUND).Set(1);
-        return new TiposPropios(barra, nota.Id);
+        List<TextNoteType> notas = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>().ToList();
+        string nombreNota = Nombre("CQ Despiece etiqueta");
+        TextNoteType? nota = notas.FirstOrDefault(n => n.Name == nombreNota);
+        if (nota is null)
+        {
+            nota = (TextNoteType)notas[0].Duplicate(nombreNota);
+            nota.get_Parameter(BuiltInParameter.TEXT_SIZE).Set(0.0025 / 0.3048);
+            nota.get_Parameter(BuiltInParameter.TEXT_BACKGROUND).Set(1);
+        }
+        return new TiposPropios(barra, metros, nota.Id);
     }
 
     private static bool TieneEtiqueta(Document doc, RebarBendingDetailType tipo) => tipo.Parameters.Cast<Parameter>()
         .Any(p => p.StorageType == StorageType.ElementId && doc.GetElement(p.AsElementId())?.Category?.Id.Value == (long)BuiltInCategory.OST_RebarTags);
 
-    private static DimensionType EnMetros(DimensionType original, string sufijo)
+    private static DimensionType EnMetros(Document doc, DimensionType original, string nombre)
     {
-        var copia = (DimensionType)original.Duplicate("CQEING temporal " + sufijo);
+        if (original.Name == nombre)
+            return original;
+        if (new FilteredElementCollector(doc).OfClass(typeof(DimensionType)).Cast<DimensionType>().FirstOrDefault(d => d.Name == nombre) is { } existente)
+            return existente;
+        var copia = (DimensionType)original.Duplicate(nombre);
         copia.SetUnitsFormatOptions(new FormatOptions(UnitTypeId.Meters) { UseDefault = false, Accuracy = 0.01, SuppressTrailingZeros = false });
         return copia;
     }
