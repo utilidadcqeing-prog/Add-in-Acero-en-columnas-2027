@@ -223,10 +223,17 @@ internal sealed class PuenteDespiece
         if (!previas.TryGetValue(clave, out object? listo))
         {
             PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia);
-            listo = new { tipo = "previa", grupo, longitudinal = Url(p.Longitudinal), seccion = Url(p.Seccion) };
+            listo = new { tipo = "previa", grupo, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
             previas[clave] = listo;
         }
         Enviar(listo);
+    }
+
+    /// <summary>La página necesita el tamaño para acercarla y moverla (<c>Visor</c> en pasos.js).</summary>
+    private static object Imagen(string ruta)
+    {
+        (int ancho, int alto) = ExportadorImagen.Tamano(ruta);
+        return new { url = Url(ruta), ancho, alto };
     }
 
     private static string Url(string ruta) => $"https://{VentanaDespiece.HostPrevia}/{Path.GetFileName(ruta)}";

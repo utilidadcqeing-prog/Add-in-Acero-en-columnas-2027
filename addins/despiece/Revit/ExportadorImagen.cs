@@ -10,8 +10,11 @@ namespace CQEING.Despiece.Revit;
 /// <summary>Exporta una vista a PNG con fondo blanco. El fondo de Revit vuelve a su color pase lo que pase.</summary>
 internal static class ExportadorImagen
 {
-    /// <summary>Las vistas de despiece se ven enteras en la ventana: no hace falta más.</summary>
+    /// <summary>La sección es pequeña: con esto se ve nítida aun al acercarla.</summary>
     public const int AnchoNormal = 1800;
+
+    /// <summary>La vista larga se acerca para leer sus etiquetas (Juan, 30-oct): una viga larga queda muy angosta a 1800 px.</summary>
+    public const int AnchoLarga = 3000;
 
     /// <summary>Las plantas se acercan con la rueda (#221). A 2000 px exportan en la mitad de tiempo que a 3000 (Juan, 30-oct).</summary>
     public const int AnchoPlanta = 2000;
@@ -46,6 +49,14 @@ internal static class ExportadorImagen
         string final = Path.Combine(carpeta, prefijo + ".png");
         File.Move(exportado, final);
         return final;
+    }
+
+    /// <summary>El tamaño del PNG en píxeles. Solo lee su encabezado.</summary>
+    public static (int Ancho, int Alto) Tamano(string ruta)
+    {
+        using FileStream entrada = File.OpenRead(ruta);
+        BitmapFrame cuadro = BitmapDecoder.Create(entrada, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None).Frames[0];
+        return (cuadro.PixelWidth, cuadro.PixelHeight);
     }
 
     /// <summary>Ubica y borra las cruces de calibración del PNG, y lo vuelve a guardar. Null si no están las dos.</summary>

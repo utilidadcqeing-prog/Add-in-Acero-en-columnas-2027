@@ -68,7 +68,7 @@ internal static class GeneradorPrevia
         {
             (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, false));
             Registro.Paso("previa: exportando la longitudinal");
-            string a = ExportadorImagen.Exportar(doc, longitudinal, carpeta);
+            string a = ExportadorImagen.Exportar(doc, longitudinal, carpeta, ExportadorImagen.AnchoLarga);
             Registro.Paso("previa: exportando la sección");
             string b = ExportadorImagen.Exportar(doc, seccion, carpeta);
             return new PreviaGenerada(a, b);
