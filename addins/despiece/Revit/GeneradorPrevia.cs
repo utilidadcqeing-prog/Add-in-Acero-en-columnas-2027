@@ -19,24 +19,30 @@ internal static class GeneradorPrevia
 {
     private const double M = 1 / 0.3048;
 
-    /// <summary>Como en el plano E-01: la vista larga a 1:50, para que los textos se lean; la sección a 1:25.</summary>
-    private const int EscalaLongitudinal = 50;
+    /// <summary>La vista larga a 1:15 (Juan, 30-oct) y la sección a 1:25.</summary>
+    private const int EscalaLongitudinal = 15;
     private const int EscalaSeccion = 25;
 
-    // Medidas de la vista larga, en pies del modelo: a 1:50 el texto ocupa el doble que a 1:25.
-    private const double SeparacionViga = 0.6 * M;
-    private const double AltoEtiqueta = 0.40 * M;
-    private const double MedioAnchoEtiqueta = 0.65 * M;
-    private const double HuecoFilas = 0.15 * M;
-    private const double HuecoEnFila = 0.20 * M;
+    // Las separaciones de la vista larga se midieron a 1:50, en pies del modelo; el texto ocupa lo que dice la escala,
+    // así que se reducen en proporción para que la vista no quede llena de aire.
+    private const double Proporcion = EscalaLongitudinal / 50.0;
+    private const double SeparacionViga = 0.6 * M * Proporcion;
+    // A 1:15 la caja de la nota baja 0.09 m desde su punto (medido en V 3, 30-oct); el resto es aire sobre la barra.
+    private const double AltoTexto = 0.11 * M;
+    private const double EspacioCotas = 0.15 * M;
+    private const double MinimoGancho = 0.05 * M;
+    private const double MedioAnchoEtiqueta = 0.65 * M * Proporcion;
+    private const double HuecoFilas = 0.15 * M * Proporcion;
+    private const double HuecoEnFila = 0.20 * M * Proporcion;
+    private const double DesfaseTraslapo = 0.08 * M;
 
     // La vista es solo de la viga (Juan, 30-oct): sin columnas, ni ocultas con otro dibujo. El recorte va justo a su alto;
     // las barras sacadas se ven por fuera de él. Donde había una columna, Revit deja la viga cortada: es su geometría real.
     private const double HolguraRecorte = 0.005 * M;
-    private const double ColaEje = 0.3 * M;
-    private const double CabezaEje = 0.8 * M;
-    private const double CotaLuces = 0.35 * M;
-    private const double CotaTotal = 0.75 * M;
+    private const double ColaEje = 0.3 * M * Proporcion;
+    private const double CabezaEje = 0.8 * M * Proporcion;
+    private const double CotaLuces = 0.35 * M * Proporcion;
+    private const double CotaTotal = 0.75 * M * Proporcion;
 
     public static PreviaGenerada Generar(Document doc, VigaContinua viga, string carpeta)
     {
@@ -111,9 +117,22 @@ internal static class GeneradorPrevia
     }
 
     /// <summary>Una barra sacada y lo que ocupa en la vista, medido en Revit.</summary>
-    private sealed record Sacada(Rebar Barra, Element Detalle, XYZ Posicion, double Izquierda, double Derecha, double Abajo, double Arriba)
+    private sealed record Sacada(Rebar Barra, Element Detalle, XYZ Posicion, int Cantidad, double Izquierda, double Derecha, double Abajo, double Arriba)
     {
         public double Alto => Arriba - Abajo;
+
+        private double GanchoArriba => Barra.get_BoundingBox(null).Max.Z - Mayor(Barra).GetEndPoint(0).Z;
+
+        private double GanchoAbajo => Mayor(Barra).GetEndPoint(0).Z - Barra.get_BoundingBox(null).Min.Z;
+
+        /// <summary>
+        /// Del borde inferior del detalle a su tramo recto. Revit pone la medida del tramo al lado contrario del gancho: con
+        /// el gancho arriba o sin gancho va debajo; con el gancho abajo, encima (visto en V 3).
+        /// </summary>
+        public double Linea => GanchoAbajo > MinimoGancho ? GanchoAbajo : GanchoArriba > MinimoGancho ? Alto - GanchoArriba : Alto;
+
+        /// <summary>Lo que ocupa la medida del tramo por encima de él: solo si el gancho va abajo.</summary>
+        public double CotaEncima => GanchoAbajo > MinimoGancho ? Alto - GanchoAbajo : 0;
     }
 
     private static View Longitudinal(Document doc, ViewFamilyType tipo, VigaContinua viga, List<Rebar> barras, TiposPropios tipos)
@@ -150,27 +169,51 @@ internal static class GeneradorPrevia
         // Se sacan todas lejos de la viga, se mide cuánto ocupa cada una y se acomodan en filas sin encimarse.
         Registro.Paso("longitudinal: sacando barras");
         List<Rebar> longitudinales = barras.Where(b => EsLongitudinal(b, derecha)).ToList();
-        var creadas = new List<(Rebar Barra, Element Detalle, XYZ Posicion)>();
-        foreach (Rebar b in longitudinales)
+        var creadas = new List<(Rebar Barra, Element Detalle, XYZ Posicion, int Cantidad)>();
+        // Una misma pieza puede ser varios conjuntos (S1: 3 #5 y dos sueltas #4). Las de igual diámetro y largo se dibujan
+        // una vez, con su cantidad total: para figurar el acero son la misma barra. Las hechas a mano no se juntan.
+        foreach (IGrouping<string, Rebar> iguales in longitudinales.GroupBy(b => MarcaVigas.Pieza(b) is { } pieza
+            ? $"{pieza}|{b.GetTypeId()}|{Math.Round(LectorDespiece.LargoBarra(b) * 304.8)}"
+            : b.Id.ToString()))
         {
+            Rebar b = iguales.First();
             XYZ c = Centro(b);
             XYZ p = new XYZ(c.X, c.Y, max.Z + 11 * M) + haciaElQueMira * (enPlano - c).DotProduct(haciaElQueMira);
             Registro.Paso($"longitudinal: barra {b.Id}");
             Element d = RebarBendingDetail.Create(doc, vista.Id, b.Id, 0, tipos.Barra, p, 0);
             Pintar(vista, d.Id, b, 2);
-            creadas.Add((b, d, p));
+            creadas.Add((b, d, p, iguales.Sum(x => x.Quantity)));
         }
         doc.Regenerate();
         List<Sacada> sacadas = creadas.Select(c =>
         {
             BoundingBoxXYZ m = c.Detalle.get_BoundingBox(vista);
             double a = m.Min.DotProduct(derecha), b = m.Max.DotProduct(derecha);
-            return new Sacada(c.Barra, c.Detalle, c.Posicion, Math.Min(a, b), Math.Max(a, b), m.Min.Z - c.Posicion.Z, m.Max.Z - c.Posicion.Z);
+            return new Sacada(c.Barra, c.Detalle, c.Posicion, c.Cantidad, Math.Min(a, b), Math.Max(a, b), m.Min.Z - c.Posicion.Z, m.Max.Z - c.Posicion.Z);
         }).ToList();
 
         double mitad = (min.Z + max.Z) / 2;
-        double tope = Acomodar(doc, vista, sacadas.Where(s => Centro(s.Barra).Z > mitad).ToList(), max.Z + SeparacionViga, true, tipos);
-        double fondo = Acomodar(doc, vista, sacadas.Where(s => Centro(s.Barra).Z <= mitad).ToList(), min.Z - SeparacionViga, false, tipos);
+        // Arriba o abajo según la marca del add-in de vigas: S e I son las líneas de arriba y de abajo, BS y BI sus bastones.
+        // Sin marca (modelada a mano), según la altura de su tramo recto, no de la caja de toda la barra: un gancho hacia
+        // el centro de la viga corre el centro de la caja y mandaba la barra de arriba abajo (visto en V 3 y V A, 30-oct).
+        bool EstaArriba(Sacada s) => MarcaVigas.Serie(s.Barra) switch
+        {
+            "S" or "BS" => true,
+            "I" or "BI" => false,
+            _ => Mayor(s.Barra).GetEndPoint(0).Z > mitad,
+        };
+        List<Sacada> deArriba = sacadas.Where(EstaArriba).ToList(), deAbajo = sacadas.Except(deArriba).ToList();
+        // Una fila por diámetro, la barra más gruesa junto a la viga, y los bastones más afuera (plano de Santiago).
+        double Lineas(List<Sacada> lado, string serie, double desde, bool haciaArriba)
+        {
+            double z = desde;
+            foreach (IGrouping<int, Sacada> diametro in lado.Where(s => MarcaVigas.Serie(s.Barra) == serie)
+                .GroupBy(s => LectorDespiece.Numero(doc.GetElement(s.Barra.GetTypeId()).Name)).OrderByDescending(g => g.Key))
+                z = AcomodarLinea(doc, vista, diametro.ToList(), z, haciaArriba, tipos);
+            return Acomodar(doc, vista, lado.Where(s => MarcaVigas.Serie(s.Barra) != serie).ToList(), z, haciaArriba, tipos);
+        }
+        double tope = Lineas(deArriba, "S", max.Z + SeparacionViga, true);
+        double fondo = Lineas(deAbajo, "I", min.Z - SeparacionViga, false);
 
         Recortar(vista, centro, largo / 2 + 1.0 * M, largo / 2 + 1.0 * M, alto / 2 + HolguraRecorte, alto / 2 + HolguraRecorte);
         vista.SetCategoryHidden(new ElementId(BuiltInCategory.OST_Levels), true);
@@ -247,15 +290,47 @@ internal static class GeneradorPrevia
             }
         }
 
-        double z = desde;
-        foreach (List<Sacada> fila in filas)
+        return ColocarFilas(doc, vista, filas.Select(f => f.Select(s => (s, 0.0)).ToList()).ToList(), desde, haciaArriba, tipos);
+    }
+
+    /// <summary>
+    /// Todas las piezas de una misma línea de acero (S1, S2… arriba; I1, I2… abajo) en una sola fila, como en el plano de
+    /// Santiago: las que se traslapan quedan en la misma fila y una se corre <see cref="DesfaseTraslapo"/> para que se vea
+    /// el traslapo (#223). La fila más cercana a la viga es esta; los bastones van más afuera.
+    /// </summary>
+    private static double AcomodarLinea(Document doc, View vista, List<Sacada> sacadas, double desde, bool haciaArriba, TiposPropios tipos)
+    {
+        if (sacadas.Count == 0)
+            return desde;
+        var fila = new List<(Sacada, double)>();
+        double hasta = double.MinValue;
+        int escalon = 0;
+        foreach (Sacada s in sacadas.OrderBy(s => s.Izquierda))
         {
-            double altoFila = fila.Max(s => s.Alto) + AltoEtiqueta;
-            double piso = haciaArriba ? z : z - altoFila;
-            foreach (Sacada s in fila)
+            escalon = s.Izquierda < hasta ? escalon + 1 : 0;
+            hasta = Math.Max(hasta, s.Derecha);
+            fila.Add((s, escalon * DesfaseTraslapo));
+        }
+        return ColocarFilas(doc, vista, [fila], desde, haciaArriba, tipos);
+    }
+
+    /// <summary>Coloca las filas de la viga hacia afuera. Cada pieza puede ir corrida un desfase; la etiqueta va a la altura de la más alta de su fila.</summary>
+    private static double ColocarFilas(Document doc, View vista, List<List<(Sacada S, double Desfase)>> filas, double desde, bool haciaArriba, TiposPropios tipos)
+    {
+        double z = desde;
+        foreach (List<(Sacada S, double Desfase)> fila in filas)
+        {
+            // Todo se mide desde el tramo recto: la etiqueta va justo sobre él, no sobre la punta del gancho (Juan, 30-oct:
+            // "quedan muy lejos"). Encima queda libre el espacio de las cotas de traslapo (#223).
+            double bajoLinea = fila.Max(f => f.S.Linea);
+            double etiqueta = fila.Max(f => f.S.CotaEncima + f.Desfase) + AltoTexto;
+            double sobreLinea = Math.Max(fila.Max(f => f.S.Alto - f.S.Linea + f.Desfase), etiqueta) + EspacioCotas;
+            double altoFila = bajoLinea + sobreLinea;
+            double linea = (haciaArriba ? z : z - altoFila) + bajoLinea;
+            foreach ((Sacada s, double desfase) in fila)
             {
-                RebarBendingDetail.SetPosition(s.Detalle, new XYZ(s.Posicion.X, s.Posicion.Y, piso - s.Abajo));
-                TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(s.Posicion.X, s.Posicion.Y, piso + s.Alto + AltoEtiqueta), Etiqueta(doc, s.Barra), tipos.Nota(HorizontalTextAlignment.Center));
+                RebarBendingDetail.SetPosition(s.Detalle, new XYZ(s.Posicion.X, s.Posicion.Y, linea - s.Linea - s.Abajo + desfase));
+                TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(s.Posicion.X, s.Posicion.Y, linea + etiqueta), LectorDespiece.Etiqueta(doc.GetElement(s.Barra.GetTypeId()).Name, s.Cantidad, LectorDespiece.LargoBarra(s.Barra)), tipos.Nota(HorizontalTextAlignment.Center));
                 Pintar(vista, nota.Id, s.Barra, null);
             }
             z = haciaArriba ? z + altoFila + HuecoFilas : z - altoFila - HuecoFilas;
@@ -425,8 +500,6 @@ internal static class GeneradorPrevia
 
     private static ElementId Solido(Document doc) => new FilteredElementCollector(doc).OfClass(typeof(FillPatternElement)).Cast<FillPatternElement>()
         .First(f => f.GetFillPattern().IsSolidFill).Id;
-
-    private static string Etiqueta(Document doc, Rebar b) => LectorDespiece.Etiqueta(doc.GetElement(b.GetTypeId()).Name, b.Quantity, LectorDespiece.LargoBarra(b));
 
     private static string NombreBarra(Document doc, Rebar b)
     {
