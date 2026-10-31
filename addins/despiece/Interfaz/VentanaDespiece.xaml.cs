@@ -14,6 +14,9 @@ internal sealed partial class VentanaDespiece : Window
     /// <summary>Host virtual con el que WebView2 sirve <see cref="CarpetaWeb"/>.</summary>
     public const string Host = "despiece.cqeing";
 
+    /// <summary>Host virtual de las imágenes de Revit: viven en <see cref="CarpetaPrevia"/>, no junto a la DLL.</summary>
+    public const string HostPrevia = "previa.cqeing";
+
     private bool cerrada;
 
     private WindowState estadoAntes = WindowState.Normal;
@@ -51,11 +54,38 @@ internal sealed partial class VentanaDespiece : Window
         };
         // La página mide 1440 × 900 como la maqueta: si no entra, se achica entera y nada se corta.
         navegador.SizeChanged += (_, _) => navegador.ZoomFactor = CalculadoraZoom.Factor(navegador.ActualWidth, navegador.ActualHeight);
+        Directory.CreateDirectory(CarpetaPrevia);
         Closed += (_, _) =>
         {
             cerrada = true;
             navegador.Dispose();
+            BorrarPrevia();
         };
+    }
+
+    /// <summary>Un mensaje de la página, como JSON.</summary>
+    public event Action<string>? MensajeRecibido;
+
+    /// <summary>Donde se guardan las imágenes de Revit mientras la ventana está abierta.</summary>
+    public string CarpetaPrevia { get; } = Path.Combine(Path.GetTempPath(), "CQEING", "despiece", Guid.NewGuid().ToString("N"));
+
+    /// <summary>Manda <paramref name="json"/> a la página. Después de cerrar no hace nada: puede quedar un trabajo en cola.</summary>
+    public void Enviar(string json)
+    {
+        if (!cerrada)
+            navegador.CoreWebView2?.PostWebMessageAsJson(json);
+    }
+
+    private void BorrarPrevia()
+    {
+        try
+        {
+            Directory.Delete(CarpetaPrevia, recursive: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Son temporales: si WebView2 aún tiene una abierta, Windows las limpia después.
+        }
     }
 
     /// <summary>La carpeta <c>web</c> junto a la DLL, donde la compilación copia la página.</summary>
@@ -146,11 +176,11 @@ internal sealed partial class VentanaDespiece : Window
         // Solo la página del despiece: soltar un archivo o un enlace sobre la ventana no la cambia por otra.
         core.NavigationStarting += (_, e) => e.Cancel = !EsDelDespiece(e.Uri);
         core.NewWindowRequested += (_, e) => e.Handled = true;
-        // El único mensaje de la página, por ahora: el botón «Cerrar» del paso 1.
+        core.SetVirtualHostNameToFolderMapping(HostPrevia, CarpetaPrevia, CoreWebView2HostResourceAccessKind.DenyCors);
         core.WebMessageReceived += (_, e) =>
         {
             if (EsDelDespiece(e.Source))
-                Close();
+                MensajeRecibido?.Invoke(e.WebMessageAsJson);
         };
         core.Navigate($"https://{Host}/index.html");
     }

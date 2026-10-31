@@ -7,7 +7,13 @@
     <Company>CQEING</Company>
     <Product>CQEING - Despiece</Product>
     <Copyright>© CQEING</Copyright>
+    <!-- El cálculo vive en calculo/ como proyecto aparte (sin Revit): no se compila dos veces. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);calculo\**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="calculo\CQEING.Despiece.Calculo\CQEING.Despiece.Calculo.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Solo para compilar: Revit ya trae WebView2 (Core, Wpf y WebView2Loader); no se copian a la salida. -->
@@ -17,6 +23,7 @@
   <ItemGroup>
     <!-- Enlazado, no copiado (decisión 2 del plan de #220): el zoom y el encaje son los del tablero de vigas. -->
     <Compile Include="..\acero-vigas\calculo\CQEING.Vigas.Calculo\Tablero\CalculadoraZoom.cs" Link="Interfaz\CalculadoraZoom.cs" />
+    <Compile Include="..\acero-vigas\calculo\CQEING.Vigas.Calculo\Modelo\ColoresDiametro.cs" Link="Revit\ColoresDiametro.cs" />
   </ItemGroup>
 
   <ItemGroup>
