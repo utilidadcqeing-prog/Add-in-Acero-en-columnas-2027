@@ -13,8 +13,8 @@ internal static class ExportadorImagen
     /// <summary>Las vistas de despiece se ven enteras en la ventana: no hace falta más.</summary>
     public const int AnchoNormal = 1800;
 
-    /// <summary>Las plantas se acercan con la rueda (#221): con 1800 px se ven borrosas al acercar.</summary>
-    public const int AnchoPlanta = 3000;
+    /// <summary>Las plantas se acercan con la rueda (#221). A 2000 px exportan en la mitad de tiempo que a 3000 (Juan, 30-oct).</summary>
+    public const int AnchoPlanta = 2000;
 
     /// <summary>Devuelve la ruta del PNG, en <paramref name="carpeta"/>, con nombre único para que la página no muestre uno viejo.</summary>
     public static string Exportar(Document doc, View vista, string carpeta, int anchoPixeles = AnchoNormal)

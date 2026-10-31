@@ -4,7 +4,7 @@
   const enviar = (m) => window.chrome?.webview?.postMessage(m);
 
   const VERDE = '#1E8E3E', AZUL = '#1F5FAF';
-  // Los límites del zoom de la planta: 1 es la planta entera en la ventana. Las plantas se exportan a 3000 px de ancho.
+  // Los límites del zoom de la planta: 1 es la planta entera en la ventana. Las plantas se exportan a 2000 px de ancho.
   const ZOOM_MIN = 0.35, ZOOM_MAX = 16;
   const TIPOS = [
     { n: 'Vigas', k: 'viga', icon: 'M3 14h30v8H3zM8 14v8M28 14v8' },
