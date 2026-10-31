@@ -113,6 +113,19 @@ internal static class LectorDespiece
         return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1} L= {2:0.00}", cantidad, nombre, largoPies * 0.3048);
     }
 
+    /// <summary>La separación de un conjunto de estribos, en pies; 0 si es uno solo.</summary>
+    public static double Separacion(Rebar b) => b.Quantity > 1 ? b.get_Parameter(BuiltInParameter.REBAR_ELEM_BAR_SPACING)?.AsDouble() ?? 0 : 0;
+
+    /// <summary>La etiqueta de una zona de estribos, como en el plano: <c>25 #4 @0.10</c>. Uno solo no lleva separación.</summary>
+    public static string EtiquetaEstribos(string tipo, int cantidad, double separacionPies)
+    {
+        int n = Numero(tipo);
+        string nombre = n > 0 ? "#" + n : tipo;
+        return separacionPies > 0
+            ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1} @{2:0.00}", cantidad, nombre, separacionPies * 0.3048)
+            : $"{cantidad} {nombre}";
+    }
+
     private static Line Linea(FamilyInstance v) => (Line)((LocationCurve)v.Location).Curve;
 
     /// <summary>La dirección con el sentido normalizado: dos vigas dibujadas al revés quedan iguales.</summary>

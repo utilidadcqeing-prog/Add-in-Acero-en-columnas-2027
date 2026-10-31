@@ -20,9 +20,9 @@ internal static class GeneradorPrevia
 {
     private const double M = 1 / 0.3048;
 
-    /// <summary>La vista larga a 1:15 (Juan, 30-oct) y la sección a 1:25.</summary>
+    /// <summary>La vista larga y la sección a 1:15 (Juan, 30-oct).</summary>
     private const int EscalaLongitudinal = 15;
-    private const int EscalaSeccion = 25;
+    private const int EscalaSeccion = 15;
 
     // Las separaciones de la vista larga se midieron a 1:50, en pies del modelo; el texto ocupa lo que dice la escala,
     // así que se reducen en proporción para que la vista no quede llena de aire.
@@ -37,6 +37,9 @@ internal static class GeneradorPrevia
     private const double HuecoFilas = 0.15 * M * Proporcion;
     private const double HuecoEnFila = 0.20 * M * Proporcion;
     private const double DesfaseTraslapo = 0.08 * M;
+    private const double MismaZona = 0.10 * M;
+    // La caja de la nota mide 0.12 m de alto a 1:15 (medido en V 3, 30-oct).
+    private const double FilaEstribos = 0.13 * M;
 
     // La vista es solo de la viga (Juan, 30-oct): sin columnas, ni ocultas con otro dibujo. El recorte va justo a su alto;
     // las barras sacadas se ven por fuera de él. Donde había una columna, Revit deja la viga cortada: es su geometría real.
@@ -214,7 +217,8 @@ internal static class GeneradorPrevia
                 z = AcomodarLinea(doc, vista, diametro.ToList(), derecha, z, haciaArriba, tipos);
             return Acomodar(doc, vista, lado.Where(s => MarcaVigas.Serie(s.Barra) != serie).ToList(), z, haciaArriba, tipos);
         }
-        double tope = Lineas(deArriba, "S", max.Z + SeparacionViga, true);
+        int filasEstribos = EtiquetarEstribos(doc, vista, barras, derecha, enPlano, max.Z, tipos);
+        double tope = Lineas(deArriba, "S", max.Z + SeparacionViga + FilaEstribos * Math.Max(filasEstribos - 1, 0), true);
         double fondo = Lineas(deAbajo, "I", min.Z - SeparacionViga, false);
 
         Recortar(vista, centro, largo / 2 + 1.0 * M, largo / 2 + 1.0 * M, alto / 2 + HolguraRecorte, alto / 2 + HolguraRecorte);
@@ -224,6 +228,36 @@ internal static class GeneradorPrevia
         Cotar(doc, vista, centro, derecha, largo, min, max, Math.Min(fondo, min.Z), tipos);
         vista.DisplayStyle = DisplayStyle.FlatColors;
         return vista;
+    }
+
+    /// <summary>
+    /// Una etiqueta sobre la viga por cada conjunto de estribos, centrada en su zona (#224). Si no cabe junto a la anterior
+    /// sube a otra fila, para que no se encimen. Devuelve cuántas filas usó. La grapa de una zona trae la misma cantidad y
+    /// separación que su estribo y va 2 cm al lado (viga 388501): con la misma etiqueta en el mismo sitio, se escribe una vez.
+    /// </summary>
+    private static int EtiquetarEstribos(Document doc, View vista, List<Rebar> barras, XYZ derecha, XYZ enPlano, double techo, TiposPropios tipos)
+    {
+        var finDeFila = new List<double>();
+        var escritas = new List<(string Texto, double Centro)>();
+        foreach ((Rebar b, double centro) in barras.Where(b => !EsLongitudinal(b, derecha))
+            .Select(b => (b, CentroDelConjunto(b).DotProduct(derecha))).OrderBy(z => z.Item2))
+        {
+            string texto = LectorDespiece.EtiquetaEstribos(doc.GetElement(b.GetTypeId()).Name, b.Quantity, LectorDespiece.Separacion(b));
+            if (escritas.Any(e => e.Texto == texto && Math.Abs(e.Centro - centro) < MismaZona))
+                continue;
+            escritas.Add((texto, centro));
+            int fila = finDeFila.FindIndex(fin => centro - MedioAnchoEtiqueta > fin + HuecoEnFila);
+            if (fila < 0)
+            {
+                fila = finDeFila.Count;
+                finDeFila.Add(0);
+            }
+            finDeFila[fila] = centro + MedioAnchoEtiqueta;
+            XYZ punto = enPlano + derecha * (centro - enPlano.DotProduct(derecha));
+            TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(punto.X, punto.Y, techo + AltoTexto + FilaEstribos * fila), texto, tipos.Nota(HorizontalTextAlignment.Center));
+            Pintar(vista, nota.Id, b, null);
+        }
+        return finDeFila.Count;
     }
 
     /// <summary>Lleva los círculos de los ejes por encima de las filas de barras, para que no choquen, solo en esta vista.</summary>
@@ -540,6 +574,14 @@ internal static class GeneradorPrevia
     {
         BoundingBoxXYZ c = b.get_BoundingBox(null);
         return (c.Min + c.Max) / 2;
+    }
+
+    /// <summary>El punto medio entre la primera y la última barra del conjunto.</summary>
+    private static XYZ CentroDelConjunto(Rebar b)
+    {
+        XYZ punto = Mayor(b).GetEndPoint(0);
+        RebarShapeDrivenAccessor acceso = b.GetShapeDrivenAccessor();
+        return (acceso.GetBarPositionTransform(0).OfPoint(punto) + acceso.GetBarPositionTransform(b.Quantity - 1).OfPoint(punto)) / 2;
     }
 
     private static Curve Mayor(Rebar b) => b.GetCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0).OrderByDescending(c => c.Length).First();
