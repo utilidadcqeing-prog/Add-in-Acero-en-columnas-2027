@@ -32,10 +32,11 @@ internal static class LectorDespiece
             .WhereElementIsNotElementType().OfType<FamilyInstance>().Where(v => v.Location is LocationCurve { Curve: Line }).ToList();
         ILookup<ElementId, Rebar> barras = new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>().ToLookup(b => b.GetHostId());
         List<Grid> ejes = new FilteredElementCollector(doc).OfClass(typeof(Grid)).Cast<Grid>().Where(g => g.Curve is Line).ToList();
+        List<Level> niveles = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().ToList();
 
         var continuas = new List<VigaContinua>();
         foreach (List<FamilyInstance> tramo in Tramos(vigas))
-            continuas.Add(Continua(doc, tramo, barras, ejes));
+            continuas.Add(Continua(doc, tramo, barras, ejes, niveles));
         return continuas;
     }
 
@@ -66,7 +67,7 @@ internal static class LectorDespiece
         }
     }
 
-    private static VigaContinua Continua(Document doc, List<FamilyInstance> tramo, ILookup<ElementId, Rebar> barras, List<Grid> ejes)
+    private static VigaContinua Continua(Document doc, List<FamilyInstance> tramo, ILookup<ElementId, Rebar> barras, List<Grid> ejes, List<Level> niveles)
     {
         Line linea = Linea(tramo[0]);
         XYZ dir = Direccion(linea);
@@ -86,7 +87,9 @@ internal static class LectorDespiece
         int ancho = (int)Math.Round(Mm(Math.Abs((cv.Max - cv.Min).DotProduct(perp))));
         int alto = (int)Math.Round(Mm(cv.Max.Z - cv.Min.Z));
         string eje = ejes.FirstOrDefault(g => Direccion((Line)g.Curve).IsAlmostEqualTo(dir) && Fuera(g.Curve.GetEndPoint(0), punto, dir) < Cercania)?.Name ?? "";
-        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista);
+        // Por la altura de la viga: en estas vigas el nivel del elemento viene vacío (PROY_JULIO_BETO, 30-oct).
+        string nivel = niveles.OrderBy(n => Math.Abs(n.Elevation - punto.Z)).FirstOrDefault()?.Name ?? "";
+        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista, nivel);
         return new VigaContinua(elemento, tramo.Select(v => v.Id).ToList(), origen, dir);
     }
 

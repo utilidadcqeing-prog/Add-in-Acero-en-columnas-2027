@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Windows.Threading;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
@@ -25,15 +26,40 @@ internal sealed class PuenteDespiece
     private List<VigaContinua> vigas = [];
     private IReadOnlyList<GrupoIguales> grupos = [];
 
+    /// <summary>Corre un trabajo del add-in: lo que cambie en el documento mientras tanto no cuenta como cambio del usuario.</summary>
+    private bool trabajando;
+
+    /// <summary>Espera a que el usuario termine: una sola orden de Revit puede ser varias transacciones seguidas.</summary>
+    private readonly DispatcherTimer esperaCambios = new() { Interval = TimeSpan.FromMilliseconds(500) };
+
     public PuenteDespiece(VentanaDespiece ventana, UIApplication uiapp)
     {
         this.ventana = ventana;
         this.uiapp = uiapp;
-        ventana.MensajeRecibido += json => acciones.Encolar(_ => Atender(json));
+        ventana.MensajeRecibido += json => Encolar(() => Atender(json));
         acciones.Fallo += texto => Enviar(new { tipo = "error", texto = $"No se pudo hacer en Revit: {texto}" });
+        esperaCambios.Tick += (_, _) =>
+        {
+            esperaCambios.Stop();
+            Encolar(Refrescar);
+        };
         uiapp.Application.DocumentClosing += AlCerrarDocumento;
+        uiapp.Application.DocumentChanged += AlCambiarDocumento;
         ventana.Closed += (_, _) => Soltar();
     }
+
+    private void Encolar(Action trabajo) => acciones.Encolar(_ =>
+    {
+        trabajando = true;
+        try
+        {
+            trabajo();
+        }
+        finally
+        {
+            trabajando = false;
+        }
+    });
 
     private void Atender(string json)
     {
@@ -78,16 +104,35 @@ internal sealed class PuenteDespiece
             Enviar(new { tipo = "error", texto = "Abre un proyecto de Revit para usar el despiece." });
             return;
         }
-        vigas = LectorDespiece.Leer(doc);
+        plantaEnCurso = null;
+        Cargar(false);
+    }
+
+    /// <summary>
+    /// El modelo cambió en Revit: se lee de nuevo y se rehacen las imágenes. La página sigue mostrando las de antes hasta
+    /// que lleguen las nuevas. Una planta ya en la cola se deja correr: al terminar sigue con las pendientes.
+    /// </summary>
+    private void Refrescar()
+    {
+        if (doc is null || !doc.IsValidObject)
+            return;
+        Registro.Paso("modelo cambió: refrescando");
+        Cargar(true);
+    }
+
+    private void Cargar(bool refresco)
+    {
+        vigas = LectorDespiece.Leer(doc!);
         grupos = AgrupadorIguales.Agrupar(vigas.Select(v => v.Elemento));
-        List<ViewPlan> lista = LectorDespiece.Plantas(doc);
+        List<ViewPlan> lista = LectorDespiece.Plantas(doc!);
         pendientes.Clear();
         pendientes.AddRange(lista.Select(p => p.Id.ToString()));
         plantas.Clear();
-        plantaEnCurso = null;
+        previas.Clear();
         Enviar(new
         {
             tipo = "modelo",
+            refresco,
             plantas = lista.Select(p => new { id = p.Id.ToString(), nombre = p.Name }),
             grupos = grupos.Select((g, i) => new
             {
@@ -143,12 +188,13 @@ internal sealed class PuenteDespiece
             return;
         plantaEnCurso = pendientes[0];
         pendientes.RemoveAt(0);
-        acciones.Encolar(_ =>
+        Encolar(() =>
         {
             string id = plantaEnCurso!;
             try
             {
-                Enviar(GenerarPlanta(id));
+                if (GenerarPlanta(id) is { } listo)
+                    Enviar(listo);
             }
             finally
             {
@@ -158,9 +204,11 @@ internal sealed class PuenteDespiece
         });
     }
 
-    private object GenerarPlanta(string id)
+    /// <summary>Null si la planta ya no existe: la pudieron borrar mientras esperaba su turno.</summary>
+    private object? GenerarPlanta(string id)
     {
-        var vista = (ViewPlan)doc!.GetElement(new ElementId(long.Parse(id)));
+        if (doc!.GetElement(new ElementId(long.Parse(id))) is not ViewPlan vista)
+            return null;
         PlantaGenerada p = GeneradorPlanta.Generar(doc, vista, ventana.CarpetaPrevia);
         object listo = new { tipo = "planta", id, url = Url(p.Ruta), ancho = p.Ancho, alto = p.Alto, cajas = p.Cajas.Select(c => new { viga = c.Key, x = c.Value.X, y = c.Value.Y, w = c.Value.Ancho, h = c.Value.Alto }) };
         plantas[id] = listo;
@@ -169,7 +217,7 @@ internal sealed class PuenteDespiece
 
     private void VerPrevia(int grupo)
     {
-        if (doc is null)
+        if (doc is null || grupo >= grupos.Count)
             return;
         string clave = grupo.ToString();
         if (!previas.TryGetValue(clave, out object? listo))
@@ -200,6 +248,35 @@ internal sealed class PuenteDespiece
     }
 
     /// <summary>
+    /// Lo que cambia las imágenes: vigas, acero, columnas, ejes o niveles, o cualquier cosa borrada (de lo borrado ya no se
+    /// puede saber qué era). Aquí no se puede tocar el modelo: solo se pide el refresco. Elegir o mirar no dispara este
+    /// evento, ni las vistas temporales del add-in, que se hacen con <see cref="trabajando"/>.
+    /// </summary>
+    private void AlCambiarDocumento(object? sender, DocumentChangedEventArgs e)
+    {
+        try
+        {
+            if (cerrado || trabajando || !e.GetDocument().Equals(doc))
+                return;
+            var relevantes = new ElementMulticategoryFilter(CategoriasDelModelo);
+            if (e.GetDeletedElementIds().Count == 0 && e.GetAddedElementIds(relevantes).Count == 0 && e.GetModifiedElementIds(relevantes).Count == 0)
+                return;
+            esperaCambios.Stop();
+            esperaCambios.Start();
+        }
+        catch (Exception ex)
+        {
+            Registro.Paso("cambio del modelo: no se pudo revisar: " + ex.Message);
+        }
+    }
+
+    private static readonly BuiltInCategory[] CategoriasDelModelo =
+    [
+        BuiltInCategory.OST_StructuralFraming, BuiltInCategory.OST_Rebar, BuiltInCategory.OST_StructuralColumns,
+        BuiltInCategory.OST_Columns, BuiltInCategory.OST_Grids, BuiltInCategory.OST_Levels, BuiltInCategory.OST_Viewers,
+    ];
+
+    /// <summary>
     /// La ventana se cerró. Corre en un evento de WPF, fuera del contexto de la API de Revit: quitar una suscripción o
     /// soltar el <see cref="ExternalEvent"/> puede lanzar «Revit is currently not within an API context», y una
     /// excepción sin atender en ese hilo cierra Revit entero (30-oct, #221: pasó dos veces). Igual que el tablero de
@@ -208,10 +285,12 @@ internal sealed class PuenteDespiece
     private void Soltar()
     {
         cerrado = true;
+        esperaCambios.Stop();
         Registro.Paso("ventana: cerrada");
         try
         {
             uiapp.Application.DocumentClosing -= AlCerrarDocumento;
+            uiapp.Application.DocumentChanged -= AlCambiarDocumento;
         }
         catch (Exception e)
         {

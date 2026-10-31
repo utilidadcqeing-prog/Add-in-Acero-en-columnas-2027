@@ -90,4 +90,34 @@ public class AgrupadorIgualesTests
 
         Assert.Equal("V - (0.50x0.90)", Assert.Single(grupos).Nombre);
     }
+
+    [Fact]
+    public void ElMismoEjeEnDosPisosConAceroDistintoNoSeLlamaIgual()
+    {
+        var grupos = AgrupadorIguales.Agrupar([
+            Viga("1", "A", Barra(tipo: "#4")) with { Nivel = "N+3.70" },
+            Viga("2", "A", Barra(tipo: "#5")) with { Nivel = "N+6.70" },
+        ]);
+
+        Assert.Equal(["V N+3.70 A - (0.50x0.90)", "V N+6.70 A - (0.50x0.90)"], grupos.Select(g => g.Nombre));
+    }
+
+    [Fact]
+    public void SinRepetirseElNombreNoLlevaElNivel()
+    {
+        var grupos = AgrupadorIguales.Agrupar([Viga("1", "A", Barra()) with { Nivel = "N+3.70" }]);
+
+        Assert.Equal("V A - (0.50x0.90)", Assert.Single(grupos).Nombre);
+    }
+
+    [Fact]
+    public void ElMismoEjeYPisoConAceroDistintoSeNumera()
+    {
+        var grupos = AgrupadorIguales.Agrupar([
+            Viga("1", "A", Barra(tipo: "#4")) with { Nivel = "N+3.70" },
+            Viga("2", "A", Barra(tipo: "#5")) with { Nivel = "N+3.70" },
+        ]);
+
+        Assert.Equal(["V N+3.70 A - (0.50x0.90)", "V N+3.70 A - (0.50x0.90) (2)"], grupos.Select(g => g.Nombre));
+    }
 }

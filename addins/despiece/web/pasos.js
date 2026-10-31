@@ -142,7 +142,9 @@
     }
 
     recibir(m) {
-      if (m.tipo === 'modelo') {
+      if (m.tipo === 'modelo' && m.refresco && this.state.modelo) {
+        this.refrescar(m);
+      } else if (m.tipo === 'modelo') {
         this.setState({ modelo: m, error: null });
         if (m.plantas.length > 0) this.verPlanta(m.plantas[0].id);
       } else if (m.tipo === 'planta') {
@@ -155,6 +157,29 @@
       } else if (m.tipo === 'error') {
         this.setState({ error: m.texto, creando: false });
       }
+    }
+
+    /**
+     * El modelo cambió en Revit: se sigue en el mismo paso, planta, zoom y viga, y se piden primero las imágenes que se están
+     * viendo. Los grupos pueden cambiar de número y de nombre, así que se buscan por sus vigas; si la elegida ya no existe,
+     * vuelve al paso 1.
+     */
+    refrescar(m) {
+      const { modelo, grupo, hechos, plantaId, paso } = this.state;
+      const elegida = modelo.grupos[grupo]?.vigas[0];
+      const nuevo = m.grupos.find((g) => g.vigas.includes(elegida)) ?? null;
+      const hechosNuevos = {};
+      m.grupos.forEach((g) => {
+        const antes = modelo.grupos.find((a) => a.vigas.some((v) => g.vigas.includes(v)));
+        if (antes && hechos[antes.indice]) hechosNuevos[g.indice] = true;
+      });
+      const sigue = m.plantas.some((p) => p.id === plantaId);
+      const planta = sigue ? plantaId : m.plantas[0]?.id ?? null;
+      const pasoNuevo = nuevo?.tieneAcero ? paso : 1;
+      if (!sigue) this.reiniciarVista();
+      this.setState({ modelo: m, grupo: nuevo?.indice ?? null, hechos: hechosNuevos, previas: {}, plantaId: planta, paso: pasoNuevo, error: null });
+      if (planta) enviar({ tipo: 'verPlanta', id: planta });
+      if (pasoNuevo > 1) enviar({ tipo: 'previa', grupo: nuevo.indice });
     }
 
     verPlanta(id) {
