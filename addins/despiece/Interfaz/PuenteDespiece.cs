@@ -81,17 +81,17 @@ internal sealed class PuenteDespiece
                 VerPrevia(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
                 break;
             case "crearVistas":
-                CrearVistas(raiz.GetProperty("grupo").GetInt32());
+                CrearVistas(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
                 break;
         }
     }
 
-    private void CrearVistas(int grupo)
+    private void CrearVistas(int grupo, bool negros)
     {
         if (doc is null)
             return;
         GrupoIguales g = grupos[grupo];
-        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre);
+        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre, negros);
         Enviar(new { tipo = "vistas", grupo, longitudinal = v.Longitudinal, seccion = v.Seccion, yaExistian = v.YaExistian });
     }
 
@@ -150,12 +150,12 @@ internal sealed class PuenteDespiece
     private VigaContinua Continua(ElementoLeido e) => vigas.First(v => v.Elemento == e);
 
     private static IEnumerable<object> Filas(GrupoIguales g) => g.Elementos[0].Barras
-        .GroupBy(b => (b.Tipo, b.Cantidad, b.LargoMm))
+        .GroupBy(b => (b.Tipo, b.Cantidad, b.LargoMm, b.RectoMm))
         .OrderByDescending(f => f.Key.LargoMm)
         .Select(f => new
         {
             c = LectorDespiece.Color(f.Key.Tipo),
-            et = LectorDespiece.Etiqueta(f.Key.Tipo, f.Key.Cantidad, f.Key.LargoMm / 304.8),
+            et = LectorDespiece.Etiqueta(f.Key.Tipo, f.Key.Cantidad, f.Key.LargoMm / 304.8, f.Key.RectoMm / 304.8),
             d = f.Count() == 1 ? "1 pieza" : $"{f.Count()} piezas",
         });
 

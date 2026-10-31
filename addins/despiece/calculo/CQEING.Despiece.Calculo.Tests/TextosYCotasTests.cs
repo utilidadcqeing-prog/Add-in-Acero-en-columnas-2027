@@ -3,13 +3,19 @@ namespace CQEING.Despiece.Calculo.Tests;
 public class TextosDespieceTests
 {
     [Fact]
-    public void LaBarraVaEnUnaLineaConBarra() => Assert.Equal("3 #5 / L= 6.00", TextosDespiece.Barra("#5 CQEING", 3, 6.0));
+    public void ConGanchoDiceRectoYTotal() => Assert.Equal("3 #5 L= 5.50/6.00", TextosDespiece.Barra("#5 CQEING", 3, 6.0, 5.5));
 
     [Fact]
-    public void ElEstriboDiceCantidadLargoYGancho() => Assert.Equal("46 #3 / L= 0.99 / G= 0.08", TextosDespiece.Estribo("#3 CQEING", 46, 0.9898, 0.0845));
+    public void SinGanchoDiceSoloElTotal() => Assert.Equal("1 #5 L= 1.08", TextosDespiece.Barra("#5 CQEING", 1, 1.075, 1.075));
 
     [Fact]
-    public void SinNumeroEnElTipoUsaElNombreDelTipo() => Assert.Equal("1 16 B 400 S / L= 2.00", TextosDespiece.Barra("16 B 400 S", 1, 2.0));
+    public void SinRectoDiceSoloElTotal() => Assert.Equal("3 #5 L= 6.00", TextosDespiece.Barra("#5 CQEING", 3, 6.0));
+
+    [Fact]
+    public void ElEstriboDiceCantidadLargoYGancho() => Assert.Equal("46 #3 L= 0.99 G= 0.08", TextosDespiece.Estribo("#3 CQEING", 46, 0.9898, 0.0845));
+
+    [Fact]
+    public void SinNumeroEnElTipoUsaElNombreDelTipo() => Assert.Equal("1 16 B 400 S L= 2.00", TextosDespiece.Barra("16 B 400 S", 1, 2.0));
 
     [Theory]
     [InlineData("#5 CQEING", 5)]

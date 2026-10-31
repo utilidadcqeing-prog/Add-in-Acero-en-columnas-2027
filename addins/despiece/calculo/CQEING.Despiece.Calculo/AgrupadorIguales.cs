@@ -2,8 +2,8 @@ using System.Globalization;
 
 namespace CQEING.Despiece.Calculo;
 
-/// <summary>Una barra de un elemento. <paramref name="PosicionMm"/>: dónde está su centro, desde un extremo del elemento.</summary>
-public record BarraLeida(string Tipo, string Forma, int Cantidad, int LargoMm, int PosicionMm);
+/// <summary>Una barra de un elemento. <paramref name="PosicionMm"/>: dónde está su centro, desde un extremo del elemento. <paramref name="RectoMm"/>: su largo sin ganchos.</summary>
+public record BarraLeida(string Tipo, string Forma, int Cantidad, int LargoMm, int PosicionMm, int RectoMm = 0);
 
 /// <summary>Una viga continua (o una columna) leída del modelo, con su acero.</summary>
 public record ElementoLeido(string Id, string Ejes, int AnchoMm, int AltoMm, int LargoMm, IReadOnlyList<BarraLeida> Barras, string Nivel = "");

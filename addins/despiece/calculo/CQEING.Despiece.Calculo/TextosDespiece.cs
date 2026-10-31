@@ -21,11 +21,20 @@ public static class TextosDespiece
         return n > 0 ? "#" + n : tipo;
     }
 
-    /// <summary><c>3 #5 / L= 6.00</c>, con el largo en metros.</summary>
-    public static string Barra(string tipo, int cantidad, double largoM) =>
-        string.Format(CultureInfo.InvariantCulture, "{0} {1} / L= {2:0.00}", cantidad, Nombre(tipo), largoM);
+    /// <summary>
+    /// <c>3 #5 L= 5.50/6.00</c>: tramo recto y largo total, en metros; lo que falta es del gancho (Juan, 31-oct). Sin
+    /// <paramref name="rectoM"/>, o si a dos decimales es igual al total, solo el total: <c>3 #5 L= 6.00</c>.
+    /// </summary>
+    public static string Barra(string tipo, int cantidad, double largoM, double? rectoM = null)
+    {
+        string total = Metros(largoM);
+        string largo = rectoM is { } recto && Metros(recto) != total ? $"{Metros(recto)}/{total}" : total;
+        return $"{cantidad} {Nombre(tipo)} L= {largo}";
+    }
 
-    /// <summary><c>46 #3 / L= 0.99 / G= 0.08</c>: cantidad, largo total y gancho, en metros.</summary>
+    /// <summary><c>46 #3 L= 0.99 G= 0.08</c>: cantidad, largo total y gancho, en metros.</summary>
     public static string Estribo(string tipo, int cantidad, double largoM, double ganchoM) =>
-        string.Format(CultureInfo.InvariantCulture, "{0} / G= {1:0.00}", Barra(tipo, cantidad, largoM), ganchoM);
+        $"{Barra(tipo, cantidad, largoM)} G= {Metros(ganchoM)}";
+
+    private static string Metros(double valor) => valor.ToString("0.00", CultureInfo.InvariantCulture);
 }

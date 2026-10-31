@@ -80,7 +80,8 @@ internal static class LectorDespiece
             BoundingBoxXYZ caja = b.get_BoundingBox(null);
             double centro = ((caja.Min + caja.Max) / 2).DotProduct(dir) - inicio;
             lista.Add(new BarraLeida(doc.GetElement(b.GetTypeId()).Name, doc.GetElement(b.GetShapeId())?.Name ?? "", b.Quantity,
-                (int)Math.Round(Mm(LargoBarra(b))), (int)Math.Round(Mm(centro))));
+                (int)Math.Round(Mm(LargoBarra(b))), (int)Math.Round(Mm(centro)),
+                (int)Math.Round(Mm(b.GetCenterlineCurves(false, true, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0).Sum(c => c.Length)))));
         }
         BoundingBoxXYZ cv = tramo[0].get_BoundingBox(null);
         XYZ perp = XYZ.BasisZ.CrossProduct(dir);
@@ -101,8 +102,8 @@ internal static class LectorDespiece
 
     public static string Color(string tipo) => ColoresDiametro.De(Numero(tipo));
 
-    /// <summary>La etiqueta de una barra, en una línea: <c>3 #5 / L= 6.00</c>.</summary>
-    public static string Etiqueta(string tipo, int cantidad, double largoPies) => TextosDespiece.Barra(tipo, cantidad, largoPies * 0.3048);
+    /// <summary>La etiqueta de una barra: <c>3 #5 L= 6.00</c>, o <c>3 #5 L= 5.50/6.00</c> si se da su tramo recto.</summary>
+    public static string Etiqueta(string tipo, int cantidad, double largoPies, double? rectoPies = null) => TextosDespiece.Barra(tipo, cantidad, largoPies * 0.3048, rectoPies * 0.3048);
 
     /// <summary>La separación de un conjunto de estribos, en pies; 0 si es uno solo.</summary>
     public static double Separacion(Rebar b) => b.Quantity > 1 ? b.get_Parameter(BuiltInParameter.REBAR_ELEM_BAR_SPACING)?.AsDouble() ?? 0 : 0;

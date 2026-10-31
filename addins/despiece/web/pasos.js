@@ -232,15 +232,10 @@
     }
 
     selectorTextos(g) {
-      const boton = (texto, valor) => {
-        const on = this.state.negros === valor;
-        return html`<button type="button" aria-pressed=${on} onClick=${() => this.elegirTextos(g, valor)} style="flex: 1; height: 32px; border: 1px solid ${on ? AZUL : '#C9CFD6'}; border-radius: 6px; background: ${on ? '#E4ECF6' : '#FFFFFF'}; color: ${on ? '#174A8A' : '#16191D'}; font: inherit; cursor: pointer">${texto}</button>`;
-      };
       return html`
-        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0">
-          <span style="font-weight: 600">Textos</span>
-          ${boton('Con colores', false)}${boton('En negro', true)}
-        </div>`;
+        <label style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 12px; color: #5E6670; cursor: pointer">
+          <input type="checkbox" checked=${this.state.negros} onChange=${(e) => this.elegirTextos(g, e.target.checked)} style="margin: 0; accent-color: ${AZUL}" />Textos en negro
+        </label>`;
     }
 
     grupoElegido() {
@@ -314,7 +309,7 @@
         if (paso < 3) return this.irA(paso + 1);
         if (hecho) return set({ paso: 1, hecho: false, grupo: null });
         set({ creando: true, error: null });
-        enviar({ tipo: 'crearVistas', grupo: g.indice });
+        enviar({ tipo: 'crearVistas', grupo: g.indice, negros: this.state.negros });
       };
 
       return html`
@@ -375,8 +370,8 @@
                   ${this.imagenes(g)}
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: hidden auto">
-                  ${this.selectorTextos(g)}
                   ${this.seccion(g)}
+                  ${this.selectorTextos(g)}
                   ${paso === 2 ? html`
                     <span style="font-weight: 600">Barras de ${g.nombre}</span>
                     ${g.filas.map((f) => html`
