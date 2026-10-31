@@ -83,6 +83,9 @@ internal sealed class PuenteDespiece
             case "crearVistas":
                 CrearVistas(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
                 break;
+            case "ver3d":
+                Ver3D(raiz.GetProperty("grupo").GetInt32());
+                break;
             case "irAVista":
                 IrAVista(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("seccion").GetBoolean());
                 break;
@@ -96,6 +99,13 @@ internal sealed class PuenteDespiece
         GrupoIguales g = grupos[grupo];
         VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre, negros);
         Enviar(new { tipo = "vistas", grupo, longitudinal = v.Longitudinal, seccion = v.Seccion, yaExistian = v.YaExistian });
+    }
+
+    private void Ver3D(int grupo)
+    {
+        if (doc is null || grupo >= grupos.Count)
+            return;
+        Enviar(new { tipo = "modelo3d", grupo, modelo = Modelo3D.Leer(doc, Continua(grupos[grupo].Elementos[0])) });
     }
 
     /// <summary>Abre en Revit la vista larga o la sección del grupo. La ventana se minimiza porque queda encima de Revit y taparía la vista.</summary>

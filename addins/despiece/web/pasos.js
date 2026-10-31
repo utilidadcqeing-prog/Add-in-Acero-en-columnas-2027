@@ -135,10 +135,116 @@
     }
   }
 
+  /** Un tubo por cada eje de barra, todos en una sola geometría: un objeto por barra giraría peor con cientos de estribos. */
+  function tubos(barras) {
+    const T = window.THREE, LADOS = 6;
+    const posiciones = [], normales = [], indices = [];
+    barras.forEach(({ r, p }) => {
+      const puntos = [];
+      for (let i = 0; i + 2 < p.length; i += 3) puntos.push(new T.Vector3(p[i], p[i + 1], p[i + 2]));
+      if (puntos.length < 2) return;
+      const inicio = posiciones.length / 3;
+      let n = null;
+      puntos.forEach((q, i) => {
+        const t = puntos[Math.min(i + 1, puntos.length - 1)].clone().sub(puntos[Math.max(i - 1, 0)]).normalize();
+        // La normal se arrastra de un punto al siguiente, para que el tubo no se retuerza en los dobleces.
+        n = n ? n.sub(t.clone().multiplyScalar(n.dot(t))) : new T.Vector3(Math.abs(t.z) < 0.9 ? 0 : 1, 0, Math.abs(t.z) < 0.9 ? 1 : 0).cross(t);
+        n.normalize();
+        const b = t.clone().cross(n);
+        for (let l = 0; l < LADOS; l++) {
+          const a = (l / LADOS) * Math.PI * 2;
+          const d = n.clone().multiplyScalar(Math.cos(a)).add(b.clone().multiplyScalar(Math.sin(a)));
+          posiciones.push(q.x + d.x * r, q.y + d.y * r, q.z + d.z * r);
+          normales.push(d.x, d.y, d.z);
+        }
+      });
+      for (let i = 0; i < puntos.length - 1; i++) {
+        for (let l = 0; l < LADOS; l++) {
+          const a = inicio + i * LADOS + l, c = inicio + i * LADOS + (l + 1) % LADOS;
+          indices.push(a, c, a + LADOS, c, c + LADOS, a + LADOS);
+        }
+      }
+    });
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(posiciones, 3));
+    g.setAttribute('normal', new T.Float32BufferAttribute(normales, 3));
+    g.setIndex(indices);
+    return g;
+  }
+
+  /** El acero real de la viga, para girarlo dentro del add-in. Solo se dibuja cuando la cámara se mueve: en reposo no gasta nada. */
+  class Vista3D extends Component {
+    componentDidMount() {
+      const T = window.THREE, { datos } = this.props, caja = this.caja;
+      try {
+        this.pintor = new T.WebGLRenderer({ antialias: true });
+      } catch (e) {
+        this.setState({ sinWebgl: true });
+        return;
+      }
+      this.pintor.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.pintor.setClearColor(0xffffff);
+      caja.appendChild(this.pintor.domElement);
+
+      const escena = new T.Scene();
+      const grupo = new T.Group();
+      const porColor = {};
+      datos.barras.forEach((b) => (porColor[b.c] ??= []).push(b));
+      Object.entries(porColor).forEach(([color, barras]) => grupo.add(new T.Mesh(tubos(barras), new T.MeshLambertMaterial({ color }))));
+      const viga = new T.BufferGeometry();
+      viga.setAttribute('position', new T.Float32BufferAttribute(datos.viga, 3));
+      viga.computeVertexNormals();
+      grupo.add(new T.Mesh(viga, new T.MeshLambertMaterial({ color: 0x9aa3ad, transparent: true, opacity: 0.22, depthWrite: false, side: T.DoubleSide })));
+      escena.add(grupo);
+
+      const camara = new T.PerspectiveCamera(35, 1, 0.05, 2000);
+      camara.up.set(0, 0, 1);
+      camara.add(new T.DirectionalLight(0xffffff, 0.7));
+      escena.add(camara, new T.AmbientLight(0xffffff, 0.65));
+
+      const limites = new T.Box3().setFromObject(grupo);
+      const centro = limites.getCenter(new T.Vector3()), radio = limites.getSize(new T.Vector3()).length() / 2;
+      camara.position.copy(centro).add(new T.Vector3(-0.55, -1, 0.45).normalize().multiplyScalar(radio * 2.3));
+      camara.far = radio * 40;
+
+      this.camara = camara;
+      this.pintar = () => this.pintor.render(escena, camara);
+      this.controles = new T.OrbitControls(camara, this.pintor.domElement);
+      this.controles.target.copy(centro);
+      this.controles.addEventListener('change', this.pintar);
+      this.controles.update();
+
+      const ajustar = () => {
+        const w = caja.clientWidth, h = caja.clientHeight;
+        if (!w || !h) return;
+        this.pintor.setSize(w, h);
+        camara.aspect = w / h;
+        camara.updateProjectionMatrix();
+        this.pintar();
+      };
+      this.observador = new ResizeObserver(ajustar);
+      this.observador.observe(caja);
+      ajustar();
+    }
+
+    componentWillUnmount() {
+      this.observador?.disconnect();
+      this.controles?.dispose();
+      this.pintor?.dispose();
+    }
+
+    render(_, { sinWebgl }) {
+      return html`
+        <div ref=${(el) => (this.caja = el)} style="position: absolute; inset: 0; overflow: hidden">
+          ${sinWebgl ? html`<div style="display: grid; place-items: center; height: 100%; color: #5E6670">Este equipo no puede dibujar el 3D.</div>` : null}
+        </div>`;
+    }
+  }
+
   class Pasos extends Component {
     constructor(props) {
       super(props);
-      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
+      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, modo3d: false, modelos3d: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
       this.alCambiarTamano = () => this.forceUpdate();
       this.alRecibir = (e) => this.recibir(e.data);
     }
@@ -173,6 +279,8 @@
         this.setState((s) => ({ plantas: { ...s.plantas, [m.id]: m }, error: null }));
       } else if (m.tipo === 'previa') {
         this.setState((s) => ({ previas: { ...s.previas, [`${m.grupo}|${m.negros}`]: m }, error: null }));
+      } else if (m.tipo === 'modelo3d') {
+        this.setState((s) => ({ modelos3d: { ...s.modelos3d, [m.grupo]: m.modelo }, error: null }));
       } else if (m.tipo === 'vistas') {
         // En verde solo cuando Revit ya las tiene.
         this.setState((s) => ({ creando: false, hecho: m.yaExistian ? 'Esas vistas ya existen: no se duplicaron.' : `Vistas creadas: ${m.longitudinal} y ${m.seccion}. Arrástralas a tu plano.`, hechos: { ...s.hechos, [m.grupo]: true }, error: null }));
@@ -199,9 +307,24 @@
       const planta = sigue ? plantaId : m.plantas[0]?.id ?? null;
       const pasoNuevo = nuevo?.tieneAcero ? paso : 1;
       if (!sigue) this.visor?.reiniciar();
-      this.setState({ modelo: m, grupo: nuevo?.indice ?? null, hechos: hechosNuevos, previas: {}, plantaId: planta, paso: pasoNuevo, error: null });
+      this.setState({ modelo: m, grupo: nuevo?.indice ?? null, hechos: hechosNuevos, previas: {}, modelos3d: {}, plantaId: planta, paso: pasoNuevo, error: null });
       if (planta) enviar({ tipo: 'verPlanta', id: planta });
       if (pasoNuevo > 1) enviar({ tipo: 'previa', grupo: nuevo.indice, negros: this.state.negros });
+      if (pasoNuevo > 1 && this.state.modo3d) enviar({ tipo: 'ver3d', grupo: nuevo.indice });
+    }
+
+    cambiar3d(g) {
+      const modo3d = !this.state.modo3d;
+      this.setState({ modo3d });
+      if (modo3d && !this.state.modelos3d[g.indice]) enviar({ tipo: 'ver3d', grupo: g.indice });
+    }
+
+    vistaGrande(g) {
+      const { modo3d, modelos3d } = this.state;
+      const datos = modelos3d[g.indice];
+      return html`
+        ${!modo3d ? this.imagenes(g) : datos ? html`<${Vista3D} key=${g.indice} datos=${datos} />` : html`<div style="display: grid; place-items: center; height: 100%; color: #5E6670">Leyendo el acero en Revit…</div>`}
+        <button type="button" onClick=${() => this.cambiar3d(g)} style="position: absolute; left: 12px; top: 12px; height: 36px; padding: 0 14px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; color: #16191D; font: inherit; cursor: pointer">${modo3d ? 'Plano' : '3D'}</button>`;
     }
 
     verPlanta(id) {
@@ -374,8 +497,8 @@
 
             ${paso > 1 && g ? html`
               <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 16px">
-                <div style="min-width: 0; min-height: 0; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
-                  ${this.imagenes(g)}
+                <div style="position: relative; min-width: 0; min-height: 0; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
+                  ${this.vistaGrande(g)}
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: hidden auto">
                   ${this.seccion(g)}

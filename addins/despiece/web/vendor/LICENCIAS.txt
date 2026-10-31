@@ -1,5 +1,10 @@
 htm-preact-standalone.umd.js es preact/standalone.umd.js del paquete npm htm@3.1.1: htm más Preact 10 en un solo archivo.
 
+three.min.js y OrbitControls.js son build/three.min.js y examples/js/controls/OrbitControls.js del paquete npm three@0.147.0.
+three.js — https://github.com/mrdoob/three.js
+Copyright 2010-2022 three.js authors
+Licencia MIT, el mismo texto que el de Preact, abajo.
+
 htm 3.1.1 — https://github.com/developit/htm
 Copyright 2018 Google Inc.
 Licencia Apache 2.0: http://www.apache.org/licenses/LICENSE-2.0
