@@ -31,9 +31,8 @@ public static class CorridasEstribos
         }
         if (libres.Count > 0)
             return Partir(posiciones, tolerancia);
-        return suyas.Where(s => s.Count > 0)
-            .Select(s => new Corrida(s[0], s.Count, s.Count > 1 ? (s[^1] - s[0]) / (s.Count - 1) : 0))
-            .ToList();
+        // Un espacio distinto dentro de una zona (el que sobra del reparto) parte su corrida.
+        return suyas.SelectMany(s => Partir(s, tolerancia)).ToList();
     }
 
     /// <param name="posiciones">De menor a mayor, como las da el motor de estribos.</param>
