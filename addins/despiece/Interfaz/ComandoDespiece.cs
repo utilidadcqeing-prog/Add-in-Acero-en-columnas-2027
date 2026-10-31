@@ -45,7 +45,21 @@ public sealed class ComandoDespiece : IExternalCommand
             message = e.ToString();
             return Result.Failed;
         }
-        ventana.Closed += (_, _) => abierta = null;
+        // El puente se crea aquí, con la API válida: su ExternalEvent no se puede crear desde la ventana.
+        _ = new PuenteDespiece(ventana, commandData.Application);
+        // Una excepción sin atender en el hilo de Revit lo cierra entero ("error irrecuperable"). Mientras la ventana
+        // esté abierta se anota y no se deja escapar; al cerrarla se suelta, para no tapar errores de otros add-ins.
+        void SinAtender(object? sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+        {
+            Registro.Paso("EXCEPCIÓN SIN ATENDER: " + e.Exception);
+            e.Handled = true;
+        }
+        ventana.Dispatcher.UnhandledException += SinAtender;
+        ventana.Closed += (_, _) =>
+        {
+            ventana.Dispatcher.UnhandledException -= SinAtender;
+            abierta = null;
+        };
         abierta = ventana;
         ventana.Show();
         return Result.Succeeded;

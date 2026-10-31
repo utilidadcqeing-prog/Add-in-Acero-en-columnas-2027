@@ -1,0 +1,6 @@
+<Project>
+  <!--
+    Corta la herencia de addins/Directory.Build.props: el cálculo del despiece no usa Revit, WPF ni addins/compartido.
+    Así compila en net8.0 puro y lo pueden usar los add-ins de 2026 y 2027.
+  -->
+</Project>
