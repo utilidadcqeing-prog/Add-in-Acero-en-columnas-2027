@@ -51,7 +51,8 @@ public class DistribuidorEstribosTests
 
         Assert.Equal(28, p.Count);
         VanCada(p.Take(8).ToList(), 254.75, 954.75, 100);
-        VanCada(p.Skip(7).Take(14).ToList(), 954.75, 3445.25, 2490.5 / 13);
+        VanCada(p.Skip(7).Take(13).ToList(), 954.75, 3354.75, 200);
+        Assert.Equal(90.5, p[20] - p[19], 6); // lo que sobra: más corto, nunca más largo
         VanCada(p.Skip(20).ToList(), 3445.25, 4145.25, 100);
     }
 
@@ -61,7 +62,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("B-C");
 
         Assert.Equal(23, p.Count);
-        VanCada(p.Skip(7).Take(9).ToList(), 5354.75, 6945.25, 1590.5 / 8);
+        VanCada(p.Skip(7).Take(8).ToList(), 5354.75, 6754.75, 200);
+        Assert.Equal(190.5, p[15] - p[14], 6);
     }
 
     /// <summary>
@@ -74,7 +76,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("Voladizo D");
 
         Assert.Equal(15, p.Count);
-        VanCada(p, 12554.75, 13945.25, 1390.5 / 14);
+        VanCada(p.Take(14).ToList(), 12554.75, 13854.75, 100);
+        Assert.Equal(13945.25, p[^1], 6);
     }
 
     [Fact]
@@ -85,7 +88,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("Voladizo A", p: portico);
 
         Assert.Equal(15, p.Count);
-        VanCada(p, -1645.25, -254.75, 1390.5 / 14);
+        VanCada(p.Skip(1).ToList(), -1554.75, -254.75, 100); // de la columna hacia la punta
+        Assert.Equal(-1645.25, p[0], 6);
     }
 
     /// <summary>Como la luz corta (min 1:22:43): si no alcanza para la zona, todo el voladizo va como zona.</summary>
@@ -97,7 +101,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("Voladizo D", p: portico);
 
         Assert.Equal(7, p.Count);
-        VanCada(p, 12554.75, 13145.25, 590.5 / 6);
+        VanCada(p.Take(6).ToList(), 12554.75, 13054.75, 100);
+        Assert.Equal(13145.25, p[^1], 6);
     }
 
     [Fact]
@@ -108,7 +113,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("Voladizo D", p: portico);
 
         Assert.Equal(8, p.Count);
-        VanCada(p, 12554.75, 13245.25, 690.5 / 7);
+        VanCada(p.Take(7).ToList(), 12554.75, 13154.75, 100);
+        Assert.Equal(13245.25, p[^1], 6);
     }
 
     [Fact]
@@ -119,7 +125,8 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("A-B", p: portico);
 
         Assert.Equal(15, p.Count);
-        VanCada(p, 254.75, 1645.25, 1390.5 / 14);
+        VanCada(p.Take(14).ToList(), 254.75, 1554.75, 100);
+        Assert.Equal(1645.25, p[^1], 6);
     }
 
     [Fact]
@@ -141,7 +148,20 @@ public class DistribuidorEstribosTests
         IReadOnlyList<double> p = Posiciones("A-B", General with { LargoZona = 0 });
 
         Assert.Equal(21, p.Count);
-        VanCada(p, 254.75, 4145.25, 3890.5 / 20);
+        VanCada(p.Take(20).ToList(), 254.75, 4054.75, 200);
+        Assert.Equal(4145.25, p[^1], 6);
+    }
+
+    /// <summary>Si sobra muy poco no quedan dos estribos casi juntos: los dos últimos espacios se igualan, sin pasar de 200.</summary>
+    [Fact]
+    public void SiSobraMuyPoco_LosDosUltimosEspaciosSeIgualan()
+    {
+        IReadOnlyList<double> p = DistribuidorEstribos.Posiciones(new Tramo("A-B", 0, 2119.5, TipoTramo.Luz), General with { LargoZona = 0 }, Estribo3);
+
+        Assert.Equal(12, p.Count);
+        VanCada(p.Take(10).ToList(), 54.75, 1854.75, 200);
+        Assert.Equal(105, p[10] - p[9], 6);
+        Assert.Equal(105, p[11] - p[10], 6);
     }
 
     [Fact]
@@ -173,7 +193,7 @@ public class DistribuidorEstribosTests
         Assert.Equal(754.75, z[0].Largo!.Value, 6);
         Assert.Equal(754.75, z[2].Largo!.Value, 6);
         Assert.Null(z[1].Largo);
-        Assert.True(z[1].Separacion <= General.SeparacionCentro);
+        Assert.Equal(General.SeparacionCentro, z[1].Separacion);
         Assert.Equal(Posiciones("A-B").Count, z.Sum(x => x.Cantidad));
     }
 

@@ -54,10 +54,11 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
     });
 
     /// <summary>
-    /// Lo que el gancho <paramref name="t"/> suma al largo de la barra, en mm. El tramo recto llega a la cara de afuera
-    /// del doblez (como lo dibuja Revit), así que el gancho suma su arco por el eje más la cola E del cuadro, menos el
-    /// radio y medio diámetro que el tramo ya cubre: la pata queda con la cola de Carlos (Juan, 26-oct; antes sumaba la B
-    /// entera y Revit alargaba la cola, 256 en vez de 191 en el #5 a 90°). Sin E en el cuadro (135° del #6 al #8), la B.
+    /// Lo que el gancho <paramref name="t"/> suma al largo de la barra, en mm. A 90° suma la B: la pata medida por fuera
+    /// mide la B y las cotas del dibujo cierran en el múltiplo (2.70 + 0.30 = 3.00; Juan, 30-oct: antes daba
+    /// 2.77 + 0.27 = 3.04, observación de Santiago del 28-oct). En los demás, el tramo recto llega a la cara de afuera del
+    /// doblez (como lo dibuja Revit), así que el gancho suma su arco por el eje más la cola E del cuadro, menos el
+    /// radio y medio diámetro que el tramo ya cubre. Sin E en el cuadro (135° del #6 al #8), la B.
     /// El de 135° sale del cuadro de estribos, el único 135° que mandó Carlos (decisión 5 del plan de #84; pregunta 1 en
     /// #79), con el doblado de gancho (<see cref="DobladoGancho"/>).
     /// Con <paramref name="redondeo"/>, el largo total B sube al siguiente múltiplo y lo que crece va a la cola: el
@@ -75,7 +76,7 @@ public sealed record Reglas(IReadOnlyDictionary<int, ReglaDiametro> PorDiametro,
         if (grados == 0)
             return 0;
         int crece = redondeo > 0 ? (g.B + redondeo - 1) / redondeo * redondeo - g.B : 0;
-        if (g.E is not int cola)
+        if (grados == 90 || g.E is not int cola)
             return g.B + crece;
         double radio = DobladoGancho(r, t) / 2 + r.Diametro / 2;
         return (int)Math.Round(radio * grados * Math.PI / 180 + cola - radio - r.Diametro / 2) + crece;

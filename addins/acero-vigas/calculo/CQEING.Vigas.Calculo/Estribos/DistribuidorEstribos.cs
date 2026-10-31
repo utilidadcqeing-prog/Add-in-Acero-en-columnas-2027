@@ -8,8 +8,9 @@ namespace CQEING.Vigas.Calculo.Estribos;
 /// docs/planes/2026-10-16-estribos-vigas-90.md):
 /// <list type="bullet">
 /// <item>el primero va a 5 cm de la cara del apoyo, medidos hasta la cara del estribo;</item>
-/// <item>una zona junto a cada columna a la separación exacta y el resto repartido a la misma distancia, sin pasar de
-/// la separación del centro. Las zonas "son las que están pegadas a las columnas" (Carlos, min 1:21:21): la luz lleva
+/// <item>una zona junto a cada columna a la separación exacta y el resto también a su separación exacta: lo que sobra
+/// queda en un último espacio más corto, nunca más largo (Santiago, 30-oct, min 34:32: pedido cada 20, salía cada 19).
+/// Las zonas "son las que están pegadas a las columnas" (Carlos, min 1:21:21): la luz lleva
 /// dos; el voladizo va todo como zona (Carlos, 21-oct, min 15:14);</item>
 /// <item>si el tramo no alcanza para sus zonas (la luz corta, min 1:22:43), todo va como zona.</item>
 /// </list>
@@ -70,9 +71,7 @@ internal static class DistribuidorEstribos
         }
         return segmentos.Select((s, i) =>
         {
-            // La separación real: el centro reparte sin pasar de la suya, así que puede quedar más junta.
-            int espacios = posiciones.Count(x => Dentro(x, s)) - 1;
-            double separacion = s.Exacta ? s.Separacion : espacios > 0 ? (s.Hasta - s.Desde) / espacios : 0;
+            double separacion = s.Exacta || posiciones.Count(x => Dentro(x, s)) > 1 ? s.Separacion : 0;
             double? largo = s.Junta && s.Exacta ? (s.DesdeLaDerecha ? t.CaraDerecha - s.Desde : s.Hasta - t.CaraIzquierda) : null;
             return new ZonaTramo(s.Desde, s.Hasta, s.Junta, cantidades[i], separacion, largo);
         }).ToList();
@@ -83,7 +82,7 @@ internal static class DistribuidorEstribos
 
     /// <summary>
     /// Un trozo del tramo: una zona va a la separación exacta desde su columna (<paramref name="DesdeLaDerecha"/> si
-    /// la columna está a la derecha); el centro se reparte a la misma distancia sin pasar de la separación.
+    /// la columna está a la derecha); los demás van a la separación y terminan en el espacio que sobra.
     /// </summary>
     private sealed record Segmento(double Desde, double Hasta, double Separacion, bool Junta, bool Exacta, bool DesdeLaDerecha = false);
 
@@ -96,7 +95,8 @@ internal static class DistribuidorEstribos
             double centro = (t.CaraIzquierda + t.CaraDerecha) / 2;
             return [new Segmento(centro, centro, c.SeparacionZona, true, false)];
         }
-        var todoComoZona = new Segmento(desde, hasta, c.SeparacionZona, true, false);
+        // En el voladizo inicial la columna está a la derecha: lo que sobra queda hacia la punta.
+        var todoComoZona = new Segmento(desde, hasta, c.SeparacionZona, true, false, DesdeLaDerecha: t.Tipo == TipoTramo.VoladizoInicial);
         // En voladizo "no existe el confinamiento y el no confinamiento… siempre va a existir el confinamiento"
         // (Carlos, 21-oct, min 15:14).
         if (t.Tipo != TipoTramo.Luz || t.CaraDerecha - t.CaraIzquierda < 2 * c.LargoZona)
@@ -119,18 +119,30 @@ internal static class DistribuidorEstribos
     private static IEnumerable<double> EnSegmento(Segmento s)
     {
         if (!s.Exacta)
-            return Repartir(s.Desde, s.Hasta, s.Separacion);
+            return Repartir(s.Desde, s.Hasta, s.Separacion, s.DesdeLaDerecha);
         int n = (int)Math.Round((s.Hasta - s.Desde) / s.Separacion) + 1;
         return Enumerable.Range(0, n).Select(i => s.DesdeLaDerecha ? s.Hasta - (n - 1 - i) * s.Separacion : s.Desde + i * s.Separacion);
     }
 
-    /// <summary>De <paramref name="desde"/> a <paramref name="hasta"/>, a la misma distancia y sin pasar de <paramref name="separacion"/>.</summary>
-    private static IReadOnlyList<double> Repartir(double desde, double hasta, double separacion)
+    /// <summary>
+    /// De <paramref name="desde"/> a <paramref name="hasta"/> cada <paramref name="separacion"/>, con lo que sobra en el
+    /// último espacio. Si sobra menos de <see cref="EspacioMinimo"/>, los dos últimos espacios se igualan para que no
+    /// queden dos estribos casi juntos: ninguno pasa de la separación.
+    /// </summary>
+    private static IReadOnlyList<double> Repartir(double desde, double hasta, double separacion, bool desdeLaDerecha)
     {
         double largo = hasta - desde;
         if (largo <= Tolerancia)
             return [desde];
         int espacios = (int)Math.Ceiling(largo / separacion - Tolerancia);
-        return Enumerable.Range(0, espacios + 1).Select(i => desde + i * largo / espacios).ToList();
+        List<double> distancias = Enumerable.Range(0, espacios).Select(i => i * separacion).ToList();
+        double sobra = largo - (espacios - 1) * separacion;
+        if (espacios > 1 && sobra < EspacioMinimo)
+            distancias[^1] = largo - (separacion + sobra) / 2;
+        distancias.Add(largo);
+        return desdeLaDerecha ? distancias.Select(x => hasta - x).Reverse().ToList() : distancias.Select(x => desde + x).ToList();
     }
+
+    /// <summary>El espacio más corto que se deja entre dos estribos del reparto, en mm.</summary>
+    private const double EspacioMinimo = 50;
 }

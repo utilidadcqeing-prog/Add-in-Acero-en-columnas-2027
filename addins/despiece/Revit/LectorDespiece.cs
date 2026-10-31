@@ -94,7 +94,11 @@ internal static class LectorDespiece
         return new VigaContinua(elemento, tramo.Select(v => v.Id).ToList(), origen, dir);
     }
 
-    /// <summary>El largo de una barra del conjunto, con ganchos (ver #217: no sirve el total del conjunto), como lo dicen sus cotas.</summary>
+    /// <summary>
+    /// El largo de una barra del conjunto, con ganchos (ver #217: no sirve el total del conjunto), como lo dicen sus
+    /// cotas: cada gancho de 90° suma lo que Revit no cuenta en la esquina, <c>2 (R + d/2) − R·π/2</c> (la misma cuenta
+    /// de <c>GanchoPropio.DiferenciaCotas</c> en acero de vigas).
+    /// </summary>
     public static double LargoBarra(Rebar b)
     {
         double largo = b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;

@@ -70,7 +70,7 @@ public class MotorVigasTests
 
         Barra ultima = r.Superior!.Barras[^1];
         Assert.True(ultima.LlegaAlVoladizo);
-        Assert.Equal(215, ultima.GanchoFin);
+        Assert.Equal(278, ultima.GanchoFin);
         Assert.Equal(ultima.Largo, ultima.LargoRecto + ultima.GanchoInicio + ultima.GanchoFin);
         Assert.All(r.Traslapos, t => Assert.True(t.Hasta <= 12100 - 50));
     }
@@ -81,7 +81,7 @@ public class MotorVigasTests
         ResultadoVigas r = MotorVigas.Calcular(Aerea() with { Inferior = [new GrupoBarras(3, 5), new GrupoBarras(2, 4)] });
 
         Assert.All(r.Inferior!.Traslapos, t => Assert.Equal((900, 5), (t.Minimo, t.Diametro)));
-        Assert.Equal(215, r.Inferior.Barras[0].GanchoInicio);
+        Assert.Equal(278, r.Inferior.Barras[0].GanchoInicio);
         Assert.All(r.Inferior.Barras, b => Assert.Equal(b.Largo / 1000.0 * 3 * 1.552 + b.Medida(4).Largo / 1000.0 * 2 * 0.994, b.Kg, precision: 6));
     }
 

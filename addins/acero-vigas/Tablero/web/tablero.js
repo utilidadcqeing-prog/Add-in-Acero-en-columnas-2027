@@ -1665,7 +1665,7 @@
                   <input type="text" aria-label=${ru.labE} value=${ru.e} onInput=${ru.setE} disabled=${v.locked} placeholder="—" style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 5px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                   <input type="text" aria-label=${ru.labK} value=${ru.k} onInput=${ru.setK} disabled=${v.locked} style="width: 100%; box-sizing: border-box; height: 28px; padding: 0 6px; border: 1px solid #C9CFD6; border-radius: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #16191D" />
                 </div>`)}
-              <span style="font-size: 11px; line-height: 1.4; color: #5E6670">Gancho y estribo: largo total del gancho (curva + tramo recto), el que se suma a la barra. En el dibujo de Revit la cota es solo la pata, por eso sale menor: #5 a 90° = 0.28 aquí y 0.25 en el dibujo.</span>
+              <span style="font-size: 11px; line-height: 1.4; color: #5E6670">Gancho y estribo: largo total del gancho (curva + tramo recto), el que se suma a la barra. A 90° la cota de la pata en Revit mide ese largo y las cotas suman el largo de la barra; en 135° y 180° la cota es solo la pata y sale menor.</span>
             </div>
           </div>` : null}
       </div>
