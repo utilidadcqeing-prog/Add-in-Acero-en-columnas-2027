@@ -32,10 +32,11 @@ internal static class LectorDespiece
             .WhereElementIsNotElementType().OfType<FamilyInstance>().Where(v => v.Location is LocationCurve { Curve: Line }).ToList();
         ILookup<ElementId, Rebar> barras = new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>().ToLookup(b => b.GetHostId());
         List<Grid> ejes = new FilteredElementCollector(doc).OfClass(typeof(Grid)).Cast<Grid>().Where(g => g.Curve is Line).ToList();
+        List<Level> niveles = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>().ToList();
 
         var continuas = new List<VigaContinua>();
         foreach (List<FamilyInstance> tramo in Tramos(vigas))
-            continuas.Add(Continua(doc, tramo, barras, ejes));
+            continuas.Add(Continua(doc, tramo, barras, ejes, niveles));
         return continuas;
     }
 
@@ -66,7 +67,7 @@ internal static class LectorDespiece
         }
     }
 
-    private static VigaContinua Continua(Document doc, List<FamilyInstance> tramo, ILookup<ElementId, Rebar> barras, List<Grid> ejes)
+    private static VigaContinua Continua(Document doc, List<FamilyInstance> tramo, ILookup<ElementId, Rebar> barras, List<Grid> ejes, List<Level> niveles)
     {
         Line linea = Linea(tramo[0]);
         XYZ dir = Direccion(linea);
@@ -86,7 +87,9 @@ internal static class LectorDespiece
         int ancho = (int)Math.Round(Mm(Math.Abs((cv.Max - cv.Min).DotProduct(perp))));
         int alto = (int)Math.Round(Mm(cv.Max.Z - cv.Min.Z));
         string eje = ejes.FirstOrDefault(g => Direccion((Line)g.Curve).IsAlmostEqualTo(dir) && Fuera(g.Curve.GetEndPoint(0), punto, dir) < Cercania)?.Name ?? "";
-        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista);
+        // Por la altura de la viga: en estas vigas el nivel del elemento viene vacío (PROY_JULIO_BETO, 30-oct).
+        string nivel = niveles.OrderBy(n => Math.Abs(n.Elevation - punto.Z)).FirstOrDefault()?.Name ?? "";
+        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista, nivel);
         return new VigaContinua(elemento, tramo.Select(v => v.Id).ToList(), origen, dir);
     }
 
@@ -125,6 +128,19 @@ internal static class LectorDespiece
         int n = Numero(tipo);
         string nombre = n > 0 ? "#" + n : tipo;
         return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1} L= {2:0.00}", cantidad, nombre, largoPies * 0.3048);
+    }
+
+    /// <summary>La separación de un conjunto de estribos, en pies; 0 si es uno solo.</summary>
+    public static double Separacion(Rebar b) => b.Quantity > 1 ? b.get_Parameter(BuiltInParameter.REBAR_ELEM_BAR_SPACING)?.AsDouble() ?? 0 : 0;
+
+    /// <summary>La etiqueta de una zona de estribos, como en el plano: <c>25 #4 @0.10</c>. Uno solo no lleva separación.</summary>
+    public static string EtiquetaEstribos(string tipo, int cantidad, double separacionPies)
+    {
+        int n = Numero(tipo);
+        string nombre = n > 0 ? "#" + n : tipo;
+        return separacionPies > 0
+            ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1} @{2:0.00}", cantidad, nombre, separacionPies * 0.3048)
+            : $"{cantidad} {nombre}";
     }
 
     private static Line Linea(FamilyInstance v) => (Line)((LocationCurve)v.Location).Curve;

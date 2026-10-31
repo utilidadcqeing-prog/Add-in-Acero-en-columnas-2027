@@ -4,7 +4,7 @@
   const enviar = (m) => window.chrome?.webview?.postMessage(m);
 
   const VERDE = '#1E8E3E', AZUL = '#1F5FAF';
-  // Los límites del zoom de la planta: 1 es la planta entera en la ventana. Las plantas se exportan a 3000 px de ancho.
+  // Los límites del zoom: 1 es la imagen entera en su recuadro.
   const ZOOM_MIN = 0.35, ZOOM_MAX = 16;
   const TIPOS = [
     { n: 'Vigas', k: 'viga', icon: 'M3 14h30v8H3zM8 14v8M28 14v8' },
@@ -18,14 +18,14 @@
     3: ['Vista previa', 'Las vistas quedan en el navegador de Revit, con etiquetas y colores. Tú las arrastras a tu plano.']
   };
 
-  class Pasos extends Component {
+  /**
+   * Una imagen de Revit que se acerca con la rueda y se mueve arrastrando. El zoom y el desplazamiento viven aquí y se
+   * aplican directo al dibujo, sin volver a pintar la página: así siguen el dedo sin retraso (Juan, 30-oct: "que sea muy
+   * fluido"). <c>movio</c> dice si lo último fue un arrastre, para no tomarlo por un clic en lo que hay dentro.
+   */
+  class Visor extends Component {
     constructor(props) {
       super(props);
-      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
-      this.alCambiarTamano = () => this.forceUpdate();
-      this.alRecibir = (e) => this.recibir(e.data);
-      // El zoom y el desplazamiento de la planta viven aquí y se aplican directo al dibujo, sin volver a pintar la página:
-      // así siguen el dedo sin retraso (Juan, 30-oct: "que sea muy fluido").
       this.vista = { k: 1, tx: 0, ty: 0 };
       this.capa = null;
       this.lienzo = null;
@@ -35,14 +35,18 @@
       this.alSoltarPuntero = () => this.soltarPuntero();
     }
 
-    aplicarVista() {
+    componentWillUnmount() {
+      this.soltarPuntero();
+    }
+
+    aplicar() {
       const { k, tx, ty } = this.vista;
       this.capa?.setAttribute('transform', `translate(${tx} ${ty}) scale(${k})`);
     }
 
-    reiniciarVista() {
+    reiniciar() {
       this.vista = { k: 1, tx: 0, ty: 0 };
-      this.aplicarVista();
+      this.aplicar();
     }
 
     /** De un punto de la pantalla a coordenadas del dibujo (píxeles de la imagen). */
@@ -59,26 +63,33 @@
      * La imagen se mueve libre en cualquier sentido y a cualquier zoom (Juan, 30-oct: "no me deja arrastrar hacia
      * arriba"); solo no se deja perder del todo: siempre queda a la vista.
      */
-    limitar(v, ancho, alto) {
+    limitar(v) {
+      const { ancho, alto } = this.props;
       const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.k));
       const rango = (largo, t) => Math.min(Math.max(t, Math.min(0, largo - k * largo) - largo * 0.5), Math.max(0, largo - k * largo) + largo * 0.5);
       return { k, tx: rango(ancho, v.tx), ty: rango(alto, v.ty) };
     }
 
-    acercar(factor, x, y, p) {
+    acercar(factor, x, y) {
       const c = this.aDibujo(x, y);
       if (!c) return;
       const v = this.vista;
       const k = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.k * factor));
       const r = k / v.k;
-      this.vista = this.limitar({ k, tx: c.x - (c.x - v.tx) * r, ty: c.y - (c.y - v.ty) * r }, p.ancho, p.alto);
-      this.aplicarVista();
+      this.vista = this.limitar({ k, tx: c.x - (c.x - v.tx) * r, ty: c.y - (c.y - v.ty) * r });
+      this.aplicar();
     }
 
-    alRueda(e, p) {
+    /** Los botones acercan hacia el centro de lo que se ve. */
+    acercarAlCentro(factor) {
+      const caja = this.lienzo?.getBoundingClientRect();
+      if (caja) this.acercar(factor, caja.left + caja.width / 2, caja.top + caja.height / 2);
+    }
+
+    alRueda(e) {
       e.preventDefault();
       // Con un touchpad, pellizcar manda la rueda con Ctrl; arrastrar con dos dedos, también la rueda.
-      this.acercar(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY, p);
+      this.acercar(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY);
     }
 
     alPulsar(e) {
@@ -91,15 +102,14 @@
 
     moverPuntero(e) {
       const a = this.arrastrando;
-      const p = this.state.plantas[this.state.plantaId];
-      if (!a || !p) return;
+      if (!a) return;
       const dx = e.clientX - a.x, dy = e.clientY - a.y;
       if (!this.movio && Math.hypot(dx, dy) < 4) return;
       this.movio = true;
       const m = this.lienzo.getScreenCTM();
-      this.vista = this.limitar({ ...this.vista, tx: this.vista.tx + dx / m.a, ty: this.vista.ty + dy / m.d }, p.ancho, p.alto);
+      this.vista = this.limitar({ ...this.vista, tx: this.vista.tx + dx / m.a, ty: this.vista.ty + dy / m.d });
       this.arrastrando = { x: e.clientX, y: e.clientY };
-      this.aplicarVista();
+      this.aplicar();
     }
 
     soltarPuntero() {
@@ -108,25 +118,38 @@
       window.removeEventListener('pointerup', this.alSoltarPuntero);
     }
 
+    render({ ancho, alto, etiqueta, children }) {
+      const estilo = 'width: 36px; height: 36px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; color: #16191D; font: inherit; font-size: 18px; cursor: pointer';
+      return html`
+        <div style="position: relative; width: 100%; height: 100%">
+          <svg ref=${(el) => (this.lienzo = el)} viewBox="0 0 ${ancho} ${alto}" style="width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none" role="img" aria-label=${etiqueta}
+            onWheel=${(e) => this.alRueda(e)} onPointerDown=${(e) => this.alPulsar(e)} onDblClick=${() => this.reiniciar()}>
+            <g ref=${(el) => { this.capa = el; this.aplicar(); }}>${children}</g>
+          </svg>
+          <div style="position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 6px">
+            <button type="button" aria-label="Acercar" title="Acercar" onClick=${() => this.acercarAlCentro(1.5)} style=${estilo}>+</button>
+            <button type="button" aria-label="Alejar" title="Alejar" onClick=${() => this.acercarAlCentro(1 / 1.5)} style=${estilo}>−</button>
+            <button type="button" aria-label="Ajustar a la ventana" title="Ajustar a la ventana" onClick=${() => this.reiniciar()} style=${estilo + '; font-size: 12px'}>Todo</button>
+          </div>
+        </div>`;
+    }
+  }
+
+  class Pasos extends Component {
+    constructor(props) {
+      super(props);
+      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
+      this.alCambiarTamano = () => this.forceUpdate();
+      this.alRecibir = (e) => this.recibir(e.data);
+    }
+
     /** Un clic en una viga solo cuenta si no fue el final de un arrastre. */
     elegirViga(g) {
-      if (this.movio) {
-        this.movio = false;
+      if (this.visor?.movio) {
+        this.visor.movio = false;
         return;
       }
       if (g) this.setState({ grupo: g.indice, hecho: false });
-    }
-
-    botonesZoom(p) {
-      const caja = this.lienzo?.getBoundingClientRect();
-      const cx = caja ? caja.left + caja.width / 2 : 0, cy = caja ? caja.top + caja.height / 2 : 0;
-      const estilo = 'width: 36px; height: 36px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; color: #16191D; font: inherit; font-size: 18px; cursor: pointer';
-      return html`
-        <div style="position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 6px">
-          <button type="button" aria-label="Acercar" title="Acercar" onClick=${() => this.acercar(1.5, cx, cy, p)} style=${estilo}>+</button>
-          <button type="button" aria-label="Alejar" title="Alejar" onClick=${() => this.acercar(1 / 1.5, cx, cy, p)} style=${estilo}>−</button>
-          <button type="button" aria-label="Ajustar a la ventana" title="Ajustar a la ventana" onClick=${() => this.reiniciarVista()} style=${estilo + '; font-size: 12px'}>Todo</button>
-        </div>`;
     }
 
     componentDidMount() {
@@ -137,25 +160,52 @@
 
     componentWillUnmount() {
       window.removeEventListener('resize', this.alCambiarTamano);
-      this.soltarPuntero();
       window.chrome?.webview?.removeEventListener('message', this.alRecibir);
     }
 
     recibir(m) {
-      if (m.tipo === 'modelo') {
+      if (m.tipo === 'modelo' && m.refresco && this.state.modelo) {
+        this.refrescar(m);
+      } else if (m.tipo === 'modelo') {
         this.setState({ modelo: m, error: null });
         if (m.plantas.length > 0) this.verPlanta(m.plantas[0].id);
       } else if (m.tipo === 'planta') {
         this.setState((s) => ({ plantas: { ...s.plantas, [m.id]: m }, error: null }));
       } else if (m.tipo === 'previa') {
         this.setState((s) => ({ previas: { ...s.previas, [m.grupo]: m }, error: null }));
+      } else if (m.tipo === 'vistas') {
+        // En verde solo cuando Revit ya las tiene.
+        this.setState((s) => ({ creando: false, hecho: m.yaExistian ? 'Esas vistas ya existen: no se duplicaron.' : `Vistas creadas: ${m.longitudinal} y ${m.seccion}. Arrástralas a tu plano.`, hechos: { ...s.hechos, [m.grupo]: true }, error: null }));
       } else if (m.tipo === 'error') {
-        this.setState({ error: m.texto });
+        this.setState({ error: m.texto, creando: false });
       }
     }
 
+    /**
+     * El modelo cambió en Revit: se sigue en el mismo paso, planta, zoom y viga, y se piden primero las imágenes que se están
+     * viendo. Los grupos pueden cambiar de número y de nombre, así que se buscan por sus vigas; si la elegida ya no existe,
+     * vuelve al paso 1.
+     */
+    refrescar(m) {
+      const { modelo, grupo, hechos, plantaId, paso } = this.state;
+      const elegida = modelo.grupos[grupo]?.vigas[0];
+      const nuevo = m.grupos.find((g) => g.vigas.includes(elegida)) ?? null;
+      const hechosNuevos = {};
+      m.grupos.forEach((g) => {
+        const antes = modelo.grupos.find((a) => a.vigas.some((v) => g.vigas.includes(v)));
+        if (antes && hechos[antes.indice]) hechosNuevos[g.indice] = true;
+      });
+      const sigue = m.plantas.some((p) => p.id === plantaId);
+      const planta = sigue ? plantaId : m.plantas[0]?.id ?? null;
+      const pasoNuevo = nuevo?.tieneAcero ? paso : 1;
+      if (!sigue) this.visor?.reiniciar();
+      this.setState({ modelo: m, grupo: nuevo?.indice ?? null, hechos: hechosNuevos, previas: {}, plantaId: planta, paso: pasoNuevo, error: null });
+      if (planta) enviar({ tipo: 'verPlanta', id: planta });
+      if (pasoNuevo > 1) enviar({ tipo: 'previa', grupo: nuevo.indice });
+    }
+
     verPlanta(id) {
-      this.reiniciarVista();
+      this.visor?.reiniciar();
       this.setState({ plantaId: id, error: null });
       if (!this.state.plantas[id]) enviar({ tipo: 'verPlanta', id });
     }
@@ -184,34 +234,40 @@
       const elegidas = new Set(this.grupoElegido()?.vigas ?? []);
       return html`
         <div style="position: absolute; inset: 0">
-          <svg ref=${(el) => (this.lienzo = el)} viewBox="0 0 ${p.ancho} ${p.alto}" style="width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none" role="img" aria-label="Planta de Revit con las vigas para elegir"
-            onWheel=${(e) => this.alRueda(e, p)} onPointerDown=${(e) => this.alPulsar(e)} onDblClick=${() => this.reiniciarVista()}>
-            <g ref=${(el) => { this.capa = el; this.aplicarVista(); }}>
-              <image href=${p.url} width=${p.ancho} height=${p.alto} draggable="false"></image>
-              ${p.cajas.map((c) => {
-                const g = this.grupoDeViga(c.viga);
-                const color = g && hechos[g.indice] ? VERDE : elegidas.has(c.viga) ? AZUL : 'transparent';
-                return html`<rect x=${c.x} y=${c.y} width=${c.w} height=${c.h} fill=${color} fill-opacity="0.55" pointer-events="all" style="cursor: pointer" onClick=${() => this.elegirViga(g)}><title>${g?.nombre ?? ''}</title></rect>`;
-              })}
-            </g>
-          </svg>
-          ${this.botonesZoom(p)}
+          <${Visor} ref=${(v) => (this.visor = v)} ancho=${p.ancho} alto=${p.alto} etiqueta="Planta de Revit con las vigas para elegir">
+            <image href=${p.url} width=${p.ancho} height=${p.alto} draggable="false"></image>
+            ${p.cajas.map((c) => {
+              const g = this.grupoDeViga(c.viga);
+              const color = g && hechos[g.indice] ? VERDE : elegidas.has(c.viga) ? AZUL : 'transparent';
+              return html`<rect x=${c.x} y=${c.y} width=${c.w} height=${c.h} fill=${color} fill-opacity="0.55" pointer-events="all" style="cursor: pointer" onClick=${() => this.elegirViga(g)}><title>${g?.nombre ?? ''}</title></rect>`;
+            })}
+          <//>
         </div>`;
     }
 
     imagenes(g) {
       const pv = this.state.previas[g.indice];
       if (!pv) return html`<div style="display: grid; place-items: center; height: 100%; color: #5E6670">Generando la vista en Revit…</div>`;
-      return html`<img src=${pv.longitudinal} alt="Vista longitudinal de Revit" style="width: 100%; height: 100%; object-fit: contain; display: block" />`;
+      const i = pv.longitudinal;
+      return html`
+        <${Visor} ancho=${i.ancho} alto=${i.alto} etiqueta="Vista longitudinal de Revit">
+          <image href=${i.url} width=${i.ancho} height=${i.alto} draggable="false"></image>
+        <//>`;
     }
 
     seccion(g) {
-      const pv = this.state.previas[g.indice];
-      return pv ? html`<img src=${pv.seccion} alt="Sección de Revit" style="width: 100%; height: 360px; flex-shrink: 0; box-sizing: border-box; object-fit: contain; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px" />` : null;
+      const i = this.state.previas[g.indice]?.seccion;
+      if (!i) return null;
+      return html`
+        <div style="width: 100%; height: 360px; flex-shrink: 0; box-sizing: border-box; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
+          <${Visor} ancho=${i.ancho} alto=${i.alto} etiqueta="Sección de Revit">
+            <image href=${i.url} width=${i.ancho} height=${i.alto} draggable="false"></image>
+          <//>
+        </div>`;
     }
 
     render() {
-      const { paso, modelo, plantaId, plantas, hechos, error, hecho } = this.state;
+      const { paso, modelo, plantaId, plantas, hechos, error, hecho, creando } = this.state;
       const g = this.grupoElegido();
       const ancho = window.innerWidth, alto = window.innerHeight;
       const set = (o) => this.setState(o);
@@ -223,7 +279,7 @@
       const titulo = TEXTOS[paso][0], ayuda = TEXTOS[paso][1];
       const enEstaPlanta = g ? g.vigas.filter((v) => plantas[plantaId]?.cajas.some((c) => c.viga === v)).length : 0;
       const hechas = modelo ? modelo.grupos.filter((x) => hechos[x.indice]).length : 0;
-      const puedeSeguir = paso === 3 || !!g?.tieneAcero;
+      const puedeSeguir = !creando && (paso === 3 || !!g?.tieneAcero);
       const back = () => {
         if (paso > 1) set({ paso: paso - 1, hecho: false });
         else enviar({ tipo: 'cerrar' });
@@ -231,7 +287,8 @@
       const next = () => {
         if (paso < 3) return this.irA(paso + 1);
         if (hecho) return set({ paso: 1, hecho: false, grupo: null });
-        set({ hecho: true, hechos: { ...hechos, [g.indice]: true } });
+        set({ creando: true, error: null });
+        enviar({ tipo: 'crearVistas', grupo: g.indice });
       };
 
       return html`
@@ -309,7 +366,7 @@
           <div style="height: 68px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 24px; background: #FFFFFF; border-top: 1px solid #D9DDE2">
             <button type="button" onClick=${back} style="height: 44px; padding: 0 20px; border: 1px solid #C9CFD6; border-radius: 6px; background: #FFFFFF; font: inherit; color: #16191D; cursor: pointer">${paso === 1 ? 'Cerrar' : 'Atrás'}</button>
             ${error ? html`<span style="color: #B3261E; font-weight: 500">${error}</span>` : null}
-            ${hecho && !error ? html`<span style="color: #1E7A3C; font-weight: 500">Marcada en verde. Crear las vistas de verdad llega con #222.</span>` : null}
+            ${hecho && !error ? html`<span style="color: #1E7A3C; font-weight: 500">${hecho}</span>` : null}
             <button type="button" disabled=${!puedeSeguir} onClick=${next} style="height: 44px; padding: 0 24px; border: 0; border-radius: 6px; background: ${puedeSeguir ? AZUL : '#AEB5BD'}; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">${paso === 3 ? (hecho ? 'Despiezar otro' : 'Crear vistas') : 'Siguiente'}</button>
           </div>
         </div>`;
