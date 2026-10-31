@@ -36,5 +36,13 @@ public static class TextosDespiece
     public static string Estribo(string tipo, int cantidad, double largoM, double ganchoM) =>
         $"{Barra(tipo, cantidad, largoM)} G= {Metros(ganchoM)}";
 
+    /// <summary>
+    /// El largo que dicen las cotas de la barra: Revit mide por el eje y descuenta el doblez, las cotas miden por fuera.
+    /// Cada gancho de 90° suma <c>2 (R + d/2) − R·π/2</c>, como <c>GanchoPropio.DiferenciaCotas</c> en acero de vigas.
+    /// Sirve en cualquier unidad, si todo viene en la misma.
+    /// </summary>
+    public static double LargoPorCotas(double largoRevit, double radio, double diametro, int ganchosDe90) =>
+        largoRevit + ganchosDe90 * (2 * (radio + diametro / 2) - radio * Math.PI / 2);
+
     private static string Metros(double valor) => valor.ToString("0.00", CultureInfo.InvariantCulture);
 }

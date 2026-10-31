@@ -175,6 +175,7 @@ internal sealed class PuenteDespiece
                 indice = i,
                 nombre = g.Nombre,
                 tieneAcero = g.TieneAcero,
+                esVigueta = g.Elementos[0].EsVigueta,
                 vistaCreada = GeneradorPrevia.VistaCreada(doc!, g.Nombre) is not null,
                 vigas = g.Elementos.SelectMany(e => Continua(e).Vigas).Select(id => id.ToString()),
                 cantidad = g.Elementos.Count,

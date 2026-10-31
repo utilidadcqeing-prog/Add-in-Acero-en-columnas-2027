@@ -6,7 +6,7 @@ namespace CQEING.Despiece.Calculo;
 public record BarraLeida(string Tipo, string Forma, int Cantidad, int LargoMm, int PosicionMm, int RectoMm = 0);
 
 /// <summary>Una viga continua (o una columna) leída del modelo, con su acero.</summary>
-public record ElementoLeido(string Id, string Ejes, int AnchoMm, int AltoMm, int LargoMm, IReadOnlyList<BarraLeida> Barras, string Nivel = "");
+public record ElementoLeido(string Id, string Ejes, int AnchoMm, int AltoMm, int LargoMm, IReadOnlyList<BarraLeida> Barras, string Nivel = "", bool EsVigueta = false);
 
 /// <summary>Los elementos con el mismo acero: llevan un solo despiece (#217).</summary>
 public record GrupoIguales(string Nombre, IReadOnlyList<ElementoLeido> Elementos)
@@ -46,7 +46,7 @@ public static class AgrupadorIguales
         string ida = Barras(e, b => b.PosicionMm);
         string vuelta = Barras(e, b => e.LargoMm - b.PosicionMm);
         string barras = string.CompareOrdinal(ida, vuelta) <= 0 ? ida : vuelta;
-        return $"{e.AnchoMm}x{e.AltoMm}|{Redondear(e.LargoMm)}|{barras}";
+        return $"{e.EsVigueta}|{e.AnchoMm}x{e.AltoMm}|{Redondear(e.LargoMm)}|{barras}";
     }
 
     private static string Barras(ElementoLeido e, Func<BarraLeida, int> posicion) => string.Join(";", e.Barras
@@ -62,6 +62,7 @@ public static class AgrupadorIguales
         string niveles = conNivel ? Unidos(elementos.Select(e => e.Nivel)) : "";
         string seccion = string.Format(CultureInfo.InvariantCulture, "({0:0.00}x{1:0.00})", elementos[0].AnchoMm / 1000.0, elementos[0].AltoMm / 1000.0);
         string donde = string.Join(" ", new[] { niveles, ejes }.Where(p => p.Length > 0));
-        return donde.Length > 0 ? $"V {donde} - {seccion}" : $"V - {seccion}";
+        string prefijo = elementos[0].EsVigueta ? "Vigueta" : "V";
+        return donde.Length > 0 ? $"{prefijo} {donde} - {seccion}" : $"{prefijo} - {seccion}";
     }
 }

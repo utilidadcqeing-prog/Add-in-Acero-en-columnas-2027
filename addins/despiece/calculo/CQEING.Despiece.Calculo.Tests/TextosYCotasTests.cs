@@ -5,6 +5,18 @@ public class TextosDespieceTests
     [Fact]
     public void ConGanchoDiceRectoYTotal() => Assert.Equal("3 #5 L= 5.50/6.00", TextosDespiece.Barra("#5 CQEING", 3, 6.0, 5.5));
 
+    // Barra 397193, medida en Revit: 6.025 de largo, radio 0.0554, diámetro 0.0159; sus cotas dan 5.765 + 0.299.
+    [Fact]
+    public void UnGanchoDe90SumaLoQueRevitDescuentaEnElDoblez() =>
+        Assert.Equal(5.765 + 0.2994, TextosDespiece.LargoPorCotas(6.025, 0.0554, 0.0159, 1), 2);
+
+    [Fact]
+    public void SinGanchosDe90ElLargoNoCambia() => Assert.Equal(1.075, TextosDespiece.LargoPorCotas(1.075, 0.0554, 0.0159, 0));
+
+    [Fact]
+    public void DosGanchosSumanDosVeces() =>
+        Assert.Equal(6.025 + 2 * (2 * (0.0554 + 0.0159 / 2) - 0.0554 * Math.PI / 2), TextosDespiece.LargoPorCotas(6.025, 0.0554, 0.0159, 2), 6);
+
     [Fact]
     public void SinGanchoDiceSoloElTotal() => Assert.Equal("1 #5 L= 1.08", TextosDespiece.Barra("#5 CQEING", 1, 1.075, 1.075));
 

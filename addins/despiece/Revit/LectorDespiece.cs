@@ -90,12 +90,20 @@ internal static class LectorDespiece
         string eje = ejes.FirstOrDefault(g => Direccion((Line)g.Curve).IsAlmostEqualTo(dir) && Fuera(g.Curve.GetEndPoint(0), punto, dir) < Cercania)?.Name ?? "";
         // Por la altura de la viga: en estas vigas el nivel del elemento viene vacío (PROY_JULIO_BETO, 30-oct).
         string nivel = niveles.OrderBy(n => Math.Abs(n.Elevation - punto.Z)).FirstOrDefault()?.Name ?? "";
-        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista, nivel);
+        var elemento = new ElementoLeido(tramo[0].Id.ToString(), eje, ancho, alto, (int)Math.Round(Mm(fin - inicio)), lista, nivel, TipoElemento.EsVigueta(tramo[0].Symbol.Name, ancho));
         return new VigaContinua(elemento, tramo.Select(v => v.Id).ToList(), origen, dir);
     }
 
-    /// <summary>El largo de una barra del conjunto, con ganchos (ver #217: no sirve el total del conjunto).</summary>
-    public static double LargoBarra(Rebar b) => b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;
+    /// <summary>El largo de una barra del conjunto, con ganchos (ver #217: no sirve el total del conjunto), como lo dicen sus cotas.</summary>
+    public static double LargoBarra(Rebar b)
+    {
+        double largo = b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;
+        if (b.Document.GetElement(b.GetTypeId()) is not RebarBarType barra)
+            return largo;
+        int ganchos = new[] { 0, 1 }.Count(punta => b.Document.GetElement(b.GetHookTypeId(punta)) is RebarHookType gancho && Math.Abs(gancho.HookAngle - Math.PI / 2) < 1e-3);
+        double d = barra.BarNominalDiameter;
+        return TextosDespiece.LargoPorCotas(largo, barra.StandardHookBendDiameter / 2 + d / 2, d, ganchos);
+    }
 
     /// <summary>El número de barra, del nombre de su tipo ("#5 CQEING" da 5); 0 si el nombre no lo dice.</summary>
     public static int Numero(string tipo) => TextosDespiece.Numero(tipo);

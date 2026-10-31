@@ -9,7 +9,7 @@
   const TIPOS = [
     { n: 'Vigas', k: 'viga', icon: 'M3 14h30v8H3zM8 14v8M28 14v8' },
     { n: 'Columnas · pronto', off: true, icon: 'M13 3h10v30H13zM13 12h10M13 24h10' },
-    { n: 'Viguetas · pronto', off: true, icon: 'M3 12h30M3 18h30M3 24h30' },
+    { n: 'Viguetas', k: 'vigueta', icon: 'M3 12h30M3 18h30M3 24h30' },
     { n: 'Zapatas · pronto', off: true, icon: 'M6 22h24v9H6zM14 22V6h8v16' }
   ];
   const TEXTOS = {
@@ -244,7 +244,7 @@
   class Pasos extends Component {
     constructor(props) {
       super(props);
-      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, movimientos: {}, modo3d: false, modelos3d: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
+      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, tipo: 'viga', movimientos: {}, modo3d: false, modelos3d: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
       this.alCambiarTamano = () => this.forceUpdate();
       this.alRecibir = (e) => this.recibir(e.data);
     }
@@ -435,6 +435,16 @@
       return this.state.modelo.grupos.find((g) => g.vigas.includes(id));
     }
 
+    /** Si el grupo es de lo que se está despiezando: cada botón deja elegir solo lo suyo. */
+    delTipo(g) {
+      return !!g && !!g.esVigueta === (this.state.tipo === 'vigueta');
+    }
+
+    /** Cambiar de tipo limpia la selección: lo elegido ya no se puede tocar en la planta. */
+    elegirTipo(tipo) {
+      if (tipo !== this.state.tipo) this.setState({ tipo, grupo: null, hecho: false });
+    }
+
     planta() {
       const { modelo, plantaId, plantas, grupo, hechos } = this.state;
       const p = plantas[plantaId];
@@ -448,6 +458,7 @@
             <image href=${p.url} width=${p.ancho} height=${p.alto} draggable="false"></image>
             ${p.cajas.map((c) => {
               const g = this.grupoDeViga(c.viga);
+              if (!this.delTipo(g)) return null;
               const color = g && hechos[g.indice] ? VERDE : elegidas.has(c.viga) ? AZUL : 'transparent';
               return html`<rect x=${c.x} y=${c.y} width=${c.w} height=${c.h} fill=${color} fill-opacity="0.55" pointer-events="all" style="cursor: pointer" onClick=${() => this.elegirViga(g)}><title>${g?.nombre ?? ''}</title></rect>`;
             })}
@@ -478,7 +489,7 @@
     }
 
     render() {
-      const { paso, modelo, plantaId, plantas, hechos, error, hecho, creando } = this.state;
+      const { paso, modelo, plantaId, plantas, hechos, error, hecho, creando, tipo } = this.state;
       const g = this.grupoElegido();
       const ancho = window.innerWidth, alto = window.innerHeight;
       const set = (o) => this.setState(o);
@@ -486,10 +497,11 @@
         const k = i + 1, on = k === paso, ya = k < paso;
         return { n, num: ya ? '✓' : String(k), color: on ? '#16191D' : '#5E6670', fw: on ? 600 : 400, fondo: on || ya ? AZUL : '#DDE1E6', numC: on || ya ? '#FFFFFF' : '#3F4A57', pick: () => (k === 1 ? set({ paso: 1 }) : this.irA(k)) };
       });
-      const tipos = TIPOS.map((t) => ({ ...t, off: !!t.off, borde: t.k ? AZUL : '#C9CFD6', fondo: t.k ? '#E4ECF6' : '#FFFFFF', color: t.k ? '#174A8A' : '#6B737C', cursor: t.off ? 'not-allowed' : 'default' }));
-      const titulo = TEXTOS[paso][0], ayuda = TEXTOS[paso][1];
+      const tipos = TIPOS.map((t) => ({ ...t, off: !!t.off, borde: t.k === tipo ? AZUL : '#C9CFD6', fondo: t.k === tipo ? '#E4ECF6' : '#FFFFFF', color: t.k === tipo ? '#174A8A' : t.off ? '#6B737C' : '#16191D', cursor: t.off ? 'not-allowed' : 'pointer' }));
+      const elemento = tipo === 'vigueta' ? 'vigueta' : 'viga';
+      const titulo = TEXTOS[paso][0], ayuda = paso === 1 && tipo === 'vigueta' ? TEXTOS[1][1].replace('una viga', 'una vigueta') : TEXTOS[paso][1];
       const enEstaPlanta = g ? g.vigas.filter((v) => plantas[plantaId]?.cajas.some((c) => c.viga === v)).length : 0;
-      const hechas = modelo ? modelo.grupos.filter((x) => hechos[x.indice]).length : 0;
+      const hechas = modelo ? modelo.grupos.filter((x) => hechos[x.indice] && this.delTipo(x)).length : 0;
       const puedeSeguir = !creando && (paso === 3 || !!g?.tieneAcero);
       const back = () => {
         if (paso > 1) set({ paso: paso - 1, hecho: false });
@@ -527,7 +539,7 @@
                 <div style="display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto">
                   <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
                     ${tipos.map((t) => html`
-                      <button type="button" disabled=${t.off} style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 92px; border: 1px solid ${t.borde}; border-radius: 6px; background: ${t.fondo}; color: ${t.color}; font: inherit; font-weight: 500; cursor: ${t.cursor}">
+                      <button type="button" disabled=${t.off} onClick=${() => t.k && this.elegirTipo(t.k)} style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 92px; border: 1px solid ${t.borde}; border-radius: 6px; background: ${t.fondo}; color: ${t.color}; font: inherit; font-weight: 500; cursor: ${t.cursor}">
                         <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><path d=${t.icon} stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"></path></svg>${t.n}
                       </button>`)}
                   </div>
@@ -540,10 +552,10 @@
                     <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: #FFFFFF; border: 1px solid ${AZUL}; border-radius: 6px">
                       <span style="font-weight: 600">${g.nombre}</span>
                       ${g.tieneAcero ? html`
-                        <span style="font-size: 12px; color: #5E6670">${g.cantidad === 1 ? 'Acero único' : `${g.cantidad} vigas con el mismo acero`}</span>
+                        <span style="font-size: 12px; color: #5E6670">${g.cantidad === 1 ? 'Acero único' : `${g.cantidad} ${elemento}s con el mismo acero`}</span>
                         <span style="font-size: 12px; color: #5E6670">${enEstaPlanta} tramos en esta planta, ${g.vigas.length - enEstaPlanta} en otras</span>` : html`
-                        <span style="font-size: 12px; color: #B3261E">Esta viga no tiene acero: no se puede despiezar.</span>`}
-                    </div>` : html`<span style="font-size: 12px; color: #5E6670">Ninguna viga elegida.</span>`}
+                        <span style="font-size: 12px; color: #B3261E">Esta ${elemento} no tiene acero: no se puede despiezar.</span>`}
+                    </div>` : html`<span style="font-size: 12px; color: #5E6670">Ninguna ${elemento} elegida.</span>`}
                   <div style="display: flex; gap: 14px; font-size: 12px; color: #5E6670">
                     <span><span style="display: inline-block; width: 10px; height: 10px; background: ${AZUL}; margin-right: 4px"></span>Elegida</span>
                     <span><span style="display: inline-block; width: 10px; height: 10px; background: ${VERDE}; margin-right: 4px"></span>Ya tiene despiece (${hechas})</span>

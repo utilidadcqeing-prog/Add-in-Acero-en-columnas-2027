@@ -359,7 +359,7 @@ internal static class GeneradorPrevia
         doc.Regenerate();
         AjustarEjes(doc, vista, Math.Max(tope, max.Z) + CabezaEje, Math.Min(fondo, min.Z) - CotaViga - ColaEje);
         Cotar(doc, vista, centro, derecha, largo, min, max, Math.Min(fondo, min.Z), tipos);
-        CotarColumnas(doc, vista, centro, derecha, min, max, Math.Min(fondo, min.Z), tipos);
+        CotarColumnas(doc, vista, viga, centro, derecha, min, max, Math.Min(fondo, min.Z), tipos);
         vista.DisplayStyle = DisplayStyle.FlatColors;
         AplicarMovimientos(doc, sacadas, sueltas, movible, derecha);
         if (movible.Separar)
@@ -467,13 +467,20 @@ internal static class GeneradorPrevia
     /// toman contra planos de referencia puestos en las caras de las columnas, solo en esta vista. Si Revit no acepta las
     /// cotas, se deshace lo hecho y la vista queda sin ellas: no vale tumbar la vista previa por esto.
     /// </summary>
-    private static void CotarColumnas(Document doc, View vista, XYZ centro, XYZ derecha, XYZ min, XYZ max, double fondo, TiposPropios tipos)
+    private static void CotarColumnas(Document doc, View vista, VigaContinua viga, XYZ centro, XYZ derecha, XYZ min, XYZ max, double fondo, TiposPropios tipos)
     {
         double a = Math.Min(min.DotProduct(derecha), max.DotProduct(derecha)), b = Math.Max(min.DotProduct(derecha), max.DotProduct(derecha));
         double holgura = 0.05 * M;
         var caja = new Outline(new XYZ(min.X - holgura, min.Y - holgura, min.Z - holgura), new XYZ(max.X + holgura, max.Y + holgura, max.Z + holgura));
-        List<(double Desde, double Hasta)> columnas = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralColumns)
-            .WhereElementIsNotElementType().WherePasses(new BoundingBoxIntersectsFilter(caja)).Select(c => c.get_BoundingBox(null)).Where(c => c is not null)
+        var filtro = new BoundingBoxIntersectsFilter(caja);
+        IEnumerable<Element> apoyos = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralColumns)
+            .WhereElementIsNotElementType().WherePasses(filtro).ToList();
+        // Una vigueta se apoya en vigas: lo perpendicular que la toca y no es otra vigueta (decisión 3 del plan de viguetas).
+        if (viga.Elemento.EsVigueta)
+            apoyos = apoyos.Concat(new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralFraming).WhereElementIsNotElementType().WherePasses(filtro)
+                .OfType<FamilyInstance>().Where(v => !viga.Vigas.Contains(v.Id) && v.Location is LocationCurve { Curve: Line l } && Math.Abs(l.Direction.DotProduct(derecha)) < 0.1
+                    && !TipoElemento.EsVigueta(v.Symbol.Name, (int)Math.Round(LectorDespiece.Mm(Math.Abs((v.get_BoundingBox(null).Max - v.get_BoundingBox(null).Min).DotProduct(derecha)))))));
+        List<(double Desde, double Hasta)> columnas = apoyos.Select(c => c.get_BoundingBox(null)).Where(c => c is not null)
             .Select(c => (Math.Min(c.Min.DotProduct(derecha), c.Max.DotProduct(derecha)), Math.Max(c.Min.DotProduct(derecha), c.Max.DotProduct(derecha)))).ToList();
         IReadOnlyList<TramoViga> tramos = TramosViga.Calcular(a, b, columnas);
         Registro.Paso($"cotas: {columnas.Count} columnas, {tramos.Count} tramos");
@@ -505,7 +512,9 @@ internal static class GeneradorPrevia
                 if (tipos.CotaCorta is { } tipo)
                     cota.DimensionType = tipo;
             }
-            Cota(planos, fondo - CotaColumnas);
+            // Con un solo tramo la cadena y el total dirían lo mismo.
+            if (tramos.Count > 1)
+                Cota(planos, fondo - CotaColumnas);
             Cota([planos[0], planos[^1]], fondo - CotaViga);
             prueba.Commit();
         }
