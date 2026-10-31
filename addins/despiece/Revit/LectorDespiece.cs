@@ -97,24 +97,12 @@ internal static class LectorDespiece
     public static double LargoBarra(Rebar b) => b.get_Parameter(BuiltInParameter.REBAR_ELEM_LENGTH)?.AsDouble() ?? 0;
 
     /// <summary>El número de barra, del nombre de su tipo ("#5 CQEING" da 5); 0 si el nombre no lo dice.</summary>
-    public static int Numero(string tipo)
-    {
-        int i = tipo.IndexOf('#');
-        if (i < 0)
-            return 0;
-        string digitos = new(tipo.Skip(i + 1).TakeWhile(char.IsDigit).ToArray());
-        return int.TryParse(digitos, out int n) ? n : 0;
-    }
+    public static int Numero(string tipo) => TextosDespiece.Numero(tipo);
 
     public static string Color(string tipo) => ColoresDiametro.De(Numero(tipo));
 
-    /// <summary>La etiqueta de los planos de Santiago: <c>3 #5 L= 6.00</c>.</summary>
-    public static string Etiqueta(string tipo, int cantidad, double largoPies)
-    {
-        int n = Numero(tipo);
-        string nombre = n > 0 ? "#" + n : tipo;
-        return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} {1} L= {2:0.00}", cantidad, nombre, largoPies * 0.3048);
-    }
+    /// <summary>La etiqueta de una barra, en una línea: <c>3 #5 / L= 6.00</c>.</summary>
+    public static string Etiqueta(string tipo, int cantidad, double largoPies) => TextosDespiece.Barra(tipo, cantidad, largoPies * 0.3048);
 
     /// <summary>La separación de un conjunto de estribos, en pies; 0 si es uno solo.</summary>
     public static double Separacion(Rebar b) => b.Quantity > 1 ? b.get_Parameter(BuiltInParameter.REBAR_ELEM_BAR_SPACING)?.AsDouble() ?? 0 : 0;

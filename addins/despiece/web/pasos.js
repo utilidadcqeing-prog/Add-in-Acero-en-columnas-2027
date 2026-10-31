@@ -138,7 +138,7 @@
   class Pasos extends Component {
     constructor(props) {
       super(props);
-      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
+      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
       this.alCambiarTamano = () => this.forceUpdate();
       this.alRecibir = (e) => this.recibir(e.data);
     }
@@ -172,7 +172,7 @@
       } else if (m.tipo === 'planta') {
         this.setState((s) => ({ plantas: { ...s.plantas, [m.id]: m }, error: null }));
       } else if (m.tipo === 'previa') {
-        this.setState((s) => ({ previas: { ...s.previas, [m.grupo]: m }, error: null }));
+        this.setState((s) => ({ previas: { ...s.previas, [`${m.grupo}|${m.negros}`]: m }, error: null }));
       } else if (m.tipo === 'vistas') {
         // En verde solo cuando Revit ya las tiene.
         this.setState((s) => ({ creando: false, hecho: m.yaExistian ? 'Esas vistas ya existen: no se duplicaron.' : `Vistas creadas: ${m.longitudinal} y ${m.seccion}. Arrástralas a tu plano.`, hechos: { ...s.hechos, [m.grupo]: true }, error: null }));
@@ -201,7 +201,7 @@
       if (!sigue) this.visor?.reiniciar();
       this.setState({ modelo: m, grupo: nuevo?.indice ?? null, hechos: hechosNuevos, previas: {}, plantaId: planta, paso: pasoNuevo, error: null });
       if (planta) enviar({ tipo: 'verPlanta', id: planta });
-      if (pasoNuevo > 1) enviar({ tipo: 'previa', grupo: nuevo.indice });
+      if (pasoNuevo > 1) enviar({ tipo: 'previa', grupo: nuevo.indice, negros: this.state.negros });
     }
 
     verPlanta(id) {
@@ -214,7 +214,33 @@
       const g = this.grupoElegido();
       if (paso > 1 && !g?.tieneAcero) return;
       this.setState({ paso, hecho: false });
-      if (paso > 1 && !this.state.previas[g.indice]) enviar({ tipo: 'previa', grupo: g.indice });
+      if (paso > 1) this.pedirPrevia(g, this.state.negros);
+    }
+
+    previa(g) {
+      return this.state.previas[`${g.indice}|${this.state.negros}`];
+    }
+
+    pedirPrevia(g, negros) {
+      if (!this.state.previas[`${g.indice}|${negros}`]) enviar({ tipo: 'previa', grupo: g.indice, negros });
+    }
+
+    /** Cada modo se genera una vez en Revit; volver a uno ya visto es inmediato. */
+    elegirTextos(g, negros) {
+      this.setState({ negros });
+      this.pedirPrevia(g, negros);
+    }
+
+    selectorTextos(g) {
+      const boton = (texto, valor) => {
+        const on = this.state.negros === valor;
+        return html`<button type="button" aria-pressed=${on} onClick=${() => this.elegirTextos(g, valor)} style="flex: 1; height: 32px; border: 1px solid ${on ? AZUL : '#C9CFD6'}; border-radius: 6px; background: ${on ? '#E4ECF6' : '#FFFFFF'}; color: ${on ? '#174A8A' : '#16191D'}; font: inherit; cursor: pointer">${texto}</button>`;
+      };
+      return html`
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0">
+          <span style="font-weight: 600">Textos</span>
+          ${boton('Con colores', false)}${boton('En negro', true)}
+        </div>`;
     }
 
     grupoElegido() {
@@ -246,7 +272,7 @@
     }
 
     imagenes(g) {
-      const pv = this.state.previas[g.indice];
+      const pv = this.previa(g);
       if (!pv) return html`<div style="display: grid; place-items: center; height: 100%; color: #5E6670">Generando la vista en Revit…</div>`;
       const i = pv.longitudinal;
       return html`
@@ -256,7 +282,7 @@
     }
 
     seccion(g) {
-      const i = this.state.previas[g.indice]?.seccion;
+      const i = this.previa(g)?.seccion;
       if (!i) return null;
       return html`
         <div style="width: 100%; height: 360px; flex-shrink: 0; box-sizing: border-box; background: #FFFFFF; border: 1px solid #D9DDE2; border-radius: 6px; overflow: hidden">
@@ -349,6 +375,7 @@
                   ${this.imagenes(g)}
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: hidden auto">
+                  ${this.selectorTextos(g)}
                   ${this.seccion(g)}
                   ${paso === 2 ? html`
                     <span style="font-weight: 600">Barras de ${g.nombre}</span>

@@ -78,7 +78,7 @@ internal sealed class PuenteDespiece
                 VerPlanta(raiz.GetProperty("id").GetString()!);
                 break;
             case "previa":
-                VerPrevia(raiz.GetProperty("grupo").GetInt32());
+                VerPrevia(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
                 break;
             case "crearVistas":
                 CrearVistas(raiz.GetProperty("grupo").GetInt32());
@@ -215,15 +215,15 @@ internal sealed class PuenteDespiece
         return listo;
     }
 
-    private void VerPrevia(int grupo)
+    private void VerPrevia(int grupo, bool negros)
     {
         if (doc is null || grupo >= grupos.Count)
             return;
-        string clave = grupo.ToString();
+        string clave = $"{grupo}|{negros}";
         if (!previas.TryGetValue(clave, out object? listo))
         {
-            PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia);
-            listo = new { tipo = "previa", grupo, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
+            PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia, negros);
+            listo = new { tipo = "previa", grupo, negros, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
             previas[clave] = listo;
         }
         Enviar(listo);

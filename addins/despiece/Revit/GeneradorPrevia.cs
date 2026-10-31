@@ -1,6 +1,7 @@
 using System.Globalization;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Structure;
+using CQEING.Despiece.Calculo;
 using CQEING.Vigas.Calculo.Modelo;
 
 namespace CQEING.Despiece.Revit;
@@ -58,12 +59,29 @@ internal static class GeneradorPrevia
     private const double CabezaEje = 0.8 * M * Proporcion;
     private const double CotaLuces = 0.35 * M * Proporcion;
     private const double CotaTotal = 0.75 * M * Proporcion;
+    // Entre las luces entre ejes y el total de ejes va la cadena de columnas y luces libres; debajo de todo, el largo de la viga.
+    private const double CotaColumnas = 0.55 * M * Proporcion;
+    private const double CotaViga = 0.95 * M * Proporcion;
 
-    public static PreviaGenerada Generar(Document doc, VigaContinua viga, string carpeta)
+    /// <summary>Un bastón va más adentro que la capa exterior por más de esto.</summary>
+    private const double ToleranciaBaston = 0.005 * M;
+
+    /// <summary>Aire entre un estribo con su texto y el siguiente que se apila debajo.</summary>
+    private const double HuecoEstribos = 0.08 * M;
+
+    /// <summary>
+    /// Textos en negro en vez del color de su diámetro (Juan, 31-oct). Es un dato de esta pasada, no del modelo: lo lee
+    /// <see cref="Pintar"/> para no repasarlo por cada una de las notas. Solo vale dentro de <see cref="Generar"/>.
+    /// </summary>
+    [ThreadStatic]
+    private static bool textosNegros;
+
+    public static PreviaGenerada Generar(Document doc, VigaContinua viga, string carpeta, bool negros)
     {
         Registro.Paso("previa: empieza " + viga.Elemento.Id);
         using var t = new Transaction(doc, "Vista previa de despiece");
         t.Start();
+        textosNegros = negros;
         try
         {
             (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, false));
@@ -75,6 +93,7 @@ internal static class GeneradorPrevia
         }
         finally
         {
+            textosNegros = false;
             Registro.Paso("previa: deshaciendo");
             t.RollBack();
             Registro.Paso("previa: deshecho");
@@ -217,7 +236,15 @@ internal static class GeneradorPrevia
             "I" or "BI" => false,
             _ => Mayor(s.Barra).GetEndPoint(0).Z > mitad,
         };
-        List<Sacada> deArriba = sacadas.Where(EstaArriba).ToList(), deAbajo = sacadas.Except(deArriba).ToList();
+        // Los bastones van dentro de la viga, centrados en su alto (Juan, 31-oct). Con marca del add-in de vigas son BS y BI;
+        // sin marca, una barra recta que va más adentro que la capa exterior de su lado.
+        List<double> alturas = sacadas.Select(s => Mayor(s.Barra).GetEndPoint(0).Z).ToList();
+        bool EsBaston(Sacada s) => MarcaVigas.EsBaston(s.Barra) || (MarcaVigas.Serie(s.Barra) is null && Curvas(s.Barra, false).Count == 1
+            && ClasificadorBastones.EsBaston(Mayor(s.Barra).GetEndPoint(0).Z, alturas, ToleranciaBaston));
+        List<Sacada> bastones = sacadas.Where(EsBaston).ToList();
+        List<Sacada> deArriba = sacadas.Except(bastones).Where(EstaArriba).ToList(), deAbajo = sacadas.Except(bastones).Except(deArriba).ToList();
+        if (bastones.Count > 0)
+            ColocarAlMedio(doc, vista, bastones, mitad, tipos);
         // Una fila por diámetro, la barra más gruesa junto a la viga, y los bastones más afuera (plano de Santiago).
         double Lineas(List<Sacada> lado, string serie, double desde, bool haciaArriba)
         {
@@ -234,10 +261,73 @@ internal static class GeneradorPrevia
         Recortar(vista, centro, largo / 2 + 1.0 * M, largo / 2 + 1.0 * M, alto / 2 + HolguraRecorte, alto / 2 + HolguraRecorte);
         vista.SetCategoryHidden(new ElementId(BuiltInCategory.OST_Levels), true);
         doc.Regenerate();
-        AjustarEjes(doc, vista, Math.Max(tope, max.Z) + CabezaEje, Math.Min(fondo, min.Z) - CotaTotal - ColaEje);
+        AjustarEjes(doc, vista, Math.Max(tope, max.Z) + CabezaEje, Math.Min(fondo, min.Z) - CotaViga - ColaEje);
         Cotar(doc, vista, centro, derecha, largo, min, max, Math.Min(fondo, min.Z), tipos);
+        CotarColumnas(doc, vista, centro, derecha, min, max, Math.Min(fondo, min.Z), tipos);
         vista.DisplayStyle = DisplayStyle.FlatColors;
         return vista;
+    }
+
+    /// <summary>
+    /// La cadena columna, luz libre, columna… y, más abajo, el largo completo de la viga (Juan, 31-oct). Las medidas se
+    /// toman contra planos de referencia puestos en las caras de las columnas, solo en esta vista. Si Revit no acepta las
+    /// cotas, se deshace lo hecho y la vista queda sin ellas: no vale tumbar la vista previa por esto.
+    /// </summary>
+    private static void CotarColumnas(Document doc, View vista, XYZ centro, XYZ derecha, XYZ min, XYZ max, double fondo, TiposPropios tipos)
+    {
+        double a = Math.Min(min.DotProduct(derecha), max.DotProduct(derecha)), b = Math.Max(min.DotProduct(derecha), max.DotProduct(derecha));
+        double holgura = 0.05 * M;
+        var caja = new Outline(new XYZ(min.X - holgura, min.Y - holgura, min.Z - holgura), new XYZ(max.X + holgura, max.Y + holgura, max.Z + holgura));
+        List<(double Desde, double Hasta)> columnas = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralColumns)
+            .WhereElementIsNotElementType().WherePasses(new BoundingBoxIntersectsFilter(caja)).Select(c => c.get_BoundingBox(null)).Where(c => c is not null)
+            .Select(c => (Math.Min(c.Min.DotProduct(derecha), c.Max.DotProduct(derecha)), Math.Max(c.Min.DotProduct(derecha), c.Max.DotProduct(derecha)))).ToList();
+        IReadOnlyList<TramoViga> tramos = TramosViga.Calcular(a, b, columnas);
+        Registro.Paso($"cotas: {columnas.Count} columnas, {tramos.Count} tramos");
+
+        XYZ En(double s, double z) => new XYZ(centro.X, centro.Y, z) + derecha * (s - centro.DotProduct(derecha));
+        using var prueba = new SubTransaction(doc);
+        prueba.Start();
+        try
+        {
+            List<double> marcas = [tramos[0].Desde, .. tramos.Select(t => t.Hasta)];
+            List<Reference> planos = marcas.Select(s => doc.Create.NewReferencePlane(En(s, max.Z), En(s, min.Z), vista.ViewDirection, vista).GetReference()).ToList();
+            doc.Regenerate();
+
+            void Cota(IEnumerable<Reference> referencias, double z)
+            {
+                var lista = new ReferenceArray();
+                foreach (Reference r in referencias)
+                    lista.Append(r);
+                Dimension cota = doc.Create.NewDimension(vista, Line.CreateBound(En(marcas[0], z), En(marcas[^1], z)), lista);
+                if (tipos.Cota is { } tipo)
+                    cota.DimensionType = tipo;
+            }
+            Cota(planos, fondo - CotaColumnas);
+            Cota([planos[0], planos[^1]], fondo - CotaViga);
+            vista.SetCategoryHidden(new ElementId(BuiltInCategory.OST_CLines), true);
+            prueba.Commit();
+        }
+        catch (Exception e)
+        {
+            Registro.Paso("cotas de columnas: no se pudieron crear: " + e.Message);
+            prueba.RollBack();
+        }
+    }
+
+    /// <summary>
+    /// Acomoda los bastones con su texto y los deja con el centro de todo el bloque en <paramref name="centro"/>. Primero se
+    /// prueba desde el centro y se deshace, para saber cuánto ocupan; recién entonces se colocan de verdad.
+    /// </summary>
+    private static void ColocarAlMedio(Document doc, View vista, List<Sacada> bastones, double centro, TiposPropios tipos)
+    {
+        double ocupado;
+        using (var prueba = new SubTransaction(doc))
+        {
+            prueba.Start();
+            ocupado = Acomodar(doc, vista, bastones, centro, true, tipos) - HuecoFilas - centro;
+            prueba.RollBack();
+        }
+        Acomodar(doc, vista, bastones, centro - ocupado / 2, true, tipos);
     }
 
     /// <summary>
@@ -496,9 +586,63 @@ internal static class GeneradorPrevia
             Element d = RebarBendingDetail.Create(doc, vista.Id, estribo.Id, 0, tipos.Barra, centroDetalle, 0);
             Pintar(vista, d.Id, estribo, 3);
             EtiquetarGancho(doc, vista, estribo, centroDetalle, medio.Z, tipos);
+            double abajo = ResumirEstribos(doc, vista, barras.Where(b => !EsLongitudinal(b, dir)).ToList(), estribo, d, centroDetalle, tipos);
+            Recortar(vista, corte, ancho / 2 + 0.55 * M, ancho / 2 + 1.05 * M, Math.Max(alto / 2 + 0.7 * M, medio.Z - abajo + 0.1 * M), alto / 2 + 0.7 * M);
         }
         Acotar(doc, vista, viga, estribo, corte, derecha, medio.Z, tipos);
         return vista;
+    }
+
+    /// <summary>
+    /// Cada forma de estribo de la viga, también las menores (grapas), con su detalle y debajo su cantidad total, su largo y
+    /// su gancho: <c>46 #3 / L= 0.99 / G= 0.08</c> (Juan, 31-oct). El principal ya está dibujado; los demás se apilan debajo.
+    /// Si Revit no deja dibujar uno (por ejemplo, no pasa por este corte), se anota y se sigue. Devuelve hasta qué altura bajó.
+    /// </summary>
+    private static double ResumirEstribos(Document doc, View vista, List<Rebar> estribos, Rebar principal, Element detallePrincipal, XYZ centroDetalle, TiposPropios tipos)
+    {
+        string Clave(Rebar b) => $"{b.GetTypeId()}|{b.GetShapeId()}|{Math.Round(LectorDespiece.LargoBarra(b) * 304.8)}";
+        List<IGrouping<string, Rebar>> formas = estribos.GroupBy(Clave).OrderByDescending(g => g.Key == Clave(principal) ? int.MaxValue : Curvas(g.First(), false).Count).ToList();
+        double tope = double.NaN, abajo = centroDetalle.Z;
+        foreach (IGrouping<string, Rebar> forma in formas)
+        {
+            bool esPrincipal = forma.Key == Clave(principal);
+            Rebar b = esPrincipal ? principal : forma.First();
+            Element detalle = detallePrincipal;
+            if (!esPrincipal)
+            {
+                try
+                {
+                    detalle = RebarBendingDetail.Create(doc, vista.Id, b.Id, 0, tipos.Barra, centroDetalle, 0);
+                    Pintar(vista, detalle.Id, b, 3);
+                }
+                catch (Exception e)
+                {
+                    Registro.Paso($"estribos: no se dibujó {b.Id}: {e.Message}");
+                    continue;
+                }
+            }
+            doc.Regenerate();
+            BoundingBoxXYZ m = detalle.get_BoundingBox(vista);
+            double dz = double.IsNaN(tope) ? 0 : tope - m.Max.Z;
+            if (dz != 0)
+                RebarBendingDetail.SetPosition(detalle, new XYZ(centroDetalle.X, centroDetalle.Y, centroDetalle.Z + dz));
+            double piso = m.Min.Z + dz;
+            string tipo = doc.GetElement(b.GetTypeId()).Name;
+            TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(centroDetalle.X, centroDetalle.Y, piso - AireNota),
+                TextosDespiece.Estribo(tipo, forma.Sum(x => x.Quantity), LectorDespiece.LargoBarra(b) * 0.3048, Gancho(b) * 0.3048), tipos.Nota(HorizontalTextAlignment.Center));
+            Pintar(vista, nota.Id, b, null);
+            abajo = piso - AireNota - FilaEstribos;
+            tope = abajo - HuecoEstribos;
+        }
+        return abajo;
+    }
+
+    /// <summary>El largo del gancho que da Revit para esta barra (el más largo de sus dos puntas), en pies; 0 si no tiene.</summary>
+    private static double Gancho(Rebar b)
+    {
+        if (b.Document.GetElement(b.GetTypeId()) is not RebarBarType tipo)
+            return 0;
+        return new[] { 0, 1 }.Select(b.GetHookTypeId).Where(id => id != ElementId.InvalidElementId).Select(tipo.GetHookLength).DefaultIfEmpty(0).Max();
     }
 
     /// <summary>
@@ -661,6 +805,8 @@ internal static class GeneradorPrevia
 
     private static void Pintar(View vista, ElementId id, Rebar barra, int? grosor)
     {
+        if (textosNegros && barra.Document.GetElement(id) is TextNote)
+            return;
         (byte r, byte g, byte a) = ColoresDiametro.Rgb(LectorDespiece.Numero(barra.Document.GetElement(barra.GetTypeId()).Name));
         var color = new Color(r, g, a);
         var o = new OverrideGraphicSettings();
