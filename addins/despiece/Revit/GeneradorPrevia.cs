@@ -40,6 +40,16 @@ internal static class GeneradorPrevia
     private const double MismaZona = 0.10 * M;
     // La caja de la nota mide 0.12 m de alto a 1:15 (medido en V 3, 30-oct).
     private const double FilaEstribos = 0.13 * M;
+    private const double BajaNota = 0.09 * M;
+    private const double SubeNota = 0.03 * M;
+    private const double AireNota = 0.01 * M;
+
+    // Bajo la sección, de arriba abajo: las etiquetas (hasta 0.29 m), la cota del ancho y el recubrimiento. Así las flechas
+    // no cruzan las cotas. A la izquierda, la cota del alto y su recubrimiento.
+    private const double CotaAnchoSeccion = 0.42 * M;
+    private const double TextoAnchoSeccion = 0.46 * M;
+    private const double CotaAltoSeccion = 0.15 * M;
+    private const double TextoAltoSeccion = 0.30 * M;
 
     // La vista es solo de la viga (Juan, 30-oct): sin columnas, ni ocultas con otro dibujo. El recorte va justo a su alto;
     // las barras sacadas se ven por fuera de él. Donde había una columna, Revit deja la viga cortada: es su geometría real.
@@ -421,7 +431,7 @@ internal static class GeneradorPrevia
         // Revit puede voltear la vista: lo que manda es su derecha real.
         XYZ derecha = vista.RightDirection;
         // Justa: la sección a la izquierda y el estribo a su lado (captura de Santiago).
-        Recortar(vista, corte, ancho / 2 + 0.55 * M, ancho / 2 + 1.05 * M, alto / 2 + 0.5 * M, alto / 2 + 0.5 * M);
+        Recortar(vista, corte, ancho / 2 + 0.55 * M, ancho / 2 + 1.05 * M, alto / 2 + 0.7 * M, alto / 2 + 0.7 * M);
         Limpiar(doc, vista, viga, barras);
         Colorear(doc, vista, barras);
         vista.SetCategoryHidden(new ElementId(BuiltInCategory.OST_Levels), true);
@@ -438,12 +448,12 @@ internal static class GeneradorPrevia
         var cortadas = new List<(Rebar Barra, XYZ Punto)>();
         foreach (Rebar b in barras.Where(b => EsLongitudinal(b, dir) && !MarcaVigas.EsBaston(b)))
         {
-            Curve mayor = Mayor(b);
-            RebarShapeDrivenAccessor acceso = b.GetShapeDrivenAccessor();
             for (int i = 0; i < b.Quantity; i++)
             {
-                Transform movida = acceso.GetBarPositionTransform(i);
-                XYZ a = movida.OfPoint(mayor.GetEndPoint(0)), e = movida.OfPoint(mayor.GetEndPoint(1));
+                // Con la curva transformada: el add-in de vigas corre barras dentro del conjunto (MoveBarInSet), y la
+                // posición del conjunto no lo sabe; la flecha caía 2 cm al lado de la barra (Sección V 3, 30-oct).
+                Curve mayor = b.GetTransformedCenterlineCurves(false, false, false, MultiplanarOption.IncludeOnlyPlanarCurves, i).OrderByDescending(c => c.Length).First();
+                XYZ a = mayor.GetEndPoint(0), e = mayor.GetEndPoint(1);
                 double pa = a.DotProduct(dir), pe = e.DotProduct(dir);
                 if (aLoLargo >= Math.Min(pa, pe) && aLoLargo <= Math.Max(pa, pe))
                     cortadas.Add((b, a + dir * (aLoLargo - pa)));
@@ -464,16 +474,107 @@ internal static class GeneradorPrevia
         Etiquetar(cortadas.Where(c => c.Punto.Z > medio.Z).ToList(), alto / 2 + 0.38 * M);
         Etiquetar(cortadas.Where(c => c.Punto.Z <= medio.Z).ToList(), -alto / 2 - 0.2 * M);
 
-        // El estribo aparte, solo con sus medidas. Con este tipo de detalle sale parado, como en la sección.
+        // El estribo aparte, solo con sus medidas. Con este tipo de detalle sale parado, como en la sección. El cerrado es
+        // el de más curvas: la grapa de la misma zona también cruza el corte.
         Rebar? estribo = new FilteredElementCollector(doc, vista.Id).OfCategory(BuiltInCategory.OST_Rebar).OfType<Rebar>()
-            .FirstOrDefault(b => viga.Vigas.Contains(b.GetHostId()) && !EsLongitudinal(b, dir));
+            .Where(b => viga.Vigas.Contains(b.GetHostId()) && !EsLongitudinal(b, dir))
+            .OrderByDescending(b => Curvas(b, false).Count).FirstOrDefault();
         if (estribo is not null)
         {
-            Element d = RebarBendingDetail.Create(doc, vista.Id, estribo.Id, 0, tipos.Barra, corte + derecha * 0.7 * M, 0);
+            XYZ centroDetalle = corte + derecha * 0.7 * M;
+            Element d = RebarBendingDetail.Create(doc, vista.Id, estribo.Id, 0, tipos.Barra, centroDetalle, 0);
             Pintar(vista, d.Id, estribo, 3);
+            EtiquetarGancho(doc, vista, estribo, centroDetalle, medio.Z, tipos);
         }
+        Acotar(doc, vista, viga, estribo, corte, derecha, medio.Z, tipos);
         return vista;
     }
+
+    /// <summary>
+    /// El largo de la pata del gancho dentro del estribo aparte, como <c>0.08</c> en la captura de Santiago (#225): el
+    /// detalle de plegado no lo muestra con el gancho de 180°. Va donde el estribo tiene espacio, al otro lado de las patas.
+    /// </summary>
+    private static void EtiquetarGancho(Document doc, View vista, Rebar estribo, XYZ centroDetalle, double centroZ, TiposPropios tipos)
+    {
+        IList<Curve> curvas = Curvas(estribo, false);
+        if (curvas.Count == Curvas(estribo, true).Count)
+            return;
+        double centroEstribo = (curvas.Min(c => c.GetEndPoint(0).Z) + curvas.Max(c => c.GetEndPoint(0).Z)) / 2;
+        List<double> puntas = new[] { curvas[0], curvas[^1] }.SelectMany(c => new[] { c.GetEndPoint(0).Z, c.GetEndPoint(1).Z }).ToList();
+        bool patasAbajo = puntas.Average() < centroEstribo;
+        double z = centroZ + (patasAbajo ? puntas.Max() - centroEstribo + BajaNota + AireNota : puntas.Min() - centroEstribo - SubeNota - AireNota);
+        string texto = (curvas[0].Length * 0.3048).ToString("0.00", CultureInfo.InvariantCulture);
+        TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(centroDetalle.X, centroDetalle.Y, z), texto, tipos.Nota(HorizontalTextAlignment.Center));
+        Pintar(vista, nota.Id, estribo, null);
+    }
+
+    /// <summary>
+    /// Ancho y alto con cotas de Revit, ligadas a las caras de la viga. El recubrimiento va en texto, como <c>0.04 · 0.17 ·
+    /// 0.04</c>: Revit ignora la referencia del estribo en una cota (probado el 30-oct, la cadena salió de un solo tramo).
+    /// </summary>
+    private static void Acotar(Document doc, View vista, VigaContinua viga, Rebar? estribo, XYZ corte, XYZ derecha, double centroZ, TiposPropios tipos)
+    {
+        // Las referencias dejan de valer al crear una cota (la segunda fallaba con InternalException, 30-oct): se leen cada vez.
+        List<PlanarFace> Lados() => Caras(doc.GetElement(viga.Vigas[0]), vista).Where(c => Math.Abs(c.FaceNormal.DotProduct(derecha)) > 0.99).OrderBy(c => c.Origin.DotProduct(derecha)).ToList();
+        List<PlanarFace> Tapas() => Caras(doc.GetElement(viga.Vigas[0]), vista).Where(c => Math.Abs(c.FaceNormal.Z) > 0.99).OrderBy(c => c.Origin.Z).ToList();
+        List<PlanarFace> lados = Lados(), tapas = Tapas();
+        if (lados.Count < 2 || tapas.Count < 2)
+            return;
+        PlanarFace izquierda = lados[0], dere = lados[^1], abajo = tapas[0], arriba = tapas[^1];
+        // Sobre el plano del corte: el origen de una cara puede estar a metros de él, y ahí Revit no crea la cota (30-oct).
+        XYZ enCorte = corte + derecha * (izquierda.Origin - corte).DotProduct(derecha);
+        XYZ esquina = new(enCorte.X, enCorte.Y, abajo.Origin.Z);
+        double ancho = (dere.Origin - izquierda.Origin).DotProduct(derecha), alto = arriba.Origin.Z - abajo.Origin.Z;
+        double cara = izquierda.Origin.DotProduct(derecha), zAbajo = abajo.Origin.Z, zArriba = arriba.Origin.Z;
+
+        void Cota(Reference a, Reference b, XYZ desde, XYZ hacia)
+        {
+            var referencias = new ReferenceArray();
+            referencias.Append(a);
+            referencias.Append(b);
+            Dimension cota = doc.Create.NewDimension(vista, Line.CreateBound(desde, hacia), referencias);
+            if (tipos.Cota is { } tipo)
+                cota.DimensionType = tipo;
+            doc.Regenerate();
+        }
+        XYZ bajo = esquina - XYZ.BasisZ * CotaAnchoSeccion;
+        Cota(izquierda.Reference, dere.Reference, bajo, bajo + derecha * ancho);
+        XYZ alLado = esquina - derecha * CotaAltoSeccion;
+        tapas = Tapas();
+        Cota(tapas[0].Reference, tapas[^1].Reference, alLado, alLado + XYZ.BasisZ * alto);
+
+        if (estribo is null)
+            return;
+        // Por la cara exterior del estribo: su eje más medio diámetro, igual que la medida del detalle.
+        double d = ((RebarBarType)doc.GetElement(estribo.GetTypeId())).BarNominalDiameter;
+        List<XYZ> puntos = Curvas(estribo, true).Select(c => c.GetEndPoint(0)).ToList();
+        double desdeEje = puntos.Min(p => p.DotProduct(derecha)) - d / 2, hastaEje = puntos.Max(p => p.DotProduct(derecha)) + d / 2;
+        double bajoEje = puntos.Min(p => p.Z) - d / 2, altoEje = puntos.Max(p => p.Z) + d / 2;
+        XYZ medioAncho = esquina + derecha * (ancho / 2);
+        TextNote.Create(doc, vista.Id, medioAncho - XYZ.BasisZ * TextoAnchoSeccion,
+            Cadena(desdeEje - cara, hastaEje - desdeEje, cara + ancho - hastaEje), tipos.Nota(HorizontalTextAlignment.Center));
+        TextNoteOptions vertical = tipos.Nota(HorizontalTextAlignment.Center);
+        vertical.Rotation = Math.PI / 2;
+        TextNote.Create(doc, vista.Id, new XYZ(esquina.X, esquina.Y, centroZ) - derecha * TextoAltoSeccion,
+            Cadena(bajoEje - zAbajo, altoEje - bajoEje, zArriba - altoEje), vertical);
+    }
+
+    private static string Cadena(params double[] pies) => string.Join(" · ", pies.Select(p => (p * 0.3048).ToString("0.00", CultureInfo.InvariantCulture)));
+
+    /// <summary>Las caras planas de la viga con referencia, para acotarlas en esta vista.</summary>
+    private static List<PlanarFace> Caras(Element viga, View vista)
+    {
+        var caras = new List<PlanarFace>();
+        foreach (GeometryObject g in viga.get_Geometry(new Options { ComputeReferences = true, View = vista }))
+        {
+            IEnumerable<Solid> solidos = g is GeometryInstance i ? i.GetInstanceGeometry().OfType<Solid>() : g is Solid s ? [s] : [];
+            foreach (Solid solido in solidos.Where(x => x.Volume > 0))
+                caras.AddRange(solido.Faces.OfType<PlanarFace>());
+        }
+        return caras;
+    }
+
+    private static IList<Curve> Curvas(Rebar b, bool sinGanchos) => b.GetCenterlineCurves(false, sinGanchos, false, MultiplanarOption.IncludeOnlyPlanarCurves, 0);
 
     /// <summary>
     /// Dónde cortar la primera viga: lo más cerca de su centro sin caer en un traslapo, donde las barras salen dobles y la
