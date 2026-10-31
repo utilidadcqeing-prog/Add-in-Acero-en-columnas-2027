@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Crear viguetas</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<!-- «Crear viguetas» (#947): la opción C de la maqueta aprobada (#945, #946), con la planta completa del piso. -->
+<style>
+:root{
+  --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif; --mono:'IBM Plex Mono',Consolas,monospace;
+  --w-bg:#EEF0F2; --w-sf:#FFFFFF; --w-line:#D9DDE2; --w-ink:#16191D; --w-ink2:#3F4A57; --w-ink3:#5E6670; --w-acc:#1F5FAF; --w-acc-soft:#E6EEF8;
+  --cv-bg:#121A24; --cv-dot:#223044; --cv-panel:#18222F; --cv-ink:#C3CDD8; --cv-ink2:#8C99A8; --cv-glass:rgba(18,26,36,.9); --cv-line:#2B394B;
+  --viga:#AEB7C1; --col:#E4E8EC; --vigueta:#4D9BFF; --vigueta-ink:#A9CEFF; --existente:#3F6E9E; --creada:#2EC4B6; --rojo:#FF5B4F; --warn:#FFA53D; --ok:#3DD68C;
+}
+*{box-sizing:border-box}
+html,body{margin:0;overflow:hidden}
+*{overscroll-behavior:none}
+body{width:1440px;height:900px;background:var(--w-bg);color:var(--w-ink);font:14px/1.45 var(--sans)}
+button,select,input{font:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--w-acc);outline-offset:1px}
+button:disabled{cursor:not-allowed}
+
+.app{display:grid;grid-template-columns:288px 1fr;grid-template-rows:1fr auto;height:900px}
+
+/* barra lateral */
+.side{background:var(--w-sf);border-right:1px solid var(--w-line);padding:16px;display:flex;flex-direction:column;justify-content:space-between;gap:6px;overflow:auto}
+.sec{display:flex;flex-direction:column;gap:10px;padding:12px 2px 14px;border-bottom:1px solid var(--w-line)}
+.sec:first-child{padding-top:2px}
+.sec.off{opacity:.45;pointer-events:none}
+.sh{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600}
+.n{width:21px;height:21px;border-radius:50%;display:inline-grid;place-items:center;font:600 11px var(--mono);background:#DDE1E6;color:var(--w-ink2);flex:none}
+.n.done{background:#E3F4EA;color:#1E8A4A;box-shadow:inset 0 0 0 1.5px #8FD0AA}
+.n svg{width:11px;height:11px}
+select.sel{height:34px;border:1px solid var(--w-line);border-radius:6px;background:var(--w-sf);color:var(--w-ink);padding:0 8px;width:100%;font:500 13px var(--mono)}
+.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--w-ink2);cursor:pointer}
+.chk input{accent-color:var(--w-acc);margin:0}
+.info{font-size:12.5px;color:var(--w-ink3)}
+.info b{color:var(--w-ink);font-family:var(--mono);font-weight:600}
+.ib{display:flex;align-items:center;gap:9px;width:100%;height:34px;padding:0 10px;border-radius:6px;border:1px solid var(--w-line);background:var(--w-sf);color:var(--w-ink);cursor:pointer;font-size:12.5px;text-align:left}
+.ib svg{width:16px;height:16px;flex:none}
+.ib:hover:not(:disabled){border-color:#AEB6BF;background:#F7F9FB}
+.ib.on{background:#FFE9E7;border-color:#E2564B;color:#A3261C;font-weight:600}
+.ib:disabled{opacity:.45}
+.ib .k{margin-left:auto;font:500 11px var(--mono)}
+.dirs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dirbtn{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border:1.5px solid var(--w-line);border-radius:8px;background:var(--w-sf);color:var(--w-ink2);cursor:pointer}
+.dirbtn .arr{font-size:20px;line-height:1;color:var(--w-ink3)}
+.dirbtn b{font:600 13px var(--mono)}
+.dirbtn[aria-pressed="true"]{border-color:var(--w-acc);background:var(--w-acc-soft);color:var(--w-acc)}
+.dirbtn[aria-pressed="true"] .arr{color:#2B7BE4}
+.campos{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fld{display:flex;flex-direction:column;gap:3px}
+.fl{font-size:11.5px;color:var(--w-ink2);font-weight:500}
+.inp{display:flex;align-items:center;height:32px;border:1px solid var(--w-line);border-radius:6px;background:var(--w-sf);padding:0 9px;gap:5px}
+.inp:focus-within{border-color:var(--w-acc);box-shadow:0 0 0 3px var(--w-acc-soft)}
+.inp input{border:0;outline:0;width:100%;min-width:0;background:transparent;color:var(--w-ink);font:500 14px var(--mono)}
+.inp em{font:normal 12px var(--mono);color:var(--w-ink3)}
+.fld.bad .inp{border-color:#E07A0B;box-shadow:0 0 0 3px #FDEBD5}
+.err{font-size:11px;color:#B45F06;min-height:14px}
+.sum{background:var(--w-bg);border:1px solid var(--w-line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.sum-h{font:500 10.5px var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--w-ink3)}
+.sum dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12.5px}
+.sum dt{color:var(--w-ink3)}
+.sum dd{margin:0;text-align:right;font:500 12.5px var(--mono)}
+
+/* lienzo */
+.cv{position:relative;background:var(--cv-bg);background-image:radial-gradient(var(--cv-dot) 1px,transparent 1.2px);background-size:18px 18px;display:flex;flex-direction:column;min-width:0;min-height:0}
+.cvbar{display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--cv-line);background:rgba(8,13,19,.55)}
+.chips,.leg,.tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.leg{gap:4px 14px;font-size:11px;color:var(--cv-ink)}
+.leg span{display:inline-flex;align-items:center;gap:7px}
+.sw{width:18px;height:5px;border-radius:1px;display:inline-block}
+.cchip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:500;background:var(--cv-glass);border:1px solid var(--cv-line);color:var(--cv-ink);white-space:nowrap}
+.cchip i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.cchip.ok{color:var(--ok);border-color:rgba(61,214,140,.35)}
+.cchip.warn{color:var(--warn);border-color:rgba(255,165,61,.4)}
+.cchip.mono{font-family:var(--mono)}
+.tb{height:28px;padding:0 10px;border-radius:6px;border:1px solid var(--cv-line);background:rgba(255,255,255,.05);color:var(--cv-ink);cursor:pointer;font-size:12px}
+.tb:hover:not(:disabled){background:rgba(255,255,255,.1)}
+.tb:disabled{opacity:.4}
+.msg{display:flex;justify-content:center;padding:10px 12px 0}
+.msg:empty{display:none}
+.banner{display:flex;align-items:center;gap:10px;background:#2A1715;border:1px solid rgba(255,91,79,.55);color:#FFD9D5;border-radius:8px;padding:7px 8px 7px 12px;font-size:12.5px}
+.banner.hint{background:#18263A;border-color:rgba(77,155,255,.5);color:#D6E7FF}
+.bb{height:26px;padding:0 10px;border-radius:5px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;font-size:12px}
+.bb:disabled{opacity:.4}
+.bb.solid{background:var(--rojo);border-color:var(--rojo)}
+.pv{flex:1;min-height:0;position:relative;cursor:grab}
+.pv.arrastre{cursor:grabbing}
+.pv svg{width:100%;height:100%;display:block}
+.pv text{font-family:var(--mono);fill:var(--cv-ink)}
+.vacio{position:absolute;inset:0;display:grid;place-items:center;color:var(--cv-ink2);font-size:14px;pointer-events:none}
+[hidden]{display:none!important}
+.src{font:500 10.5px var(--mono);color:var(--cv-ink2);text-align:right;padding:0 14px 6px}
+.cvfoot{padding:0 12px 12px}
+.mt{background:var(--cv-glass);border:1px solid var(--cv-line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.mt-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.m{display:flex;flex-direction:column;padding:6px 10px;border-radius:7px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05)}
+.m-l{font-size:11.5px;color:var(--cv-ink2)}
+.m-v{font:600 19px var(--mono);color:#F2F5F8}
+.mt-foot{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.tipos{display:flex;flex-wrap:wrap;gap:6px}
+.tc{font:500 11.5px var(--mono);color:var(--vigueta-ink);background:rgba(77,155,255,.13);border-radius:4px;padding:2px 7px}
+.tc.del{color:#FF9A92;background:rgba(255,91,79,.12)}
+.tag{font:500 10.5px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cv-ink2);border:1px dashed #4A586A;border-radius:4px;padding:2px 6px;cursor:help}
+.msg-warn{font-size:12px;color:var(--warn)}
+
+/* SVG */
+.pn{fill:var(--cv-panel);stroke:#2F3E52;cursor:pointer}
+.pn:hover{fill:#1F2D3E}
+.pn.con{fill:#163033}
+.pn.sel{fill:#1A2B22;stroke:var(--ok);stroke-width:2}
+.editando .pn{cursor:default}
+.viga{fill:var(--viga)}
+.existente{fill:var(--existente)}
+.creada{fill:var(--creada)}
+.colm{fill:var(--col)}
+.vg{fill:var(--vigueta)}
+.editando .vg{cursor:pointer}
+.editando .vg:hover{fill:#FF8C83}
+.ghost{fill:transparent;stroke:#FF8C83;stroke-dasharray:5 4}
+.editando .ghost{cursor:pointer}
+.lbl{font-weight:600;fill:#E7ECF1!important;pointer-events:none}
+.lbl2{fill:var(--cv-ink2)!important;pointer-events:none}
+.vt{fill:var(--vigueta-ink)!important;font-weight:600;pointer-events:none}
+.dim line{stroke:var(--cv-ink2)}
+.dim.eje line{stroke:#6FB0FF}
+.dim.eje text{fill:var(--vigueta-ink)!important}
+.dim.tot text{font-weight:600;fill:#F2F5F8!important}
+.halo{paint-order:stroke;stroke:var(--cv-bg);stroke-linejoin:round}
+
+/* pie */
+.foot{grid-column:1/3;display:flex;align-items:center;gap:10px 14px;padding:10px 14px;background:var(--w-sf);border-top:1px solid var(--w-line)}
+.doc{font:500 12px var(--mono);color:var(--w-ink3)}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border-radius:6px;border:1px solid var(--w-line);background:var(--w-sf);color:var(--w-ink);cursor:pointer;font-size:13px}
+.btn:hover:not(:disabled){border-color:#AEB6BF}
+.btn.pri{background:var(--w-acc);border-color:var(--w-acc);color:#fff;font-weight:500}
+.btn.pri:hover:not(:disabled){background:#194F93}
+.btn:disabled{opacity:.45}
+
+/* primera entrada y avisos */
+.modal{position:fixed;inset:0;background:rgba(12,18,26,.55);display:grid;place-items:center;z-index:5}
+.modal[hidden]{display:none}
+.mcard{background:var(--w-sf);border-radius:12px;border:1px solid var(--w-line);box-shadow:0 30px 60px -20px rgba(0,0,0,.55);width:460px;max-height:720px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.mcard h2{margin:0;font-size:17px;font-weight:600}
+.mcard p{margin:-6px 0 0;color:var(--w-ink3);font-size:12.5px}
+.pisos{display:flex;flex-direction:column;gap:8px;overflow:auto}
+.piso{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--w-line);border-radius:8px;background:var(--w-sf);cursor:pointer;text-align:left;color:var(--w-ink)}
+.piso:hover{border-color:var(--w-acc);background:var(--w-acc-soft)}
+.piso .lv{font:600 14px var(--mono);color:var(--w-acc)}
+.piso .pc{font:500 11.5px var(--mono);color:var(--w-ink3)}
+.toast{position:fixed;left:50%;bottom:70px;transform:translate(-50%,8px);background:#0B1118;border:1px solid #2B394B;color:#fff;font-size:13px;padding:9px 16px;border-radius:6px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:900px;text-align:center;z-index:6}
+.toast.bien{border-color:rgba(61,214,140,.5)}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side"></aside>
+  <main class="cv">
+    <div class="cvbar">
+      <div class="chips" id="chips"></div>
+      <div class="tools">
+        <button class="tb" id="b-todo" title="Ver todo el piso">Todo el piso</button>
+        <button class="tb" id="b-panel" title="Acercar al panel elegido" disabled>Acercar al panel</button>
+      </div>
+      <div class="leg">
+        <span><i class="sw" style="background:var(--viga)"></i>Vigas</span>
+        <span><i class="sw" style="background:var(--existente)"></i>Viguetas del modelo</span>
+        <span><i class="sw" style="background:var(--creada)"></i>Creadas por CQEING</span>
+        <span><i class="sw" style="background:var(--vigueta)"></i>Propuesta</span>
+        <span><i class="sw" style="border-top:2px dashed #FF8C83;height:0"></i>Eliminada</span>
+      </div>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="pv" id="pv"><div class="vacio" id="vacio">Elige un piso para ver su planta.</div></div>
+    <div class="src">Planta leída del modelo de Revit · rueda para acercar, arrastrar para mover</div>
+    <div class="cvfoot"><div class="mt" id="mt"></div></div>
+  </main>
+  <footer class="foot">
+    <span class="doc" id="doc"></span><span class="sp"></span>
+    <button class="btn" id="b-cerrar">Cerrar</button>
+    <button class="btn" id="b-quitar" disabled>Quitar creadas del panel</button>
+    <button class="btn pri" id="b-crear" disabled>Crear viguetas</button>
+  </footer>
+</div>
+<div class="modal" id="modal" hidden><div class="mcard" role="dialog" aria-modal="true" aria-labelledby="m-t">
+  <h2 id="m-t">¿En qué piso vas a crear viguetas?</h2>
+  <p>Se muestran los niveles del modelo que tienen vigas.</p>
+  <div class="pisos" id="m-pisos"></div>
+</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- Fuera de Revit, viguetas.js carga viguetas-demo.js con un piso de ejemplo. -->
+<script src="viguetas.js"></script>
+</body>
+</html>

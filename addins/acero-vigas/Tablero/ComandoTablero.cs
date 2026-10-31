@@ -13,9 +13,24 @@ public sealed class ComandoTablero : IExternalCommand
     private const string Titulo = "Acero en vigas";
 
     private const string FaltaRuntime =
-        "Falta Microsoft Edge WebView2 Runtime. Instálelo desde https://go.microsoft.com/fwlink/p/?LinkId=2124703 y vuelva a abrir el tablero.";
+        "Falta Microsoft Edge WebView2 Runtime. Instálelo desde https://go.microsoft.com/fwlink/p/?LinkId=2124703 y vuelva a abrir la ventana.";
 
     private static VentanaTablero? abierta;
+
+    /// <summary>Si falta WebView2 Runtime, lo avisa con <paramref name="titulo"/>. También lo usa «Crear viguetas» (#947).</summary>
+    internal static bool HayWebView2(string titulo)
+    {
+        try
+        {
+            CoreWebView2Environment.GetAvailableBrowserVersionString();
+            return true;
+        }
+        catch (WebView2RuntimeNotFoundException)
+        {
+            TaskDialog.Show(titulo, FaltaRuntime);
+            return false;
+        }
+    }
 
     public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
     {
@@ -25,15 +40,8 @@ public sealed class ComandoTablero : IExternalCommand
             return Result.Succeeded;
         }
 
-        try
-        {
-            CoreWebView2Environment.GetAvailableBrowserVersionString();
-        }
-        catch (WebView2RuntimeNotFoundException)
-        {
-            TaskDialog.Show(Titulo, FaltaRuntime);
+        if (!HayWebView2(Titulo))
             return Result.Cancelled;
-        }
 
         UIApplication uiapp = commandData.Application;
         VentanaTablero ventana;
