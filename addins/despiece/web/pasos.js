@@ -14,7 +14,7 @@
   ];
   const TEXTOS = {
     1: ['¿Qué vas a despiezar?', 'Muévete entre plantas y haz clic en una viga. Las que llevan el mismo acero se eligen solas, también en otras plantas.'],
-    2: ['Revisa el despiece', 'Es la vista real de Revit. Todavía no se creó nada en el proyecto.'],
+    2: ['Revisa el despiece', 'Arrastra las barras y los textos para acomodarlos. Todavía no se creó nada en el proyecto.'],
     3: ['Vista previa', 'Las vistas quedan en el navegador de Revit, con etiquetas y colores. Tú las arrastras a tu plano.']
   };
 
@@ -244,7 +244,7 @@
   class Pasos extends Component {
     constructor(props) {
       super(props);
-      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, modo3d: false, modelos3d: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
+      this.state = { paso: 1, modelo: null, plantaId: null, plantas: {}, grupo: null, previas: {}, negros: false, movimientos: {}, modo3d: false, modelos3d: {}, hechos: {}, error: null, hecho: false, ...(props.inicial ?? {}) };
       this.alCambiarTamano = () => this.forceUpdate();
       this.alRecibir = (e) => this.recibir(e.data);
     }
@@ -278,7 +278,7 @@
       } else if (m.tipo === 'planta') {
         this.setState((s) => ({ plantas: { ...s.plantas, [m.id]: m }, error: null }));
       } else if (m.tipo === 'previa') {
-        this.setState((s) => ({ previas: { ...s.previas, [`${m.grupo}|${m.negros}`]: m }, error: null }));
+        this.setState((s) => ({ previas: { ...s.previas, [m.clave]: m }, error: null }));
       } else if (m.tipo === 'modelo3d') {
         this.setState((s) => ({ modelos3d: { ...s.modelos3d, [m.grupo]: m.modelo }, error: null }));
       } else if (m.tipo === 'vistas') {
@@ -309,7 +309,7 @@
       if (!sigue) this.visor?.reiniciar();
       this.setState({ modelo: m, grupo: nuevo?.indice ?? null, hechos: hechosNuevos, previas: {}, modelos3d: {}, plantaId: planta, paso: pasoNuevo, error: null });
       if (planta) enviar({ tipo: 'verPlanta', id: planta });
-      if (pasoNuevo > 1) enviar({ tipo: 'previa', grupo: nuevo.indice, negros: this.state.negros });
+      if (pasoNuevo > 1) enviar(this.mensajePrevia(nuevo, this.state.negros, pasoNuevo));
       if (pasoNuevo > 1 && this.state.modo3d) enviar({ tipo: 'ver3d', grupo: nuevo.indice });
     }
 
@@ -337,28 +337,94 @@
       const g = this.grupoElegido();
       if (paso > 1 && !g?.tieneAcero) return;
       this.setState({ paso, hecho: false });
-      if (paso > 1) this.pedirPrevia(g, this.state.negros);
+      if (paso > 1) this.pedirPrevia(g, this.state.negros, paso);
+    }
+
+    /** Lo movido en una viga, en metros: <c>{ id: { dz, tx, tz } }</c>. Va por viga: el número del grupo cambia con el modelo. */
+    movimientos(g) {
+      return this.state.movimientos[g.vigas[0]] ?? {};
+    }
+
+    /** El paso 2 trae lo movible aparte y no depende de lo movido; el 3 es la imagen real con todo aplicado. */
+    mensajePrevia(g, negros, paso) {
+      const separar = paso === 2;
+      const movimientos = separar ? {} : this.movimientos(g);
+      return { tipo: 'previa', grupo: g.indice, negros, separar, movimientos, clave: `${g.indice}|${negros}|${separar}|${JSON.stringify(movimientos)}` };
     }
 
     previa(g) {
-      return this.state.previas[`${g.indice}|${this.state.negros}`];
+      return this.state.previas[this.mensajePrevia(g, this.state.negros, this.state.paso).clave];
     }
 
-    pedirPrevia(g, negros) {
-      if (!this.state.previas[`${g.indice}|${negros}`]) enviar({ tipo: 'previa', grupo: g.indice, negros });
+    pedirPrevia(g, negros, paso) {
+      const m = this.mensajePrevia(g, negros, paso);
+      if (!this.state.previas[m.clave]) enviar(m);
     }
 
     /** Cada modo se genera una vez en Revit; volver a uno ya visto es inmediato. */
     elegirTextos(g, negros) {
       this.setState({ negros });
-      this.pedirPrevia(g, negros);
+      this.pedirPrevia(g, negros, this.state.paso);
     }
 
     selectorTextos(g) {
+      const movido = this.state.paso === 2 && Object.keys(this.movimientos(g)).length > 0;
       return html`
-        <label style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 12px; color: #5E6670; cursor: pointer">
-          <input type="checkbox" checked=${this.state.negros} onChange=${(e) => this.elegirTextos(g, e.target.checked)} style="margin: 0; accent-color: ${AZUL}" />Textos en negro
-        </label>`;
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; font-size: 12px; color: #5E6670">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
+            <input type="checkbox" checked=${this.state.negros} onChange=${(e) => this.elegirTextos(g, e.target.checked)} style="margin: 0; accent-color: ${AZUL}" />Textos en negro
+          </label>
+          ${movido ? html`<button type="button" onClick=${() => this.setState((s) => ({ movimientos: { ...s.movimientos, [g.vigas[0]]: {} } }))} style="padding: 0; border: 0; background: transparent; color: ${AZUL}; font: inherit; cursor: pointer">Volver a la posición automática</button>` : null}
+        </div>`;
+    }
+
+    /** Arrastra una barra (solo arriba y abajo, con su texto y su gancho) o un texto (libre). El zoom del visor ya viene en la matriz. */
+    arrastrar(e, g, id, esBarra, escala) {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      const k = e.currentTarget.getScreenCTM().a;
+      const clave = g.vigas[0];
+      let x = e.clientX, y = e.clientY;
+      const mover = (ev) => {
+        const dx = (ev.clientX - x) / k / escala, dz = -(ev.clientY - y) / k / escala;
+        x = ev.clientX;
+        y = ev.clientY;
+        this.setState((s) => {
+          const deViga = s.movimientos[clave] ?? {};
+          const m = deViga[id] ?? { dz: 0, tx: 0, tz: 0 };
+          const nuevo = esBarra ? { ...m, dz: m.dz + dz } : { ...m, tx: m.tx + dx, tz: m.tz + dz };
+          return { movimientos: { ...s.movimientos, [clave]: { ...deViga, [id]: nuevo } } };
+        });
+      };
+      const soltar = () => {
+        window.removeEventListener('pointermove', mover);
+        window.removeEventListener('pointerup', soltar);
+      };
+      window.addEventListener('pointermove', mover);
+      window.addEventListener('pointerup', soltar);
+    }
+
+    /** Lo movible de la vista larga, encima de la imagen: mismas medidas que da Revit, en píxeles de la imagen. */
+    capaMovible(g, capa) {
+      const { escala, altoLetra, piezas } = capa;
+      const movs = this.movimientos(g), negros = this.state.negros;
+      const texto = (t, color, extra) => html`
+        <text x=${t.x} y=${t.y} font-size=${altoLetra} font-family="Arial, sans-serif" text-anchor="middle" dominant-baseline="central" fill=${negros ? '#000000' : color} transform=${t.girado ? `rotate(-90 ${t.x} ${t.y})` : null} ...${extra}>${t.texto}</text>`;
+      return piezas.map((p) => {
+        const m = movs[p.id] ?? { dz: 0, tx: 0, tz: 0 };
+        const puntos = p.puntos.map((q) => q.join(',')).join(' ');
+        const alBarra = (e) => this.arrastrar(e, g, p.id, true, escala);
+        return html`
+          <g key=${p.id} transform="translate(0 ${-m.dz * escala})">
+            ${puntos ? html`
+              <polyline points=${puntos} fill="none" stroke=${p.color} stroke-width="6"></polyline>
+              <polyline points=${puntos} fill="none" stroke="transparent" stroke-width="18" pointer-events="stroke" style="cursor: ns-resize" onPointerDown=${alBarra}></polyline>` : null}
+            ${p.anexos.map((t) => texto(t, p.color, { style: 'cursor: ns-resize', onPointerDown: alBarra }))}
+            <g transform="translate(${m.tx * escala} ${-m.tz * escala})">
+              ${texto(p.etiqueta, p.color, { style: 'cursor: move', onPointerDown: (e) => this.arrastrar(e, g, p.id, false, escala) })}
+            </g>
+          </g>`;
+      });
     }
 
     grupoElegido() {
@@ -396,6 +462,7 @@
       return html`
         <${Visor} ancho=${i.ancho} alto=${i.alto} etiqueta="Vista longitudinal de Revit">
           <image href=${i.url} width=${i.ancho} height=${i.alto} draggable="false"></image>
+          ${pv.capa ? this.capaMovible(g, pv.capa) : null}
         <//>`;
     }
 
@@ -432,7 +499,7 @@
         if (paso < 3) return this.irA(paso + 1);
         if (hecho) return set({ paso: 1, hecho: false, grupo: null });
         set({ creando: true, error: null });
-        enviar({ tipo: 'crearVistas', grupo: g.indice, negros: this.state.negros });
+        enviar({ tipo: 'crearVistas', grupo: g.indice, negros: this.state.negros, movimientos: this.movimientos(g) });
       };
 
       return html`

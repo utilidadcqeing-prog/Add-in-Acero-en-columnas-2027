@@ -7,7 +7,28 @@ using CQEING.Vigas.Calculo.Modelo;
 namespace CQEING.Despiece.Revit;
 
 /// <summary>Las dos imágenes de la vista previa.</summary>
-internal sealed record PreviaGenerada(string Longitudinal, string Seccion);
+internal sealed record PreviaGenerada(string Longitudinal, string Seccion, object? Capa = null);
+
+/// <summary>
+/// Lo que se puede mover en la vista larga (Juan, 31-oct). <paramref name="Movimientos"/> va por pieza, en metros.
+/// <paramref name="Separar"/>: la imagen sale sin barras sacadas ni sus textos, y se entregan para que los dibuje la página.
+/// </summary>
+internal sealed record DespieceMovible(IReadOnlyDictionary<string, Movimiento> Movimientos, bool Separar)
+{
+    public static DespieceMovible Fijo { get; } = new(new Dictionary<string, Movimiento>(), false);
+
+    public List<ElementId> Ocultos { get; } = [];
+
+    public List<PiezaMovible> Piezas { get; } = [];
+
+    public (PuntoModelo A, PuntoModelo B)? Marcas { get; set; }
+}
+
+/// <summary>Un texto de la capa: su centro en coordenadas de la vista, en pies.</summary>
+internal sealed record TextoMovible(string Texto, PuntoModelo Centro, bool Girado);
+
+/// <summary>Una pieza de la capa. Sin <paramref name="Puntos"/>, es un texto suelto, como la etiqueta de unos estribos.</summary>
+internal sealed record PiezaMovible(string Id, string Color, List<PuntoModelo> Puntos, TextoMovible Etiqueta, List<TextoMovible> Anexos);
 
 /// <summary>Las vistas del navegador de Revit. <paramref name="YaExistian"/>: no se creó nada porque ya estaban.</summary>
 internal sealed record VistasCreadas(string Longitudinal, string Seccion, bool YaExistian);
@@ -78,7 +99,7 @@ internal static class GeneradorPrevia
     [ThreadStatic]
     private static bool textosNegros;
 
-    public static PreviaGenerada Generar(Document doc, VigaContinua viga, string carpeta, bool negros)
+    public static PreviaGenerada Generar(Document doc, VigaContinua viga, string carpeta, bool negros, DespieceMovible movible)
     {
         Registro.Paso("previa: empieza " + viga.Elemento.Id);
         using var t = new Transaction(doc, "Vista previa de despiece");
@@ -86,12 +107,7 @@ internal static class GeneradorPrevia
         textosNegros = negros;
         try
         {
-            (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, false));
-            Registro.Paso("previa: exportando la longitudinal");
-            string a = ExportadorImagen.Exportar(doc, longitudinal, carpeta, ExportadorImagen.AnchoLarga);
-            Registro.Paso("previa: exportando la sección");
-            string b = ExportadorImagen.Exportar(doc, seccion, carpeta);
-            return new PreviaGenerada(a, b);
+            return Producir(doc, viga, carpeta, movible);
         }
         finally
         {
@@ -102,11 +118,75 @@ internal static class GeneradorPrevia
         }
     }
 
+    /// <summary>Crea y exporta las dos vistas. Quien llama abre la transacción y la deshace.</summary>
+    private static PreviaGenerada Producir(Document doc, VigaContinua viga, string carpeta, DespieceMovible movible)
+    {
+        (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, false), movible);
+        Registro.Paso("previa: exportando la longitudinal");
+        string a = ExportadorImagen.Exportar(doc, longitudinal, carpeta, ExportadorImagen.AnchoLarga);
+        object? capa = null;
+        if (movible.Marcas is { } marcas)
+        {
+            var (calibracion, _, _) = ExportadorImagen.Calibrar(a, marcas.A, marcas.B);
+            if (calibracion is not null)
+                capa = Capa(movible, ConEscalaIgual(calibracion, (marcas.A.Y + marcas.B.Y) / 2));
+            else
+            {
+                // Mejor fija que mal alineada: la imagen completa, sin arrastre (decisión 6 del plan).
+                Registro.Paso("previa: sin calibración, la vista larga queda fija");
+                longitudinal.UnhideElements(movible.Ocultos);
+                doc.Regenerate();
+                a = ExportadorImagen.Exportar(doc, longitudinal, carpeta, ExportadorImagen.AnchoLarga);
+            }
+        }
+        Registro.Paso("previa: exportando la sección");
+        string b = ExportadorImagen.Exportar(doc, seccion, carpeta);
+        return new PreviaGenerada(a, b, capa);
+    }
+
+    /// <summary>
+    /// Las cruces están muy lejos a lo largo de la viga y muy cerca en altura. La imagen tiene la misma escala en los dos
+    /// sentidos, así que la vertical se toma de la horizontal, que es la precisa, sin mover la altura media de las cruces.
+    /// </summary>
+    private static Calibracion ConEscalaIgual(Calibracion c, double alturaMedia)
+    {
+        double escalaY = -Math.Abs(c.EscalaX);
+        return c with { EscalaY = escalaY, OrigenY = c.OrigenY + alturaMedia * (c.EscalaY - escalaY) };
+    }
+
+    /// <summary>Las piezas en píxeles de la imagen, y cuántos píxeles mide un metro, para arrastrarlas en metros.</summary>
+    private static object Capa(DespieceMovible movible, Calibracion c)
+    {
+        object Texto(TextoMovible t)
+        {
+            (double x, double y) = c.APixel(t.Centro);
+            return new { texto = t.Texto, x, y, girado = t.Girado };
+        }
+        return new
+        {
+            escala = Math.Abs(c.EscalaX) / 0.3048,
+            // Revit mide la altura de la mayúscula; en la página se pide el tamaño de la fuente, y en Arial la mayúscula es el 72 %.
+            altoLetra = Math.Abs(c.EscalaX) / 0.3048 * 0.0025 * EscalaLongitudinal / 0.72,
+            piezas = movible.Piezas.Select(p => new
+            {
+                id = p.Id,
+                color = p.Color,
+                puntos = p.Puntos.Select(q =>
+                {
+                    (double x, double y) = c.APixel(q);
+                    return new[] { x, y };
+                }),
+                etiqueta = Texto(p.Etiqueta),
+                anexos = p.Anexos.Select(Texto),
+            }),
+        };
+    }
+
     /// <summary>
     /// Deja las dos vistas en el navegador de Revit (#222), iguales a la vista previa. No coloca nada en las hojas. Si ya
     /// existe alguna, no crea nada: reemplazarla podría borrar lo que se haya cambiado a mano.
     /// </summary>
-    public static VistasCreadas Crear(Document doc, VigaContinua viga, string nombre, bool negros)
+    public static VistasCreadas Crear(Document doc, VigaContinua viga, string nombre, bool negros, DespieceMovible movible)
     {
         string nombreSeccion = "Sección " + nombre;
         bool yaExisten = new FilteredElementCollector(doc).OfClass(typeof(ViewSection)).Any(v => v.Name == nombre || v.Name == nombreSeccion);
@@ -118,7 +198,7 @@ internal static class GeneradorPrevia
         textosNegros = negros;
         try
         {
-            (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, true));
+            (View longitudinal, View seccion) = Construir(doc, viga, TiposPropios.Crear(doc, true), movible);
             longitudinal.Name = nombre;
             seccion.Name = nombreSeccion;
             if (t.Commit() != TransactionStatus.Committed)
@@ -140,14 +220,14 @@ internal static class GeneradorPrevia
         return new FilteredElementCollector(doc).OfClass(typeof(ViewSection)).Cast<View>().FirstOrDefault(v => !v.IsTemplate && v.Name == buscado);
     }
 
-    private static (View Longitudinal, View Seccion) Construir(Document doc, VigaContinua viga, TiposPropios tipos)
+    private static (View Longitudinal, View Seccion) Construir(Document doc, VigaContinua viga, TiposPropios tipos, DespieceMovible movible)
     {
         ViewFamilyType tipoSeccion = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
             .First(v => v.ViewFamily == ViewFamily.Section);
         List<Rebar> barras = new FilteredElementCollector(doc).OfClass(typeof(Rebar)).Cast<Rebar>()
             .Where(b => viga.Vigas.Contains(b.GetHostId())).ToList();
         Registro.Paso($"vistas: {barras.Count} barras; vista longitudinal");
-        View longitudinal = Longitudinal(doc, tipoSeccion, viga, barras, tipos);
+        View longitudinal = Longitudinal(doc, tipoSeccion, viga, barras, tipos, movible);
         Registro.Paso("vistas: sección");
         View seccion = Seccion(doc, tipoSeccion, viga, barras, tipos);
         doc.Regenerate();
@@ -166,6 +246,13 @@ internal static class GeneradorPrevia
     {
         public double Alto => Arriba - Abajo;
 
+        /// <summary>Dónde quedó el detalle. Su etiqueta y sus medidas se mueven con él.</summary>
+        public XYZ? Final { get; set; }
+
+        public TextNote? Etiqueta { get; set; }
+
+        public List<TextNote> Anexos { get; } = [];
+
         private double GanchoArriba => Barra.get_BoundingBox(null).Max.Z - Mayor(Barra).GetEndPoint(0).Z;
 
         private double GanchoAbajo => Mayor(Barra).GetEndPoint(0).Z - Barra.get_BoundingBox(null).Min.Z;
@@ -180,7 +267,7 @@ internal static class GeneradorPrevia
         public double CotaEncima => GanchoAbajo > MinimoGancho ? Alto - GanchoAbajo : 0;
     }
 
-    private static View Longitudinal(Document doc, ViewFamilyType tipo, VigaContinua viga, List<Rebar> barras, TiposPropios tipos)
+    private static View Longitudinal(Document doc, ViewFamilyType tipo, VigaContinua viga, List<Rebar> barras, TiposPropios tipos, DespieceMovible movible)
     {
         (XYZ min, XYZ max) = Caja(doc, viga);
         XYZ derecha = SentidoDeLectura(doc, viga);
@@ -262,7 +349,8 @@ internal static class GeneradorPrevia
                 z = AcomodarLinea(doc, vista, diametro.ToList(), derecha, z, haciaArriba, tipos);
             return Acomodar(doc, vista, lado.Where(s => MarcaVigas.Serie(s.Barra) != serie && !EsBaston(s)).ToList(), z, haciaArriba, tipos);
         }
-        int filasEstribos = EtiquetarEstribos(doc, vista, barras, derecha, enPlano, max.Z, tipos);
+        var sueltas = new List<(Rebar Barra, TextNote Nota)>();
+        int filasEstribos = EtiquetarEstribos(doc, vista, barras, derecha, enPlano, max.Z, tipos, sueltas);
         double tope = Lineas(deArriba, "S", max.Z + SeparacionViga + FilaEstribos * Math.Max(filasEstribos - 1, 0), true);
         double fondo = Lineas(deAbajo, "I", min.Z - SeparacionViga, false);
 
@@ -273,7 +361,105 @@ internal static class GeneradorPrevia
         Cotar(doc, vista, centro, derecha, largo, min, max, Math.Min(fondo, min.Z), tipos);
         CotarColumnas(doc, vista, centro, derecha, min, max, Math.Min(fondo, min.Z), tipos);
         vista.DisplayStyle = DisplayStyle.FlatColors;
+        AplicarMovimientos(doc, sacadas, sueltas, movible, derecha);
+        if (movible.Separar)
+            Separar(doc, vista, sacadas, sueltas, movible, derecha, enPlano, min, max);
         return vista;
+    }
+
+    private static string ClaveEstribos(Rebar b) => "e" + b.Id.Value;
+
+    /// <summary>Lo que el usuario movió en el paso 2. Una pieza que ya no está en el modelo simplemente no aparece aquí.</summary>
+    private static void AplicarMovimientos(Document doc, List<Sacada> sacadas, List<(Rebar Barra, TextNote Nota)> sueltas, DespieceMovible movible, XYZ derecha)
+    {
+        foreach (Sacada s in sacadas)
+        {
+            if (s.Final is null || !movible.Movimientos.TryGetValue(s.Barra.Id.Value.ToString(), out Movimiento? m))
+                continue;
+            XYZ arriba = XYZ.BasisZ * (m.Dz / 0.3048);
+            RebarBendingDetail.SetPosition(s.Detalle, s.Final + arriba);
+            foreach (TextNote anexo in s.Anexos)
+                anexo.Coord += arriba;
+            if (s.Etiqueta is not null)
+                s.Etiqueta.Coord += arriba + derecha * (m.Tx / 0.3048) + XYZ.BasisZ * (m.Tz / 0.3048);
+        }
+        foreach ((Rebar barra, TextNote nota) in sueltas)
+        {
+            if (movible.Movimientos.TryGetValue(ClaveEstribos(barra), out Movimiento? m))
+                nota.Coord += derecha * (m.Tx / 0.3048) + XYZ.BasisZ * (m.Tz / 0.3048);
+        }
+        doc.Regenerate();
+    }
+
+    /// <summary>
+    /// Mide lo movible, lo oculta de la imagen y deja las dos cruces de calibración: la página lo dibuja encima y se puede
+    /// arrastrar. Una línea o un texto medidos aquí caen en el mismo sitio donde los pondría Revit.
+    /// </summary>
+    private static void Separar(Document doc, View vista, List<Sacada> sacadas, List<(Rebar Barra, TextNote Nota)> sueltas, DespieceMovible movible, XYZ derecha, XYZ enPlano, XYZ min, XYZ max)
+    {
+        (double A, double B) EnX(BoundingBoxXYZ c)
+        {
+            double a = c.Min.DotProduct(derecha), b = c.Max.DotProduct(derecha);
+            return (Math.Min(a, b), Math.Max(a, b));
+        }
+        TextoMovible Texto(TextNote nota, bool girado)
+        {
+            BoundingBoxXYZ c = nota.get_BoundingBox(vista);
+            (double a, double b) = EnX(c);
+            return new TextoMovible(nota.Text.Trim(), new PuntoModelo((a + b) / 2, (c.Min.Z + c.Max.Z) / 2), girado);
+        }
+        void Ocultar(Element e)
+        {
+            if (e.CanBeHidden(vista))
+                movible.Ocultos.Add(e.Id);
+        }
+
+        foreach (Sacada s in sacadas.Where(x => x.Etiqueta is not null))
+        {
+            BoundingBoxXYZ caja = s.Detalle.get_BoundingBox(vista);
+            (double izquierda, _) = EnX(caja);
+            // El dibujo es la barra real trasladada: se lleva a la esquina de su detalle.
+            List<XYZ> curva = [];
+            foreach (Curve c in Curvas(s.Barra, false))
+                curva.AddRange(c.Tessellate());
+            double dx = izquierda - curva.Min(p => p.DotProduct(derecha)), dz = caja.Min.Z - curva.Min(p => p.Z);
+            List<PuntoModelo> puntos = curva.Select(p => new PuntoModelo(p.DotProduct(derecha) + dx, p.Z + dz)).ToList();
+            string color = LectorDespiece.Color(doc.GetElement(s.Barra.GetTypeId()).Name);
+            movible.Piezas.Add(new PiezaMovible(s.Barra.Id.Value.ToString(), color, puntos, Texto(s.Etiqueta!, false),
+                s.Anexos.Select(n => Texto(n, Math.Abs(n.BaseDirection.Z) > 0.5)).ToList()));
+            Ocultar(s.Detalle);
+            Ocultar(s.Etiqueta!);
+            s.Anexos.ForEach(Ocultar);
+        }
+        foreach ((Rebar barra, TextNote nota) in sueltas)
+        {
+            movible.Piezas.Add(new PiezaMovible(ClaveEstribos(barra), LectorDespiece.Color(doc.GetElement(barra.GetTypeId()).Name), [], Texto(nota, false), []));
+            Ocultar(nota);
+        }
+        if (movible.Ocultos.Count > 0)
+            vista.HideElements(movible.Ocultos);
+
+        double izq = Math.Min(min.DotProduct(derecha), max.DotProduct(derecha)), der = Math.Max(min.DotProduct(derecha), max.DotProduct(derecha));
+        // Dentro de la viga: el recorte va justo a su alto y se come una cruz puesta más afuera (medido el 31-oct).
+        double adentro = 0.02 * M;
+        var marcaA = new PuntoModelo(izq, min.Z + adentro);
+        var marcaB = new PuntoModelo(der, max.Z - adentro);
+        Marcar(doc, vista, enPlano, derecha, marcaA);
+        Marcar(doc, vista, enPlano, derecha, marcaB);
+        doc.Regenerate();
+        movible.Marcas = (marcaA, marcaB);
+    }
+
+    /// <summary>Una cruz de calibración, como las de <see cref="GeneradorPlanta"/>.</summary>
+    private static void Marcar(Document doc, View vista, XYZ enPlano, XYZ derecha, PuntoModelo p)
+    {
+        const double Largo = 0.015 * M;
+        var magenta = new OverrideGraphicSettings();
+        magenta.SetProjectionLineColor(new Color(255, 0, 255));
+        magenta.SetProjectionLineWeight(1);
+        XYZ En(double x, double z) => new XYZ(enPlano.X, enPlano.Y, z) + derecha * (x - enPlano.DotProduct(derecha));
+        foreach (Line l in new[] { Line.CreateBound(En(p.X - Largo, p.Y), En(p.X + Largo, p.Y)), Line.CreateBound(En(p.X, p.Y - Largo), En(p.X, p.Y + Largo)) })
+            vista.SetElementOverrides(doc.Create.NewDetailCurve(vista, l).Id, magenta);
     }
 
     /// <summary>
@@ -335,7 +521,7 @@ internal static class GeneradorPrevia
     /// sube a otra fila, para que no se encimen. Devuelve cuántas filas usó. La grapa de una zona trae la misma cantidad y
     /// separación que su estribo y va 2 cm al lado (viga 388501): con la misma etiqueta en el mismo sitio, se escribe una vez.
     /// </summary>
-    private static int EtiquetarEstribos(Document doc, View vista, List<Rebar> barras, XYZ derecha, XYZ enPlano, double techo, TiposPropios tipos)
+    private static int EtiquetarEstribos(Document doc, View vista, List<Rebar> barras, XYZ derecha, XYZ enPlano, double techo, TiposPropios tipos, List<(Rebar Barra, TextNote Nota)> sueltas)
     {
         var finDeFila = new List<double>();
         var escritas = new List<(string Texto, double Centro)>();
@@ -356,6 +542,7 @@ internal static class GeneradorPrevia
             XYZ punto = enPlano + derecha * (centro - enPlano.DotProduct(derecha));
             TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(punto.X, punto.Y, techo + AltoTexto + FilaEstribos * fila), texto, tipos.Nota(HorizontalTextAlignment.Center));
             Pintar(vista, nota.Id, b, null);
+            sueltas.Add((b, nota));
         }
         return finDeFila.Count;
     }
@@ -471,20 +658,26 @@ internal static class GeneradorPrevia
             double linea = (haciaArriba ? z : z - altoFila) + bajoLinea;
             foreach ((Sacada s, double desfase) in fila)
             {
-                RebarBendingDetail.SetPosition(s.Detalle, new XYZ(s.Posicion.X, s.Posicion.Y, linea - s.Linea - s.Abajo + desfase));
+                s.Final = new XYZ(s.Posicion.X, s.Posicion.Y, linea - s.Linea - s.Abajo + desfase);
+                RebarBendingDetail.SetPosition(s.Detalle, s.Final);
                 TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(s.Posicion.X, s.Posicion.Y, linea + s.CotaEncima + desfase + AltoTexto), LectorDespiece.Etiqueta(doc.GetElement(s.Barra.GetTypeId()).Name, s.Cantidad, LectorDespiece.LargoBarra(s.Barra), Curvas(s.Barra, true).Sum(c => c.Length)), tipos.Nota(HorizontalTextAlignment.Center));
                 Pintar(vista, nota.Id, s.Barra, null);
+                s.Etiqueta = nota;
                 MedirGanchos(doc, vista, s, linea + desfase, tipos);
             }
             // La medida de cada traslapo, sobre él (#223). Es texto: un detalle de plegado no da referencias para una cota
             // de Revit (probado el 30-oct). Si le cae encima a una etiqueta de la fila, sube al espacio libre.
             foreach (Traslapo t in derecha is null ? [] : traslapos ?? [])
             {
-                bool choca = fila.Any(f => Math.Abs(f.S.Posicion.DotProduct(derecha!) - t.Centro) < MedioAnchoEtiqueta);
+                // Justo sobre la más alta de las dos barras que se traslapan, no a la altura de la fila (Juan, 31-oct). Solo sube
+                // si ahí mismo hay una etiqueta a su altura.
+                double sobreTraslapo = fila.First(f => ReferenceEquals(f.S, t.Pieza)).Desfase;
+                bool choca = fila.Any(f => Math.Abs(f.Desfase - sobreTraslapo) < AltoTexto && Math.Abs(f.S.Posicion.DotProduct(derecha!) - t.Centro) < MedioAnchoEtiqueta);
                 XYZ punto = t.Pieza.Posicion + derecha! * (t.Centro - t.Pieza.Posicion.DotProduct(derecha!));
-                double alto = linea + etiqueta + (choca ? AltoTexto : 0);
+                double alto = linea + sobreTraslapo + AltoTexto + (choca ? AltoTexto : 0);
                 TextNote nota = TextNote.Create(doc, vista.Id, new XYZ(punto.X, punto.Y, alto), (t.Largo * 0.3048).ToString("0.00", CultureInfo.InvariantCulture), tipos.Nota(HorizontalTextAlignment.Center));
                 Pintar(vista, nota.Id, t.Pieza.Barra, null);
+                t.Pieza.Anexos.Add(nota);
             }
             z = haciaArriba ? z + altoFila + HuecoFilas : z - altoFila - HuecoFilas;
         }
@@ -517,6 +710,7 @@ internal static class GeneradorPrevia
             XYZ punto = new XYZ(s.Posicion.X, s.Posicion.Y, z) + derecha * (x - s.Posicion.DotProduct(derecha));
             TextNote nota = TextNote.Create(doc, vista.Id, punto, (largo * 0.3048).ToString("0.00", CultureInfo.InvariantCulture), girada);
             Pintar(vista, nota.Id, s.Barra, null);
+            s.Anexos.Add(nota);
         }
 
         if (s.Barra.GetHookTypeId(0) != ElementId.InvalidElementId)

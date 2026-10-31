@@ -78,10 +78,10 @@ internal sealed class PuenteDespiece
                 VerPlanta(raiz.GetProperty("id").GetString()!);
                 break;
             case "previa":
-                VerPrevia(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
+                VerPrevia(raiz);
                 break;
             case "crearVistas":
-                CrearVistas(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean());
+                CrearVistas(raiz.GetProperty("grupo").GetInt32(), raiz.GetProperty("negros").GetBoolean(), Movimientos(raiz));
                 break;
             case "ver3d":
                 Ver3D(raiz.GetProperty("grupo").GetInt32());
@@ -92,12 +92,21 @@ internal sealed class PuenteDespiece
         }
     }
 
-    private void CrearVistas(int grupo, bool negros)
+    /// <summary>Lo que la página dice que se movió: <c>{ "397193": { dz, tx, tz } }</c>, en metros.</summary>
+    private static Dictionary<string, Movimiento> Movimientos(JsonElement raiz)
+    {
+        var movimientos = new Dictionary<string, Movimiento>();
+        foreach (JsonProperty p in raiz.GetProperty("movimientos").EnumerateObject())
+            movimientos[p.Name] = new Movimiento(p.Value.GetProperty("dz").GetDouble(), p.Value.GetProperty("tx").GetDouble(), p.Value.GetProperty("tz").GetDouble());
+        return movimientos;
+    }
+
+    private void CrearVistas(int grupo, bool negros, Dictionary<string, Movimiento> movimientos)
     {
         if (doc is null)
             return;
         GrupoIguales g = grupos[grupo];
-        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre, negros);
+        VistasCreadas v = GeneradorPrevia.Crear(doc, Continua(g.Elementos[0]), g.Nombre, negros, new DespieceMovible(movimientos, false));
         Enviar(new { tipo = "vistas", grupo, longitudinal = v.Longitudinal, seccion = v.Seccion, yaExistian = v.YaExistian });
     }
 
@@ -243,15 +252,21 @@ internal sealed class PuenteDespiece
         return listo;
     }
 
-    private void VerPrevia(int grupo, bool negros)
+    /// <summary>
+    /// La vista previa que pide la página. <c>separar</c>: la del paso 2, con lo movible aparte para arrastrarlo; si no, la
+    /// imagen real con los movimientos aplicados. La clave la pone la página, y dice todo lo que distingue una imagen de otra.
+    /// </summary>
+    private void VerPrevia(JsonElement raiz)
     {
+        int grupo = raiz.GetProperty("grupo").GetInt32();
         if (doc is null || grupo >= grupos.Count)
             return;
-        string clave = $"{grupo}|{negros}";
+        string clave = raiz.GetProperty("clave").GetString()!;
         if (!previas.TryGetValue(clave, out object? listo))
         {
-            PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia, negros);
-            listo = new { tipo = "previa", grupo, negros, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
+            var movible = new DespieceMovible(Movimientos(raiz), raiz.GetProperty("separar").GetBoolean());
+            PreviaGenerada p = GeneradorPrevia.Generar(doc, Continua(grupos[grupo].Elementos[0]), ventana.CarpetaPrevia, raiz.GetProperty("negros").GetBoolean(), movible);
+            listo = new { tipo = "previa", grupo, clave, capa = p.Capa, longitudinal = Imagen(p.Longitudinal), seccion = Imagen(p.Seccion) };
             previas[clave] = listo;
         }
         Enviar(listo);
