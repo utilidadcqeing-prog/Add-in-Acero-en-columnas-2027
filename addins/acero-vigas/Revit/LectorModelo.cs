@@ -22,6 +22,8 @@ internal static class LectorModelo
     private static List<VigaLeida> Vigas(Document doc)
     {
         var vigas = new List<VigaLeida>();
+        List<NivelLeido> niveles = new FilteredElementCollector(doc).OfClass(typeof(Level)).Cast<Level>()
+            .Select(l => new NivelLeido(l.Name, Mm(l.Elevation))).ToList();
         foreach (FamilyInstance viga in Instancias(doc, BuiltInCategory.OST_StructuralFraming))
         {
             if (viga.Location is not LocationCurve { Curve: Line linea })
@@ -32,8 +34,10 @@ internal static class LectorModelo
             XYZ d = linea.Direction;
             var normal = new XYZ(-d.Y, d.X, 0).Normalize();
             double ancho = puntos.Max(p => p.DotProduct(normal)) - puntos.Min(p => p.DotProduct(normal));
-            NivelLeido? nivel = doc.GetElement(viga.get_Parameter(BuiltInParameter.INSTANCE_REFERENCE_LEVEL_PARAM)?.AsElementId()
+            NivelLeido? referencia = doc.GetElement(viga.get_Parameter(BuiltInParameter.INSTANCE_REFERENCE_LEVEL_PARAM)?.AsElementId()
                 ?? ElementId.InvalidElementId) is Level l ? new NivelLeido(l.Name, Mm(l.Elevation)) : null;
+            // Por la altura de su cara de arriba: la pieza del cielo raso referenciada al piso salía sobrepuesta con la losa.
+            NivelLeido? nivel = NivelPorAltura.Elegir(niveles, referencia, Mm(puntos.Max(p => p.Z)));
             // El centro de la caja en planta es el de la viga, también girada: la sección es simétrica (#85).
             var centro = new XYZ((puntos.Min(p => p.X) + puntos.Max(p => p.X)) / 2, (puntos.Min(p => p.Y) + puntos.Max(p => p.Y)) / 2, 0);
             vigas.Add(new VigaLeida(viga.Id.ToString(), Planta(linea.GetEndPoint(0)), Planta(linea.GetEndPoint(1)),
